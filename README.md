@@ -9,6 +9,7 @@ Personal couch co-op twin-stick roguelite prototype built in Godot 4.6.2.
 - The first-playable milestone is still defined by the Patch 7 target: one complete 10-15 minute run that is readable, stable, and usable without explanation.
 - The current build includes early Patch 8 work plus a Patch 9 baseline for persistent meta progression and unlocks.
 - The current build also includes a full juice pass, an enemy behavior pass, a secondary identity pass, and a debug start-gear mode.
+- The current build now also includes a working pause flow, gamepad-driven menu confirm/back navigation, and shooter-colored projectiles.
 
 ## Stack
 
@@ -38,6 +39,8 @@ Personal couch co-op twin-stick roguelite prototype built in Godot 4.6.2.
 - shared primary loadout variants: `Rifle`, `Scatter`, `Slug`
 - shared secondary loadout variants: `Grenade`, `Cluster`, `Siege`
 - debug mode for selecting starting primary and secondary gear
+- pause menu with resume and room restart
+- gamepad menu confirm/back support
 - mouse aim and mouse buttons for keyboard/mouse play
 - `L2` secondary for gamepad play
 - movement-first dash direction with aim fallback
@@ -47,6 +50,8 @@ Personal couch co-op twin-stick roguelite prototype built in Godot 4.6.2.
 - enemy archetypes: `Chaser`, `Spitter`, `Charger`, and placeholder boss
 - placeholder boss encounter
 - clean rectangular grid arena with placeholder walls
+- arena framing pushed closer so the room fills most of the screen
+- projectile, impact, and grenade burst colors now inherit from the firing actor
 - return-to-menu flow after a run so meta unlocks can be spent
 
 ## Controls
@@ -63,6 +68,9 @@ Personal couch co-op twin-stick roguelite prototype built in Godot 4.6.2.
   - primary fire: `R2`
   - secondary: `L2`
   - dash: `A`
+  - pause: `Start`
+  - menu confirm: `A / X`
+  - menu back: `B / O`
 
 ## Placeholder Policy
 

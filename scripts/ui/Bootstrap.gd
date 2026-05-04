@@ -61,9 +61,18 @@ func _ready() -> void:
 	unlock_button_4.pressed.connect(_on_unlock_button_4_pressed)
 	meta_back_button.pressed.connect(_on_meta_back_button_pressed)
 	_register_button_animations()
+	_configure_menu_focus()
 	menu_panel.visible = true
 	meta_panel.visible = false
 	_refresh_menu_state()
+	call_deferred("_focus_menu_panel")
+
+func _unhandled_input(event: InputEvent) -> void:
+	if not event.is_action_pressed("ui_cancel"):
+		return
+	if meta_panel.visible:
+		_on_meta_back_button_pressed()
+		get_viewport().set_input_as_handled()
 
 func _populate_menu() -> void:
 	player_count_option.clear()
@@ -198,15 +207,18 @@ func _on_return_to_menu_requested(open_meta_menu: bool = false) -> void:
 		_set_panel_state(menu_panel, false)
 		_set_panel_state(meta_panel, true)
 		_refresh_meta_panel("")
+		call_deferred("_focus_meta_panel")
 		return
 	_set_panel_state(menu_panel, true)
 	_set_panel_state(meta_panel, false)
+	call_deferred("_focus_menu_panel")
 
 func _on_meta_button_pressed() -> void:
 	_play_ui_click()
 	_set_panel_state(menu_panel, false)
 	_set_panel_state(meta_panel, true)
 	_refresh_meta_panel("")
+	call_deferred("_focus_meta_panel")
 
 func _on_reset_profile_button_pressed() -> void:
 	_play_ui_click()
@@ -240,6 +252,7 @@ func _on_meta_back_button_pressed() -> void:
 	_set_panel_state(meta_panel, false)
 	_set_panel_state(menu_panel, true)
 	_refresh_menu_state()
+	call_deferred("_focus_menu_panel")
 
 func _refresh_meta_panel(extra_text: String) -> void:
 	_meta_unlocks = ProfileState.get_available_unlocks()
@@ -291,6 +304,42 @@ func _register_button_animations() -> void:
 	]
 	for control in controls:
 		_register_button_animation(control)
+
+func _configure_menu_focus() -> void:
+	var controls := [
+		player_count_option,
+		player_1_control_option,
+		player_2_control_option,
+		player_3_control_option,
+		player_4_control_option,
+		debug_mode_check,
+		debug_primary_option,
+		debug_secondary_option,
+		meta_button,
+		reset_profile_button,
+		start_button,
+		unlock_button_1,
+		unlock_button_2,
+		unlock_button_3,
+		unlock_button_4,
+		meta_back_button,
+	]
+	for control in controls:
+		if control == null:
+			continue
+		control.focus_mode = Control.FOCUS_ALL
+
+func _focus_menu_panel() -> void:
+	if debug_mode_check.button_pressed:
+		debug_primary_option.grab_focus()
+		return
+	player_count_option.grab_focus()
+
+func _focus_meta_panel() -> void:
+	if unlock_button_1.visible and not unlock_button_1.disabled:
+		unlock_button_1.grab_focus()
+		return
+	meta_back_button.grab_focus()
 
 func _register_button_animation(control: Control) -> void:
 	if control == null:

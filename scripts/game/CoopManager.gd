@@ -71,6 +71,9 @@ signal player_revived(player)
 @onready var modifier_intro_panel: Panel = $UI/ModifierIntroPanel
 @onready var modifier_intro_title_label: Label = $UI/ModifierIntroPanel/MarginContainer/IntroLayout/ModifierTitle
 @onready var modifier_intro_detail_label: Label = $UI/ModifierIntroPanel/MarginContainer/IntroLayout/ModifierDetail
+@onready var pause_panel: Panel = $UI/PausePanel
+@onready var resume_button: Button = $UI/PausePanel/MarginContainer/PauseLayout/ResumeButton
+@onready var pause_retry_button: Button = $UI/PausePanel/MarginContainer/PauseLayout/PauseRetryButton
 
 var _player_nodes: Array = []
 var _player_configs: Array = [
@@ -129,13 +132,31 @@ func _ready() -> void:
 	p1_mode_button.pressed.connect(_on_p1_mode_button_pressed)
 	p2_mode_button.pressed.connect(_on_p2_mode_button_pressed)
 	retry_button.pressed.connect(_on_retry_button_pressed)
+	resume_button.pressed.connect(_on_resume_button_pressed)
+	pause_retry_button.pressed.connect(_on_pause_retry_button_pressed)
 	Input.joy_connection_changed.connect(_on_joy_connection_changed)
+	_configure_menu_focus()
 	_refresh_debug_ui()
 
 func _process(delta: float) -> void:
+	if get_tree().paused:
+		return
 	_refresh_debug_ui()
 	_update_room_progress(delta)
 	_update_screen_effects()
+
+func _input(event: InputEvent) -> void:
+	if get_tree().paused and event.is_action_pressed("ui_cancel") and not event.is_echo():
+		_set_paused(false)
+		get_viewport().set_input_as_handled()
+		return
+	if _room_is_cleared or _room_is_failed:
+		return
+	if event.is_echo():
+		return
+	if _is_pause_event(event):
+		_toggle_pause()
+		get_viewport().set_input_as_handled()
 
 func _spawn_players() -> void:
 	_clear_container(players)
@@ -405,37 +426,37 @@ func _clear_container(container: Node) -> void:
 	for child in container.get_children():
 		child.queue_free()
 
-func _on_player_fire_requested(origin: Vector2, direction: Vector2, speed: float, damage: int, team: String) -> void:
+func _on_player_fire_requested(origin: Vector2, direction: Vector2, speed: float, damage: int, team: String, color: Color) -> void:
 	if _room_is_cleared or _room_is_failed:
 		return
-	_spawn_projectile(origin, direction, speed, damage, team)
+	_spawn_projectile(origin, direction, speed, damage, team, color)
 
-func _on_player_secondary_requested(origin: Vector2, direction: Vector2, speed: float, damage: int, team: String, projectile_data: Dictionary) -> void:
+func _on_player_secondary_requested(origin: Vector2, direction: Vector2, speed: float, damage: int, team: String, projectile_data: Dictionary, color: Color) -> void:
 	if _room_is_cleared or _room_is_failed:
 		return
 
 	match str(projectile_data.get("kind", "grenade")):
 		"grenade":
-			_spawn_grenade(origin, direction, speed, damage, team, projectile_data)
+			_spawn_grenade(origin, direction, speed, damage, team, projectile_data, color)
 		_:
-			_spawn_projectile(origin, direction, speed, damage, team)
+			_spawn_projectile(origin, direction, speed, damage, team, color)
 
-func _on_enemy_fire_requested(origin: Vector2, direction: Vector2, speed: float, damage: int, team: String) -> void:
+func _on_enemy_fire_requested(origin: Vector2, direction: Vector2, speed: float, damage: int, team: String, color: Color) -> void:
 	if _room_is_cleared or _room_is_failed:
 		return
-	_spawn_projectile(origin, direction, speed, damage, team)
+	_spawn_projectile(origin, direction, speed, damage, team, color)
 
-func _spawn_projectile(origin: Vector2, direction: Vector2, speed: float, damage: int, team: String) -> void:
+func _spawn_projectile(origin: Vector2, direction: Vector2, speed: float, damage: int, team: String, color: Color) -> void:
 	var projectile = projectile_scene.instantiate()
 	projectile.global_position = origin
-	projectile.setup(team, direction, speed, damage)
+	projectile.setup(team, direction, speed, damage, color)
 	projectile.impact_requested.connect(_on_projectile_impact_requested)
 	projectiles.add_child(projectile)
 
-func _spawn_grenade(origin: Vector2, direction: Vector2, speed: float, damage: int, team: String, projectile_data: Dictionary) -> void:
+func _spawn_grenade(origin: Vector2, direction: Vector2, speed: float, damage: int, team: String, projectile_data: Dictionary, color: Color) -> void:
 	var grenade = grenade_projectile_scene.instantiate()
 	grenade.global_position = origin
-	grenade.setup(team, direction, speed, damage)
+	grenade.setup(team, direction, speed, damage, color)
 	grenade.kind = str(projectile_data.get("kind", grenade.kind))
 	grenade.explosion_radius = float(projectile_data.get("explosion_radius", grenade.explosion_radius))
 	grenade.fuse_time = float(projectile_data.get("fuse_time", grenade.fuse_time))
@@ -484,10 +505,10 @@ func _on_player_revived(player) -> void:
 	)
 	_refresh_debug_ui()
 
-func _on_grenade_exploded(_origin: Vector2) -> void:
+func _on_grenade_exploded(_origin: Vector2, color: Color) -> void:
 	_play_sfx_explosion()
 	_spawn_world_effect(
-		ParticleFactoryData.create_explosion_burst(Color(1.0, 0.7, 0.28, 1.0)),
+		ParticleFactoryData.create_explosion_burst(color),
 		_origin
 	)
 	_play_zoom_punch(0.06, 0.05, 0.12)
@@ -507,8 +528,7 @@ func _on_enemy_hit_received(enemy, damage_amount: int, _lethal: bool) -> void:
 	if enemy != null and is_instance_valid(enemy):
 		_spawn_world_floating_text("-%d" % damage_amount, Color(1.0, 0.85, 0.7, 1.0), enemy.global_position + Vector2(0.0, -36.0))
 
-func _on_projectile_impact_requested(origin: Vector2, direction: Vector2, team: String) -> void:
-	var color := Color(1.0, 0.88, 0.48, 1.0) if team == "player" else Color(1.0, 0.48, 0.48, 1.0)
+func _on_projectile_impact_requested(origin: Vector2, direction: Vector2, _team: String, color: Color) -> void:
 	_spawn_world_effect(ParticleFactoryData.create_impact_sparks(color, direction), origin)
 
 func _evaluate_room_state() -> void:
@@ -713,10 +733,18 @@ func handle_enemy_death_explosion(origin: Vector2, radius: float, damage: int) -
 
 func _on_retry_button_pressed() -> void:
 	Engine.time_scale = 1.0
+	get_tree().paused = false
+	pause_panel.visible = false
 	_clear_spawn_warning_effects()
 	_spawn_players()
 	_start_room()
 	_refresh_debug_ui()
+
+func _on_resume_button_pressed() -> void:
+	_set_paused(false)
+
+func _on_pause_retry_button_pressed() -> void:
+	_on_retry_button_pressed()
 
 func _current_time_seconds() -> float:
 	return Time.get_ticks_msec() / 1000.0
@@ -1073,11 +1101,13 @@ func _build_hud() -> void:
 	_hud_root = Control.new()
 	_hud_root.name = "HUDRoot"
 	_hud_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_hud_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	ui_layer.add_child(_hud_root)
 
 	_floating_text_layer = Control.new()
 	_floating_text_layer.name = "FloatingTextLayer"
 	_floating_text_layer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_floating_text_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_hud_root.add_child(_floating_text_layer)
 
 	for index in range(4):
@@ -1148,6 +1178,31 @@ func _update_room_timer_pulse(remaining: float, now: float) -> void:
 func _reset_room_status_pulse() -> void:
 	room_status_label.scale = Vector2.ONE
 	room_status_label.modulate = Color(1.0, 1.0, 1.0, 1.0)
+
+func _is_pause_event(event: InputEvent) -> bool:
+	if event is InputEventKey:
+		var key_event := event as InputEventKey
+		return key_event.pressed and not key_event.echo and key_event.keycode == KEY_ESCAPE
+	if event is InputEventJoypadButton:
+		var joypad_event := event as InputEventJoypadButton
+		return joypad_event.pressed and joypad_event.button_index == JOY_BUTTON_START
+	return false
+
+func _toggle_pause() -> void:
+	_set_paused(not get_tree().paused)
+
+func _set_paused(paused: bool) -> void:
+	get_tree().paused = paused
+	pause_panel.visible = paused
+	if paused:
+		resume_button.grab_focus()
+
+func _configure_menu_focus() -> void:
+	var controls: Array = [p1_mode_button, p2_mode_button, retry_button, resume_button, pause_retry_button]
+	for control in controls:
+		if control == null:
+			continue
+		control.focus_mode = Control.FOCUS_ALL
 
 func _update_screen_effects() -> void:
 	if screen_effects == null:

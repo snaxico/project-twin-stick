@@ -1,6 +1,6 @@
 extends Area2D
 
-signal exploded(origin)
+signal exploded(origin, color)
 
 @export var gravity_force: float = 520.0
 @export var fuse_time: float = 1.0
@@ -16,19 +16,25 @@ var speed: float = 320.0
 var damage: int = 3
 var team: String = ""
 
+@onready var visual: Polygon2D = $Visual
+
 var _velocity: Vector2 = Vector2.ZERO
 var _explode_at := 0.0
+var _tint_color: Color = Color(1.0, 0.72, 0.28, 1.0)
 
-func setup(projectile_team: String, projectile_direction: Vector2, projectile_speed: float, projectile_damage: int) -> void:
+func setup(projectile_team: String, projectile_direction: Vector2, projectile_speed: float, projectile_damage: int, projectile_color: Color = Color(1.0, 0.72, 0.28, 1.0)) -> void:
 	team = projectile_team
 	direction = projectile_direction.normalized() if projectile_direction.length() > 0.0 else Vector2.RIGHT
 	speed = projectile_speed
 	damage = projectile_damage
+	_tint_color = projectile_color
 	_velocity = direction * speed + Vector2(0.0, -180.0)
 
 func _ready() -> void:
 	body_entered.connect(_on_body_entered)
 	_explode_at = _current_time_seconds() + fuse_time
+	if visual != null:
+		visual.color = _tint_color
 
 func _physics_process(delta: float) -> void:
 	_velocity.y += gravity_force * delta
@@ -49,7 +55,7 @@ func _explode() -> void:
 			_explode_siege()
 		_:
 			_apply_explosion_damage(global_position, explosion_radius, damage)
-			exploded.emit(global_position)
+			exploded.emit(global_position, _tint_color)
 	queue_free()
 
 func _explode_cluster() -> void:
@@ -63,11 +69,11 @@ func _explode_cluster() -> void:
 	var blast_damage: int = max(1, int(round(float(damage) * 0.7)))
 	for blast_point in blast_points:
 		_apply_explosion_damage(blast_point, blast_radius, blast_damage)
-		exploded.emit(blast_point)
+		exploded.emit(blast_point, _tint_color)
 
 func _explode_siege() -> void:
 	_apply_explosion_damage(global_position, explosion_radius, damage)
-	exploded.emit(global_position)
+	exploded.emit(global_position, _tint_color)
 	if pulse_count <= 1:
 		return
 
@@ -81,7 +87,7 @@ func _explode_siege() -> void:
 		var pulse_scale: float = 1.0 + float(pulse_index) * 0.18
 		var pulse_damage: int = max(1, damage - pulse_index)
 		_apply_explosion_damage(global_position, explosion_radius * pulse_scale, pulse_damage)
-		exploded.emit(global_position)
+		exploded.emit(global_position, _tint_color)
 
 func _apply_explosion_damage(origin: Vector2, radius: float, damage_amount: int) -> void:
 	var tree := get_tree()

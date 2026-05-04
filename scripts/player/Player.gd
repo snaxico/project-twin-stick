@@ -15,8 +15,8 @@ void fragment() {
 }
 """
 
-signal fire_requested(origin, direction, speed, damage, team)
-signal secondary_requested(origin, direction, speed, damage, team, projectile_data)
+signal fire_requested(origin, direction, speed, damage, team, color)
+signal secondary_requested(origin, direction, speed, damage, team, projectile_data, color)
 signal health_changed(current_health, max_health)
 signal downed(player)
 signal revived(player)
@@ -239,14 +239,16 @@ func _physics_process(delta: float) -> void:
 	if _is_fire_pressed() and now >= _next_primary_fire_at and aim_direction.length() > 0.0:
 		_next_primary_fire_at = now + primary_fire_interval
 		_play_fire_recoil()
-		muzzle_flash_requested.emit(global_position + aim_direction * 24.0, aim_direction, player_config.tint.lightened(0.3))
+		var projectile_color: Color = player_config.tint.lightened(0.08)
+		muzzle_flash_requested.emit(global_position + aim_direction * 24.0, aim_direction, projectile_color)
 		for projectile_direction in _build_spread_directions(aim_direction, _primary_projectile_count, _primary_spread_radians):
 			fire_requested.emit(
 				global_position + projectile_direction * 26.0,
 				projectile_direction,
 				projectile_speed,
 				projectile_damage,
-				get_team()
+				get_team(),
+				projectile_color
 			)
 
 	var secondary_pressed := _is_secondary_pressed()
@@ -566,6 +568,7 @@ func _fire_secondary() -> void:
 	if now < _next_secondary_ready_at or aim_direction.length() <= 0.0:
 		return
 	_next_secondary_ready_at = now + secondary_cooldown
+	var secondary_color: Color = player_config.tint.lightened(0.08)
 	for projectile_direction in _build_spread_directions(aim_direction, _secondary_projectile_count, _secondary_spread_radians):
 		secondary_requested.emit(
 			global_position + projectile_direction * 22.0,
@@ -573,5 +576,6 @@ func _fire_secondary() -> void:
 			secondary_projectile_speed,
 			secondary_damage,
 			get_team(),
-			_secondary_projectile_data.duplicate(true)
+			_secondary_projectile_data.duplicate(true),
+			secondary_color
 		)

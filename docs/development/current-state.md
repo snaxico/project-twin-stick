@@ -23,6 +23,8 @@ Godot 4.6.2 prototype for a same-screen local co-op twin-stick roguelite, now ca
 - Shared secondary loadout variants
 - Keyboard control with mouse aim, left-click primary fire, and right-click secondary fire
 - Gamepad secondary on `L2`
+- Gamepad menu confirm/back on `A/X` and `B/O`
+- In-room pause menu on `Start` / `Esc`
 - A timed survival room with recurring chaser and spitter spawns
 - A placeholder boss room that ends the run
 - A JSON-backed room modifier system with pre-fight telegraphing
@@ -78,6 +80,7 @@ Godot 4.6.2 prototype for a same-screen local co-op twin-stick roguelite, now ca
 - layout presets: default, crossfire, pinch, offset, and boss gate
 - placeholder-only Godot-native runtime visuals
 - player color identity: P1 green, P2 blue, P3 yellow, P4 orange, enemies red
+- projectile, impact-spark, and grenade-burst colors inherit from the firing actor
 - room boundary collision
 - JSON data stubs for weapons, enemies, modifiers, and items
 
@@ -119,3 +122,5 @@ If development resumes, the next work should be tuning and validation rather tha
 - Secondary identity pass: `Grenade` remains the aimed standard throw, `Cluster` is now a splitting canister, and `Siege` is now a heavier aimed shell with repeated impact pulses.
 - Debug bootstrap mode: the start menu can now override starting primary and secondary gear for local testing without changing the normal progression path.
 - All current secondaries now use `hold to aim, release to throw`; the preview only shows while held and only when the secondary is ready.
+- Pause/menu input pass: gameplay now pauses correctly, menus can be driven by gamepad, `A/X` confirms, and `B/O` backs out or resumes.
+- Projectile color pass: player and enemy shots now inherit their shooter color, and that tint also flows into impact sparks and grenade explosion bursts.

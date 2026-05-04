@@ -4,23 +4,25 @@ const ParticleFactoryData = preload("res://scripts/juice/ParticleFactory.gd")
 
 @export var lifetime: float = 1.8
 
-signal impact_requested(origin, direction, team)
+signal impact_requested(origin, direction, team, color)
 
 var direction: Vector2 = Vector2.RIGHT
 var speed: float = 500.0
 var damage: int = 1
 var team: String = ""
+var tint_color: Color = Color(1.0, 0.96, 0.7, 1.0)
 
 @onready var visual: Polygon2D = $Visual
 
 var _expires_at := 0.0
 var _trail_particles: GPUParticles2D = null
 
-func setup(projectile_team: String, projectile_direction: Vector2, projectile_speed: float, projectile_damage: int) -> void:
+func setup(projectile_team: String, projectile_direction: Vector2, projectile_speed: float, projectile_damage: int, projectile_color: Color = Color(1.0, 0.96, 0.7, 1.0)) -> void:
 	team = projectile_team
 	direction = projectile_direction.normalized() if projectile_direction.length() > 0.0 else Vector2.RIGHT
 	speed = projectile_speed
 	damage = projectile_damage
+	tint_color = projectile_color
 
 func _ready() -> void:
 	body_entered.connect(_on_body_entered)
@@ -38,7 +40,7 @@ func _physics_process(delta: float) -> void:
 
 func _on_body_entered(body: Node) -> void:
 	if body is StaticBody2D:
-		impact_requested.emit(global_position, -direction, team)
+		impact_requested.emit(global_position, -direction, team, _get_projectile_color())
 		queue_free()
 		return
 
@@ -49,7 +51,7 @@ func _on_body_entered(body: Node) -> void:
 		if body.has_method("apply_knockback"):
 			body.apply_knockback(direction, 200.0)
 		body.apply_damage(damage)
-		impact_requested.emit(global_position, -direction, team)
+		impact_requested.emit(global_position, -direction, team, _get_projectile_color())
 		queue_free()
 
 func _current_time_seconds() -> float:
@@ -62,4 +64,4 @@ func _apply_visual_state() -> void:
 	visual.scale = Vector2(1.12, 1.12)
 
 func _get_projectile_color() -> Color:
-	return Color(1.0, 0.96, 0.7, 1.0) if team == "player" else Color(1.0, 0.3, 0.22, 1.0)
+	return tint_color

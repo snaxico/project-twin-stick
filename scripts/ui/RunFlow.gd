@@ -60,6 +60,7 @@ func _ready() -> void:
 	choice_button_3.pressed.connect(_on_choice_button_3_pressed)
 	choice_continue_button.pressed.connect(_on_choice_continue_button_pressed)
 	_register_button_animations()
+	_configure_menu_focus()
 	_show_map()
 
 func _show_map() -> void:
@@ -83,6 +84,7 @@ func _show_map() -> void:
 
 	_configure_option_button(option_button_1, current_options[0] if current_options.size() > 0 else {})
 	_configure_option_button(option_button_2, current_options[1] if current_options.size() > 1 else {})
+	call_deferred("_focus_map_panel")
 
 func _configure_option_button(button: Button, node: Dictionary) -> void:
 	if node.is_empty():
@@ -175,6 +177,7 @@ func _show_resolution(title: String, detail: String, button_text: String) -> voi
 	resolution_title_label.text = title
 	resolution_detail_label.text = detail
 	resolution_button.text = button_text
+	call_deferred("_focus_resolution_panel")
 
 func _on_resolution_button_pressed() -> void:
 	_play_ui_click()
@@ -236,6 +239,7 @@ func _show_choice_panel(context: Dictionary) -> void:
 	_configure_choice_button(choice_button_3, choices[2] if choices.size() > 2 else {}, choice_mode)
 	choice_continue_button.visible = choice_mode == "shop"
 	choice_continue_button.text = "Leave Shop"
+	call_deferred("_focus_choice_panel")
 
 func _configure_choice_button(button: Button, item: Dictionary, choice_mode: String) -> void:
 	if item.is_empty():
@@ -319,6 +323,7 @@ func _show_run_summary(outcome: Dictionary, meta_reward: Dictionary, did_win: bo
 		unlock_text = "Newly available unlocks:\n- %s" % "\n- ".join(unlock_names)
 	run_summary_unlocks_label.text = unlock_text
 	run_summary_button.text = "Open Meta Menu"
+	call_deferred("_focus_summary_panel")
 
 func _on_run_summary_button_pressed() -> void:
 	_play_ui_click()
@@ -342,6 +347,48 @@ func _register_button_animations() -> void:
 	]
 	for control in controls:
 		_register_button_animation(control)
+
+func _configure_menu_focus() -> void:
+	var controls := [
+		option_button_1,
+		option_button_2,
+		resolution_button,
+		run_summary_button,
+		choice_button_1,
+		choice_button_2,
+		choice_button_3,
+		choice_continue_button,
+	]
+	for control in controls:
+		if control == null:
+			continue
+		control.focus_mode = Control.FOCUS_ALL
+
+func _focus_map_panel() -> void:
+	if option_button_1.visible:
+		option_button_1.grab_focus()
+		return
+	if option_button_2.visible:
+		option_button_2.grab_focus()
+
+func _focus_resolution_panel() -> void:
+	resolution_button.grab_focus()
+
+func _focus_choice_panel() -> void:
+	if choice_button_1.visible and not choice_button_1.disabled:
+		choice_button_1.grab_focus()
+		return
+	if choice_button_2.visible and not choice_button_2.disabled:
+		choice_button_2.grab_focus()
+		return
+	if choice_button_3.visible and not choice_button_3.disabled:
+		choice_button_3.grab_focus()
+		return
+	if choice_continue_button.visible:
+		choice_continue_button.grab_focus()
+
+func _focus_summary_panel() -> void:
+	run_summary_button.grab_focus()
 
 func _register_button_animation(control: Control) -> void:
 	if control == null:

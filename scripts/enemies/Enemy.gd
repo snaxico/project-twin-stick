@@ -1,7 +1,7 @@
 extends CharacterBody2D
 
 signal enemy_died(enemy)
-signal fire_requested(origin, direction, speed, damage, team)
+signal fire_requested(origin, direction, speed, damage, team, color)
 signal hit_received(enemy, damage_amount, lethal)
 
 const FLASH_SHADER_CODE := """
@@ -300,7 +300,8 @@ func _emit_projectile_burst(base_direction: Vector2) -> void:
 			projectile_direction,
 			projectile_speed,
 			projectile_damage,
-			get_team()
+			get_team(),
+			visual.color.lightened(0.08)
 		)
 
 func _emit_spitter_shot(base_direction: Vector2) -> void:
@@ -312,7 +313,8 @@ func _emit_spitter_shot(base_direction: Vector2) -> void:
 		projectile_direction,
 		projectile_speed,
 		projectile_damage,
-		get_team()
+		get_team(),
+		visual.color.lightened(0.08)
 	)
 
 func _build_spread_directions(base_direction: Vector2, projectile_count: int, spread_radians: float) -> Array:
