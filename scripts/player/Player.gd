@@ -77,6 +77,7 @@ var _secondary_projectile_data := {
 var _base_collision_layer := 0
 var _base_collision_mask := 0
 var _flash_material: ShaderMaterial = null
+var _flash_tween: Tween = null
 var _next_dash_trail_at := 0.0
 var _base_visual_scale := Vector2.ONE
 var _base_shadow_scale := Vector2.ONE
@@ -484,8 +485,10 @@ func _play_damage_flash() -> void:
 		return
 	var material := _get_flash_material()
 	material.set_shader_parameter("flash_intensity", 1.0)
-	var tween := create_tween()
-	tween.tween_property(material, "shader_parameter/flash_intensity", 0.0, 0.12)
+	if _flash_tween != null and _flash_tween.is_valid():
+		_flash_tween.kill()
+	_flash_tween = create_tween()
+	_flash_tween.tween_property(material, "shader_parameter/flash_intensity", 0.0, 0.12)
 
 func _get_flash_material() -> ShaderMaterial:
 	if _flash_material != null:

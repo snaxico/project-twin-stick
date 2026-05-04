@@ -11,6 +11,7 @@ var _title_text: String = ""
 var _current_ratio: float = 1.0
 var _ghost_ratio: float = 1.0
 var _current_status_text: String = ""
+var _ghost_tween: Tween = null
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -42,14 +43,16 @@ func set_health(current_health: int, max_health: int, status_text: String = "") 
 		_title_label.text = _title_text
 
 	_apply_fill_ratio(_current_ratio)
+	if _ghost_tween != null and _ghost_tween.is_valid():
+		_ghost_tween.kill()
 	if target_ratio >= previous_ratio:
 		_ghost_ratio = target_ratio
 		_apply_ghost_ratio(_ghost_ratio)
 		return
 
-	var tween := create_tween()
-	tween.tween_interval(0.08)
-	tween.tween_method(_set_ghost_ratio, _ghost_ratio, target_ratio, 0.24)
+	_ghost_tween = create_tween()
+	_ghost_tween.tween_interval(0.08)
+	_ghost_tween.tween_method(_set_ghost_ratio, _ghost_ratio, target_ratio, 0.24)
 
 func _build() -> void:
 	if _title_label != null:

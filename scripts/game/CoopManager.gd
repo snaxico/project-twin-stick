@@ -449,7 +449,7 @@ func _spawn_grenade(origin: Vector2, direction: Vector2, speed: float, damage: i
 
 func _on_enemy_died(enemy) -> void:
 	_trigger_hitstop(0.04)
-	_add_camera_trauma(0.3)
+	_add_camera_trauma(0.4)
 	_play_sfx_enemy_death()
 	_spawn_world_effect(
 		ParticleFactoryData.create_death_burst(Color(1.0, 0.28, 0.28, 1.0)),
@@ -974,7 +974,7 @@ func _play_damage_juice() -> void:
 	if modifier_tint == null or camera == null:
 		return
 	var base_color: Color = modifier_tint.color
-	_add_camera_trauma(0.5)
+	_add_camera_trauma(0.3)
 	var tween := create_tween()
 	tween.tween_property(modifier_tint, "color", Color(1.0, 0.72, 0.72, 1.0), 0.08)
 	tween.tween_property(modifier_tint, "color", base_color, 0.14)

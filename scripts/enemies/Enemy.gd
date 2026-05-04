@@ -48,6 +48,7 @@ var _projectile_burst_count := 1
 var _projectile_spread_radians := 0.0
 var _knockback_velocity: Vector2 = Vector2.ZERO
 var _flash_material: ShaderMaterial = null
+var _flash_tween: Tween = null
 var _base_body_root_position := Vector2.ZERO
 var _base_shadow_scale := Vector2.ONE
 var _idle_phase := 0.0
@@ -416,8 +417,10 @@ func _play_flash(color: Color, duration: float) -> void:
 	var material := _get_flash_material()
 	material.set_shader_parameter("flash_color", color)
 	material.set_shader_parameter("flash_intensity", 1.0)
-	var tween := create_tween()
-	tween.tween_property(material, "shader_parameter/flash_intensity", 0.0, duration)
+	if _flash_tween != null and _flash_tween.is_valid():
+		_flash_tween.kill()
+	_flash_tween = create_tween()
+	_flash_tween.tween_property(material, "shader_parameter/flash_intensity", 0.0, duration)
 
 func _get_flash_material() -> ShaderMaterial:
 	if _flash_material != null:
