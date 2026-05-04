@@ -84,10 +84,10 @@ func resolve_current_combat_victory(health_states: Array) -> Dictionary:
 	set_player_health_states(health_states)
 	var room_title := str(current_node.get("title", "Room"))
 	var summary_lines := ["Room cleared."]
-	var scrap_gain := int(current_node.get("currency_reward", 0))
-	if scrap_gain > 0:
-		gold += scrap_gain
-		summary_lines.append("Gained %d Gold. Shared total: %d." % [scrap_gain, gold])
+	var gold_gain := int(current_node.get("currency_reward", 0))
+	if gold_gain > 0:
+		gold += gold_gain
+		summary_lines.append("Gained %d Gold. Shared total: %d." % [gold_gain, gold])
 
 	var outcome := _build_outcome(room_title, "\n".join(summary_lines), "next")
 	var reward: Dictionary = current_node.get("reward", {}).duplicate(true)
@@ -106,8 +106,8 @@ func resolve_current_combat_victory(health_states: Array) -> Dictionary:
 		run_outcome = "won"
 		outcome["title"] = "Run Victory"
 		outcome["summary"] = "Boss defeated.\n%s" % get_run_summary_text()
-		outcome["post_action"] = "restart"
-		outcome["button_text"] = "Restart Run"
+		outcome["post_action"] = "return_to_menu"
+		outcome["button_text"] = "Return to Menu"
 	return outcome
 
 func set_player_health_states(health_states: Array) -> void:
@@ -325,14 +325,17 @@ func _roll_item_choices(pool_name: String, count: int) -> Array:
 		var repeatable := bool(item.get("repeatable", false))
 		if not (item_pools is Array) or not item_pools.has(pool_name):
 			continue
+		if not ProfileState.has_item_unlock(item_id):
+			continue
 		if not repeatable and acquired_item_ids.has(item_id):
 			continue
 		available.append(item.duplicate(true))
-
+		
 	if available.is_empty():
 		for item in _items:
+			var item_id := str(item.get("id", ""))
 			var item_pools = item.get("pools", [])
-			if item_pools is Array and item_pools.has(pool_name):
+			if item_pools is Array and item_pools.has(pool_name) and ProfileState.has_item_unlock(item_id):
 				available.append(item.duplicate(true))
 
 	var choices: Array = []

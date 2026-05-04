@@ -26,10 +26,10 @@ anchor_left = 0.5
 anchor_top = 0.5
 anchor_right = 0.5
 anchor_bottom = 0.5
-offset_left = -220.0
-offset_top = -170.0
-offset_right = 220.0
-offset_bottom = 170.0
+offset_left = -250.0
+offset_top = -220.0
+offset_right = 250.0
+offset_bottom = 220.0
 grow_horizontal = 2
 grow_vertical = 2
 
@@ -133,6 +133,79 @@ layout_mode = 2
 autowrap_mode = 2
 text = "Status"
 
+[node name="MetaButton" type="Button" parent="MenuPanel/MarginContainer/MenuLayout"]
+layout_mode = 2
+text = "Meta Progression"
+
+[node name="ResetProfileButton" type="Button" parent="MenuPanel/MarginContainer/MenuLayout"]
+layout_mode = 2
+text = "Reset Meta Profile"
+
 [node name="StartButton" type="Button" parent="MenuPanel/MarginContainer/MenuLayout"]
 layout_mode = 2
 text = "Start"
+
+[node name="MetaPanel" type="Panel" parent="."]
+visible = false
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -260.0
+offset_top = -240.0
+offset_right = 260.0
+offset_bottom = 240.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="MarginContainer" type="MarginContainer" parent="MetaPanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 16.0
+offset_top = 16.0
+offset_right = -16.0
+offset_bottom = -16.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 8
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 8
+theme_override_constants/margin_bottom = 8
+
+[node name="MetaLayout" type="VBoxContainer" parent="MetaPanel/MarginContainer"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="MetaTitle" type="Label" parent="MetaPanel/MarginContainer/MetaLayout"]
+layout_mode = 2
+text = "Meta Progression"
+horizontal_alignment = 1
+
+[node name="MetaStatusLabel" type="Label" parent="MetaPanel/MarginContainer/MetaLayout"]
+layout_mode = 2
+autowrap_mode = 2
+text = "Meta status"
+
+[node name="UnlockButton1" type="Button" parent="MetaPanel/MarginContainer/MetaLayout"]
+layout_mode = 2
+text = "Unlock 1"
+
+[node name="UnlockButton2" type="Button" parent="MetaPanel/MarginContainer/MetaLayout"]
+layout_mode = 2
+text = "Unlock 2"
+
+[node name="UnlockButton3" type="Button" parent="MetaPanel/MarginContainer/MetaLayout"]
+layout_mode = 2
+text = "Unlock 3"
+
+[node name="UnlockButton4" type="Button" parent="MetaPanel/MarginContainer/MetaLayout"]
+layout_mode = 2
+text = "Unlock 4"
+
+[node name="MetaBackButton" type="Button" parent="MetaPanel/MarginContainer/MetaLayout"]
+layout_mode = 2
+text = "Back"

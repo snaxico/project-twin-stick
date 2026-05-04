@@ -4,10 +4,10 @@ Personal couch co-op twin-stick roguelite prototype built in Godot 4.6.2.
 
 ## Current Position
 
-- Development is paused after a Patch 8 baseline pass.
+- Development resumed for a Patch 9 baseline pass.
 - The prototype remains locked to a same-screen, room-based, local co-op structure.
 - The first-playable milestone is still defined by the Patch 7 target: one complete 10-15 minute run that is readable, stable, and usable without explanation.
-- The current build already includes early Patch 8 work: `1–4` player support, added layout variety, added modifiers, and light placeholder-only presentation juice.
+- The current build includes early Patch 8 work plus a Patch 9 baseline for persistent meta progression and unlocks.
 
 ## Stack
 
@@ -29,6 +29,10 @@ Personal couch co-op twin-stick roguelite prototype built in Godot 4.6.2.
 ## Current Feature Baseline
 
 - `1–4` local players
+- persistent profile save data
+- meta-gold rewards after each completed run
+- persistent unlock purchases that gate future reward/shop pools
+- dedicated run-end summary panel with direct meta-menu handoff
 - shared gold economy and shared upgrade selection
 - shared primary loadout variants: `Rifle`, `Scatter`, `Slug`
 - shared secondary loadout variants: `Grenade`, `Cluster`, `Siege`
@@ -40,6 +44,7 @@ Personal couch co-op twin-stick roguelite prototype built in Godot 4.6.2.
 - multiple room layout presets
 - placeholder boss encounter
 - faux 3/4-view 2D presentation
+- return-to-menu flow after a run so meta unlocks can be spent
 
 ## Controls
 

@@ -23,6 +23,7 @@ window/stretch/mode="canvas_items"
 
 [autoload]
 
+ProfileState="*res://scripts/meta/ProfileState.gd"
 RunState="*res://scripts/game/RunState.gd"
 
 [input]

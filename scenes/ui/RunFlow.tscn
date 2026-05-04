@@ -124,6 +124,61 @@ horizontal_alignment = 1
 layout_mode = 2
 text = "Continue"
 
+[node name="RunSummaryPanel" type="Panel" parent="."]
+visible = false
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -320.0
+offset_top = -210.0
+offset_right = 320.0
+offset_bottom = 210.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="MarginContainer" type="MarginContainer" parent="RunSummaryPanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 16.0
+offset_top = 16.0
+offset_right = -16.0
+offset_bottom = -16.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 8
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 8
+theme_override_constants/margin_bottom = 8
+
+[node name="SummaryLayout" type="VBoxContainer" parent="RunSummaryPanel/MarginContainer"]
+layout_mode = 2
+theme_override_constants/separation = 14
+
+[node name="SummaryTitle" type="Label" parent="RunSummaryPanel/MarginContainer/SummaryLayout"]
+layout_mode = 2
+text = "Run Summary"
+horizontal_alignment = 1
+
+[node name="SummaryDetail" type="Label" parent="RunSummaryPanel/MarginContainer/SummaryLayout"]
+layout_mode = 2
+autowrap_mode = 2
+text = "Summary detail"
+horizontal_alignment = 1
+
+[node name="SummaryUnlocks" type="Label" parent="RunSummaryPanel/MarginContainer/SummaryLayout"]
+layout_mode = 2
+autowrap_mode = 2
+text = "Unlock summary"
+
+[node name="SummaryButton" type="Button" parent="RunSummaryPanel/MarginContainer/SummaryLayout"]
+layout_mode = 2
+text = "Open Meta Menu"
+
 [node name="ChoicePanel" type="Panel" parent="."]
 visible = false
 layout_mode = 1

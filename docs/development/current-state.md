@@ -2,14 +2,17 @@
 
 ## Project Role
 
-Godot 4.6.2 prototype for a same-screen local co-op twin-stick roguelite, currently paused after an early Patch 8 baseline while the first-playable target remains defined by Patch 7.
+Godot 4.6.2 prototype for a same-screen local co-op twin-stick roguelite, now carrying a Patch 9 baseline for persistent progression while the first-playable target remains defined by Patch 7.
 
 ## What Currently Runs
 
 - A bootstrap main scene that opens a setup menu before the game
 - A selectable `1–4` player pre-run setup flow
+- A persistent meta-progression menu with unlock purchases
 - A simple node-map flow with two choices per step
 - Shared gold, post-combat upgrade picks, and a shop choice flow
+- Meta-gold rewards after each completed run
+- A dedicated run-end summary panel with direct meta-menu handoff
 - A downed-and-revive combat loop for co-op recovery
 - A bounded room with solid collision walls
 - A 2D faux 3/4-view placeholder presentation layer
@@ -29,17 +32,22 @@ Godot 4.6.2 prototype for a same-screen local co-op twin-stick roguelite, curren
 - A shared fixed room camera
 - Runtime aim-mode cycling through a small debug HUD
 - The project has been exercised interactively through the current feature slices
+- Headless Godot validation passes with `Godot_v4.6.2-stable_win64_console.exe`
 
 ## Active Systems
 
 - project structure and documentation baseline
 - bootstrap menu for player count and per-player control source
+- `ProfileState` autoload for save data, meta gold, and unlock ownership
 - `RunState` autoload for cross-room progression and health persistence
 - shared gold economy and shared item inventory
 - shared build-state/loadout application across the active team
 - `RunFlow` scene for node selection and room transitions
 - pooled reward-choice and shop-choice UI
+- reward/shop pool gating based on persistent unlock ownership
 - run win/lose resolution through the node-map flow
+- run-end return to menu for persistent spending
+- run-end summary with newly affordable unlock callouts
 - faux 3/4-view room presentation with fixed camera
 - input action namespace for `p1` through `p4`
 - one-to-four player spawning
@@ -74,16 +82,17 @@ Godot 4.6.2 prototype for a same-screen local co-op twin-stick roguelite, curren
 - full run-length tuning and broader solo-vs-3/4-player balancing are not implemented yet
 - grenade readability is still weaker than the primary-fire loop
 - the current aim-mode switcher is a debug HUD, not the final pause-menu flow
-- headless validation from this Codex environment is currently blocked by local Godot execution access outside the workspace
-- no custom art, audio, export flow, or meta-progression pipeline has been started
-- development is paused at this state rather than continuing into Patch 9
+- no custom art, audio, or export pipeline has been started
+- export flow and distribution polish are still not implemented
+- patch 9 currently covers persistence and unlocks, not the distribution part of the roadmap item
 
 ## Next Step
 
 If development resumes, the next work should be tuning and validation rather than new feature scope:
 
 - verify `3–4` player joins, HUD readability, and encounter pressure scaling
+- verify profile save/load, unlock purchase flow, and reward-pool gating across relaunches
 - tune grenade readability and secondary usefulness
 - tune revive timing, boss pressure, and failure fairness
 - tune full-run duration toward the intended `10–15` minute target
-- decide whether Patch 8 should be stabilized as part of the first-playable track or held as extra scope beyond it
+- decide whether Patch 8/9 systems should be stabilized as part of the first-playable track or held as extra scope beyond it

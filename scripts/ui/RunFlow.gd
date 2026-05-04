@@ -2,6 +2,8 @@ extends Control
 
 const GAME_WORLD_SCENE = preload("res://scenes/game/GameWorld.tscn")
 
+signal return_to_menu_requested(open_meta_menu: bool)
+
 @onready var map_panel: Panel = $MapPanel
 @onready var map_title_label: Label = $MapPanel/MarginContainer/MapLayout/MapTitle
 @onready var map_status_label: Label = $MapPanel/MarginContainer/MapLayout/MapStatus
@@ -11,6 +13,11 @@ const GAME_WORLD_SCENE = preload("res://scenes/game/GameWorld.tscn")
 @onready var resolution_title_label: Label = $ResolutionPanel/MarginContainer/ResolutionLayout/ResolutionTitle
 @onready var resolution_detail_label: Label = $ResolutionPanel/MarginContainer/ResolutionLayout/ResolutionDetail
 @onready var resolution_button: Button = $ResolutionPanel/MarginContainer/ResolutionLayout/ResolutionButton
+@onready var run_summary_panel: Panel = $RunSummaryPanel
+@onready var run_summary_title_label: Label = $RunSummaryPanel/MarginContainer/SummaryLayout/SummaryTitle
+@onready var run_summary_detail_label: Label = $RunSummaryPanel/MarginContainer/SummaryLayout/SummaryDetail
+@onready var run_summary_unlocks_label: Label = $RunSummaryPanel/MarginContainer/SummaryLayout/SummaryUnlocks
+@onready var run_summary_button: Button = $RunSummaryPanel/MarginContainer/SummaryLayout/SummaryButton
 @onready var choice_panel: Panel = $ChoicePanel
 @onready var choice_title_label: Label = $ChoicePanel/MarginContainer/ChoiceLayout/ChoiceTitle
 @onready var choice_detail_label: Label = $ChoicePanel/MarginContainer/ChoiceLayout/ChoiceDetail
@@ -24,11 +31,13 @@ var _active_game = null
 var _post_resolution_action: String = "next"
 var _pending_followup: Dictionary = {}
 var _choice_context: Dictionary = {}
+var _open_meta_menu_on_return: bool = false
 
 func _ready() -> void:
 	option_button_1.pressed.connect(_on_option_button_1_pressed)
 	option_button_2.pressed.connect(_on_option_button_2_pressed)
 	resolution_button.pressed.connect(_on_resolution_button_pressed)
+	run_summary_button.pressed.connect(_on_run_summary_button_pressed)
 	choice_button_1.pressed.connect(_on_choice_button_1_pressed)
 	choice_button_2.pressed.connect(_on_choice_button_2_pressed)
 	choice_button_3.pressed.connect(_on_choice_button_3_pressed)
@@ -37,12 +46,13 @@ func _ready() -> void:
 
 func _show_map() -> void:
 	if RunState.is_run_complete():
-		_show_resolution("Run Victory", RunState.get_run_summary_text(), "Restart Run")
-		_post_resolution_action = "restart"
+		_show_resolution("Run Victory", RunState.get_run_summary_text(), "Return to Menu")
+		_post_resolution_action = "return_to_menu"
 		return
 
 	map_panel.visible = true
 	resolution_panel.visible = false
+	run_summary_panel.visible = false
 	choice_panel.visible = false
 	_clear_active_game()
 
@@ -111,17 +121,26 @@ func _launch_room(node: Dictionary) -> void:
 
 func _on_room_cleared(health_states: Array) -> void:
 	var outcome := RunState.resolve_current_combat_victory(health_states)
+	if str(outcome.get("post_action", "")) == "return_to_menu":
+		var meta_reward := ProfileState.award_run_meta_gold(RunState.run_outcome, RunState.rooms_completed)
+		_show_run_summary(outcome, meta_reward, true)
+		return
 	_show_outcome(outcome)
 
 func _on_room_failed() -> void:
 	RunState.run_outcome = "failed"
 	_pending_followup = {}
-	_show_resolution("Run Failed", "The party was defeated.\n%s" % RunState.get_run_summary_text(), "Restart Run")
-	_post_resolution_action = "restart"
+	var meta_reward := ProfileState.award_run_meta_gold(RunState.run_outcome, RunState.rooms_completed)
+	var outcome := {
+		"title": "Run Failed",
+		"summary": "The party was defeated.\n%s" % RunState.get_run_summary_text(),
+	}
+	_show_run_summary(outcome, meta_reward, false)
 
 func _show_resolution(title: String, detail: String, button_text: String) -> void:
 	map_panel.visible = false
 	resolution_panel.visible = true
+	run_summary_panel.visible = false
 	choice_panel.visible = false
 	_clear_active_game()
 	resolution_title_label.text = title
@@ -136,10 +155,9 @@ func _on_resolution_button_pressed() -> void:
 		return
 
 	match _post_resolution_action:
-		"restart":
-			RunState.start_new_run(RunState.player_configs)
+		"return_to_menu":
 			_pending_followup = {}
-			_show_map()
+			return_to_menu_requested.emit(_open_meta_menu_on_return)
 		"complete":
 			_pending_followup = {}
 			_show_map()
@@ -154,6 +172,7 @@ func _clear_active_game() -> void:
 
 func _show_outcome(outcome: Dictionary) -> void:
 	_pending_followup = {}
+	_open_meta_menu_on_return = false
 	_post_resolution_action = str(outcome.get("post_action", "next"))
 	var action := str(outcome.get("action", "next"))
 	if action == "reward" or action == "shop":
@@ -167,6 +186,7 @@ func _show_outcome(outcome: Dictionary) -> void:
 func _show_choice_panel(context: Dictionary) -> void:
 	map_panel.visible = false
 	resolution_panel.visible = false
+	run_summary_panel.visible = false
 	choice_panel.visible = true
 	_clear_active_game()
 	_choice_context = context.duplicate(true)
@@ -230,3 +250,36 @@ func _select_choice(index: int) -> void:
 func _on_choice_continue_button_pressed() -> void:
 	_choice_context = {}
 	_show_map()
+
+func _show_run_summary(outcome: Dictionary, meta_reward: Dictionary, did_win: bool) -> void:
+	map_panel.visible = false
+	resolution_panel.visible = false
+	run_summary_panel.visible = true
+	choice_panel.visible = false
+	_clear_active_game()
+	_pending_followup = {}
+	_choice_context = {}
+	_post_resolution_action = "return_to_menu"
+	_open_meta_menu_on_return = true
+
+	var summary_title := "Run Victory" if did_win else "Run Failed"
+	run_summary_title_label.text = summary_title
+	run_summary_detail_label.text = "%s\n\n%s" % [
+		str(outcome.get("summary", "")),
+		str(meta_reward.get("summary", "")),
+	]
+
+	var unlock_names: Array = meta_reward.get("newly_affordable_unlock_names", [])
+	var unlock_text := ""
+	if unlock_names.is_empty():
+		var affordable_count := int(meta_reward.get("affordable_unlock_count", 0))
+		unlock_text = "No new unlocks became affordable this run."
+		if affordable_count > 0:
+			unlock_text = "%s\nAffordable unlocks waiting in meta menu: %d" % [unlock_text, affordable_count]
+	else:
+		unlock_text = "Newly available unlocks:\n- %s" % "\n- ".join(unlock_names)
+	run_summary_unlocks_label.text = unlock_text
+	run_summary_button.text = "Open Meta Menu"
+
+func _on_run_summary_button_pressed() -> void:
+	return_to_menu_requested.emit(true)

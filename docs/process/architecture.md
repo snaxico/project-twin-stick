@@ -22,6 +22,7 @@
 - No autoloads in Patches 0-4.
 - Introduce exactly one autoload in Patch 5: `RunState.gd`.
 - `RunState.gd` owns cross-room run state only: active players, health persistence, node progression, current node selection, acquired upgrades, shared gold, and run outcome.
+- Patch 9 introduces `ProfileState.gd` for persistent save data, meta currency, and unlock ownership outside individual runs.
 
 ## Input And Bootstrap Note
 
@@ -38,6 +39,7 @@
 - `RunFlow` owns node selection and room transitions.
 - `GameWorld` remains the combat-room runtime and receives per-room configuration from the selected node.
 - `RunState` persists health, gold, acquired items, current node, and final run outcome across those transitions.
+- `ProfileState` persists unlocks and meta currency across application launches and gates which run upgrades may appear in reward/shop pools.
 
 ## Core Data Contracts
 
@@ -46,6 +48,7 @@
 - `enemies.json`: enemy archetypes and tuning values
 - `modifiers.json`: room modifier definitions
 - `items.json`: item definitions and descriptive text
+- `unlocks.json`: persistent unlock definitions and costs
 
 ## Planned Runtime Signals
 
@@ -58,11 +61,15 @@
 
 Signals stay local to the systems that own them until cross-room state exists.
 
-## Current Pause Note
+## Current State Note
 
-- The current paused build already includes early Patch 8 work:
+- The current build includes early Patch 8 work:
   - `1–4` player support
   - extra room layouts
   - extra modifiers
   - light placeholder-only juice
+- The current build also includes an early Patch 9 baseline:
+  - persistent meta profile save data
+  - menu-side unlock purchasing
+  - run-end return-to-menu flow for spending unlock currency
 - Those systems are present in code but still need broader tuning and readability passes before they should be treated as stable.
