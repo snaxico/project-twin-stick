@@ -4,9 +4,10 @@ Personal couch co-op twin-stick roguelite prototype built in Godot 4.6.2.
 
 ## Current Position
 
-- Phase 0 foundation and Patch 0 baseline are the active implementation target.
-- The prototype is locked to a same-screen, room-based, local co-op structure.
-- The first playable target is Patch 7: one complete 10-15 minute run that passes the girlfriend test.
+- Development is paused after a Patch 8 baseline pass.
+- The prototype remains locked to a same-screen, room-based, local co-op structure.
+- The first-playable milestone is still defined by the Patch 7 target: one complete 10-15 minute run that is readable, stable, and usable without explanation.
+- The current build already includes early Patch 8 work: `1–4` player support, added layout variety, added modifiers, and light placeholder-only presentation juice.
 
 ## Stack
 
@@ -15,43 +16,56 @@ Personal couch co-op twin-stick roguelite prototype built in Godot 4.6.2.
 - Data: JSON-first content definitions
 - Platform target: Windows desktop first
 
-## Run
+## Current Runtime
 
-1. Open the project in Godot 4.6.2 stable.
-2. Run the main scene.
-3. Current runtime baseline:
-    - A bootstrap menu opens first.
-    - The menu selects `1–2` players and one control source per player.
-    - The selected setup launches a simple node-map flow.
-    - The node map previews room type, modifier, and reward before entry.
-    - Combat and elite selections launch configured survival rooms.
-    - Rest and shop nodes resolve as lightweight placeholder progression nodes.
-    - Two placeholder players can spawn in the active room.
-    - Players can fire placeholder projectiles.
-    - One grenade-style secondary is available with cooldown feedback.
-    - A small placeholder enemy wave can be defeated or can defeat the players.
-    - Each room rolls one active modifier with a visible pre-fight telegraph.
-    - The room reports either `Victory` after 30 seconds or `All players down`.
-    - Shared fixed camera stays centered on the room.
-    - Debug HUD buttons cycle P1 and P2 aim modes at runtime.
-4. Current keyboard fallback:
-   - P1 move: `WASD`
-   - P1 aim: arrow keys
-   - P1 dash: `Space`
-   - P2 move: `IJKL`
-   - P2 aim: numpad `8/4/5/6`
-   - P2 dash: `Enter`
+1. Open the project in Godot 4.6.2 stable and run the main scene.
+2. A bootstrap menu opens first and currently defaults to `1 Player` plus `Gamepad`.
+3. The menu supports `1–4` players and per-player control source selection.
+4. Starting a run opens a simple node-map flow with room, modifier, and reward preview.
+5. Combat and elite nodes launch survival rooms with recurring enemy spawns and room modifiers.
+6. Rest and shop nodes resolve through lightweight placeholder progression flows.
+7. Clearing the final boss room resolves into a run-victory screen. Losing all active players resolves into a defeat screen.
+
+## Current Feature Baseline
+
+- `1–4` local players
+- shared gold economy and shared upgrade selection
+- shared primary loadout variants: `Rifle`, `Scatter`, `Slug`
+- shared secondary loadout variants: `Grenade`, `Cluster`, `Siege`
+- mouse aim and mouse buttons for keyboard/mouse play
+- `L2` secondary for gamepad play
+- movement-first dash direction with aim fallback
+- downed and proximity-revive flow
+- room modifiers with pre-fight telegraphing
+- multiple room layout presets
+- placeholder boss encounter
+- faux 3/4-view 2D presentation
+
+## Controls
+
+- Keyboard/mouse:
+  - move: `WASD`
+  - aim: mouse
+  - primary fire: left mouse button
+  - secondary: right mouse button
+  - dash: `Space`
+- Gamepad:
+  - move: left stick
+  - aim: right stick
+  - primary fire: `R2`
+  - secondary: `L2`
+  - dash: `A`
 
 ## Placeholder Policy
 
-- Use Godot-native placeholder visuals with default styling during the current prototype slices.
-- Do not add custom sprite production work, custom placeholder palettes, or custom art assets before the gameplay slices demand it.
-
-## Current Menu Scope
-
-- Player count selection currently supports `1` or `2`.
-- Per-player control source currently supports `Keyboard`, `Gamepad`, or `Hybrid`.
-- The menu is a pre-run bootstrap flow, not the final front-end or pause-menu implementation.
+- Use Godot-native placeholder visuals only during the current prototype stage.
+- No custom sprite production or final art pipeline has been started.
+- Current player/enemy readability relies on simple colored placeholder forms:
+  - `P1`: green
+  - `P2`: blue
+  - `P3`: yellow
+  - `P4`: orange
+  - enemies: red
 
 ## Documentation
 

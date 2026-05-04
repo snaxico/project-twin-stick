@@ -9,15 +9,15 @@ One patch equals one validated subsystem. Do not start the next patch until the 
 | Patch | Goal | Current Status |
 | --- | --- | --- |
 | Phase 0 | Project structure, docs, standards alignment, Git, readiness artifacts | Completed |
-| Patch 0 | Bounded room and Player 1 movement baseline | Implemented, manual control check pending |
-| Patch 1 | Two players, aim, dash, aim assist, hot-plug tolerance | Implemented, interactive validation pending |
-| Patch 2 | Primary combat loop and first enemies | Implemented, gameplay validation pending |
-| Patch 3 | Secondary slot and cooldown feedback | Implemented, gameplay validation pending |
-| Patch 4 | Modifier engine and room telegraphing | Implemented, gameplay validation pending |
-| Patch 5 | Node map, room flow, reward preview, `RunState` | Implemented, gameplay validation pending |
-| Patch 6 | Shared loot and build differentiation | Planned |
-| Patch 7 | Boss, revive flow, full run, first-playable validation | Planned |
-| Patch 8 | Juice, audio, 3-4 player tuning, broader content | Deferred until Patch 7 passes |
+| Patch 0 | Bounded room and Player 1 movement baseline | Implemented and interactively validated during development |
+| Patch 1 | Two players, aim, dash, aim assist, hot-plug tolerance | Implemented and interactively validated during development |
+| Patch 2 | Primary combat loop and first enemies | Implemented and interactively validated during development |
+| Patch 3 | Secondary slot and cooldown feedback | Implemented and interactively validated during development |
+| Patch 4 | Modifier engine and room telegraphing | Implemented and interactively validated during development |
+| Patch 5 | Node map, room flow, reward preview, `RunState` | Implemented and interactively validated during development |
+| Patch 6 | Shared loot and build differentiation | Implemented and interactively validated during development |
+| Patch 7 | Boss, revive flow, full run, first-playable validation | Implemented and interactively validated during development |
+| Patch 8 | Juice, audio, 3-4 player tuning, broader content | Implemented as an early baseline, broader validation and tuning still pending |
 | Patch 9 | Meta-progression and distribution | Deferred until Patch 8 passes |
 
 ## Validation Gate Per Patch
@@ -31,15 +31,11 @@ One patch equals one validated subsystem. Do not start the next patch until the 
 
 ## Current Validation Note
 
-- Headless Godot launch is clean on 2026-05-04.
-- Patch 0 still needs an interactive manual check for movement feel, wall collision, and runtime readability before it should be treated as complete and committed as a finished patch.
-- Patch 1 now loads cleanly and spawns two placeholder players with a shared fixed camera and runtime aim-mode cycling.
-- A bootstrap menu now loads before the game scene and configures player count plus per-player control source for the current `1–2` player scope.
-- Patch 1 still needs interactive checks for dual-keyboard controls, mixed aim modes, dash timing, and controller disconnect/reconnect behavior.
-- Patch 2 now loads cleanly with placeholder projectiles, a small enemy wave, HP/damage, and room-clear or full-party-loss state.
-- Patch 2 still needs the real gameplay test: do the controls, combat readability, and enemy pressure feel like the first actual fun slice?
-- Patch 3 now loads cleanly with one grenade-style secondary and HUD cooldown feedback.
-- Patch 4 now loads cleanly with JSON-backed room modifiers, visual telegraphing, and active room-rule effects.
-- Patch 3 and Patch 4 still need gameplay validation for grenade readability, modifier clarity, and whether the different room rules feel distinct enough to justify staying.
-- Patch 5 now loads cleanly with `RunState`, a simple node map, room/reward preview, and transitions between room selection and configured encounters.
-- Patch 5 still needs gameplay validation for room-flow clarity, health persistence between nodes, and whether the current rest/shop placeholders are sufficient until the loot/map systems expand.
+- The project was exercised interactively through these slices while development was in progress.
+- Headless Godot validation from this Codex environment is not reliable because local executable access outside the workspace is blocked here.
+- The strongest remaining runtime risk at pause is tuning and readability rather than basic flow breakage:
+  - `3–4` player pressure and HUD readability
+  - grenade readability and general combat clarity under stress
+  - boss pacing and revive fairness
+  - full-run duration tuning toward the intended `10–15` minute target
+- Development is intentionally paused at this state rather than continuing into Patch 9.

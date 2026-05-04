@@ -2,7 +2,7 @@
 
 ## Folder Ownership
 
-- `scenes/`: scene composition for world, player, enemies, weapons, UI, and later boss/menu flows
+- `scenes/`: scene composition for world, player, enemies, weapons, UI, and run/menu flows
 - `scripts/`: gameplay and runtime logic
 - `data/`: editable JSON definitions
 - `assets/`: sprites, audio, fonts, and imported content only
@@ -14,44 +14,30 @@
 - Simulation owns movement, aim rules, combat, revive logic, room rules, loot rules, and run progression.
 - Presentation owns visuals, HUD, modifier tinting, hit feedback, particles, and camera feel.
 - Scene files compose nodes but do not become the place where rules are hidden.
-- Placeholder visuals should stay Godot-native through the current prototype slices, using default styling rather than a custom palette. No custom sprite work is needed before combat readability or feel requires it.
-- Pre-run configuration flows should pass state through scene ownership, not early autoloads. The current menu uses a bootstrap scene that instantiates `GameWorld` with explicit player configs.
+- Placeholder visuals should stay Godot-native through the current prototype slices. The current paused build uses simple placeholder geometry, a faux 3/4 view, and minimal player/enemy color identity for readability rather than any custom art pipeline.
+- Pre-run configuration flows should pass state through scene ownership, not early autoloads. The current menu uses a bootstrap scene that hands off explicit player configs into the run flow.
 
 ## Singleton Policy
 
 - No autoloads in Patches 0-4.
 - Introduce exactly one autoload in Patch 5: `RunState.gd`.
-- `RunState.gd` owns cross-room run state only: active players, health persistence, node progression, current node selection, and run outcome.
+- `RunState.gd` owns cross-room run state only: active players, health persistence, node progression, current node selection, acquired upgrades, shared gold, and run outcome.
 
-## Input Contract
+## Input And Bootstrap Note
 
-Reserve per-player action namespaces now:
+- Movement remains action-map driven for `p1_*` through `p4_*`.
+- Aim and some control routing are resolved through a code-side control layer so the prototype can stay clean and playable without premature editor-side input plumbing.
+- Keyboard control currently uses mouse aim, left mouse primary fire, and right mouse secondary fire.
+- Gamepad control currently uses `R2` for primary fire, `L2` for secondary, and a movement-first dash direction with aim fallback.
+- Runtime aim-mode switching still uses a small debug HUD. A proper pause-menu flow remains deferred.
+- Player count and control source selection happen in a bootstrap menu before the run-flow scene starts.
 
-- `p1_*`
-- `p2_*`
-- `p3_*`
-- `p4_*`
+## Run Flow Note
 
-Each namespace will own:
-
-- `move_left`, `move_right`, `move_up`, `move_down`
-- `aim_left`, `aim_right`, `aim_up`, `aim_down`
-- `fire`, `secondary`, `dash`, `pause`
-
-Patch 0 validates only Player 1 movement. Patch 1 fills in the active co-op bindings and aim behavior.
-
-## Patch 1 Note
-
-- Movement remains action-map driven for `p1_*` and `p2_*`.
-- Aim and dash are currently resolved through a code-side control layer so the prototype can stay clean and playable without premature editor-side input plumbing.
-- Runtime aim-mode switching currently uses a small debug HUD. A proper pause-menu flow is still deferred.
-- Player count and control source selection now happen in a bootstrap menu before `GameWorld` starts.
-
-## Patch 5 Note
-
-- The bootstrap menu now hands off to a run-flow scene instead of opening the room directly.
+- The bootstrap menu hands off to a run-flow scene instead of opening the room directly.
 - `RunFlow` owns node selection and room transitions.
-- `GameWorld` remains the combat room runtime and receives per-room configuration from the selected node.
+- `GameWorld` remains the combat-room runtime and receives per-room configuration from the selected node.
+- `RunState` persists health, gold, acquired items, current node, and final run outcome across those transitions.
 
 ## Core Data Contracts
 
@@ -71,3 +57,12 @@ Patch 0 validates only Player 1 movement. Patch 1 fills in the active co-op bind
 - `run_completed`
 
 Signals stay local to the systems that own them until cross-room state exists.
+
+## Current Pause Note
+
+- The current paused build already includes early Patch 8 work:
+  - `1–4` player support
+  - extra room layouts
+  - extra modifiers
+  - light placeholder-only juice
+- Those systems are present in code but still need broader tuning and readability passes before they should be treated as stable.

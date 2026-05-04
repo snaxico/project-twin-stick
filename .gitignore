@@ -1,7 +1,7 @@
 .godot/
 .import/
+.claude/
 export.cfg
 export_presets.cfg
 *.tmp
 *.log
-

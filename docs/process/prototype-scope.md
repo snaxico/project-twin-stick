@@ -8,7 +8,7 @@ Build a same-screen local co-op twin-stick roguelite prototype in Godot where on
 
 Enter room -> fight under one active modifier -> clear the room -> make one shared loot or route decision -> continue to the next room.
 
-## Locked Decisions Through Patch 7
+## Locked Decisions Through First-Playable
 
 - Same-screen camera with one fixed room view.
 - No split-screen and no dynamic zoom.
@@ -21,14 +21,20 @@ Enter room -> fight under one active modifier -> clear the room -> make one shar
 - No class system.
 - No Skeleton2D rigging before the prototype loop is proven.
 
-## Explicit Non-Goals Before Patch 8
+## Explicit Non-Goals Before First-Playable Signoff
 
-- 3-4 player tuning
+- full `3–4` player tuning
 - deep art production
 - advanced menus
 - meta-progression
 - export polish
 - expanded content breadth beyond first-playable needs
+
+## Current Pause Note
+
+- The paused build has already stepped slightly past the strict Patch 7 boundary with an early Patch 8 baseline.
+- The codebase now includes initial `3–4` player support, more layouts, more modifiers, and light placeholder presentation effects.
+- This does not change the first-playable definition. The real success bar is still a readable, stable, `1–2` player run that lands in the intended `10–15` minute window.
 
 ## Prototype Success Criteria
 
@@ -36,4 +42,3 @@ Enter room -> fight under one active modifier -> clear the room -> make one shar
 - A two-player run can be completed in 10-15 minutes.
 - Shared decisions are readable in the moment.
 - A non-gamer can complete a run without asking for help.
-
