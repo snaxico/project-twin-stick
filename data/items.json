@@ -1,0 +1,101 @@
+{
+  "items": [
+    {
+      "id": "scatter_rig",
+      "name": "Scatter Rig",
+      "category": "Primary",
+      "description": "Swap the shared primary into a three-shot spread pattern.",
+      "pools": ["reward", "shop"],
+      "cost": 3,
+      "repeatable": false,
+      "effects": {
+        "set_primary_profile": "spread"
+      }
+    },
+    {
+      "id": "slug_chamber",
+      "name": "Slug Chamber",
+      "category": "Primary",
+      "description": "Swap the shared primary into a slower heavy slug with higher damage.",
+      "pools": ["reward", "shop"],
+      "cost": 3,
+      "repeatable": false,
+      "effects": {
+        "set_primary_profile": "slug"
+      }
+    },
+    {
+      "id": "overclocked_receiver",
+      "name": "Overclocked Receiver",
+      "category": "Primary",
+      "description": "Increase shared primary fire rate by 18%.",
+      "pools": ["reward", "shop"],
+      "cost": 2,
+      "repeatable": false,
+      "effects": {
+        "primary_fire_interval_mult": 0.82
+      }
+    },
+    {
+      "id": "cluster_shells",
+      "name": "Cluster Shells",
+      "category": "Secondary",
+      "description": "Swap the shared secondary into a twin-grenade cluster pattern.",
+      "pools": ["reward", "shop"],
+      "cost": 3,
+      "repeatable": false,
+      "effects": {
+        "set_secondary_profile": "cluster"
+      }
+    },
+    {
+      "id": "siege_canister",
+      "name": "Siege Canister",
+      "category": "Secondary",
+      "description": "Swap the shared secondary into a slower, wider blast canister.",
+      "pools": ["reward", "shop"],
+      "cost": 3,
+      "repeatable": false,
+      "effects": {
+        "set_secondary_profile": "siege"
+      }
+    },
+    {
+      "id": "quick_release_valve",
+      "name": "Quick Release Valve",
+      "category": "Secondary",
+      "description": "Reduce shared secondary cooldown by 20%.",
+      "pools": ["reward", "shop"],
+      "cost": 2,
+      "repeatable": false,
+      "effects": {
+        "secondary_cooldown_mult": 0.8
+      }
+    },
+    {
+      "id": "high_velocity_rounds",
+      "name": "High Velocity Rounds",
+      "category": "Primary",
+      "description": "Increase shared projectile speed and add 1 primary damage.",
+      "pools": ["reward", "shop"],
+      "cost": 2,
+      "repeatable": false,
+      "effects": {
+        "projectile_speed_mult": 1.2,
+        "projectile_damage_bonus": 1
+      }
+    },
+    {
+      "id": "reinforced_plating",
+      "name": "Reinforced Plating",
+      "category": "Survival",
+      "description": "Give every player +1 max HP and heal that amount immediately.",
+      "pools": ["reward", "shop"],
+      "cost": 2,
+      "repeatable": false,
+      "effects": {
+        "max_health_bonus": 1
+      }
+    }
+  ]
+}

@@ -1,0 +1,190 @@
+[gd_scene format=3 uid="uid://dtkvs0n4xibsl"]
+
+[ext_resource type="Script" path="res://scripts/ui/RunFlow.gd" id="1_rh1f0"]
+
+[node name="RunFlow" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_rh1f0")
+
+[node name="GameContainer" type="Control" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="MapPanel" type="Panel" parent="."]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -360.0
+offset_top = -240.0
+offset_right = 360.0
+offset_bottom = 240.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="MarginContainer" type="MarginContainer" parent="MapPanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 16.0
+offset_top = 16.0
+offset_right = -16.0
+offset_bottom = -16.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 8
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 8
+theme_override_constants/margin_bottom = 8
+
+[node name="MapLayout" type="VBoxContainer" parent="MapPanel/MarginContainer"]
+layout_mode = 2
+theme_override_constants/separation = 14
+
+[node name="MapTitle" type="Label" parent="MapPanel/MarginContainer/MapLayout"]
+layout_mode = 2
+text = "Node Map"
+horizontal_alignment = 1
+
+[node name="MapStatus" type="Label" parent="MapPanel/MarginContainer/MapLayout"]
+layout_mode = 2
+autowrap_mode = 2
+text = "Choose the next room."
+horizontal_alignment = 1
+
+[node name="OptionButton1" type="Button" parent="MapPanel/MarginContainer/MapLayout"]
+layout_mode = 2
+custom_minimum_size = Vector2(0, 110)
+text = "Option 1"
+
+[node name="OptionButton2" type="Button" parent="MapPanel/MarginContainer/MapLayout"]
+layout_mode = 2
+custom_minimum_size = Vector2(0, 110)
+text = "Option 2"
+
+[node name="ResolutionPanel" type="Panel" parent="."]
+visible = false
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -300.0
+offset_top = -170.0
+offset_right = 300.0
+offset_bottom = 170.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="MarginContainer" type="MarginContainer" parent="ResolutionPanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 16.0
+offset_top = 16.0
+offset_right = -16.0
+offset_bottom = -16.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 8
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 8
+theme_override_constants/margin_bottom = 8
+
+[node name="ResolutionLayout" type="VBoxContainer" parent="ResolutionPanel/MarginContainer"]
+layout_mode = 2
+theme_override_constants/separation = 14
+
+[node name="ResolutionTitle" type="Label" parent="ResolutionPanel/MarginContainer/ResolutionLayout"]
+layout_mode = 2
+text = "Result"
+horizontal_alignment = 1
+
+[node name="ResolutionDetail" type="Label" parent="ResolutionPanel/MarginContainer/ResolutionLayout"]
+layout_mode = 2
+autowrap_mode = 2
+text = "Resolution detail"
+horizontal_alignment = 1
+
+[node name="ResolutionButton" type="Button" parent="ResolutionPanel/MarginContainer/ResolutionLayout"]
+layout_mode = 2
+text = "Continue"
+
+[node name="ChoicePanel" type="Panel" parent="."]
+visible = false
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -360.0
+offset_top = -240.0
+offset_right = 360.0
+offset_bottom = 240.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="MarginContainer" type="MarginContainer" parent="ChoicePanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 16.0
+offset_top = 16.0
+offset_right = -16.0
+offset_bottom = -16.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 8
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 8
+theme_override_constants/margin_bottom = 8
+
+[node name="ChoiceLayout" type="VBoxContainer" parent="ChoicePanel/MarginContainer"]
+layout_mode = 2
+theme_override_constants/separation = 14
+
+[node name="ChoiceTitle" type="Label" parent="ChoicePanel/MarginContainer/ChoiceLayout"]
+layout_mode = 2
+text = "Choose Upgrade"
+horizontal_alignment = 1
+
+[node name="ChoiceDetail" type="Label" parent="ChoicePanel/MarginContainer/ChoiceLayout"]
+layout_mode = 2
+autowrap_mode = 2
+text = "Choice detail"
+horizontal_alignment = 1
+
+[node name="ChoiceButton1" type="Button" parent="ChoicePanel/MarginContainer/ChoiceLayout"]
+layout_mode = 2
+custom_minimum_size = Vector2(0, 88)
+text = "Choice 1"
+
+[node name="ChoiceButton2" type="Button" parent="ChoicePanel/MarginContainer/ChoiceLayout"]
+layout_mode = 2
+custom_minimum_size = Vector2(0, 88)
+text = "Choice 2"
+
+[node name="ChoiceButton3" type="Button" parent="ChoicePanel/MarginContainer/ChoiceLayout"]
+layout_mode = 2
+custom_minimum_size = Vector2(0, 88)
+text = "Choice 3"
+
+[node name="ChoiceContinueButton" type="Button" parent="ChoicePanel/MarginContainer/ChoiceLayout"]
+layout_mode = 2
+text = "Leave Shop"

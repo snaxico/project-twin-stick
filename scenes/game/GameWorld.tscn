@@ -1,0 +1,265 @@
+[gd_scene load_steps=8 format=3 uid="uid://c6ov0pl7m3y8a"]
+
+[ext_resource type="Script" path="res://scripts/game/CoopManager.gd" id="1_4o0x5"]
+[ext_resource type="PackedScene" path="res://scenes/player/Player.tscn" id="1_3sby6"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_top"]
+size = Vector2(1152, 16)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_bottom"]
+size = Vector2(1152, 16)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_left"]
+size = Vector2(16, 592)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_right"]
+size = Vector2(16, 592)
+
+[node name="GameWorld" type="Node2D"]
+script = ExtResource("1_4o0x5")
+player_scene = ExtResource("1_3sby6")
+
+[node name="Floor" type="Polygon2D" parent="."]
+color = Color(0.2, 0.26, 0.18, 1)
+polygon = PackedVector2Array(200, 120, 1080, 120, 1180, 620, 100, 620)
+
+[node name="BackWall" type="Polygon2D" parent="."]
+color = Color(0.28, 0.31, 0.26, 1)
+polygon = PackedVector2Array(200, 96, 1080, 96, 1080, 136, 200, 136)
+
+[node name="LeftWallVisual" type="Polygon2D" parent="."]
+color = Color(0.24, 0.28, 0.22, 1)
+polygon = PackedVector2Array(172, 120, 200, 120, 100, 620, 72, 620)
+
+[node name="RightWallVisual" type="Polygon2D" parent="."]
+color = Color(0.24, 0.28, 0.22, 1)
+polygon = PackedVector2Array(1080, 120, 1108, 120, 1208, 620, 1180, 620)
+
+[node name="ArenaBounds" type="StaticBody2D" parent="."]
+
+[node name="TopWall" type="CollisionShape2D" parent="ArenaBounds"]
+position = Vector2(640, 56)
+shape = SubResource("RectangleShape2D_top")
+
+[node name="BottomWall" type="CollisionShape2D" parent="ArenaBounds"]
+position = Vector2(640, 664)
+shape = SubResource("RectangleShape2D_bottom")
+
+[node name="LeftWall" type="CollisionShape2D" parent="ArenaBounds"]
+position = Vector2(56, 360)
+shape = SubResource("RectangleShape2D_left")
+
+[node name="RightWall" type="CollisionShape2D" parent="ArenaBounds"]
+position = Vector2(1224, 360)
+shape = SubResource("RectangleShape2D_right")
+
+[node name="Camera2D" type="Camera2D" parent="."]
+position = Vector2(640, 392)
+enabled = true
+zoom = Vector2(0.92, 0.92)
+
+[node name="ModifierTint" type="CanvasModulate" parent="."]
+color = Color(1, 1, 1, 1)
+
+[node name="Players" type="Node2D" parent="."]
+
+[node name="Projectiles" type="Node2D" parent="."]
+
+[node name="Enemies" type="Node2D" parent="."]
+
+[node name="Player1Spawn" type="Marker2D" parent="."]
+position = Vector2(500, 360)
+
+[node name="Player2Spawn" type="Marker2D" parent="."]
+position = Vector2(780, 360)
+
+[node name="Player3Spawn" type="Marker2D" parent="."]
+position = Vector2(500, 438)
+
+[node name="Player4Spawn" type="Marker2D" parent="."]
+position = Vector2(780, 438)
+
+[node name="EnemySpawn1" type="Marker2D" parent="."]
+position = Vector2(360, 220)
+
+[node name="EnemySpawn2" type="Marker2D" parent="."]
+position = Vector2(920, 220)
+
+[node name="EnemySpawn3" type="Marker2D" parent="."]
+position = Vector2(360, 520)
+
+[node name="EnemySpawn4" type="Marker2D" parent="."]
+position = Vector2(920, 520)
+
+[node name="EnemySpawn5" type="Marker2D" parent="."]
+position = Vector2(640, 180)
+
+[node name="EnemySpawn6" type="Marker2D" parent="."]
+position = Vector2(640, 560)
+
+[node name="UI" type="CanvasLayer" parent="."]
+
+[node name="Title" type="Label" parent="UI"]
+offset_left = 16.0
+offset_top = 16.0
+offset_right = 420.0
+offset_bottom = 42.0
+text = "Prototype Debug HUD"
+
+[node name="P1Status" type="Label" parent="UI"]
+offset_left = 16.0
+offset_top = 48.0
+offset_right = 500.0
+offset_bottom = 74.0
+text = "P1"
+
+[node name="P1ModeButton" type="Button" parent="UI"]
+offset_left = 16.0
+offset_top = 74.0
+offset_right = 210.0
+offset_bottom = 106.0
+text = "Cycle P1 Aim Mode"
+
+[node name="P1SecondaryStatus" type="Label" parent="UI"]
+offset_left = 16.0
+offset_top = 108.0
+offset_right = 360.0
+offset_bottom = 134.0
+text = "P1 Secondary"
+
+[node name="P2Status" type="Label" parent="UI"]
+offset_left = 16.0
+offset_top = 146.0
+offset_right = 500.0
+offset_bottom = 172.0
+text = "P2"
+
+[node name="P2ModeButton" type="Button" parent="UI"]
+offset_left = 16.0
+offset_top = 172.0
+offset_right = 210.0
+offset_bottom = 204.0
+text = "Cycle P2 Aim Mode"
+
+[node name="P2SecondaryStatus" type="Label" parent="UI"]
+offset_left = 16.0
+offset_top = 206.0
+offset_right = 360.0
+offset_bottom = 232.0
+text = "P2 Secondary"
+
+[node name="P3Status" type="Label" parent="UI"]
+offset_left = 16.0
+offset_top = 244.0
+offset_right = 500.0
+offset_bottom = 270.0
+text = "P3"
+
+[node name="P3SecondaryStatus" type="Label" parent="UI"]
+offset_left = 16.0
+offset_top = 272.0
+offset_right = 360.0
+offset_bottom = 298.0
+text = "P3 Secondary"
+
+[node name="P4Status" type="Label" parent="UI"]
+offset_left = 16.0
+offset_top = 310.0
+offset_right = 500.0
+offset_bottom = 336.0
+text = "P4"
+
+[node name="P4SecondaryStatus" type="Label" parent="UI"]
+offset_left = 16.0
+offset_top = 338.0
+offset_right = 360.0
+offset_bottom = 364.0
+text = "P4 Secondary"
+
+[node name="ConnectionStatus" type="Label" parent="UI"]
+offset_left = 16.0
+offset_top = 390.0
+offset_right = 640.0
+offset_bottom = 442.0
+text = "Gamepads"
+
+[node name="RoomStatus" type="Label" parent="UI"]
+offset_left = 16.0
+offset_top = 444.0
+offset_right = 780.0
+offset_bottom = 496.0
+autowrap_mode = 2
+text = "Room status"
+
+[node name="ModifierStatus" type="Label" parent="UI"]
+offset_left = 16.0
+offset_top = 476.0
+offset_right = 780.0
+offset_bottom = 536.0
+autowrap_mode = 2
+text = "Modifier status"
+
+[node name="ResultPanel" type="Panel" parent="UI"]
+visible = false
+offset_left = 420.0
+offset_top = 250.0
+offset_right = 860.0
+offset_bottom = 470.0
+
+[node name="MarginContainer" type="MarginContainer" parent="UI/ResultPanel"]
+offset_left = 16.0
+offset_top = 16.0
+offset_right = 424.0
+offset_bottom = 204.0
+theme_override_constants/margin_left = 8
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 8
+theme_override_constants/margin_bottom = 8
+
+[node name="ResultLayout" type="VBoxContainer" parent="UI/ResultPanel/MarginContainer"]
+offset_right = 408.0
+offset_bottom = 188.0
+theme_override_constants/separation = 12
+
+[node name="ResultTitle" type="Label" parent="UI/ResultPanel/MarginContainer/ResultLayout"]
+text = "Victory"
+horizontal_alignment = 1
+
+[node name="ResultDetail" type="Label" parent="UI/ResultPanel/MarginContainer/ResultLayout"]
+autowrap_mode = 2
+text = "You survived."
+horizontal_alignment = 1
+
+[node name="RetryButton" type="Button" parent="UI/ResultPanel/MarginContainer/ResultLayout"]
+text = "Retry"
+
+[node name="ModifierIntroPanel" type="Panel" parent="UI"]
+visible = false
+offset_left = 360.0
+offset_top = 120.0
+offset_right = 920.0
+offset_bottom = 240.0
+
+[node name="MarginContainer" type="MarginContainer" parent="UI/ModifierIntroPanel"]
+offset_left = 16.0
+offset_top = 16.0
+offset_right = 544.0
+offset_bottom = 104.0
+theme_override_constants/margin_left = 8
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 8
+theme_override_constants/margin_bottom = 8
+
+[node name="IntroLayout" type="VBoxContainer" parent="UI/ModifierIntroPanel/MarginContainer"]
+offset_right = 528.0
+offset_bottom = 88.0
+theme_override_constants/separation = 10
+
+[node name="ModifierTitle" type="Label" parent="UI/ModifierIntroPanel/MarginContainer/IntroLayout"]
+text = "Incoming Modifier"
+horizontal_alignment = 1
+
+[node name="ModifierDetail" type="Label" parent="UI/ModifierIntroPanel/MarginContainer/IntroLayout"]
+autowrap_mode = 2
+text = "Modifier description"
+horizontal_alignment = 1

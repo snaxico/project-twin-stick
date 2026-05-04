@@ -1,0 +1,138 @@
+[gd_scene load_steps=2 format=3 uid="uid://dwltxnx4kksv6"]
+
+[ext_resource type="Script" path="res://scripts/ui/Bootstrap.gd" id="1_nouxx"]
+
+[node name="Bootstrap" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_nouxx")
+
+[node name="GameContainer" type="Control" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="MenuPanel" type="Panel" parent="."]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -220.0
+offset_top = -170.0
+offset_right = 220.0
+offset_bottom = 170.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="MarginContainer" type="MarginContainer" parent="MenuPanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 16.0
+offset_top = 16.0
+offset_right = -16.0
+offset_bottom = -16.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 8
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 8
+theme_override_constants/margin_bottom = 8
+
+[node name="MenuLayout" type="VBoxContainer" parent="MenuPanel/MarginContainer"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="Title" type="Label" parent="MenuPanel/MarginContainer/MenuLayout"]
+layout_mode = 2
+text = "Project Placeholder"
+horizontal_alignment = 1
+
+[node name="Subtitle" type="Label" parent="MenuPanel/MarginContainer/MenuLayout"]
+layout_mode = 2
+text = "Choose players and control sources"
+horizontal_alignment = 1
+
+[node name="PlayerCountRow" type="HBoxContainer" parent="MenuPanel/MarginContainer/MenuLayout"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="PlayerCountLabel" type="Label" parent="MenuPanel/MarginContainer/MenuLayout/PlayerCountRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Player Count"
+
+[node name="PlayerCountOption" type="OptionButton" parent="MenuPanel/MarginContainer/MenuLayout/PlayerCountRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="Player1ControlRow" type="HBoxContainer" parent="MenuPanel/MarginContainer/MenuLayout"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="Player1ControlLabel" type="Label" parent="MenuPanel/MarginContainer/MenuLayout/Player1ControlRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Player 1 Control"
+
+[node name="Player1ControlOption" type="OptionButton" parent="MenuPanel/MarginContainer/MenuLayout/Player1ControlRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="Player2ControlRow" type="HBoxContainer" parent="MenuPanel/MarginContainer/MenuLayout"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="Player2ControlLabel" type="Label" parent="MenuPanel/MarginContainer/MenuLayout/Player2ControlRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Player 2 Control"
+
+[node name="Player2ControlOption" type="OptionButton" parent="MenuPanel/MarginContainer/MenuLayout/Player2ControlRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="Player3ControlRow" type="HBoxContainer" parent="MenuPanel/MarginContainer/MenuLayout"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="Player3ControlLabel" type="Label" parent="MenuPanel/MarginContainer/MenuLayout/Player3ControlRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Player 3 Control"
+
+[node name="Player3ControlOption" type="OptionButton" parent="MenuPanel/MarginContainer/MenuLayout/Player3ControlRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="Player4ControlRow" type="HBoxContainer" parent="MenuPanel/MarginContainer/MenuLayout"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="Player4ControlLabel" type="Label" parent="MenuPanel/MarginContainer/MenuLayout/Player4ControlRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Player 4 Control"
+
+[node name="Player4ControlOption" type="OptionButton" parent="MenuPanel/MarginContainer/MenuLayout/Player4ControlRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="StatusLabel" type="Label" parent="MenuPanel/MarginContainer/MenuLayout"]
+layout_mode = 2
+autowrap_mode = 2
+text = "Status"
+
+[node name="StartButton" type="Button" parent="MenuPanel/MarginContainer/MenuLayout"]
+layout_mode = 2
+text = "Start"

@@ -1,0 +1,19 @@
+[gd_scene format=3 uid="uid://cspwwdblr4x1w"]
+
+[ext_resource type="Script" path="res://scripts/weapons/GrenadeProjectile.gd" id="1_6j5os"]
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_grenade"]
+radius = 8.0
+
+[node name="GrenadeProjectile" type="Area2D"]
+collision_layer = 2
+collision_mask = 1
+monitoring = true
+monitorable = true
+script = ExtResource("1_6j5os")
+
+[node name="Visual" type="Polygon2D" parent="."]
+polygon = PackedVector2Array(0, -8, 8, 0, 0, 8, -8, 0)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+shape = SubResource("CircleShape2D_grenade")

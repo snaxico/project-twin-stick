@@ -1,0 +1,32 @@
+[gd_scene load_steps=3 format=3 uid="uid://duj7gr8f4jk4j"]
+
+[ext_resource type="Script" path="res://scripts/player/Player.gd" id="1_n0xfx"]
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_body"]
+radius = 18.0
+
+[node name="Player" type="CharacterBody2D"]
+collision_layer = 1
+collision_mask = 1
+script = ExtResource("1_n0xfx")
+
+[node name="Shadow" type="Polygon2D" parent="."]
+color = Color(0, 0, 0, 0.25)
+polygon = PackedVector2Array(-16, 0, -12, -4, 0, -6, 12, -4, 16, 0, 12, 4, 0, 6, -12, 4)
+scale = Vector2(1.1, 0.55)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+shape = SubResource("CircleShape2D_body")
+
+[node name="BodyRoot" type="Node2D" parent="."]
+position = Vector2(0, -20)
+
+[node name="Visual" type="Polygon2D" parent="BodyRoot"]
+polygon = PackedVector2Array(0, -22, 12, -14, 14, -2, 12, 12, 0, 20, -12, 12, -14, -2, -12, -14)
+scale = Vector2(0.95, 1.18)
+
+[node name="AimPivot" type="Node2D" parent="BodyRoot"]
+
+[node name="AimLine" type="Line2D" parent="BodyRoot/AimPivot"]
+width = 4.0
+points = PackedVector2Array(0, 0, 40, 0)
