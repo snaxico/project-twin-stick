@@ -48,7 +48,7 @@ Godot 4.6.2 prototype for a same-screen local co-op twin-stick roguelite, now ca
 - run win/lose resolution through the node-map flow
 - run-end return to menu for persistent spending
 - run-end summary with newly affordable unlock callouts
-- faux 3/4-view room presentation with fixed camera
+- clean rectangular grid arena with fixed same-screen camera
 - input action namespace for `p1` through `p4`
 - one-to-four player spawning
 - per-player aim assist modes with enemyless fallback behavior
@@ -57,11 +57,16 @@ Godot 4.6.2 prototype for a same-screen local co-op twin-stick roguelite, now ca
 - secondary requests from players
 - placeholder projectile spawning and hit resolution
 - grenade projectile and cooldown state
+- enemy hit flash, knockback, delayed death flash, and kill hitstop
+- player damage flash
+- trauma-based camera shake on kills, downed states, room clear, and grenade explosions
+- grenade explosion zoom punch and dedicated camera shake runtime
 - three shared primary profiles: rifle, scatter, and slug
 - three shared secondary profiles: grenade, cluster, and siege
 - downed players, proximity revive progress, and revive recovery
-- one chaser enemy behavior
-- one spitter enemy behavior
+- one chaser enemy behavior with lunge pressure
+- one spitter enemy behavior with strafing burst fire
+- one charger enemy behavior with windup dash pressure
 - one placeholder boss behavior with support spawns
 - JSON-backed modifier definitions
 - modifier intro panel and active room tinting
@@ -81,6 +86,8 @@ Godot 4.6.2 prototype for a same-screen local co-op twin-stick roguelite, now ca
 - `3–4` player support is implemented but still needs deeper runtime validation and tuning
 - full run-length tuning and broader solo-vs-3/4-player balancing are not implemented yet
 - grenade readability is still weaker than the primary-fire loop
+- the new `J1` hit feedback layer still needs an interactive feel pass for flash readability, knockback strength, and hitstop intensity
+- the new `J2` camera layer still needs an interactive feel pass for shake strength, clear readability, and grenade punch intensity
 - the current aim-mode switcher is a debug HUD, not the final pause-menu flow
 - no custom art, audio, or export pipeline has been started
 - export flow and distribution polish are still not implemented
@@ -91,8 +98,24 @@ Godot 4.6.2 prototype for a same-screen local co-op twin-stick roguelite, now ca
 If development resumes, the next work should be tuning and validation rather than new feature scope:
 
 - verify `3–4` player joins, HUD readability, and encounter pressure scaling
+- verify `J1` hit feedback in live play: enemy flash, player flash, knockback, and kill hitstop
+- verify `J2` camera feel in live play: kill shake, damage shake, room-clear shake, and grenade zoom punch
 - verify profile save/load, unlock purchase flow, and reward-pool gating across relaunches
 - tune grenade readability and secondary usefulness
 - tune revive timing, boss pressure, and failure fairness
 - tune full-run duration toward the intended `10–15` minute target
 - decide whether Patch 8/9 systems should be stabilized as part of the first-playable track or held as extra scope beyond it
+## Juice Status
+
+- `J1` is implemented and validated: enemy/player flash, enemy knockback, kill hitstop.
+- `J2` is implemented and validated: trauma-based screen shake, grenade shake reduced to zoom punch only.
+- `J3` is now implemented: muzzle flash, projectile trail, impact sparks, enemy death burst, grenade explosion burst, and dash trail all route through a room-level `Effects` container.
+- `J4` is now implemented: a shared procedural `SfxEngine` provides fire, hit, explosion, dash, damage, enemy death, room clear, and UI click sounds without external audio assets.
+- `J5` is now implemented: player health bars, a boss health bar, floating damage and gold text, low-time pulse feedback, and button/panel motion in the bootstrap and run-flow menus.
+- `J6` is now implemented: player lean, turn squash, fire recoil, downed pulse, enemy idle bob and spawn pop, projectile facing cleanup, player spawn-in animation, and revive burst particles.
+- `J7` is now implemented: screen-edge vignette and low-health/combat warmth overlays, spawn warning pulses, smoother modifier tint transitions, wave announcement text, subtle floor shader noise, and room-transition wipe passes in run flow.
+- Arena readability pass: the room is now a cleaner rectangular grid with plain walls, brighter base contrast, closer camera framing, larger player/enemy silhouettes, and higher-contrast projectiles.
+- Enemy behavior pass: chasers now stalk and lunge, spitters now strafe and fire short bursts, and a new charger archetype adds windup dash pressure to room and boss-support waves.
+- Secondary identity pass: `Grenade` remains the aimed standard throw, `Cluster` is now a splitting canister, and `Siege` is now a heavier aimed shell with repeated impact pulses.
+- Debug bootstrap mode: the start menu can now override starting primary and secondary gear for local testing without changing the normal progression path.
+- All current secondaries now use `hold to aim, release to throw`; the preview only shows while held and only when the secondary is ready.

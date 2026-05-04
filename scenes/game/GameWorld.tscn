@@ -1,7 +1,9 @@
-[gd_scene load_steps=8 format=3 uid="uid://c6ov0pl7m3y8a"]
+[gd_scene load_steps=10 format=3 uid="uid://c6ov0pl7m3y8a"]
 
 [ext_resource type="Script" path="res://scripts/game/CoopManager.gd" id="1_4o0x5"]
 [ext_resource type="PackedScene" path="res://scenes/player/Player.tscn" id="1_3sby6"]
+[ext_resource type="Script" path="res://scripts/juice/ScreenShake.gd" id="3_msc66"]
+[ext_resource type="Script" path="res://scripts/juice/ScreenEffects.gd" id="4_0rmhf"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_top"]
 size = Vector2(1152, 16)
@@ -20,19 +22,21 @@ script = ExtResource("1_4o0x5")
 player_scene = ExtResource("1_3sby6")
 
 [node name="Floor" type="Polygon2D" parent="."]
-color = Color(0.2, 0.26, 0.18, 1)
+color = Color(0.72, 0.78, 0.68, 1)
 polygon = PackedVector2Array(200, 120, 1080, 120, 1180, 620, 100, 620)
 
+[node name="FloorGrid" type="Node2D" parent="."]
+
 [node name="BackWall" type="Polygon2D" parent="."]
-color = Color(0.28, 0.31, 0.26, 1)
+color = Color(0.38, 0.42, 0.36, 1)
 polygon = PackedVector2Array(200, 96, 1080, 96, 1080, 136, 200, 136)
 
 [node name="LeftWallVisual" type="Polygon2D" parent="."]
-color = Color(0.24, 0.28, 0.22, 1)
+color = Color(0.44, 0.48, 0.4, 1)
 polygon = PackedVector2Array(172, 120, 200, 120, 100, 620, 72, 620)
 
 [node name="RightWallVisual" type="Polygon2D" parent="."]
-color = Color(0.24, 0.28, 0.22, 1)
+color = Color(0.44, 0.48, 0.4, 1)
 polygon = PackedVector2Array(1080, 120, 1108, 120, 1208, 620, 1180, 620)
 
 [node name="ArenaBounds" type="StaticBody2D" parent="."]
@@ -58,14 +62,22 @@ position = Vector2(640, 392)
 enabled = true
 zoom = Vector2(0.92, 0.92)
 
+[node name="ScreenShake" type="Node" parent="Camera2D"]
+script = ExtResource("3_msc66")
+
 [node name="ModifierTint" type="CanvasModulate" parent="."]
 color = Color(1, 1, 1, 1)
+
+[node name="ScreenEffects" type="CanvasLayer" parent="."]
+script = ExtResource("4_0rmhf")
 
 [node name="Players" type="Node2D" parent="."]
 
 [node name="Projectiles" type="Node2D" parent="."]
 
 [node name="Enemies" type="Node2D" parent="."]
+
+[node name="Effects" type="Node2D" parent="."]
 
 [node name="Player1Spawn" type="Marker2D" parent="."]
 position = Vector2(500, 360)

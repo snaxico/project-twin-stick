@@ -3,7 +3,7 @@
 [ext_resource type="Script" path="res://scripts/weapons/Projectile.gd" id="1_8c7hm"]
 
 [sub_resource type="CircleShape2D" id="CircleShape2D_projectile"]
-radius = 6.0
+radius = 7.0
 
 [node name="Projectile" type="Area2D"]
 collision_layer = 2
@@ -13,7 +13,7 @@ monitorable = true
 script = ExtResource("1_8c7hm")
 
 [node name="Visual" type="Polygon2D" parent="."]
-polygon = PackedVector2Array(0, -6, 6, 0, 0, 6, -6, 0)
+polygon = PackedVector2Array(0, -8, 8, 0, 0, 8, -8, 0)
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="."]
 shape = SubResource("CircleShape2D_projectile")

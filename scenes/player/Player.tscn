@@ -3,7 +3,7 @@
 [ext_resource type="Script" path="res://scripts/player/Player.gd" id="1_n0xfx"]
 
 [sub_resource type="CircleShape2D" id="CircleShape2D_body"]
-radius = 18.0
+radius = 22.0
 
 [node name="Player" type="CharacterBody2D"]
 collision_layer = 1
@@ -12,21 +12,39 @@ script = ExtResource("1_n0xfx")
 
 [node name="Shadow" type="Polygon2D" parent="."]
 color = Color(0, 0, 0, 0.25)
-polygon = PackedVector2Array(-16, 0, -12, -4, 0, -6, 12, -4, 16, 0, 12, 4, 0, 6, -12, 4)
-scale = Vector2(1.1, 0.55)
+polygon = PackedVector2Array(-20, 0, -15, -5, 0, -7, 15, -5, 20, 0, 15, 5, 0, 7, -15, 5)
+scale = Vector2(1.18, 0.58)
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="."]
 shape = SubResource("CircleShape2D_body")
+
+[node name="SecondaryPreview" type="Node2D" parent="."]
+
+[node name="SecondaryTrajectory" type="Line2D" parent="SecondaryPreview"]
+visible = false
+width = 3.0
+default_color = Color(1, 0.82, 0.22, 0.95)
+
+[node name="SecondaryTargetRing" type="Line2D" parent="SecondaryPreview"]
+visible = false
+width = 2.5
+default_color = Color(1, 0.72, 0.18, 0.9)
+closed = true
+
+[node name="SecondaryTargetCross" type="Line2D" parent="SecondaryPreview"]
+visible = false
+width = 2.5
+default_color = Color(1, 0.9, 0.4, 0.95)
 
 [node name="BodyRoot" type="Node2D" parent="."]
 position = Vector2(0, -20)
 
 [node name="Visual" type="Polygon2D" parent="BodyRoot"]
-polygon = PackedVector2Array(0, -22, 12, -14, 14, -2, 12, 12, 0, 20, -12, 12, -14, -2, -12, -14)
-scale = Vector2(0.95, 1.18)
+polygon = PackedVector2Array(0, -26, 14, -18, 18, -4, 15, 14, 0, 24, -15, 14, -18, -4, -14, -18)
+scale = Vector2(1.02, 1.22)
 
 [node name="AimPivot" type="Node2D" parent="BodyRoot"]
 
 [node name="AimLine" type="Line2D" parent="BodyRoot/AimPivot"]
 width = 4.0
-points = PackedVector2Array(0, 0, 40, 0)
+points = PackedVector2Array(0, 0, 46, 0)

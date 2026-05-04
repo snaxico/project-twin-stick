@@ -23,7 +23,7 @@ func _ready() -> void:
 	_random.randomize()
 	_load_items()
 
-func start_new_run(configs: Array) -> void:
+func start_new_run(configs: Array, debug_options: Dictionary = {}) -> void:
 	_load_items()
 	player_configs = []
 	for config in configs:
@@ -43,6 +43,7 @@ func start_new_run(configs: Array) -> void:
 	gold = 0
 	acquired_item_ids = []
 	build_state = _build_default_build_state()
+	_apply_debug_start_options(debug_options)
 	run_outcome = "in_progress"
 
 func get_current_options() -> Array:
@@ -133,18 +134,22 @@ func get_player_runtime_loadout() -> Dictionary:
 		"secondary_profile_name": str(secondary_profile.get("label", "Grenade")),
 		"primary_projectile_count": int(primary_profile.get("projectile_count", 1)),
 		"primary_spread_radians": float(primary_profile.get("spread_radians", 0.0)),
-		"primary_fire_interval": 0.18 * float(build_state.get("primary_fire_interval_mult", 1.0)) * float(primary_profile.get("fire_interval_mult", 1.0)),
+		"primary_fire_interval": 0.24 * float(build_state.get("primary_fire_interval_mult", 1.0)) * float(primary_profile.get("fire_interval_mult", 1.0)),
 		"projectile_speed": 540.0 * float(build_state.get("projectile_speed_mult", 1.0)) * float(primary_profile.get("projectile_speed_mult", 1.0)),
 		"projectile_damage": max(1, int(round((1.0 + float(build_state.get("projectile_damage_bonus", 0.0))) * float(primary_profile.get("damage_mult", 1.0))))),
 		"secondary_projectile_count": int(secondary_profile.get("projectile_count", 1)),
 		"secondary_spread_radians": float(secondary_profile.get("spread_radians", 0.0)),
 		"secondary_cooldown": 4.0 * float(build_state.get("secondary_cooldown_mult", 1.0)) * float(secondary_profile.get("cooldown_mult", 1.0)),
-		"secondary_projectile_speed": 320.0 * float(build_state.get("secondary_projectile_speed_mult", 1.0)) * float(secondary_profile.get("projectile_speed_mult", 1.0)),
+		"secondary_projectile_speed": 125.0 * float(build_state.get("secondary_projectile_speed_mult", 1.0)) * float(secondary_profile.get("projectile_speed_mult", 1.0)),
 		"secondary_damage": max(1, int(round((3.0 + float(build_state.get("secondary_damage_bonus", 0.0))) * float(secondary_profile.get("damage_mult", 1.0))))),
-		"secondary_projectile_kind": "grenade",
+		"secondary_projectile_kind": str(secondary_profile.get("kind", "grenade")),
 		"secondary_explosion_radius": 92.0 * float(build_state.get("secondary_explosion_radius_mult", 1.0)) * float(secondary_profile.get("explosion_radius_mult", 1.0)),
 		"secondary_fuse_time": 1.0 * float(secondary_profile.get("fuse_time_mult", 1.0)),
 		"secondary_gravity_force": 520.0 * float(secondary_profile.get("gravity_force_mult", 1.0)),
+		"secondary_pulse_count": int(secondary_profile.get("pulse_count", 1)),
+		"secondary_pulse_interval": float(secondary_profile.get("pulse_interval", 0.18)),
+		"secondary_cluster_blast_count": int(secondary_profile.get("cluster_blast_count", 0)),
+		"secondary_cluster_spread_radius": 52.0 * float(secondary_profile.get("cluster_spread_radius_mult", 1.0)),
 	}
 	return loadout
 
@@ -273,19 +278,32 @@ func _build_default_build_state() -> Dictionary:
 		"secondary_explosion_radius_mult": 1.0,
 	}
 
+func _apply_debug_start_options(debug_options: Dictionary) -> void:
+	if debug_options.is_empty():
+		return
+	if bool(debug_options.get("enabled", false)) == false:
+		return
+
+	var primary_profile := str(debug_options.get("primary_profile", ""))
+	var secondary_profile := str(debug_options.get("secondary_profile", ""))
+	if not primary_profile.is_empty():
+		build_state["primary_profile"] = primary_profile
+	if not secondary_profile.is_empty():
+		build_state["secondary_profile"] = secondary_profile
+
 func _get_primary_profile(profile_id: String) -> Dictionary:
 	var profiles := {
 		"rifle": {"label": "Rifle", "projectile_count": 1, "spread_radians": 0.0, "fire_interval_mult": 1.0, "projectile_speed_mult": 1.0, "damage_mult": 1.0},
-		"spread": {"label": "Scatter", "projectile_count": 3, "spread_radians": 0.18, "fire_interval_mult": 1.15, "projectile_speed_mult": 0.95, "damage_mult": 0.65},
-		"slug": {"label": "Slug", "projectile_count": 1, "spread_radians": 0.0, "fire_interval_mult": 1.7, "projectile_speed_mult": 1.2, "damage_mult": 2.4},
+		"spread": {"label": "Scatter", "projectile_count": 3, "spread_radians": 0.18, "fire_interval_mult": 1.25, "projectile_speed_mult": 0.95, "damage_mult": 0.65},
+		"slug": {"label": "Slug", "projectile_count": 1, "spread_radians": 0.0, "fire_interval_mult": 1.85, "projectile_speed_mult": 1.2, "damage_mult": 2.4},
 	}
 	return profiles.get(profile_id, profiles["rifle"]).duplicate(true)
 
 func _get_secondary_profile(profile_id: String) -> Dictionary:
 	var profiles := {
-		"grenade": {"label": "Grenade", "projectile_count": 1, "spread_radians": 0.0, "cooldown_mult": 1.0, "projectile_speed_mult": 1.0, "damage_mult": 1.0, "explosion_radius_mult": 1.0, "fuse_time_mult": 1.0, "gravity_force_mult": 1.0},
-		"cluster": {"label": "Cluster", "projectile_count": 2, "spread_radians": 0.2, "cooldown_mult": 1.15, "projectile_speed_mult": 1.0, "damage_mult": 0.7, "explosion_radius_mult": 0.8, "fuse_time_mult": 0.95, "gravity_force_mult": 1.0},
-		"siege": {"label": "Siege", "projectile_count": 1, "spread_radians": 0.0, "cooldown_mult": 1.35, "projectile_speed_mult": 0.85, "damage_mult": 1.7, "explosion_radius_mult": 1.35, "fuse_time_mult": 1.15, "gravity_force_mult": 1.0},
+		"grenade": {"label": "Grenade", "kind": "grenade", "projectile_count": 1, "spread_radians": 0.0, "cooldown_mult": 1.0, "projectile_speed_mult": 1.0, "damage_mult": 1.0, "explosion_radius_mult": 1.0, "fuse_time_mult": 1.0, "gravity_force_mult": 1.0, "pulse_count": 1, "pulse_interval": 0.18, "cluster_blast_count": 0, "cluster_spread_radius_mult": 1.0},
+		"cluster": {"label": "Cluster", "kind": "cluster", "projectile_count": 1, "spread_radians": 0.0, "cooldown_mult": 0.92, "projectile_speed_mult": 1.0, "damage_mult": 0.8, "explosion_radius_mult": 0.78, "fuse_time_mult": 1.0, "gravity_force_mult": 1.0, "pulse_count": 1, "pulse_interval": 0.18, "cluster_blast_count": 4, "cluster_spread_radius_mult": 1.0},
+		"siege": {"label": "Siege", "kind": "siege", "projectile_count": 1, "spread_radians": 0.0, "cooldown_mult": 1.35, "projectile_speed_mult": 1.0, "damage_mult": 1.1, "explosion_radius_mult": 1.35, "fuse_time_mult": 1.0, "gravity_force_mult": 1.0, "pulse_count": 3, "pulse_interval": 0.18, "cluster_blast_count": 0, "cluster_spread_radius_mult": 1.0},
 	}
 	return profiles.get(profile_id, profiles["grenade"]).duplicate(true)
 

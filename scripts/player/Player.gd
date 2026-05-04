@@ -3,26 +3,47 @@ extends CharacterBody2D
 const PlayerConfigData = preload("res://scripts/player/PlayerConfig.gd")
 const AimAssistData = preload("res://scripts/player/AimAssist.gd")
 const DashData = preload("res://scripts/player/Dash.gd")
+const FLASH_SHADER_CODE := """
+shader_type canvas_item;
+
+uniform float flash_intensity : hint_range(0.0, 1.0) = 0.0;
+uniform vec4 flash_color : source_color = vec4(1.0, 0.2, 0.2, 1.0);
+
+void fragment() {
+	vec4 base = COLOR;
+	COLOR = mix(base, flash_color, flash_intensity * flash_color.a);
+}
+"""
 
 signal fire_requested(origin, direction, speed, damage, team)
 signal secondary_requested(origin, direction, speed, damage, team, projectile_data)
 signal health_changed(current_health, max_health)
 signal downed(player)
 signal revived(player)
+signal muzzle_flash_requested(origin, direction, color)
+signal dash_trail_requested(origin, color)
+signal dash_started(origin)
+signal damage_taken(player, amount, current_health)
 
 @export_range(1, 4, 1) var player_id: int = 1
 @export var move_speed: float = 260.0
 @export var max_health: int = 5
-@export var primary_fire_interval: float = 0.18
+@export var primary_fire_interval: float = 0.24
 @export var projectile_speed: float = 540.0
 @export var projectile_damage: int = 1
 @export var secondary_cooldown: float = 4.0
-@export var secondary_projectile_speed: float = 320.0
+@export var secondary_projectile_speed: float = 125.0
 @export var secondary_damage: int = 3
 
+@onready var shadow: Polygon2D = $Shadow
+@onready var body_root: Node2D = $BodyRoot
 @onready var visual: Polygon2D = $BodyRoot/Visual
 @onready var aim_pivot: Node2D = $BodyRoot/AimPivot
 @onready var aim_line: Line2D = $BodyRoot/AimPivot/AimLine
+@onready var secondary_preview: Node2D = $SecondaryPreview
+@onready var secondary_trajectory: Line2D = $SecondaryPreview/SecondaryTrajectory
+@onready var secondary_target_ring: Line2D = $SecondaryPreview/SecondaryTargetRing
+@onready var secondary_target_cross: Line2D = $SecondaryPreview/SecondaryTargetCross
 
 var player_config = PlayerConfigData.new()
 var gamepad_device_id: int = -1
@@ -35,6 +56,7 @@ var _dash_pressed_last_frame := false
 var _next_primary_fire_at := 0.0
 var _secondary_pressed_last_frame := false
 var _next_secondary_ready_at := 0.0
+var _secondary_hold_active := false
 var _is_downed := false
 var _primary_profile_name := "Rifle"
 var _primary_projectile_count := 1
@@ -47,9 +69,21 @@ var _secondary_projectile_data := {
 	"explosion_radius": 92.0,
 	"fuse_time": 1.0,
 	"gravity_force": 520.0,
+	"pulse_count": 1,
+	"pulse_interval": 0.18,
+	"cluster_blast_count": 0,
+	"cluster_spread_radius": 52.0,
 }
 var _base_collision_layer := 0
 var _base_collision_mask := 0
+var _flash_material: ShaderMaterial = null
+var _next_dash_trail_at := 0.0
+var _base_visual_scale := Vector2.ONE
+var _base_shadow_scale := Vector2.ONE
+var _display_move_input := Vector2.ZERO
+var _previous_move_input := Vector2.ZERO
+var _turn_squash := 0.0
+var _aim_line_recoil := 0.0
 
 func setup(config, assigned_gamepad_device_id: int) -> void:
 	player_config = config
@@ -123,6 +157,10 @@ func apply_loadout(loadout: Dictionary) -> void:
 		"explosion_radius": float(loadout.get("secondary_explosion_radius", 92.0)),
 		"fuse_time": float(loadout.get("secondary_fuse_time", 1.0)),
 		"gravity_force": float(loadout.get("secondary_gravity_force", 520.0)),
+		"pulse_count": int(loadout.get("secondary_pulse_count", 1)),
+		"pulse_interval": float(loadout.get("secondary_pulse_interval", 0.18)),
+		"cluster_blast_count": int(loadout.get("secondary_cluster_blast_count", 0)),
+		"cluster_spread_radius": float(loadout.get("secondary_cluster_spread_radius", 52.0)),
 	}
 
 func set_health_state(state: Dictionary) -> void:
@@ -143,6 +181,8 @@ func apply_damage(amount: int) -> void:
 		return
 
 	current_health = max(current_health - amount, 0)
+	_play_damage_flash()
+	damage_taken.emit(self, amount, current_health)
 	health_changed.emit(current_health, max_health)
 	if current_health == 0:
 		_enter_downed_state()
@@ -167,11 +207,15 @@ func _ready() -> void:
 	add_to_group("player_target")
 	_base_collision_layer = collision_layer
 	_base_collision_mask = collision_mask
+	if visual != null:
+		_base_visual_scale = visual.scale
+	if shadow != null:
+		_base_shadow_scale = shadow.scale
 	current_health = max_health
 	health_changed.emit(current_health, max_health)
 	_apply_visual_state(_current_time_seconds())
 
-func _physics_process(_delta: float) -> void:
+func _physics_process(delta: float) -> void:
 	var move_input := _get_move_input()
 	var raw_aim_input := _get_aim_input()
 	aim_direction = _aim_assist.resolve_aim_direction(
@@ -187,10 +231,14 @@ func _physics_process(_delta: float) -> void:
 	if dash_pressed and not _dash_pressed_last_frame:
 		var dash_direction := move_input if move_input.length() > 0.0 else aim_direction
 		_dash.try_trigger(dash_direction, now)
+		if dash_direction.length() > 0.0:
+			dash_started.emit(global_position)
 	_dash_pressed_last_frame = dash_pressed
 
 	if _is_fire_pressed() and now >= _next_primary_fire_at and aim_direction.length() > 0.0:
 		_next_primary_fire_at = now + primary_fire_interval
+		_play_fire_recoil()
+		muzzle_flash_requested.emit(global_position + aim_direction * 24.0, aim_direction, player_config.tint.lightened(0.3))
 		for projectile_direction in _build_spread_directions(aim_direction, _primary_projectile_count, _primary_spread_radians):
 			fire_requested.emit(
 				global_position + projectile_direction * 26.0,
@@ -201,21 +249,23 @@ func _physics_process(_delta: float) -> void:
 			)
 
 	var secondary_pressed := _is_secondary_pressed()
-	if secondary_pressed and not _secondary_pressed_last_frame and now >= _next_secondary_ready_at and aim_direction.length() > 0.0:
-		_next_secondary_ready_at = now + secondary_cooldown
-		for projectile_direction in _build_spread_directions(aim_direction, _secondary_projectile_count, _secondary_spread_radians):
-			secondary_requested.emit(
-				global_position + projectile_direction * 22.0,
-				projectile_direction,
-				secondary_projectile_speed,
-				secondary_damage,
-				get_team(),
-				_secondary_projectile_data.duplicate(true)
-			)
+	if _uses_hold_to_aim_secondary():
+		if secondary_pressed and not _secondary_pressed_last_frame and now >= _next_secondary_ready_at and aim_direction.length() > 0.0:
+			_secondary_hold_active = true
+		elif not secondary_pressed and _secondary_pressed_last_frame and _secondary_hold_active:
+			_fire_secondary()
+			_secondary_hold_active = false
+	elif secondary_pressed and not _secondary_pressed_last_frame and now >= _next_secondary_ready_at and aim_direction.length() > 0.0:
+		_fire_secondary()
 	_secondary_pressed_last_frame = secondary_pressed
+
+	if is_dash_active() and now >= _next_dash_trail_at:
+		_next_dash_trail_at = now + 0.045
+		dash_trail_requested.emit(global_position + Vector2(0.0, -10.0), player_config.tint)
 
 	velocity = _dash.get_velocity(move_input, aim_direction, move_speed, now)
 	move_and_slide()
+	_update_animation_state(move_input, delta)
 	_apply_visual_state(now)
 
 func _get_move_input() -> Vector2:
@@ -375,14 +425,34 @@ func _build_spread_directions(base_direction: Vector2, projectile_count: int, sp
 	return directions
 
 func _apply_visual_state(now: float) -> void:
-	if visual == null or aim_pivot == null or aim_line == null:
+	if visual == null or aim_pivot == null or aim_line == null or body_root == null:
 		return
 	var dash_active: bool = _dash != null and _dash.is_active(now)
-	visual.color = player_config.tint.darkened(0.45) if _is_downed else player_config.tint
-	visual.scale = Vector2.ONE * (0.9 if _is_downed else (1.15 if dash_active else 1.0))
+	var downed_pulse: float = 0.5 + 0.5 * sin(now * 6.0)
+	var tint: Color = player_config.tint.darkened(0.45) if _is_downed else player_config.tint
+	tint.a = 0.56 + 0.24 * downed_pulse if _is_downed else 1.0
+	visual.color = tint
+	var dash_scale: float = 1.15 if dash_active else 1.0
+	var move_stretch: float = clamp(velocity.length() / max(move_speed, 1.0), 0.0, 1.0) * 0.06
+	var squash_x: float = 1.0 + _turn_squash * 0.18 - move_stretch * 0.03
+	var squash_y: float = 1.0 - _turn_squash * 0.12 + move_stretch
+	visual.scale = Vector2(_base_visual_scale.x * dash_scale * squash_x, _base_visual_scale.y * dash_scale * squash_y)
+	if shadow != null:
+		shadow.scale = Vector2(
+			_base_shadow_scale.x * (1.0 + _turn_squash * 0.08),
+			_base_shadow_scale.y * (1.0 - _turn_squash * 0.05)
+		)
+		var shadow_modulate := shadow.modulate
+		shadow_modulate.a = 0.1 + 0.14 * downed_pulse if _is_downed else 0.25
+		shadow.modulate = shadow_modulate
+	var lean_target: float = 0.0 if _is_downed else clamp(_display_move_input.x, -1.0, 1.0) * 0.16
+	body_root.rotation = lerp_angle(body_root.rotation, lean_target, 0.18)
 	aim_pivot.rotation = aim_direction.angle()
+	aim_pivot.position = Vector2(-_aim_line_recoil * 0.2, 0.0)
 	aim_line.default_color = player_config.tint.lightened(0.15)
 	aim_line.visible = not _is_downed
+	aim_line.points = PackedVector2Array([Vector2.ZERO, Vector2(max(16.0, 40.0 - _aim_line_recoil), 0.0)])
+	_update_secondary_preview(now)
 
 func _current_time_seconds() -> float:
 	return Time.get_ticks_msec() / 1000.0
@@ -390,8 +460,115 @@ func _current_time_seconds() -> float:
 func _enter_downed_state() -> void:
 	_is_downed = true
 	velocity = Vector2.ZERO
+	_secondary_hold_active = false
 	collision_layer = 0
 	collision_mask = 0
 	set_physics_process(false)
 	downed.emit(self)
 	_apply_visual_state(_current_time_seconds())
+
+func _update_animation_state(move_input: Vector2, delta: float) -> void:
+	if move_input.length() > 0.2 and _previous_move_input.length() > 0.2 and move_input.dot(_previous_move_input) < -0.2:
+		_turn_squash = 1.0
+	_display_move_input = _display_move_input.lerp(move_input, clamp(delta * 10.0, 0.0, 1.0))
+	_previous_move_input = move_input if move_input.length() > 0.05 else _previous_move_input.move_toward(Vector2.ZERO, delta * 5.0)
+	_turn_squash = move_toward(_turn_squash, 0.0, delta * 3.8)
+	_aim_line_recoil = move_toward(_aim_line_recoil, 0.0, delta * 85.0)
+
+func _play_fire_recoil() -> void:
+	_aim_line_recoil = max(_aim_line_recoil, 12.0)
+	_turn_squash = max(_turn_squash, 0.3)
+
+func _play_damage_flash() -> void:
+	if visual == null:
+		return
+	var material := _get_flash_material()
+	material.set_shader_parameter("flash_intensity", 1.0)
+	var tween := create_tween()
+	tween.tween_property(material, "shader_parameter/flash_intensity", 0.0, 0.12)
+
+func _get_flash_material() -> ShaderMaterial:
+	if _flash_material != null:
+		return _flash_material
+	_flash_material = ShaderMaterial.new()
+	var shader := Shader.new()
+	shader.code = FLASH_SHADER_CODE
+	_flash_material.shader = shader
+	_flash_material.set_shader_parameter("flash_intensity", 0.0)
+	_flash_material.set_shader_parameter("flash_color", Color(1.0, 0.2, 0.2, 1.0))
+	visual.material = _flash_material
+	return _flash_material
+
+func _update_secondary_preview(now: float) -> void:
+	if secondary_preview == null or secondary_trajectory == null or secondary_target_ring == null or secondary_target_cross == null:
+		return
+
+	var show_preview := _should_show_secondary_preview(now)
+	secondary_preview.visible = show_preview
+	secondary_trajectory.visible = show_preview
+	secondary_target_ring.visible = show_preview
+	secondary_target_cross.visible = show_preview
+	if not show_preview:
+		return
+
+	var origin_offset: Vector2 = aim_direction.normalized() * 22.0
+	var initial_velocity: Vector2 = aim_direction.normalized() * secondary_projectile_speed + Vector2(0.0, -180.0)
+	var gravity_force: float = float(_secondary_projectile_data.get("gravity_force", 520.0))
+	var fuse_time: float = float(_secondary_projectile_data.get("fuse_time", 1.0))
+	var explosion_radius: float = float(_secondary_projectile_data.get("explosion_radius", 92.0))
+
+	var trajectory_points: Array = []
+	var sample_count := 9
+	for index in range(sample_count):
+		var t := fuse_time * float(index) / float(sample_count - 1)
+		trajectory_points.append(origin_offset + initial_velocity * t + Vector2(0.0, 0.5 * gravity_force * t * t))
+	secondary_trajectory.points = PackedVector2Array(trajectory_points)
+
+	var landing_local: Vector2 = origin_offset + initial_velocity * fuse_time + Vector2(0.0, 0.5 * gravity_force * fuse_time * fuse_time)
+	secondary_target_ring.points = _build_circle_points(landing_local, explosion_radius, 28)
+	secondary_target_cross.points = PackedVector2Array([
+		landing_local + Vector2(-12, 0),
+		landing_local + Vector2(12, 0),
+		landing_local,
+		landing_local + Vector2(0, -12),
+		landing_local + Vector2(0, 12),
+	])
+
+func _build_circle_points(center: Vector2, radius: float, point_count: int) -> PackedVector2Array:
+	var points: Array = []
+	for index in range(point_count):
+		var angle := TAU * float(index) / float(point_count)
+		points.append(center + Vector2.RIGHT.rotated(angle) * radius)
+	return PackedVector2Array(points)
+
+func _should_show_secondary_preview(now: float) -> bool:
+	if _is_downed:
+		return false
+	if aim_direction.length() <= 0.0:
+		return false
+	if now < _next_secondary_ready_at:
+		return false
+	if not _supports_secondary_preview():
+		return false
+	return _secondary_hold_active and _is_secondary_pressed()
+
+func _uses_hold_to_aim_secondary() -> bool:
+	return _supports_secondary_preview()
+
+func _supports_secondary_preview() -> bool:
+	return true
+
+func _fire_secondary() -> void:
+	var now := _current_time_seconds()
+	if now < _next_secondary_ready_at or aim_direction.length() <= 0.0:
+		return
+	_next_secondary_ready_at = now + secondary_cooldown
+	for projectile_direction in _build_spread_directions(aim_direction, _secondary_projectile_count, _secondary_spread_radians):
+		secondary_requested.emit(
+			global_position + projectile_direction * 22.0,
+			projectile_direction,
+			secondary_projectile_speed,
+			secondary_damage,
+			get_team(),
+			_secondary_projectile_data.duplicate(true)
+		)

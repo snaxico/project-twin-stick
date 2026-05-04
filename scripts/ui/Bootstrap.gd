@@ -2,14 +2,19 @@ extends Control
 
 const PlayerConfigData = preload("res://scripts/player/PlayerConfig.gd")
 const RUN_FLOW_SCENE = preload("res://scenes/ui/RunFlow.tscn")
-
 @onready var game_container: Control = $GameContainer
+@onready var sfx_engine = $SfxEngine
 @onready var menu_panel: Panel = $MenuPanel
 @onready var player_count_option: OptionButton = $MenuPanel/MarginContainer/MenuLayout/PlayerCountRow/PlayerCountOption
 @onready var player_1_control_option: OptionButton = $MenuPanel/MarginContainer/MenuLayout/Player1ControlRow/Player1ControlOption
 @onready var player_2_control_option: OptionButton = $MenuPanel/MarginContainer/MenuLayout/Player2ControlRow/Player2ControlOption
 @onready var player_3_control_option: OptionButton = $MenuPanel/MarginContainer/MenuLayout/Player3ControlRow/Player3ControlOption
 @onready var player_4_control_option: OptionButton = $MenuPanel/MarginContainer/MenuLayout/Player4ControlRow/Player4ControlOption
+@onready var debug_mode_check: CheckBox = $MenuPanel/MarginContainer/MenuLayout/DebugModeCheck
+@onready var debug_primary_row: HBoxContainer = $MenuPanel/MarginContainer/MenuLayout/DebugPrimaryRow
+@onready var debug_primary_option: OptionButton = $MenuPanel/MarginContainer/MenuLayout/DebugPrimaryRow/DebugPrimaryOption
+@onready var debug_secondary_row: HBoxContainer = $MenuPanel/MarginContainer/MenuLayout/DebugSecondaryRow
+@onready var debug_secondary_option: OptionButton = $MenuPanel/MarginContainer/MenuLayout/DebugSecondaryRow/DebugSecondaryOption
 @onready var meta_button: Button = $MenuPanel/MarginContainer/MenuLayout/MetaButton
 @onready var reset_profile_button: Button = $MenuPanel/MarginContainer/MenuLayout/ResetProfileButton
 @onready var start_button: Button = $MenuPanel/MarginContainer/MenuLayout/StartButton
@@ -27,6 +32,7 @@ const RUN_FLOW_SCENE = preload("res://scenes/ui/RunFlow.tscn")
 
 var _active_game = null
 var _meta_unlocks: Array = []
+var _panel_base_positions: Dictionary = {}
 var _player_tints := [
 	Color(0.2, 0.85, 0.2, 1.0),
 	Color(0.2, 0.45, 1.0, 1.0),
@@ -43,6 +49,9 @@ var _player_aim_modes := [
 func _ready() -> void:
 	_populate_menu()
 	player_count_option.item_selected.connect(_on_player_count_changed)
+	debug_mode_check.toggled.connect(_on_debug_mode_toggled)
+	debug_primary_option.item_selected.connect(_on_debug_loadout_changed)
+	debug_secondary_option.item_selected.connect(_on_debug_loadout_changed)
 	start_button.pressed.connect(_on_start_pressed)
 	meta_button.pressed.connect(_on_meta_button_pressed)
 	reset_profile_button.pressed.connect(_on_reset_profile_button_pressed)
@@ -51,6 +60,7 @@ func _ready() -> void:
 	unlock_button_3.pressed.connect(_on_unlock_button_3_pressed)
 	unlock_button_4.pressed.connect(_on_unlock_button_4_pressed)
 	meta_back_button.pressed.connect(_on_meta_back_button_pressed)
+	_register_button_animations()
 	menu_panel.visible = true
 	meta_panel.visible = false
 	_refresh_menu_state()
@@ -67,6 +77,16 @@ func _populate_menu() -> void:
 	_populate_control_option(player_2_control_option, "gamepad")
 	_populate_control_option(player_3_control_option, "gamepad")
 	_populate_control_option(player_4_control_option, "gamepad")
+	_populate_profile_option(debug_primary_option, [
+		{"label": "Rifle", "value": "rifle"},
+		{"label": "Scatter", "value": "spread"},
+		{"label": "Slug", "value": "slug"},
+	], "rifle")
+	_populate_profile_option(debug_secondary_option, [
+		{"label": "Grenade", "value": "grenade"},
+		{"label": "Cluster", "value": "cluster"},
+		{"label": "Siege", "value": "siege"},
+	], "grenade")
 
 func _populate_control_option(option_button: OptionButton, default_value: String) -> void:
 	option_button.clear()
@@ -82,20 +102,53 @@ func _populate_control_option(option_button: OptionButton, default_value: String
 			option_button.select(index)
 			break
 
+func _populate_profile_option(option_button: OptionButton, entries: Array, default_value: String) -> void:
+	option_button.clear()
+	for index in range(entries.size()):
+		var entry: Dictionary = entries[index]
+		option_button.add_item(str(entry.get("label", "Option")))
+		option_button.set_item_metadata(index, str(entry.get("value", "")))
+
+	for index in range(option_button.item_count):
+		if option_button.get_item_metadata(index) == default_value:
+			option_button.select(index)
+			break
+
 func _refresh_menu_state() -> void:
 	var player_count := get_selected_player_count()
 	player_2_control_row.visible = player_count > 1
 	player_3_control_row.visible = player_count > 2
 	player_4_control_row.visible = player_count > 3
-	status_label.text = "%s\nPatch 9 adds persistent unlocks. Player 3 and Player 4 are still intended for gamepad play in the current prototype." % ProfileState.get_profile_summary_text()
+	debug_primary_row.visible = debug_mode_check.button_pressed
+	debug_secondary_row.visible = debug_mode_check.button_pressed
+	var debug_text := ""
+	if debug_mode_check.button_pressed:
+		debug_text = "\nDebug start active: %s / %s" % [
+			debug_primary_option.get_item_text(debug_primary_option.selected),
+			debug_secondary_option.get_item_text(debug_secondary_option.selected),
+		]
+	status_label.text = "%s\nPatch 9 adds persistent unlocks. Player 3 and Player 4 are still intended for gamepad play in the current prototype.%s" % [
+		ProfileState.get_profile_summary_text(),
+		debug_text,
+	]
 
 func get_selected_player_count() -> int:
 	return player_count_option.selected + 1
 
 func _on_player_count_changed(_index: int) -> void:
+	_play_ui_click()
+	_refresh_menu_state()
+
+func _on_debug_mode_toggled(_enabled: bool) -> void:
+	_play_ui_click()
+	_refresh_menu_state()
+
+func _on_debug_loadout_changed(_index: int) -> void:
+	_play_ui_click()
 	_refresh_menu_state()
 
 func _on_start_pressed() -> void:
+	_play_ui_click()
 	var player_configs := _build_player_configs()
 	_launch_game(player_configs)
 
@@ -118,16 +171,23 @@ func _build_player_configs() -> Array:
 
 	return configs
 
+func _build_debug_start_options() -> Dictionary:
+	return {
+		"enabled": debug_mode_check.button_pressed,
+		"primary_profile": str(debug_primary_option.get_selected_metadata()),
+		"secondary_profile": str(debug_secondary_option.get_selected_metadata()),
+	}
+
 func _launch_game(player_configs: Array) -> void:
 	if _active_game != null and is_instance_valid(_active_game):
 		_active_game.queue_free()
 
-	RunState.start_new_run(player_configs)
+	RunState.start_new_run(player_configs, _build_debug_start_options())
 	_active_game = RUN_FLOW_SCENE.instantiate()
 	_active_game.return_to_menu_requested.connect(_on_return_to_menu_requested)
 	game_container.add_child(_active_game)
-	menu_panel.visible = false
-	meta_panel.visible = false
+	_set_panel_state(menu_panel, false)
+	_set_panel_state(meta_panel, false)
 
 func _on_return_to_menu_requested(open_meta_menu: bool = false) -> void:
 	if _active_game != null and is_instance_valid(_active_game):
@@ -135,25 +195,28 @@ func _on_return_to_menu_requested(open_meta_menu: bool = false) -> void:
 	_active_game = null
 	_refresh_menu_state()
 	if open_meta_menu:
-		menu_panel.visible = false
-		meta_panel.visible = true
+		_set_panel_state(menu_panel, false)
+		_set_panel_state(meta_panel, true)
 		_refresh_meta_panel("")
 		return
-	menu_panel.visible = true
-	meta_panel.visible = false
+	_set_panel_state(menu_panel, true)
+	_set_panel_state(meta_panel, false)
 
 func _on_meta_button_pressed() -> void:
-	menu_panel.visible = false
-	meta_panel.visible = true
+	_play_ui_click()
+	_set_panel_state(menu_panel, false)
+	_set_panel_state(meta_panel, true)
 	_refresh_meta_panel("")
 
 func _on_reset_profile_button_pressed() -> void:
+	_play_ui_click()
 	ProfileState.reset_profile()
 	_refresh_menu_state()
 
 func _on_unlock_button_pressed(index: int) -> void:
 	if index < 0 or index >= _meta_unlocks.size():
 		return
+	_play_ui_click()
 	var unlock: Dictionary = _meta_unlocks[index]
 	var result := ProfileState.purchase_unlock(str(unlock.get("id", "")))
 	var extra_text := str(result.get("summary", ""))
@@ -173,8 +236,9 @@ func _on_unlock_button_4_pressed() -> void:
 	_on_unlock_button_pressed(3)
 
 func _on_meta_back_button_pressed() -> void:
-	meta_panel.visible = false
-	menu_panel.visible = true
+	_play_ui_click()
+	_set_panel_state(meta_panel, false)
+	_set_panel_state(menu_panel, true)
 	_refresh_menu_state()
 
 func _refresh_meta_panel(extra_text: String) -> void:
@@ -201,3 +265,86 @@ func _configure_unlock_button(button: Button, unlock: Dictionary) -> void:
 		str(unlock.get("description", "")),
 		int(unlock.get("cost", 0)),
 	]
+
+func _play_ui_click() -> void:
+	if sfx_engine != null:
+		sfx_engine.play_ui_click()
+
+func _register_button_animations() -> void:
+	var controls := [
+		player_count_option,
+		player_1_control_option,
+		player_2_control_option,
+		player_3_control_option,
+		player_4_control_option,
+		debug_mode_check,
+		debug_primary_option,
+		debug_secondary_option,
+		meta_button,
+		reset_profile_button,
+		start_button,
+		unlock_button_1,
+		unlock_button_2,
+		unlock_button_3,
+		unlock_button_4,
+		meta_back_button,
+	]
+	for control in controls:
+		_register_button_animation(control)
+
+func _register_button_animation(control: Control) -> void:
+	if control == null:
+		return
+	control.pivot_offset = control.size * 0.5
+	control.mouse_entered.connect(_on_button_hovered.bind(control))
+	control.mouse_exited.connect(_on_button_unhovered.bind(control))
+	var button := control as BaseButton
+	if button != null:
+		button.button_down.connect(_on_button_pressed.bind(control))
+		button.button_up.connect(_on_button_released.bind(control))
+
+func _on_button_hovered(control: Control) -> void:
+	_animate_button_scale(control, Vector2.ONE * 1.04, 0.12)
+
+func _on_button_unhovered(control: Control) -> void:
+	_animate_button_scale(control, Vector2.ONE, 0.12)
+
+func _on_button_pressed(control: Control) -> void:
+	_animate_button_scale(control, Vector2.ONE * 0.97, 0.06)
+
+func _on_button_released(control: Control) -> void:
+	_animate_button_scale(control, Vector2.ONE * 1.03, 0.08)
+
+func _animate_button_scale(control: Control, target_scale: Vector2, duration: float) -> void:
+	if control == null:
+		return
+	var tween := create_tween()
+	tween.tween_property(control, "scale", target_scale, duration)
+
+func _set_panel_state(panel: Control, show: bool) -> void:
+	if panel == null:
+		return
+	if not _panel_base_positions.has(panel):
+		_panel_base_positions[panel] = panel.position
+	var base_position: Vector2 = _panel_base_positions[panel]
+	if show:
+		panel.visible = true
+		panel.position = base_position + Vector2(0.0, 16.0)
+		panel.modulate.a = 0.0
+		var tween_in := create_tween()
+		tween_in.set_parallel(true)
+		tween_in.tween_property(panel, "position", base_position, 0.18)
+		tween_in.tween_property(panel, "modulate:a", 1.0, 0.18)
+		return
+	if not panel.visible:
+		return
+	var tween_out := create_tween()
+	tween_out.set_parallel(true)
+	tween_out.tween_property(panel, "position", base_position + Vector2(0.0, 12.0), 0.14)
+	tween_out.tween_property(panel, "modulate:a", 0.0, 0.14)
+	tween_out.set_parallel(false)
+	tween_out.tween_callback(func() -> void:
+		panel.visible = false
+		panel.position = base_position
+		panel.modulate.a = 1.0
+	)

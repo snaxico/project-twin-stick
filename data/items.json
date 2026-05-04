@@ -28,12 +28,12 @@
       "id": "overclocked_receiver",
       "name": "Overclocked Receiver",
       "category": "Primary",
-      "description": "Increase shared primary fire rate by 18%.",
+      "description": "Increase shared primary fire rate by 12%.",
       "pools": ["reward", "shop"],
       "cost": 2,
       "repeatable": false,
       "effects": {
-        "primary_fire_interval_mult": 0.82
+        "primary_fire_interval_mult": 0.88
       }
     },
     {

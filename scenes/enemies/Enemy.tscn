@@ -3,7 +3,7 @@
 [ext_resource type="Script" path="res://scripts/enemies/Enemy.gd" id="1_8b8sy"]
 
 [sub_resource type="CircleShape2D" id="CircleShape2D_enemy"]
-radius = 16.0
+radius = 19.0
 
 [node name="Enemy" type="CharacterBody2D"]
 collision_layer = 1
@@ -12,8 +12,8 @@ script = ExtResource("1_8b8sy")
 
 [node name="Shadow" type="Polygon2D" parent="."]
 color = Color(0, 0, 0, 0.25)
-polygon = PackedVector2Array(-14, 0, -10, -4, 0, -5, 10, -4, 14, 0, 10, 4, 0, 5, -10, 4)
-scale = Vector2(1.05, 0.5)
+polygon = PackedVector2Array(-18, 0, -13, -5, 0, -6, 13, -5, 18, 0, 13, 5, 0, 6, -13, 5)
+scale = Vector2(1.12, 0.54)
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="."]
 shape = SubResource("CircleShape2D_enemy")
@@ -22,5 +22,5 @@ shape = SubResource("CircleShape2D_enemy")
 position = Vector2(0, -18)
 
 [node name="Visual" type="Polygon2D" parent="BodyRoot"]
-polygon = PackedVector2Array(0, -18, 10, -12, 14, -2, 12, 12, 0, 18, -12, 12, -14, -2, -10, -12)
-scale = Vector2(0.9, 1.1)
+polygon = PackedVector2Array(0, -22, 12, -14, 16, -3, 14, 14, 0, 22, -14, 14, -16, -3, -12, -14)
+scale = Vector2(0.96, 1.14)
