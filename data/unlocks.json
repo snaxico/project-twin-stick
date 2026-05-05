@@ -3,7 +3,8 @@
     "overclocked_receiver",
     "quick_release_valve",
     "high_velocity_rounds",
-    "reinforced_plating"
+    "reinforced_plating",
+    "grenade_belt"
   ],
   "unlocks": [
     {
@@ -19,15 +20,27 @@
       "cost": 5
     },
     {
-      "id": "cluster_shells",
+      "id": "cluster_grenades",
       "name": "Cluster Shells License",
       "description": "Adds Cluster Shells to future reward and shop pools.",
       "cost": 4
     },
     {
-      "id": "siege_canister",
+      "id": "siege_grenades",
       "name": "Siege Canister License",
       "description": "Adds Siege Canister to future reward and shop pools.",
+      "cost": 5
+    },
+    {
+      "id": "cluster_shells",
+      "name": "Shrapnel Mine Housing License",
+      "description": "Adds Shrapnel Mine Housing to future reward and shop pools.",
+      "cost": 4
+    },
+    {
+      "id": "siege_canister",
+      "name": "Heavy Mine Casing License",
+      "description": "Adds Heavy Mine Casing to future reward and shop pools.",
       "cost": 5
     }
   ]

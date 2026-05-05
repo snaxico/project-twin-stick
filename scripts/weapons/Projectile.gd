@@ -13,6 +13,7 @@ var team: String = ""
 var tint_color: Color = Color(1.0, 0.96, 0.7, 1.0)
 
 @onready var visual: Polygon2D = $Visual
+@onready var outline: Polygon2D = $Outline
 
 var _expires_at := 0.0
 var _trail_particles: GPUParticles2D = null
@@ -60,8 +61,26 @@ func _current_time_seconds() -> float:
 func _apply_visual_state() -> void:
 	if visual == null:
 		return
-	visual.color = _get_projectile_color()
-	visual.scale = Vector2(1.12, 1.12)
+	var projectile_color := _get_projectile_color()
+	var enemy_shot := team == "enemy"
+	visual.color = projectile_color.lightened(0.08) if enemy_shot else projectile_color
+	visual.scale = Vector2(1.26, 1.26) if enemy_shot else Vector2(1.14, 1.14)
+	visual.polygon = PackedVector2Array([
+		Vector2(0, -9),
+		Vector2(9, 0),
+		Vector2(0, 9),
+		Vector2(-9, 0),
+	]) if enemy_shot else PackedVector2Array([
+		Vector2(0, -8),
+		Vector2(10, 0),
+		Vector2(0, 8),
+		Vector2(-10, 0),
+	])
+	if outline != null:
+		outline.visible = true
+		outline.color = Color(1.0, 0.96, 0.88, 0.96) if enemy_shot else Color(0.05, 0.08, 0.12, 0.82)
+		outline.scale = visual.scale * 1.24
+		outline.polygon = visual.polygon
 
 func _get_projectile_color() -> Color:
 	return tint_color

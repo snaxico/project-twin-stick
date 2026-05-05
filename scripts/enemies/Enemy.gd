@@ -73,7 +73,7 @@ func setup(type_name: String, combat_owner) -> void:
 			enemy_type = EnemyType.SPITTER
 			max_health = 2
 			move_speed = 84.0
-			fire_interval = 1.45
+			fire_interval = 1.85
 			projectile_speed = 340.0
 			projectile_damage = 1
 			preferred_distance = 230.0
@@ -94,13 +94,13 @@ func setup(type_name: String, combat_owner) -> void:
 			enemy_type = EnemyType.BOSS
 			max_health = 18
 			move_speed = 82.0
-			fire_interval = 0.95
+			fire_interval = 1.3
 			projectile_speed = 380.0
 			projectile_damage = 1
 			contact_damage = 1
 			preferred_distance = 240.0
 			_projectile_burst_count = 5
-			_projectile_spread_radians = 0.18
+			_projectile_spread_radians = 0.14
 		_:
 			enemy_type = EnemyType.CHASER
 			max_health = 3
@@ -251,7 +251,7 @@ func _update_spitter_behavior(direction: Vector2, distance: float, now: float) -
 			_burst_shots_remaining -= 1
 			_burst_shot_index += 1
 			if _burst_shots_remaining > 0:
-				_next_burst_shot_at = now + 0.12
+				_next_burst_shot_at = now + 0.18
 			else:
 				_next_projectile_at = now + fire_interval
 		elif _burst_shots_remaining == 0 and now >= _next_projectile_at:

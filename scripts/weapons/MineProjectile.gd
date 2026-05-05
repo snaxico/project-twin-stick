@@ -2,26 +2,27 @@ extends Area2D
 
 signal exploded(origin, color)
 
-@export var gravity_force: float = 520.0
-@export var fuse_time: float = 1.0
+@export var fuse_time: float = 12.0
 @export var explosion_radius: float = 92.0
-@export var kind: String = "grenade"
+@export var kind: String = "mine"
 @export var pulse_count: int = 1
 @export var pulse_interval: float = 0.18
 @export var cluster_blast_count: int = 0
 @export var cluster_spread_radius: float = 52.0
+@export var proximity_radius: float = 52.0
 
 var direction: Vector2 = Vector2.RIGHT
-var speed: float = 320.0
+var speed: float = 0.0
 var damage: int = 3
 var team: String = ""
 
 @onready var visual: Polygon2D = $Visual
 @onready var outline: Polygon2D = $Outline
+@onready var proximity_ring: Line2D = $ProximityRing
 
-var _velocity: Vector2 = Vector2.ZERO
-var _explode_at := 0.0
 var _tint_color: Color = Color(1.0, 0.72, 0.28, 1.0)
+var _arms_at := 0.0
+var _expires_at := 0.0
 
 func setup(projectile_team: String, projectile_direction: Vector2, projectile_speed: float, projectile_damage: int, projectile_color: Color = Color(1.0, 0.72, 0.28, 1.0)) -> void:
 	team = projectile_team
@@ -29,42 +30,55 @@ func setup(projectile_team: String, projectile_direction: Vector2, projectile_sp
 	speed = projectile_speed
 	damage = projectile_damage
 	_tint_color = projectile_color
-	_velocity = direction * speed + Vector2(0.0, -180.0)
 
 func _ready() -> void:
-	body_entered.connect(_on_body_entered)
-	_explode_at = _current_time_seconds() + fuse_time
+	var now: float = _current_time_seconds()
+	_arms_at = now + 0.18
+	_expires_at = now + fuse_time
 	if visual != null:
 		visual.color = _tint_color
-		visual.scale = Vector2(1.2, 1.2)
+		visual.scale = Vector2(1.18, 1.18)
+		visual.polygon = PackedVector2Array([
+			Vector2(-9, -6),
+			Vector2(0, -10),
+			Vector2(9, -6),
+			Vector2(10, 4),
+			Vector2(0, 10),
+			Vector2(-10, 4),
+		])
 	if outline != null:
 		outline.color = Color(0.05, 0.08, 0.12, 0.82)
 		outline.scale = Vector2(1.52, 1.52)
 		outline.polygon = visual.polygon if visual != null else outline.polygon
+	if proximity_ring != null:
+		proximity_ring.default_color = _tint_color.lightened(0.22)
+		proximity_ring.visible = false
+		proximity_ring.points = _build_circle_points(proximity_radius, 24)
 
-func _physics_process(delta: float) -> void:
-	_velocity.y += gravity_force * delta
-	global_position += _velocity * delta
-	rotation += delta * 6.0
-	if _current_time_seconds() >= _explode_at:
-		_explode()
-
-func _on_body_entered(body: Node) -> void:
-	if body is StaticBody2D:
+func _physics_process(_delta: float) -> void:
+	var now: float = _current_time_seconds()
+	rotation = sin(now * 6.5) * 0.08
+	if proximity_ring != null:
+		proximity_ring.visible = now >= _arms_at
+		proximity_ring.width = 2.0 + 0.5 * sin(now * 8.0)
+	if now >= _expires_at:
+		queue_free()
+		return
+	if now >= _arms_at and _check_proximity_trigger():
 		_explode()
 
 func _explode() -> void:
 	match kind:
-		"cluster_grenade", "cluster":
-			_explode_cluster_grenade()
-		"siege_grenade", "siege":
-			_explode_siege_grenade()
+		"shrapnel_mine", "cluster_mine":
+			_explode_shrapnel_mine()
+		"heavy_mine", "siege_mine":
+			_explode_heavy_mine()
 		_:
 			_apply_explosion_damage(global_position, explosion_radius, damage)
 			exploded.emit(global_position, _tint_color)
 	queue_free()
 
-func _explode_cluster_grenade() -> void:
+func _explode_shrapnel_mine() -> void:
 	var blast_points: Array = [global_position]
 	var blast_count: int = max(cluster_blast_count, 4)
 	for index in range(blast_count):
@@ -77,7 +91,7 @@ func _explode_cluster_grenade() -> void:
 		_apply_explosion_damage(blast_point, blast_radius, blast_damage)
 		exploded.emit(blast_point, _tint_color)
 
-func _explode_siege_grenade() -> void:
+func _explode_heavy_mine() -> void:
 	_apply_explosion_damage(global_position, explosion_radius, damage)
 	exploded.emit(global_position, _tint_color)
 	if pulse_count <= 1:
@@ -101,14 +115,11 @@ func _apply_explosion_damage(origin: Vector2, radius: float, damage_amount: int)
 		return
 
 	var groups_to_check := ["aim_target"] if team == "player" else ["player_target"]
-
 	for group_name in groups_to_check:
 		for candidate in tree.get_nodes_in_group(group_name):
 			if not is_instance_valid(candidate):
 				continue
 			if not (candidate is Node2D):
-				continue
-			if candidate == self:
 				continue
 			if candidate.has_method("get_team") and candidate.get_team() == team:
 				continue
@@ -117,6 +128,31 @@ func _apply_explosion_damage(origin: Vector2, radius: float, damage_amount: int)
 			var distance: float = origin.distance_to(target_node.global_position)
 			if distance <= radius and candidate.has_method("apply_damage"):
 				candidate.apply_damage(damage_amount)
+
+func _check_proximity_trigger() -> bool:
+	var tree := get_tree()
+	if tree == null:
+		return false
+
+	var groups_to_check := ["aim_target"] if team == "player" else ["player_target"]
+	for group_name in groups_to_check:
+		for candidate in tree.get_nodes_in_group(group_name):
+			if not is_instance_valid(candidate):
+				continue
+			if not (candidate is Node2D):
+				continue
+			if candidate.has_method("get_team") and candidate.get_team() == team:
+				continue
+			if global_position.distance_to(candidate.global_position) <= proximity_radius:
+				return true
+	return false
+
+func _build_circle_points(radius: float, point_count: int) -> PackedVector2Array:
+	var points: Array = []
+	for index in range(point_count):
+		var angle := TAU * float(index) / float(point_count)
+		points.append(Vector2.RIGHT.rotated(angle) * radius)
+	return PackedVector2Array(points)
 
 func _current_time_seconds() -> float:
 	return Time.get_ticks_msec() / 1000.0

@@ -127,29 +127,30 @@ func get_run_summary_text() -> String:
 
 func get_player_runtime_loadout() -> Dictionary:
 	var primary_profile := _get_primary_profile(str(build_state.get("primary_profile", "rifle")))
-	var secondary_profile := _get_secondary_profile(str(build_state.get("secondary_profile", "grenade")))
+	var secondary_profile := _get_secondary_profile(str(build_state.get("secondary_profile", "mine")))
 	var loadout := {
 		"move_speed": 260.0 * float(build_state.get("move_speed_mult", 1.0)),
 		"primary_profile_name": str(primary_profile.get("label", "Rifle")),
-		"secondary_profile_name": str(secondary_profile.get("label", "Grenade")),
+		"secondary_profile_name": str(secondary_profile.get("label", "Mine")),
 		"primary_projectile_count": int(primary_profile.get("projectile_count", 1)),
 		"primary_spread_radians": float(primary_profile.get("spread_radians", 0.0)),
-		"primary_fire_interval": 0.24 * float(build_state.get("primary_fire_interval_mult", 1.0)) * float(primary_profile.get("fire_interval_mult", 1.0)),
+		"primary_fire_interval": 0.27 * float(build_state.get("primary_fire_interval_mult", 1.0)) * float(primary_profile.get("fire_interval_mult", 1.0)),
 		"projectile_speed": 540.0 * float(build_state.get("projectile_speed_mult", 1.0)) * float(primary_profile.get("projectile_speed_mult", 1.0)),
 		"projectile_damage": max(1, int(round((1.0 + float(build_state.get("projectile_damage_bonus", 0.0))) * float(primary_profile.get("damage_mult", 1.0))))),
 		"secondary_projectile_count": int(secondary_profile.get("projectile_count", 1)),
 		"secondary_spread_radians": float(secondary_profile.get("spread_radians", 0.0)),
 		"secondary_cooldown": 4.0 * float(build_state.get("secondary_cooldown_mult", 1.0)) * float(secondary_profile.get("cooldown_mult", 1.0)),
-		"secondary_projectile_speed": 125.0 * float(build_state.get("secondary_projectile_speed_mult", 1.0)) * float(secondary_profile.get("projectile_speed_mult", 1.0)),
+		"secondary_projectile_speed": float(secondary_profile.get("base_projectile_speed", 0.0)) * float(build_state.get("secondary_projectile_speed_mult", 1.0)) * float(secondary_profile.get("projectile_speed_mult", 1.0)),
 		"secondary_damage": max(1, int(round((3.0 + float(build_state.get("secondary_damage_bonus", 0.0))) * float(secondary_profile.get("damage_mult", 1.0))))),
-		"secondary_projectile_kind": str(secondary_profile.get("kind", "grenade")),
+		"secondary_projectile_kind": str(secondary_profile.get("kind", "mine")),
 		"secondary_explosion_radius": 92.0 * float(build_state.get("secondary_explosion_radius_mult", 1.0)) * float(secondary_profile.get("explosion_radius_mult", 1.0)),
-		"secondary_fuse_time": 1.0 * float(secondary_profile.get("fuse_time_mult", 1.0)),
-		"secondary_gravity_force": 520.0 * float(secondary_profile.get("gravity_force_mult", 1.0)),
+		"secondary_fuse_time": float(secondary_profile.get("base_fuse_time", 12.0)) * float(secondary_profile.get("fuse_time_mult", 1.0)),
+		"secondary_gravity_force": float(secondary_profile.get("base_gravity_force", 0.0)) * float(secondary_profile.get("gravity_force_mult", 1.0)),
 		"secondary_pulse_count": int(secondary_profile.get("pulse_count", 1)),
 		"secondary_pulse_interval": float(secondary_profile.get("pulse_interval", 0.18)),
 		"secondary_cluster_blast_count": int(secondary_profile.get("cluster_blast_count", 0)),
 		"secondary_cluster_spread_radius": 52.0 * float(secondary_profile.get("cluster_spread_radius_mult", 1.0)),
+		"secondary_proximity_radius": float(secondary_profile.get("base_proximity_radius", 52.0)) * float(secondary_profile.get("proximity_radius_mult", 1.0)),
 	}
 	return loadout
 
@@ -267,7 +268,7 @@ func _apply_reward(reward: Dictionary) -> String:
 func _build_default_build_state() -> Dictionary:
 	return {
 		"primary_profile": "rifle",
-		"secondary_profile": "grenade",
+		"secondary_profile": "mine",
 		"move_speed_mult": 1.0,
 		"primary_fire_interval_mult": 1.0,
 		"projectile_speed_mult": 1.0,
@@ -294,18 +295,37 @@ func _apply_debug_start_options(debug_options: Dictionary) -> void:
 func _get_primary_profile(profile_id: String) -> Dictionary:
 	var profiles := {
 		"rifle": {"label": "Rifle", "projectile_count": 1, "spread_radians": 0.0, "fire_interval_mult": 1.0, "projectile_speed_mult": 1.0, "damage_mult": 1.0},
-		"spread": {"label": "Scatter", "projectile_count": 3, "spread_radians": 0.18, "fire_interval_mult": 1.25, "projectile_speed_mult": 0.95, "damage_mult": 0.65},
-		"slug": {"label": "Slug", "projectile_count": 1, "spread_radians": 0.0, "fire_interval_mult": 1.85, "projectile_speed_mult": 1.2, "damage_mult": 2.4},
+		"spread": {"label": "Scatter", "projectile_count": 3, "spread_radians": 0.18, "fire_interval_mult": 1.35, "projectile_speed_mult": 0.95, "damage_mult": 0.65},
+		"slug": {"label": "Slug", "projectile_count": 1, "spread_radians": 0.0, "fire_interval_mult": 2.1, "projectile_speed_mult": 1.2, "damage_mult": 2.4},
 	}
 	return profiles.get(profile_id, profiles["rifle"]).duplicate(true)
 
 func _get_secondary_profile(profile_id: String) -> Dictionary:
+	var normalized_profile_id := _normalize_secondary_profile_id(profile_id)
 	var profiles := {
-		"grenade": {"label": "Grenade", "kind": "grenade", "projectile_count": 1, "spread_radians": 0.0, "cooldown_mult": 1.0, "projectile_speed_mult": 1.0, "damage_mult": 1.0, "explosion_radius_mult": 1.0, "fuse_time_mult": 1.0, "gravity_force_mult": 1.0, "pulse_count": 1, "pulse_interval": 0.18, "cluster_blast_count": 0, "cluster_spread_radius_mult": 1.0},
-		"cluster": {"label": "Cluster", "kind": "cluster", "projectile_count": 1, "spread_radians": 0.0, "cooldown_mult": 0.92, "projectile_speed_mult": 1.0, "damage_mult": 0.8, "explosion_radius_mult": 0.78, "fuse_time_mult": 1.0, "gravity_force_mult": 1.0, "pulse_count": 1, "pulse_interval": 0.18, "cluster_blast_count": 4, "cluster_spread_radius_mult": 1.0},
-		"siege": {"label": "Siege", "kind": "siege", "projectile_count": 1, "spread_radians": 0.0, "cooldown_mult": 1.35, "projectile_speed_mult": 1.0, "damage_mult": 1.1, "explosion_radius_mult": 1.35, "fuse_time_mult": 1.0, "gravity_force_mult": 1.0, "pulse_count": 3, "pulse_interval": 0.18, "cluster_blast_count": 0, "cluster_spread_radius_mult": 1.0},
+		"grenade": {"label": "Grenade", "kind": "grenade", "projectile_count": 1, "spread_radians": 0.0, "cooldown_mult": 1.0, "base_projectile_speed": 125.0, "projectile_speed_mult": 1.0, "damage_mult": 1.0, "explosion_radius_mult": 1.0, "base_fuse_time": 1.0, "fuse_time_mult": 1.0, "base_gravity_force": 520.0, "gravity_force_mult": 1.0, "pulse_count": 1, "pulse_interval": 0.18, "cluster_blast_count": 0, "cluster_spread_radius_mult": 1.0, "base_proximity_radius": 0.0, "proximity_radius_mult": 1.0},
+		"cluster_grenade": {"label": "Cluster Grenade", "kind": "cluster_grenade", "projectile_count": 1, "spread_radians": 0.0, "cooldown_mult": 0.92, "base_projectile_speed": 125.0, "projectile_speed_mult": 1.0, "damage_mult": 0.8, "explosion_radius_mult": 0.78, "base_fuse_time": 1.0, "fuse_time_mult": 1.0, "base_gravity_force": 520.0, "gravity_force_mult": 1.0, "pulse_count": 1, "pulse_interval": 0.18, "cluster_blast_count": 4, "cluster_spread_radius_mult": 1.0, "base_proximity_radius": 0.0, "proximity_radius_mult": 1.0},
+		"siege_grenade": {"label": "Siege Grenade", "kind": "siege_grenade", "projectile_count": 1, "spread_radians": 0.0, "cooldown_mult": 1.35, "base_projectile_speed": 125.0, "projectile_speed_mult": 1.0, "damage_mult": 1.1, "explosion_radius_mult": 1.35, "base_fuse_time": 1.0, "fuse_time_mult": 1.0, "base_gravity_force": 520.0, "gravity_force_mult": 1.0, "pulse_count": 3, "pulse_interval": 0.18, "cluster_blast_count": 0, "cluster_spread_radius_mult": 1.0, "base_proximity_radius": 0.0, "proximity_radius_mult": 1.0},
+		"mine": {"label": "Mine", "kind": "mine", "projectile_count": 1, "spread_radians": 0.0, "cooldown_mult": 1.0, "base_projectile_speed": 0.0, "projectile_speed_mult": 0.0, "damage_mult": 1.0, "explosion_radius_mult": 1.0, "base_fuse_time": 12.0, "fuse_time_mult": 1.0, "base_gravity_force": 0.0, "gravity_force_mult": 0.0, "pulse_count": 1, "pulse_interval": 0.18, "cluster_blast_count": 0, "cluster_spread_radius_mult": 1.0, "base_proximity_radius": 52.0, "proximity_radius_mult": 1.0},
+		"shrapnel_mine": {"label": "Shrapnel Mine", "kind": "shrapnel_mine", "projectile_count": 1, "spread_radians": 0.0, "cooldown_mult": 0.92, "base_projectile_speed": 0.0, "projectile_speed_mult": 0.0, "damage_mult": 0.82, "explosion_radius_mult": 0.82, "base_fuse_time": 12.0, "fuse_time_mult": 1.0, "base_gravity_force": 0.0, "gravity_force_mult": 0.0, "pulse_count": 1, "pulse_interval": 0.18, "cluster_blast_count": 4, "cluster_spread_radius_mult": 1.0, "base_proximity_radius": 52.0, "proximity_radius_mult": 0.95},
+		"heavy_mine": {"label": "Heavy Mine", "kind": "heavy_mine", "projectile_count": 1, "spread_radians": 0.0, "cooldown_mult": 1.3, "base_projectile_speed": 0.0, "projectile_speed_mult": 0.0, "damage_mult": 1.15, "explosion_radius_mult": 1.35, "base_fuse_time": 12.0, "fuse_time_mult": 1.0, "base_gravity_force": 0.0, "gravity_force_mult": 0.0, "pulse_count": 3, "pulse_interval": 0.18, "cluster_blast_count": 0, "cluster_spread_radius_mult": 1.0, "base_proximity_radius": 52.0, "proximity_radius_mult": 1.2},
 	}
-	return profiles.get(profile_id, profiles["grenade"]).duplicate(true)
+	return profiles.get(normalized_profile_id, profiles["mine"]).duplicate(true)
+
+func _normalize_secondary_profile_id(profile_id: String) -> String:
+	match profile_id:
+		"":
+			return "mine"
+		"cluster":
+			return "cluster_grenade"
+		"siege":
+			return "siege_grenade"
+		"cluster_mine":
+			return "shrapnel_mine"
+		"siege_mine":
+			return "heavy_mine"
+		_:
+			return profile_id
 
 func _load_items() -> void:
 	_items = []
@@ -377,7 +397,7 @@ func _apply_item(item: Dictionary) -> String:
 	if effects.has("set_primary_profile"):
 		build_state["primary_profile"] = str(effects.get("set_primary_profile", "rifle"))
 	if effects.has("set_secondary_profile"):
-		build_state["secondary_profile"] = str(effects.get("set_secondary_profile", "grenade"))
+		build_state["secondary_profile"] = _normalize_secondary_profile_id(str(effects.get("set_secondary_profile", "mine")))
 	if effects.has("primary_fire_interval_mult"):
 		build_state["primary_fire_interval_mult"] = float(build_state.get("primary_fire_interval_mult", 1.0)) * float(effects.get("primary_fire_interval_mult", 1.0))
 	if effects.has("projectile_speed_mult"):

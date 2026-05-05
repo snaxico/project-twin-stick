@@ -21,7 +21,7 @@
 
 ## Documentation Rule
 
-- Read `current-state.md` and the latest history entry at the start of work.
+- Read `docs/development/start-of-day.md`, `current-state.md`, and the latest history entry at the start of work.
 - Update `current-state.md` and session history after meaningful work.
 - If implementation changes scope or architecture, update the relevant process doc in the same slice.
 
@@ -34,4 +34,3 @@ Work is done only when:
 - the result is understandable
 - the important docs are updated
 - the next step can be picked up without guessing
-

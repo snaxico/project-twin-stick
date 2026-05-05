@@ -93,9 +93,12 @@ func _populate_menu() -> void:
 	], "rifle")
 	_populate_profile_option(debug_secondary_option, [
 		{"label": "Grenade", "value": "grenade"},
-		{"label": "Cluster", "value": "cluster"},
-		{"label": "Siege", "value": "siege"},
-	], "grenade")
+		{"label": "Cluster Grenade", "value": "cluster_grenade"},
+		{"label": "Siege Grenade", "value": "siege_grenade"},
+		{"label": "Mine", "value": "mine"},
+		{"label": "Shrapnel Mine", "value": "shrapnel_mine"},
+		{"label": "Heavy Mine", "value": "heavy_mine"},
+	], "mine")
 
 func _populate_control_option(option_button: OptionButton, default_value: String) -> void:
 	option_button.clear()

@@ -10,6 +10,7 @@ Personal couch co-op twin-stick roguelite prototype built in Godot 4.6.2.
 - The current build includes early Patch 8 work plus a Patch 9 baseline for persistent meta progression and unlocks.
 - The current build also includes a full juice pass, an enemy behavior pass, a secondary identity pass, and a debug start-gear mode.
 - The current build now also includes a working pause flow, gamepad-driven menu confirm/back navigation, and shooter-colored projectiles.
+- The current build now also includes a readability-and-balance follow-up: lower ranged pressure, clearer aiming/projectile contrast, and separate grenade and mine secondary families.
 
 ## Stack
 
@@ -37,7 +38,7 @@ Personal couch co-op twin-stick roguelite prototype built in Godot 4.6.2.
 - dedicated run-end summary panel with direct meta-menu handoff
 - shared gold economy and shared upgrade selection
 - shared primary loadout variants: `Rifle`, `Scatter`, `Slug`
-- shared secondary loadout variants: `Grenade`, `Cluster`, `Siege`
+- shared secondary loadout variants: `Grenade`, `Cluster Grenade`, `Siege Grenade`, `Mine`, `Shrapnel Mine`, `Heavy Mine`
 - debug mode for selecting starting primary and secondary gear
 - pause menu with resume and room restart
 - gamepad menu confirm/back support
@@ -52,6 +53,7 @@ Personal couch co-op twin-stick roguelite prototype built in Godot 4.6.2.
 - clean rectangular grid arena with placeholder walls
 - arena framing pushed closer so the room fills most of the screen
 - projectile, impact, and grenade burst colors now inherit from the firing actor
+- mine secondaries now use instant placement plus proximity detonation
 - return-to-menu flow after a run so meta unlocks can be spent
 
 ## Controls

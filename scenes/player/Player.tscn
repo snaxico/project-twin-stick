@@ -45,6 +45,11 @@ scale = Vector2(1.02, 1.22)
 
 [node name="AimPivot" type="Node2D" parent="BodyRoot"]
 
+[node name="AimLineBackdrop" type="Line2D" parent="BodyRoot/AimPivot"]
+width = 8.0
+default_color = Color(0.04, 0.06, 0.08, 0.72)
+points = PackedVector2Array(0, 0, 46, 0)
+
 [node name="AimLine" type="Line2D" parent="BodyRoot/AimPivot"]
-width = 4.0
+width = 5.0
 points = PackedVector2Array(0, 0, 46, 0)

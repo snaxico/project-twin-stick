@@ -39,6 +39,7 @@ signal damage_taken(player, amount, current_health)
 @onready var body_root: Node2D = $BodyRoot
 @onready var visual: Polygon2D = $BodyRoot/Visual
 @onready var aim_pivot: Node2D = $BodyRoot/AimPivot
+@onready var aim_line_backdrop: Line2D = $BodyRoot/AimPivot/AimLineBackdrop
 @onready var aim_line: Line2D = $BodyRoot/AimPivot/AimLine
 @onready var secondary_preview: Node2D = $SecondaryPreview
 @onready var secondary_trajectory: Line2D = $SecondaryPreview/SecondaryTrajectory
@@ -61,18 +62,19 @@ var _is_downed := false
 var _primary_profile_name := "Rifle"
 var _primary_projectile_count := 1
 var _primary_spread_radians := 0.0
-var _secondary_profile_name := "Grenade"
+var _secondary_profile_name := "Mine"
 var _secondary_projectile_count := 1
 var _secondary_spread_radians := 0.0
 var _secondary_projectile_data := {
-	"kind": "grenade",
+	"kind": "mine",
 	"explosion_radius": 92.0,
-	"fuse_time": 1.0,
-	"gravity_force": 520.0,
+	"fuse_time": 12.0,
+	"gravity_force": 0.0,
 	"pulse_count": 1,
 	"pulse_interval": 0.18,
 	"cluster_blast_count": 0,
 	"cluster_spread_radius": 52.0,
+	"proximity_radius": 52.0,
 }
 var _base_collision_layer := 0
 var _base_collision_mask := 0
@@ -141,7 +143,7 @@ func get_secondary_profile_name() -> String:
 
 func apply_loadout(loadout: Dictionary) -> void:
 	_primary_profile_name = str(loadout.get("primary_profile_name", "Rifle"))
-	_secondary_profile_name = str(loadout.get("secondary_profile_name", "Grenade"))
+	_secondary_profile_name = str(loadout.get("secondary_profile_name", "Mine"))
 	_primary_projectile_count = max(1, int(loadout.get("primary_projectile_count", 1)))
 	_primary_spread_radians = float(loadout.get("primary_spread_radians", 0.0))
 	_secondary_projectile_count = max(1, int(loadout.get("secondary_projectile_count", 1)))
@@ -154,14 +156,15 @@ func apply_loadout(loadout: Dictionary) -> void:
 	secondary_projectile_speed = float(loadout.get("secondary_projectile_speed", secondary_projectile_speed))
 	secondary_damage = max(1, int(loadout.get("secondary_damage", secondary_damage)))
 	_secondary_projectile_data = {
-		"kind": str(loadout.get("secondary_projectile_kind", "grenade")),
+		"kind": str(loadout.get("secondary_projectile_kind", "mine")),
 		"explosion_radius": float(loadout.get("secondary_explosion_radius", 92.0)),
-		"fuse_time": float(loadout.get("secondary_fuse_time", 1.0)),
-		"gravity_force": float(loadout.get("secondary_gravity_force", 520.0)),
+		"fuse_time": float(loadout.get("secondary_fuse_time", 12.0)),
+		"gravity_force": float(loadout.get("secondary_gravity_force", 0.0)),
 		"pulse_count": int(loadout.get("secondary_pulse_count", 1)),
 		"pulse_interval": float(loadout.get("secondary_pulse_interval", 0.18)),
 		"cluster_blast_count": int(loadout.get("secondary_cluster_blast_count", 0)),
 		"cluster_spread_radius": float(loadout.get("secondary_cluster_spread_radius", 52.0)),
+		"proximity_radius": float(loadout.get("secondary_proximity_radius", 52.0)),
 	}
 
 func set_health_state(state: Dictionary) -> void:
@@ -253,12 +256,12 @@ func _physics_process(delta: float) -> void:
 
 	var secondary_pressed := _is_secondary_pressed()
 	if _uses_hold_to_aim_secondary():
-		if secondary_pressed and not _secondary_pressed_last_frame and now >= _next_secondary_ready_at and aim_direction.length() > 0.0:
+		if secondary_pressed and not _secondary_pressed_last_frame and _can_activate_secondary(now):
 			_secondary_hold_active = true
 		elif not secondary_pressed and _secondary_pressed_last_frame and _secondary_hold_active:
 			_fire_secondary()
 			_secondary_hold_active = false
-	elif secondary_pressed and not _secondary_pressed_last_frame and now >= _next_secondary_ready_at and aim_direction.length() > 0.0:
+	elif secondary_pressed and not _secondary_pressed_last_frame and _can_activate_secondary(now):
 		_fire_secondary()
 	_secondary_pressed_last_frame = secondary_pressed
 
@@ -428,7 +431,7 @@ func _build_spread_directions(base_direction: Vector2, projectile_count: int, sp
 	return directions
 
 func _apply_visual_state(now: float) -> void:
-	if visual == null or aim_pivot == null or aim_line == null or body_root == null:
+	if visual == null or aim_pivot == null or aim_line == null or aim_line_backdrop == null or body_root == null:
 		return
 	var dash_active: bool = _dash != null and _dash.is_active(now)
 	var downed_pulse: float = 0.5 + 0.5 * sin(now * 6.0)
@@ -445,16 +448,19 @@ func _apply_visual_state(now: float) -> void:
 			_base_shadow_scale.x * (1.0 + _turn_squash * 0.08),
 			_base_shadow_scale.y * (1.0 - _turn_squash * 0.05)
 		)
-		var shadow_modulate := shadow.modulate
+		var shadow_modulate: Color = shadow.modulate
 		shadow_modulate.a = 0.1 + 0.14 * downed_pulse if _is_downed else 0.25
 		shadow.modulate = shadow_modulate
 	var lean_target: float = 0.0 if _is_downed else clamp(_display_move_input.x, -1.0, 1.0) * 0.16
 	body_root.rotation = lerp_angle(body_root.rotation, lean_target, 0.18)
 	aim_pivot.rotation = aim_direction.angle()
 	aim_pivot.position = Vector2(-_aim_line_recoil * 0.2, 0.0)
-	aim_line.default_color = player_config.tint.lightened(0.15)
+	var aim_length: float = max(18.0, 52.0 - _aim_line_recoil)
+	aim_line_backdrop.visible = not _is_downed
+	aim_line_backdrop.points = PackedVector2Array([Vector2.ZERO, Vector2(aim_length, 0.0)])
+	aim_line.default_color = player_config.tint.lightened(0.25)
 	aim_line.visible = not _is_downed
-	aim_line.points = PackedVector2Array([Vector2.ZERO, Vector2(max(16.0, 40.0 - _aim_line_recoil), 0.0)])
+	aim_line.points = PackedVector2Array([Vector2.ZERO, Vector2(aim_length, 0.0)])
 	_update_secondary_preview(now)
 
 func _current_time_seconds() -> float:
@@ -549,6 +555,8 @@ func _build_circle_points(center: Vector2, radius: float, point_count: int) -> P
 func _should_show_secondary_preview(now: float) -> bool:
 	if _is_downed:
 		return false
+	if _is_proximity_mine_secondary():
+		return false
 	if aim_direction.length() <= 0.0:
 		return false
 	if now < _next_secondary_ready_at:
@@ -561,17 +569,30 @@ func _uses_hold_to_aim_secondary() -> bool:
 	return _supports_secondary_preview()
 
 func _supports_secondary_preview() -> bool:
-	return true
+	return not _is_proximity_mine_secondary()
+
+func _is_proximity_mine_secondary() -> bool:
+	var kind := str(_secondary_projectile_data.get("kind", ""))
+	return kind == "mine" or kind == "shrapnel_mine" or kind == "heavy_mine" or kind == "cluster_mine" or kind == "siege_mine"
+
+func _can_activate_secondary(now: float) -> bool:
+	if now < _next_secondary_ready_at:
+		return false
+	if _is_proximity_mine_secondary():
+		return true
+	return aim_direction.length() > 0.0
 
 func _fire_secondary() -> void:
 	var now := _current_time_seconds()
-	if now < _next_secondary_ready_at or aim_direction.length() <= 0.0:
+	if not _can_activate_secondary(now):
 		return
 	_next_secondary_ready_at = now + secondary_cooldown
 	var secondary_color: Color = player_config.tint.lightened(0.08)
-	for projectile_direction in _build_spread_directions(aim_direction, _secondary_projectile_count, _secondary_spread_radians):
+	var secondary_direction: Vector2 = aim_direction.normalized() if aim_direction.length() > 0.0 else Vector2.RIGHT
+	var spawn_origin: Vector2 = global_position + secondary_direction * 14.0 if _is_proximity_mine_secondary() else global_position
+	for projectile_direction in _build_spread_directions(secondary_direction, _secondary_projectile_count, _secondary_spread_radians):
 		secondary_requested.emit(
-			global_position + projectile_direction * 22.0,
+			spawn_origin if _is_proximity_mine_secondary() else global_position + projectile_direction * 22.0,
 			projectile_direction,
 			secondary_projectile_speed,
 			secondary_damage,

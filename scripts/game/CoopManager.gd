@@ -10,6 +10,7 @@ const HealthBarHUDData = preload("res://scripts/juice/HealthBarHUD.gd")
 @export var enemy_scene: PackedScene
 @export var projectile_scene: PackedScene
 @export var grenade_projectile_scene: PackedScene
+@export var mine_projectile_scene: PackedScene
 @export var survival_duration: float = 30.0
 @export var enemy_spawn_interval: float = 4.0
 @export var modifier_intro_duration: float = 1.8
@@ -120,6 +121,8 @@ func _ready() -> void:
 		projectile_scene = load("res://scenes/weapons/Projectile.tscn")
 	if grenade_projectile_scene == null:
 		grenade_projectile_scene = load("res://scenes/weapons/GrenadeProjectile.tscn")
+	if mine_projectile_scene == null:
+		mine_projectile_scene = load("res://scenes/weapons/MineProjectile.tscn")
 	_modifier_engine = ModifierEngineData.new()
 	_sfx_engine = get_tree().get_first_node_in_group("sfx_engine")
 	_status_labels = [p1_status_label, p2_status_label, p3_status_label, p4_status_label]
@@ -435,11 +438,11 @@ func _on_player_secondary_requested(origin: Vector2, direction: Vector2, speed: 
 	if _room_is_cleared or _room_is_failed:
 		return
 
-	match str(projectile_data.get("kind", "grenade")):
-		"grenade":
-			_spawn_grenade(origin, direction, speed, damage, team, projectile_data, color)
-		_:
-			_spawn_projectile(origin, direction, speed, damage, team, color)
+	var secondary_kind := str(projectile_data.get("kind", "mine"))
+	if _is_mine_secondary_kind(secondary_kind):
+		_spawn_mine(origin, direction, speed, damage, team, projectile_data, color)
+	else:
+		_spawn_grenade(origin, direction, speed, damage, team, projectile_data, color)
 
 func _on_enemy_fire_requested(origin: Vector2, direction: Vector2, speed: float, damage: int, team: String, color: Color) -> void:
 	if _room_is_cleared or _room_is_failed:
@@ -465,8 +468,26 @@ func _spawn_grenade(origin: Vector2, direction: Vector2, speed: float, damage: i
 	grenade.pulse_interval = float(projectile_data.get("pulse_interval", grenade.pulse_interval))
 	grenade.cluster_blast_count = int(projectile_data.get("cluster_blast_count", grenade.cluster_blast_count))
 	grenade.cluster_spread_radius = float(projectile_data.get("cluster_spread_radius", grenade.cluster_spread_radius))
-	grenade.exploded.connect(_on_grenade_exploded)
+	grenade.exploded.connect(_on_explosive_detonated)
 	projectiles.add_child(grenade)
+
+func _spawn_mine(origin: Vector2, direction: Vector2, speed: float, damage: int, team: String, projectile_data: Dictionary, color: Color) -> void:
+	var mine = mine_projectile_scene.instantiate()
+	mine.global_position = origin
+	mine.setup(team, direction, speed, damage, color)
+	mine.kind = str(projectile_data.get("kind", mine.kind))
+	mine.explosion_radius = float(projectile_data.get("explosion_radius", mine.explosion_radius))
+	mine.fuse_time = float(projectile_data.get("fuse_time", mine.fuse_time))
+	mine.pulse_count = int(projectile_data.get("pulse_count", mine.pulse_count))
+	mine.pulse_interval = float(projectile_data.get("pulse_interval", mine.pulse_interval))
+	mine.cluster_blast_count = int(projectile_data.get("cluster_blast_count", mine.cluster_blast_count))
+	mine.cluster_spread_radius = float(projectile_data.get("cluster_spread_radius", mine.cluster_spread_radius))
+	mine.proximity_radius = float(projectile_data.get("proximity_radius", mine.proximity_radius))
+	mine.exploded.connect(_on_explosive_detonated)
+	projectiles.add_child(mine)
+
+func _is_mine_secondary_kind(kind: String) -> bool:
+	return kind == "mine" or kind == "shrapnel_mine" or kind == "heavy_mine" or kind == "cluster_mine" or kind == "siege_mine"
 
 func _on_enemy_died(enemy) -> void:
 	_trigger_hitstop(0.04)
@@ -505,7 +526,7 @@ func _on_player_revived(player) -> void:
 	)
 	_refresh_debug_ui()
 
-func _on_grenade_exploded(_origin: Vector2, color: Color) -> void:
+func _on_explosive_detonated(_origin: Vector2, color: Color) -> void:
 	_play_sfx_explosion()
 	_spawn_world_effect(
 		ParticleFactoryData.create_explosion_burst(color),

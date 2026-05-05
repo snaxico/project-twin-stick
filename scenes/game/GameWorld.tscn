@@ -22,21 +22,21 @@ script = ExtResource("1_4o0x5")
 player_scene = ExtResource("1_3sby6")
 
 [node name="Floor" type="Polygon2D" parent="."]
-color = Color(0.72, 0.78, 0.68, 1)
+color = Color(0.58, 0.64, 0.62, 1)
 polygon = PackedVector2Array(200, 120, 1080, 120, 1180, 620, 100, 620)
 
 [node name="FloorGrid" type="Node2D" parent="."]
 
 [node name="BackWall" type="Polygon2D" parent="."]
-color = Color(0.38, 0.42, 0.36, 1)
+color = Color(0.24, 0.28, 0.29, 1)
 polygon = PackedVector2Array(200, 96, 1080, 96, 1080, 136, 200, 136)
 
 [node name="LeftWallVisual" type="Polygon2D" parent="."]
-color = Color(0.44, 0.48, 0.4, 1)
+color = Color(0.3, 0.34, 0.35, 1)
 polygon = PackedVector2Array(172, 120, 200, 120, 100, 620, 72, 620)
 
 [node name="RightWallVisual" type="Polygon2D" parent="."]
-color = Color(0.44, 0.48, 0.4, 1)
+color = Color(0.3, 0.34, 0.35, 1)
 polygon = PackedVector2Array(1080, 120, 1108, 120, 1208, 620, 1180, 620)
 
 [node name="ArenaBounds" type="StaticBody2D" parent="."]

@@ -37,27 +37,63 @@
       }
     },
     {
-      "id": "cluster_shells",
-      "name": "Cluster Shells",
+      "id": "grenade_belt",
+      "name": "Grenade Belt",
       "category": "Secondary",
-      "description": "Swap the shared secondary into a twin-grenade cluster pattern.",
+      "description": "Swap the shared secondary back to the classic timed grenade toss.",
       "pools": ["reward", "shop"],
       "cost": 3,
       "repeatable": false,
       "effects": {
-        "set_secondary_profile": "cluster"
+        "set_secondary_profile": "grenade"
+      }
+    },
+    {
+      "id": "cluster_grenades",
+      "name": "Cluster Shells",
+      "category": "Secondary",
+      "description": "Swap the shared secondary into a thrown cluster grenade pattern.",
+      "pools": ["reward", "shop"],
+      "cost": 3,
+      "repeatable": false,
+      "effects": {
+        "set_secondary_profile": "cluster_grenade"
+      }
+    },
+    {
+      "id": "siege_grenades",
+      "name": "Siege Canister",
+      "category": "Secondary",
+      "description": "Swap the shared secondary into a slower, wider blast grenade.",
+      "pools": ["reward", "shop"],
+      "cost": 3,
+      "repeatable": false,
+      "effects": {
+        "set_secondary_profile": "siege_grenade"
+      }
+    },
+    {
+      "id": "cluster_shells",
+      "name": "Shrapnel Mine Housing",
+      "category": "Secondary",
+      "description": "Swap the shared secondary into a proximity mine that bursts into shrapnel blasts.",
+      "pools": ["reward", "shop"],
+      "cost": 3,
+      "repeatable": false,
+      "effects": {
+        "set_secondary_profile": "shrapnel_mine"
       }
     },
     {
       "id": "siege_canister",
-      "name": "Siege Canister",
+      "name": "Heavy Mine Casing",
       "category": "Secondary",
-      "description": "Swap the shared secondary into a slower, wider blast canister.",
+      "description": "Swap the shared secondary into a heavier proximity mine with wider blast pulses.",
       "pools": ["reward", "shop"],
       "cost": 3,
       "repeatable": false,
       "effects": {
-        "set_secondary_profile": "siege"
+        "set_secondary_profile": "heavy_mine"
       }
     },
     {

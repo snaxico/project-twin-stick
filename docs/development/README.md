@@ -2,9 +2,10 @@
 
 ## Start-Of-Session Read Order
 
-1. `current-state.md`
-2. the latest file in `history/`
-3. any affected process doc for the task at hand
+1. `start-of-day.md`
+2. `current-state.md`
+3. the latest file in `history/`
+4. any affected process doc for the task at hand
 
 ## Update Rule
 
@@ -19,4 +20,3 @@ After meaningful work:
 - Write for continuation, not presentation.
 - Keep entries short and factual.
 - Record what changed, why, and what remains open.
-

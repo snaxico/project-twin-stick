@@ -15,5 +15,10 @@ script = ExtResource("1_8c7hm")
 [node name="Visual" type="Polygon2D" parent="."]
 polygon = PackedVector2Array(0, -8, 8, 0, 0, 8, -8, 0)
 
+[node name="Outline" type="Polygon2D" parent="."]
+color = Color(0.05, 0.08, 0.12, 0.82)
+polygon = PackedVector2Array(0, -8, 8, 0, 0, 8, -8, 0)
+scale = Vector2(1.3, 1.3)
+
 [node name="CollisionShape2D" type="CollisionShape2D" parent="."]
 shape = SubResource("CircleShape2D_projectile")
