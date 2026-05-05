@@ -404,6 +404,8 @@ func _apply_item(item: Dictionary) -> String:
 		build_state["projectile_speed_mult"] = float(build_state.get("projectile_speed_mult", 1.0)) * float(effects.get("projectile_speed_mult", 1.0))
 	if effects.has("projectile_damage_bonus"):
 		build_state["projectile_damage_bonus"] = float(build_state.get("projectile_damage_bonus", 0.0)) + float(effects.get("projectile_damage_bonus", 0.0))
+	if effects.has("move_speed_mult"):
+		build_state["move_speed_mult"] = float(build_state.get("move_speed_mult", 1.0)) * float(effects.get("move_speed_mult", 1.0))
 	if effects.has("secondary_cooldown_mult"):
 		build_state["secondary_cooldown_mult"] = float(build_state.get("secondary_cooldown_mult", 1.0)) * float(effects.get("secondary_cooldown_mult", 1.0))
 	if effects.has("secondary_projectile_speed_mult"):

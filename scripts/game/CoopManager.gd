@@ -6,6 +6,77 @@ const ScreenShakeData = preload("res://scripts/juice/ScreenShake.gd")
 const ParticleFactoryData = preload("res://scripts/juice/ParticleFactory.gd")
 const FloatingTextData = preload("res://scripts/juice/FloatingText.gd")
 const HealthBarHUDData = preload("res://scripts/juice/HealthBarHUD.gd")
+const DARKNESS_OVERLAY_SHADER := """
+shader_type canvas_item;
+
+uniform vec2 player_1_pos = vec2(-9999.0, -9999.0);
+uniform vec2 player_2_pos = vec2(-9999.0, -9999.0);
+uniform vec2 player_3_pos = vec2(-9999.0, -9999.0);
+uniform vec2 player_4_pos = vec2(-9999.0, -9999.0);
+uniform float player_1_active = 0.0;
+uniform float player_2_active = 0.0;
+uniform float player_3_active = 0.0;
+uniform float player_4_active = 0.0;
+uniform float vision_radius = 280.0;
+uniform vec4 darkness_color : source_color = vec4(0.01, 0.02, 0.03, 0.84);
+
+float reveal_amount(vec2 frag, vec2 center, float active, float radius) {
+	if (active < 0.5) {
+		return 0.0;
+	}
+	float edge_start = radius * 0.72;
+	float dist = distance(frag, center);
+	return 1.0 - smoothstep(edge_start, radius, dist);
+}
+
+void fragment() {
+	vec2 frag = SCREEN_UV / SCREEN_PIXEL_SIZE;
+	float reveal = 0.0;
+	reveal = max(reveal, reveal_amount(frag, player_1_pos, player_1_active, vision_radius));
+	reveal = max(reveal, reveal_amount(frag, player_2_pos, player_2_active, vision_radius));
+	reveal = max(reveal, reveal_amount(frag, player_3_pos, player_3_active, vision_radius));
+	reveal = max(reveal, reveal_amount(frag, player_4_pos, player_4_active, vision_radius));
+	float alpha = darkness_color.a * (1.0 - reveal);
+	COLOR = vec4(darkness_color.rgb, alpha);
+}
+"""
+const LAYOUT_PALETTES := {
+	"default": {
+		"floor_color": Color(0.58, 0.64, 0.62, 1.0),
+		"wall_color": Color(0.24, 0.28, 0.29, 1.0),
+		"side_wall_color": Color(0.3, 0.34, 0.35, 1.0),
+		"grid_color": Color(0.48, 0.54, 0.46, 0.7),
+		"accent_color": Color(0.74, 0.82, 0.68, 0.3),
+	},
+	"crossfire": {
+		"floor_color": Color(0.72, 0.62, 0.48, 1.0),
+		"wall_color": Color(0.42, 0.21, 0.16, 1.0),
+		"side_wall_color": Color(0.48, 0.26, 0.18, 1.0),
+		"grid_color": Color(0.58, 0.42, 0.29, 0.56),
+		"accent_color": Color(0.94, 0.8, 0.62, 0.26),
+	},
+	"pinch": {
+		"floor_color": Color(0.42, 0.5, 0.58, 1.0),
+		"wall_color": Color(0.12, 0.19, 0.3, 1.0),
+		"side_wall_color": Color(0.16, 0.24, 0.38, 1.0),
+		"grid_color": Color(0.61, 0.74, 0.86, 0.34),
+		"accent_color": Color(0.76, 0.88, 1.0, 0.22),
+	},
+	"offset": {
+		"floor_color": Color(0.46, 0.52, 0.36, 1.0),
+		"wall_color": Color(0.14, 0.21, 0.12, 1.0),
+		"side_wall_color": Color(0.18, 0.28, 0.15, 1.0),
+		"grid_color": Color(0.67, 0.76, 0.54, 0.32),
+		"accent_color": Color(0.82, 0.9, 0.64, 0.2),
+	},
+	"boss_gate": {
+		"floor_color": Color(0.26, 0.08, 0.1, 1.0),
+		"wall_color": Color(0.05, 0.04, 0.05, 1.0),
+		"side_wall_color": Color(0.09, 0.07, 0.08, 1.0),
+		"grid_color": Color(0.68, 0.22, 0.28, 0.24),
+		"accent_color": Color(0.96, 0.32, 0.38, 0.18),
+	},
+}
 @export var player_scene: PackedScene
 @export var enemy_scene: PackedScene
 @export var projectile_scene: PackedScene
@@ -51,6 +122,7 @@ signal player_revived(player)
 @onready var enemy_spawn_5: Marker2D = $EnemySpawn5
 @onready var enemy_spawn_6: Marker2D = $EnemySpawn6
 @onready var ui_layer: CanvasLayer = $UI
+@onready var title_label: Label = $UI/Title
 @onready var p1_status_label: Label = $UI/P1Status
 @onready var p2_status_label: Label = $UI/P2Status
 @onready var p3_status_label: Label = $UI/P3Status
@@ -106,11 +178,23 @@ var _hud_root: Control = null
 var _floating_text_layer: Control = null
 var _player_health_bars: Array = []
 var _boss_health_bar = null
+var _player_hud_container: VBoxContainer = null
+var _modifier_chip_panel: Panel = null
+var _modifier_chip_label: Label = null
+var _timer_panel: Panel = null
+var _timer_fill: ColorRect = null
+var _timer_label: Label = null
+var _encounter_status_label: Label = null
+var _darkness_overlay: ColorRect = null
+var _darkness_material: ShaderMaterial = null
+var _floor_landmarks: Node2D = null
 var _survival_spawn_warning_pending := false
 var _boss_support_warning_pending := false
 var _pending_survival_wave_plan: Array = []
 var _pending_boss_support_plan: Array = []
 var _pending_warning_effects: Array = []
+var _friendly_fire_enabled := false
+var _vision_radius := 0.0
 
 func _ready() -> void:
 	if player_scene == null:
@@ -128,6 +212,7 @@ func _ready() -> void:
 	_status_labels = [p1_status_label, p2_status_label, p3_status_label, p4_status_label]
 	_secondary_labels = [p1_secondary_label, p2_secondary_label, p3_secondary_label, p4_secondary_label]
 	_build_hud()
+	_ensure_floor_landmarks()
 
 	_is_initialized = true
 	_spawn_players()
@@ -198,13 +283,14 @@ func _refresh_debug_ui() -> void:
 		var status_label: Label = _status_labels[index]
 		var secondary_label: Label = _secondary_labels[index]
 		var has_player := index < _player_nodes.size()
-		status_label.visible = has_player
-		secondary_label.visible = has_player
+		status_label.visible = false
+		secondary_label.visible = false
 		if has_player:
 			status_label.text = _build_player_status_text(_player_nodes[index])
 			secondary_label.text = _build_secondary_status_text(_player_nodes[index])
 
-	p2_mode_button.visible = _player_nodes.size() >= 2
+	p1_mode_button.visible = false
+	p2_mode_button.visible = false
 
 	var connected_devices: Array = Input.get_connected_joypads()
 	if connected_devices.is_empty():
@@ -212,6 +298,7 @@ func _refresh_debug_ui() -> void:
 	else:
 		connection_status_label.text = "Gamepads: %s" % connected_devices
 	modifier_status_label.text = _build_modifier_status_text()
+	_refresh_modifier_chip()
 	_refresh_player_health_bars()
 	_refresh_boss_health_bar()
 
@@ -333,6 +420,8 @@ func _start_room() -> void:
 	_pending_boss_support_plan = []
 	_boss_node = null
 	_active_modifier = {} if _is_boss_room() else _room_config.get("modifier", _modifier_engine.get_random_modifier()).duplicate(true)
+	_friendly_fire_enabled = _modifier_engine.is_friendly_fire(_active_modifier)
+	_vision_radius = _modifier_engine.get_vision_radius(_active_modifier)
 	_clear_container(projectiles)
 	_clear_container(enemies)
 	_clear_container(effects)
@@ -347,6 +436,7 @@ func _start_room() -> void:
 	_show_room_intro()
 	_play_intro_juice()
 	room_status_label.text = "Room status: Incoming encounter"
+	_set_room_progress_ui("Deploying", "Incoming encounter", 1.0, _get_active_hud_accent())
 
 func _spawn_room_opening_encounter() -> void:
 	if _is_boss_room():
@@ -453,6 +543,7 @@ func _spawn_projectile(origin: Vector2, direction: Vector2, speed: float, damage
 	var projectile = projectile_scene.instantiate()
 	projectile.global_position = origin
 	projectile.setup(team, direction, speed, damage, color)
+	projectile.allow_friendly_fire = _friendly_fire_enabled and team == "player"
 	projectile.impact_requested.connect(_on_projectile_impact_requested)
 	projectiles.add_child(projectile)
 
@@ -560,6 +651,7 @@ func _evaluate_room_state() -> void:
 		_room_is_failed = true
 		_reset_room_status_pulse()
 		room_status_label.text = "Room status: All players down"
+		_set_room_progress_ui("Defeat", "All players down", 0.0, Color(0.94, 0.32, 0.28, 1.0))
 		_clear_container(projectiles)
 		_clear_container(enemies)
 		var defeat_text := "All players were downed before the timer expired."
@@ -577,6 +669,7 @@ func _update_room_progress(delta: float) -> void:
 		var intro_remaining: float = max(_room_intro_ends_at - now, 0.0)
 		var intro_label := str(_room_config.get("title", "Room")) if _is_boss_room() else str(_active_modifier.get("name", "Modifier"))
 		room_status_label.text = "Room status: %s in %.1fs" % [intro_label, intro_remaining]
+		_set_room_progress_ui("%.1fs" % intro_remaining, intro_label, clamp(intro_remaining / max(modifier_intro_duration, 0.01), 0.0, 1.0), _get_active_hud_accent())
 		if now >= _room_intro_ends_at:
 			_room_is_in_intro = false
 			modifier_intro_panel.visible = false
@@ -617,6 +710,12 @@ func _update_room_progress(delta: float) -> void:
 		enemies.get_child_count(),
 		_build_revive_status_suffix(),
 	]
+	_set_room_progress_ui(
+		"%.1fs" % remaining,
+		"Enemies %d%s" % [enemies.get_child_count(), _build_revive_status_suffix()],
+		clamp(remaining / max(room_duration, 0.01), 0.0, 1.0),
+		_get_active_hud_accent()
+	)
 	_update_room_timer_pulse(remaining, now)
 
 func _update_boss_room(now: float) -> void:
@@ -642,6 +741,12 @@ func _update_boss_room(now: float) -> void:
 		add_count,
 		_build_revive_status_suffix(),
 	]
+	_set_room_progress_ui(
+		"Boss",
+		"Boss HP %s | Adds %d%s" % [_boss_node.get_health_ratio_text(), add_count, _build_revive_status_suffix()],
+		_boss_node.get_health_ratio(),
+		_get_active_hud_accent()
+	)
 
 func _update_revive_state(delta: float) -> void:
 	var downed_players := get_downed_players()
@@ -693,6 +798,7 @@ func _handle_room_clear(title: String, detail: String) -> void:
 		_boss_node = null
 	room_status_label.text = "Room status: %s" % title
 	_reset_room_status_pulse()
+	_set_room_progress_ui(title, detail, 1.0, _get_active_hud_accent())
 	_play_sfx_room_clear()
 	var gold_gain := int(_room_config.get("currency_reward", 0))
 	if gold_gain > 0:
@@ -704,6 +810,7 @@ func _handle_room_clear(title: String, detail: String) -> void:
 func _show_result(title: String, detail: String) -> void:
 	result_title_label.text = title
 	result_detail_label.text = detail
+	_apply_panel_style(result_panel, _get_active_hud_accent())
 	result_panel.visible = true
 
 func _show_room_intro() -> void:
@@ -713,6 +820,7 @@ func _show_room_intro() -> void:
 	else:
 		modifier_intro_title_label.text = "Incoming Modifier: %s" % str(_active_modifier.get("name", "Unknown"))
 		modifier_intro_detail_label.text = str(_active_modifier.get("description", ""))
+	_apply_panel_style(modifier_intro_panel, _get_active_hud_accent())
 	modifier_intro_panel.visible = true
 
 func _apply_modifier_visuals() -> void:
@@ -728,6 +836,7 @@ func _apply_modifier_visuals() -> void:
 
 	var tween := create_tween()
 	tween.tween_property(modifier_tint, "color", target_color, 0.28)
+	_refresh_modifier_chip()
 
 func _get_spawn_interval() -> float:
 	var base_interval := float(_room_config.get("enemy_spawn_interval", enemy_spawn_interval))
@@ -783,7 +892,7 @@ func _is_boss_room() -> bool:
 	return str(_room_config.get("room_type", "")) == "boss"
 
 func _get_enemy_spawn_positions() -> Array:
-	return [
+	var spawn_positions := [
 		enemy_spawn_1.global_position,
 		enemy_spawn_2.global_position,
 		enemy_spawn_3.global_position,
@@ -791,6 +900,21 @@ func _get_enemy_spawn_positions() -> Array:
 		enemy_spawn_5.global_position,
 		enemy_spawn_6.global_position,
 	]
+	var spawn_side: String = _modifier_engine.get_spawn_side(_active_modifier)
+	if spawn_side != "left":
+		return spawn_positions
+
+	var min_x: float = spawn_positions[0].x
+	var max_x: float = spawn_positions[0].x
+	for spawn_position in spawn_positions:
+		min_x = min(min_x, spawn_position.x)
+		max_x = max(max_x, spawn_position.x)
+	var center_x: float = lerpf(min_x, max_x, 0.5)
+	var filtered_positions: Array = []
+	for spawn_position in spawn_positions:
+		if spawn_position.x < center_x:
+			filtered_positions.append(spawn_position)
+	return filtered_positions if not filtered_positions.is_empty() else spawn_positions
 
 func _apply_layout_preset(layout_id: String) -> void:
 	const MAP_SCALE := 1.15
@@ -994,7 +1118,9 @@ func _apply_layout_preset(layout_id: String) -> void:
 	back_wall_visual.polygon = back_wall_points
 	left_wall_visual.polygon = left_wall_points
 	right_wall_visual.polygon = right_wall_points
-	_rebuild_floor_grid(floor_points)
+	_apply_layout_palette(layout_id)
+	_rebuild_floor_grid(floor_points, _get_layout_palette(layout_id).get("grid_color", Color(0.48, 0.54, 0.46, 0.7)))
+	_rebuild_floor_landmarks(layout_id, floor_points)
 	_apply_collision_bounds_from_floor(floor_points)
 	player_1_spawn.position = player_positions[0]
 	player_2_spawn.position = player_positions[1]
@@ -1130,25 +1256,110 @@ func _build_hud() -> void:
 	_floating_text_layer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_floating_text_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_hud_root.add_child(_floating_text_layer)
+	_hide_legacy_debug_ui()
+
+	_player_hud_container = VBoxContainer.new()
+	_player_hud_container.name = "PlayerHUD"
+	_player_hud_container.anchor_top = 1.0
+	_player_hud_container.anchor_bottom = 1.0
+	_player_hud_container.offset_left = 28.0
+	_player_hud_container.offset_top = -236.0
+	_player_hud_container.offset_right = 340.0
+	_player_hud_container.offset_bottom = -28.0
+	_player_hud_container.add_theme_constant_override("separation", 10)
+	_hud_root.add_child(_player_hud_container)
 
 	for index in range(4):
 		var bar = HealthBarHUDData.new()
-		bar.position = Vector2(1540.0, 40.0 + float(index) * 84.0)
-		bar.size = Vector2(320.0, 40.0)
+		bar.custom_minimum_size = Vector2(300.0, 34.0)
+		bar.size = Vector2(300.0, 34.0)
 		var fill_color := Color(0.7, 0.7, 0.7, 1.0)
 		if index < _player_configs.size():
 			fill_color = _player_configs[index].tint
 		bar.configure("P%d" % (index + 1), fill_color)
 		bar.visible = false
-		_hud_root.add_child(bar)
+		_player_hud_container.add_child(bar)
 		_player_health_bars.append(bar)
 
+	_modifier_chip_panel = Panel.new()
+	_modifier_chip_panel.name = "ModifierChip"
+	_modifier_chip_panel.anchor_left = 0.5
+	_modifier_chip_panel.anchor_right = 0.5
+	_modifier_chip_panel.offset_left = -180.0
+	_modifier_chip_panel.offset_top = 22.0
+	_modifier_chip_panel.offset_right = 180.0
+	_modifier_chip_panel.offset_bottom = 62.0
+	_hud_root.add_child(_modifier_chip_panel)
+	_modifier_chip_label = Label.new()
+	_modifier_chip_label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_modifier_chip_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_modifier_chip_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_modifier_chip_panel.add_child(_modifier_chip_label)
+
+	_timer_panel = Panel.new()
+	_timer_panel.name = "TimerPanel"
+	_timer_panel.anchor_left = 0.5
+	_timer_panel.anchor_right = 0.5
+	_timer_panel.offset_left = -220.0
+	_timer_panel.offset_top = 70.0
+	_timer_panel.offset_right = 220.0
+	_timer_panel.offset_bottom = 102.0
+	_hud_root.add_child(_timer_panel)
+	var timer_bg := ColorRect.new()
+	timer_bg.color = Color(0.02, 0.03, 0.05, 0.72)
+	timer_bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_timer_panel.add_child(timer_bg)
+	_timer_fill = ColorRect.new()
+	_timer_fill.color = Color(0.45, 0.82, 0.54, 0.95)
+	_timer_fill.anchor_top = 0.0
+	_timer_fill.anchor_bottom = 1.0
+	_timer_fill.offset_left = 4.0
+	_timer_fill.offset_top = 4.0
+	_timer_fill.offset_bottom = -4.0
+	_timer_panel.add_child(_timer_fill)
+	_timer_label = Label.new()
+	_timer_label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_timer_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_timer_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_timer_panel.add_child(_timer_label)
+
+	_encounter_status_label = Label.new()
+	_encounter_status_label.anchor_left = 0.5
+	_encounter_status_label.anchor_right = 0.5
+	_encounter_status_label.offset_left = -340.0
+	_encounter_status_label.offset_top = 108.0
+	_encounter_status_label.offset_right = 340.0
+	_encounter_status_label.offset_bottom = 136.0
+	_encounter_status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_hud_root.add_child(_encounter_status_label)
+
 	_boss_health_bar = HealthBarHUDData.new()
-	_boss_health_bar.position = Vector2(660.0, 18.0)
+	_boss_health_bar.position = Vector2(660.0, 144.0)
 	_boss_health_bar.size = Vector2(600.0, 40.0)
 	_boss_health_bar.configure("Crimson Gate", Color(0.86, 0.18, 0.18, 1.0))
 	_boss_health_bar.visible = false
 	_hud_root.add_child(_boss_health_bar)
+
+	_darkness_overlay = ColorRect.new()
+	_darkness_overlay.name = "DarknessOverlay"
+	_darkness_overlay.color = Color(1.0, 1.0, 1.0, 1.0)
+	_darkness_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_darkness_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_darkness_material = ShaderMaterial.new()
+	var shader := Shader.new()
+	shader.code = DARKNESS_OVERLAY_SHADER
+	_darkness_material.shader = shader
+	_darkness_overlay.material = _darkness_material
+	_darkness_overlay.visible = false
+	_hud_root.add_child(_darkness_overlay)
+	_hud_root.move_child(_darkness_overlay, 0)
+
+	_apply_panel_style(result_panel, Color(0.34, 0.72, 0.98, 1.0))
+	_apply_panel_style(modifier_intro_panel, Color(0.34, 0.72, 0.98, 1.0))
+	_apply_panel_style(pause_panel, Color(0.34, 0.72, 0.98, 1.0))
+	_apply_panel_style(_modifier_chip_panel, Color(0.34, 0.72, 0.98, 1.0))
+	_apply_panel_style(_timer_panel, Color(0.34, 0.72, 0.98, 1.0))
+	_set_room_progress_ui("Ready", "Awaiting room", 1.0, Color(0.34, 0.72, 0.98, 1.0))
 
 func _refresh_player_health_bars() -> void:
 	if _player_health_bars.is_empty():
@@ -1160,9 +1371,9 @@ func _refresh_player_health_bars() -> void:
 		if not has_player:
 			continue
 		var player = _player_nodes[index]
-		bar.configure("P%d" % player.player_id, player.player_config.tint)
+		bar.configure("P%d  %s" % [player.player_id, player.get_primary_profile_name()], player.player_config.tint)
 		var health_state: Dictionary = player.get_health_state()
-		var status_text := "DOWN" if player.is_downed() else ""
+		var status_text := "DOWN" if player.is_downed() else _build_compact_secondary_status(player)
 		bar.set_health(int(health_state.get("current", 0)), int(health_state.get("max", 1)), status_text)
 
 func _refresh_boss_health_bar() -> void:
@@ -1189,16 +1400,20 @@ func _world_to_ui_position(world_position: Vector2) -> Vector2:
 	return get_viewport().get_canvas_transform() * world_position
 
 func _update_room_timer_pulse(remaining: float, now: float) -> void:
+	if _timer_panel == null or _timer_label == null:
+		return
 	if remaining < 5.0:
 		var pulse := 1.0 + 0.08 * sin(now * 10.0)
-		room_status_label.scale = Vector2.ONE * pulse
-		room_status_label.modulate = Color(1.0, 0.72, 0.72, 1.0)
+		_timer_panel.scale = Vector2.ONE * pulse
+		_timer_label.modulate = Color(1.0, 0.72, 0.72, 1.0)
 		return
 	_reset_room_status_pulse()
 
 func _reset_room_status_pulse() -> void:
-	room_status_label.scale = Vector2.ONE
-	room_status_label.modulate = Color(1.0, 1.0, 1.0, 1.0)
+	if _timer_panel != null:
+		_timer_panel.scale = Vector2.ONE
+	if _timer_label != null:
+		_timer_label.modulate = Color(1.0, 1.0, 1.0, 1.0)
 
 func _is_pause_event(event: InputEvent) -> bool:
 	if event is InputEventKey:
@@ -1246,6 +1461,229 @@ func _update_screen_effects() -> void:
 		intensity = clamp(float(enemies.get_child_count()) / max(4.0 + float(_player_nodes.size()) * 1.5, 1.0), 0.0, 1.0)
 	screen_effects.set_low_health_ratio(lowest_ratio)
 	screen_effects.set_combat_intensity(intensity)
+	_update_darkness_overlay()
+
+func _build_compact_secondary_status(player) -> String:
+	if player.is_downed():
+		return "Downed"
+	var cooldown: float = player.get_secondary_cooldown_remaining()
+	if cooldown > 0.0:
+		return "%s %.1fs" % [player.get_secondary_profile_name(), cooldown]
+	return "%s Ready" % player.get_secondary_profile_name()
+
+func _hide_legacy_debug_ui() -> void:
+	var legacy_controls: Array = [
+		title_label,
+		p1_status_label,
+		p2_status_label,
+		p3_status_label,
+		p4_status_label,
+		p1_secondary_label,
+		p2_secondary_label,
+		p3_secondary_label,
+		p4_secondary_label,
+		connection_status_label,
+		room_status_label,
+		modifier_status_label,
+		p1_mode_button,
+		p2_mode_button,
+	]
+	for control in legacy_controls:
+		if control == null:
+			continue
+		control.visible = false
+
+func _apply_panel_style(panel: Panel, border_color: Color) -> void:
+	if panel == null:
+		return
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.08, 0.09, 0.11, 0.9)
+	style.border_color = border_color
+	style.set_border_width_all(2)
+	style.set_corner_radius_all(6)
+	panel.add_theme_stylebox_override("panel", style)
+
+func _set_room_progress_ui(timer_text: String, encounter_text: String, ratio: float, accent: Color) -> void:
+	if _timer_fill != null and _timer_panel != null:
+		var width: float = max(_timer_panel.size.x - 8.0, 0.0)
+		_timer_fill.size.x = width * clamp(ratio, 0.0, 1.0)
+		_timer_fill.color = accent
+	if _timer_label != null:
+		_timer_label.text = timer_text
+	if _encounter_status_label != null:
+		_encounter_status_label.text = encounter_text
+		_encounter_status_label.modulate = accent.lightened(0.45)
+	if _timer_panel != null:
+		_apply_panel_style(_timer_panel, accent)
+
+func _refresh_modifier_chip() -> void:
+	if _modifier_chip_panel == null or _modifier_chip_label == null:
+		return
+	var accent := _get_active_hud_accent()
+	var chip_text := "Boss Room" if _is_boss_room() else str(_active_modifier.get("name", "No Modifier"))
+	_modifier_chip_label.text = chip_text
+	_modifier_chip_label.modulate = accent.lightened(0.5)
+	_apply_panel_style(_modifier_chip_panel, accent)
+
+func _get_active_hud_accent() -> Color:
+	if _is_boss_room():
+		return Color(0.92, 0.24, 0.28, 1.0)
+	if _active_modifier.is_empty():
+		return Color(0.34, 0.72, 0.98, 1.0)
+	return _modifier_engine.get_tint_color(_active_modifier)
+
+func _ensure_floor_landmarks() -> void:
+	if _floor_landmarks != null:
+		return
+	_floor_landmarks = Node2D.new()
+	_floor_landmarks.name = "FloorLandmarks"
+	add_child(_floor_landmarks)
+	if floor_grid != null:
+		move_child(_floor_landmarks, floor_grid.get_index() + 1)
+
+func _get_layout_palette(layout_id: String) -> Dictionary:
+	return LAYOUT_PALETTES.get(layout_id, LAYOUT_PALETTES["default"])
+
+func _apply_layout_palette(layout_id: String) -> void:
+	var palette := _get_layout_palette(layout_id)
+	floor_visual.color = palette.get("floor_color", floor_visual.color)
+	back_wall_visual.color = palette.get("wall_color", back_wall_visual.color)
+	left_wall_visual.color = palette.get("side_wall_color", left_wall_visual.color)
+	right_wall_visual.color = palette.get("side_wall_color", right_wall_visual.color)
+
+func _rebuild_floor_landmarks(layout_id: String, floor_points: PackedVector2Array) -> void:
+	_ensure_floor_landmarks()
+	if _floor_landmarks == null:
+		return
+	for child in _floor_landmarks.get_children():
+		child.queue_free()
+
+	var bounds := _compute_bounds(floor_points)
+	var min_x: float = bounds["min_x"]
+	var max_x: float = bounds["max_x"]
+	var min_y: float = bounds["min_y"]
+	var max_y: float = bounds["max_y"]
+	var center := Vector2((min_x + max_x) * 0.5, (min_y + max_y) * 0.5)
+	var width := max_x - min_x
+	var height := max_y - min_y
+	var accent: Color = _get_layout_palette(layout_id).get("accent_color", Color(1.0, 1.0, 1.0, 0.2))
+
+	match layout_id:
+		"crossfire":
+			_add_floor_landmark(PackedVector2Array([
+				center + Vector2(-110.0, -14.0),
+				center + Vector2(110.0, -14.0),
+				center + Vector2(110.0, 14.0),
+				center + Vector2(-110.0, 14.0),
+			]), accent)
+			_add_floor_landmark(PackedVector2Array([
+				Vector2(min_x + 48.0, min_y + 48.0),
+				Vector2(min_x + 124.0, min_y + 48.0),
+				Vector2(min_x + 48.0, min_y + 124.0),
+			]), accent.darkened(0.15))
+			_add_floor_landmark(PackedVector2Array([
+				Vector2(max_x - 48.0, max_y - 48.0),
+				Vector2(max_x - 124.0, max_y - 48.0),
+				Vector2(max_x - 48.0, max_y - 124.0),
+			]), accent.darkened(0.15))
+		"pinch":
+			_add_floor_landmark(PackedVector2Array([
+				Vector2(center.x - 22.0, min_y + height * 0.22),
+				Vector2(center.x + 22.0, min_y + height * 0.22),
+				Vector2(center.x + 56.0, max_y - height * 0.18),
+				Vector2(center.x - 56.0, max_y - height * 0.18),
+			]), accent)
+			_add_floor_landmark(PackedVector2Array([
+				Vector2(min_x + 82.0, max_y - 54.0),
+				Vector2(min_x + 150.0, max_y - 54.0),
+				Vector2(min_x + 116.0, max_y - 120.0),
+			]), accent.darkened(0.1))
+			_add_floor_landmark(PackedVector2Array([
+				Vector2(max_x - 82.0, max_y - 54.0),
+				Vector2(max_x - 150.0, max_y - 54.0),
+				Vector2(max_x - 116.0, max_y - 120.0),
+			]), accent.darkened(0.1))
+		"offset":
+			_add_floor_landmark(PackedVector2Array([
+				center + Vector2(-150.0, -28.0),
+				center + Vector2(-34.0, -28.0),
+				center + Vector2(-34.0, 28.0),
+				center + Vector2(-150.0, 28.0),
+			]), accent)
+			_add_floor_landmark(PackedVector2Array([
+				Vector2(max_x - 180.0, min_y + 64.0),
+				Vector2(max_x - 120.0, min_y + 38.0),
+				Vector2(max_x - 96.0, min_y + 118.0),
+				Vector2(max_x - 156.0, min_y + 142.0),
+			]), accent.darkened(0.14))
+			_add_floor_landmark(PackedVector2Array([
+				Vector2(min_x + 62.0, max_y - 74.0),
+				Vector2(min_x + 134.0, max_y - 96.0),
+				Vector2(min_x + 158.0, max_y - 28.0),
+				Vector2(min_x + 82.0, max_y - 12.0),
+			]), accent.darkened(0.14))
+		"boss_gate":
+			_add_floor_landmark(PackedVector2Array([
+				Vector2(center.x - 150.0, min_y + 84.0),
+				Vector2(center.x + 150.0, min_y + 84.0),
+				Vector2(center.x + 120.0, min_y + 136.0),
+				Vector2(center.x - 120.0, min_y + 136.0),
+			]), accent)
+			_add_floor_landmark(PackedVector2Array([
+				center + Vector2(-64.0, -24.0),
+				center + Vector2(0.0, -72.0),
+				center + Vector2(64.0, -24.0),
+				center + Vector2(28.0, 44.0),
+				center + Vector2(-28.0, 44.0),
+			]), accent.darkened(0.06))
+			_add_floor_landmark(PackedVector2Array([
+				Vector2(min_x + 56.0, max_y - 56.0),
+				Vector2(min_x + 134.0, max_y - 56.0),
+				Vector2(min_x + 56.0, max_y - 134.0),
+			]), accent.darkened(0.12))
+		_:
+			_add_floor_landmark(PackedVector2Array([
+				center + Vector2(0.0, -42.0),
+				center + Vector2(42.0, 0.0),
+				center + Vector2(0.0, 42.0),
+				center + Vector2(-42.0, 0.0),
+			]), accent)
+			_add_floor_landmark(PackedVector2Array([
+				Vector2(min_x + 54.0, min_y + 54.0),
+				Vector2(min_x + 128.0, min_y + 54.0),
+				Vector2(min_x + 54.0, min_y + 128.0),
+			]), accent.darkened(0.12))
+			_add_floor_landmark(PackedVector2Array([
+				Vector2(max_x - 54.0, min_y + 54.0),
+				Vector2(max_x - 128.0, min_y + 54.0),
+				Vector2(max_x - 54.0, min_y + 128.0),
+			]), accent.darkened(0.12))
+
+func _add_floor_landmark(points: PackedVector2Array, color: Color) -> void:
+	if _floor_landmarks == null:
+		return
+	var landmark := Polygon2D.new()
+	landmark.polygon = points
+	landmark.color = color
+	_floor_landmarks.add_child(landmark)
+
+func _update_darkness_overlay() -> void:
+	if _darkness_overlay == null or _darkness_material == null:
+		return
+	var active := _vision_radius > 0.0 and not _room_is_failed and not _room_is_cleared
+	_darkness_overlay.visible = active
+	if not active:
+		return
+	_darkness_material.set_shader_parameter("vision_radius", _vision_radius)
+	for index in range(4):
+		var active_key := "player_%d_active" % (index + 1)
+		var position_key := "player_%d_pos" % (index + 1)
+		if index < _player_nodes.size() and is_instance_valid(_player_nodes[index]):
+			_darkness_material.set_shader_parameter(active_key, 1.0)
+			_darkness_material.set_shader_parameter(position_key, _world_to_ui_position(_player_nodes[index].global_position))
+		else:
+			_darkness_material.set_shader_parameter(active_key, 0.0)
+			_darkness_material.set_shader_parameter(position_key, Vector2(-9999.0, -9999.0))
 
 func _show_spawn_warning(plan: Array, announcement: String) -> void:
 	_clear_spawn_warning_effects()
@@ -1322,7 +1760,7 @@ func _scale_vector_array(points: Array, center: Vector2, scale_factor: float) ->
 		scaled.append(center + (point - center) * scale_factor)
 	return scaled
 
-func _rebuild_floor_grid(floor_points: PackedVector2Array) -> void:
+func _rebuild_floor_grid(floor_points: PackedVector2Array, grid_color: Color) -> void:
 	if floor_grid == null:
 		return
 	for child in floor_grid.get_children():
@@ -1334,7 +1772,6 @@ func _rebuild_floor_grid(floor_points: PackedVector2Array) -> void:
 	var min_y: float = bounds["min_y"]
 	var max_y: float = bounds["max_y"]
 	var spacing := 96.0
-	var grid_color := Color(0.48, 0.54, 0.46, 0.7)
 
 	var x := min_x
 	while x <= max_x:

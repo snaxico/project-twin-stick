@@ -36,9 +36,20 @@ Read this first to restore project context quickly, then read `current-state.md`
 - Secondary family is now split cleanly:
   - thrown explosives: `Grenade`, `Cluster Grenade`, `Siege Grenade`
   - proximity explosives: `Mine`, `Shrapnel Mine`, `Heavy Mine`
+- Enemy silhouettes are now intentionally separated:
+  - `Chaser`: small red dart
+  - `Spitter`: medium magenta hex
+  - `Charger`: large brown wedge
+  - `Boss`: oversized crimson crown
 - Grenades use aimed throw behavior.
 - Mines place instantly on secondary press and detonate on proximity fuse.
 - Mine proximity radius was increased by `100%` from the original mine implementation.
+- Layout presets now have distinct palettes and floor landmarks.
+- Combat HUD is no longer the old debug text layout:
+  - stacked player health bars
+  - top-center modifier chip
+  - timer bar
+  - styled result/pause/modifier panels
 
 ## Current Priorities
 
@@ -47,6 +58,7 @@ Read this first to restore project context quickly, then read `current-state.md`
 - Keep enemy ranged pressure under control.
 - Keep projectile, aim-line, and arena contrast readable.
 - Keep grenade and mine roles distinct instead of blending them back together.
+- Validate the new HUD and modifier readability in live combat, not just parse/startup.
 - Validate `3–4` player behavior and full-run pacing later; do not expand scope casually.
 
 ## Important Runtime Ownership
@@ -57,6 +69,7 @@ Read this first to restore project context quickly, then read `current-state.md`
 - `RunFlow.gd`: node-map and room transition flow.
 - `data/items.json`: shared reward/shop item definitions.
 - `data/modifiers.json`: room modifier tuning.
+- `Enemy.gd`: enemy silhouettes, hitbox sizing, and motion identity.
 
 ## Validation Reminder
 

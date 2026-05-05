@@ -11,6 +11,7 @@ var speed: float = 500.0
 var damage: int = 1
 var team: String = ""
 var tint_color: Color = Color(1.0, 0.96, 0.7, 1.0)
+var allow_friendly_fire := false
 
 @onready var visual: Polygon2D = $Visual
 @onready var outline: Polygon2D = $Outline
@@ -46,7 +47,10 @@ func _on_body_entered(body: Node) -> void:
 		return
 
 	if body.has_method("get_team") and body.get_team() == team:
-		return
+		if allow_friendly_fire and team == "player" and body.get_team() == "player":
+			pass
+		else:
+			return
 
 	if body.has_method("apply_damage"):
 		if body.has_method("apply_knockback"):
@@ -54,6 +58,7 @@ func _on_body_entered(body: Node) -> void:
 		body.apply_damage(damage)
 		impact_requested.emit(global_position, -direction, team, _get_projectile_color())
 		queue_free()
+		return
 
 func _current_time_seconds() -> float:
 	return Time.get_ticks_msec() / 1000.0

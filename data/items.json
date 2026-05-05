@@ -37,6 +37,43 @@
       }
     },
     {
+      "id": "rapid_loader",
+      "name": "Rapid Loader",
+      "category": "Primary",
+      "description": "Cycle the shared primary faster for tighter sustained fire.",
+      "pools": ["reward", "shop"],
+      "cost": 2,
+      "repeatable": false,
+      "effects": {
+        "primary_fire_interval_mult": 0.82
+      }
+    },
+    {
+      "id": "tungsten_cores",
+      "name": "Tungsten Cores",
+      "category": "Primary",
+      "description": "Add 2 shared primary damage to every shot.",
+      "pools": ["reward", "shop"],
+      "cost": 3,
+      "repeatable": false,
+      "effects": {
+        "projectile_damage_bonus": 2
+      }
+    },
+    {
+      "id": "velocity_rig",
+      "name": "Velocity Rig",
+      "category": "Primary",
+      "description": "Fire faster projectiles, but the shared primary cycles a little slower.",
+      "pools": ["reward", "shop"],
+      "cost": 2,
+      "repeatable": false,
+      "effects": {
+        "projectile_speed_mult": 1.35,
+        "primary_fire_interval_mult": 1.15
+      }
+    },
+    {
       "id": "grenade_belt",
       "name": "Grenade Belt",
       "category": "Secondary",
@@ -46,6 +83,42 @@
       "repeatable": false,
       "effects": {
         "set_secondary_profile": "grenade"
+      }
+    },
+    {
+      "id": "blast_amplifier",
+      "name": "Blast Amplifier",
+      "category": "Secondary",
+      "description": "Increase shared explosive radius by 30%.",
+      "pools": ["reward", "shop"],
+      "cost": 2,
+      "repeatable": false,
+      "effects": {
+        "secondary_explosion_radius_mult": 1.3
+      }
+    },
+    {
+      "id": "charged_payload",
+      "name": "Charged Payload",
+      "category": "Secondary",
+      "description": "Add 2 damage to every shared secondary detonation.",
+      "pools": ["reward", "shop"],
+      "cost": 3,
+      "repeatable": false,
+      "effects": {
+        "secondary_damage_bonus": 2
+      }
+    },
+    {
+      "id": "quick_deploy",
+      "name": "Quick Deploy",
+      "category": "Secondary",
+      "description": "Cut shared secondary cooldown by 30%.",
+      "pools": ["reward", "shop"],
+      "cost": 2,
+      "repeatable": false,
+      "effects": {
+        "secondary_cooldown_mult": 0.7
       }
     },
     {
@@ -109,6 +182,19 @@
       }
     },
     {
+      "id": "chain_reaction",
+      "name": "Chain Reaction",
+      "category": "Hybrid",
+      "description": "Give explosions more reach and add 1 primary damage.",
+      "pools": ["reward", "shop"],
+      "cost": 3,
+      "repeatable": false,
+      "effects": {
+        "secondary_explosion_radius_mult": 1.2,
+        "projectile_damage_bonus": 1
+      }
+    },
+    {
       "id": "high_velocity_rounds",
       "name": "High Velocity Rounds",
       "category": "Primary",
@@ -122,6 +208,18 @@
       }
     },
     {
+      "id": "ablative_coating",
+      "name": "Ablative Coating",
+      "category": "Survival",
+      "description": "Give every player +2 max HP and restore that amount immediately.",
+      "pools": ["reward", "shop"],
+      "cost": 3,
+      "repeatable": false,
+      "effects": {
+        "max_health_bonus": 2
+      }
+    },
+    {
       "id": "reinforced_plating",
       "name": "Reinforced Plating",
       "category": "Survival",
@@ -131,6 +229,18 @@
       "repeatable": false,
       "effects": {
         "max_health_bonus": 1
+      }
+    },
+    {
+      "id": "sprint_servos",
+      "name": "Sprint Servos",
+      "category": "Survival",
+      "description": "Increase shared move speed by 18%.",
+      "pools": ["reward", "shop"],
+      "cost": 2,
+      "repeatable": false,
+      "effects": {
+        "move_speed_mult": 1.18
       }
     }
   ]

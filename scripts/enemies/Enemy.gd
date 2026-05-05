@@ -32,6 +32,7 @@ enum EnemyType {
 @export var preferred_distance: float = 190.0
 
 @onready var shadow: Polygon2D = $Shadow
+@onready var collision_shape: CollisionShape2D = $CollisionShape2D
 @onready var body_root: Node2D = $BodyRoot
 @onready var visual: Polygon2D = $BodyRoot/Visual
 
@@ -354,49 +355,66 @@ func _apply_type_visual() -> void:
 
 	match enemy_type:
 		EnemyType.SPITTER:
-			visual.color = Color(0.85, 0.2, 0.2, 1.0)
+			visual.color = Color(0.76, 0.26, 0.78, 1.0)
 			visual.polygon = PackedVector2Array([
-				Vector2(-16, -16),
-				Vector2(16, -16),
-				Vector2(16, 16),
-				Vector2(-16, 16),
+				Vector2(-24, -9),
+				Vector2(-10, -16),
+				Vector2(10, -16),
+				Vector2(24, -9),
+				Vector2(20, 9),
+				Vector2(-20, 9),
 			])
+			visual.scale = Vector2(1.0, 1.0)
+			_set_collision_radius(21.0)
 		EnemyType.CHARGER:
-			visual.color = Color(0.94, 0.34, 0.18, 1.0)
+			visual.color = Color(0.52, 0.26, 0.12, 1.0)
 			visual.polygon = PackedVector2Array([
-				Vector2(0, -24),
-				Vector2(18, -10),
-				Vector2(22, 8),
-				Vector2(8, 20),
-				Vector2(-8, 20),
-				Vector2(-22, 8),
-				Vector2(-18, -10),
+				Vector2(-18, -18),
+				Vector2(18, -18),
+				Vector2(28, -2),
+				Vector2(20, 24),
+				Vector2(-20, 24),
 			])
+			visual.scale = Vector2(1.34, 1.34)
+			_set_collision_radius(28.0)
 		EnemyType.BOSS:
-			visual.color = Color(0.7, 0.05, 0.05, 1.0)
+			visual.color = Color(0.46, 0.03, 0.07, 1.0)
 			visual.polygon = PackedVector2Array([
-				Vector2(0, -34),
-				Vector2(22, -28),
-				Vector2(34, -8),
-				Vector2(34, 16),
-				Vector2(18, 34),
-				Vector2(-18, 34),
-				Vector2(-34, 16),
-				Vector2(-34, -8),
-				Vector2(-22, -28),
+				Vector2(0, -42),
+				Vector2(14, -34),
+				Vector2(24, -46),
+				Vector2(34, -28),
+				Vector2(48, -12),
+				Vector2(44, 22),
+				Vector2(26, 44),
+				Vector2(8, 50),
+				Vector2(-8, 50),
+				Vector2(-26, 44),
+				Vector2(-44, 22),
+				Vector2(-48, -12),
+				Vector2(-34, -28),
+				Vector2(-24, -46),
+				Vector2(-14, -34),
 			])
+			visual.scale = Vector2(1.5, 1.5)
+			_set_collision_radius(44.0)
 		_:
-			visual.color = Color(1.0, 0.15, 0.15, 1.0)
+			visual.color = Color(1.0, 0.16, 0.12, 1.0)
 			visual.polygon = PackedVector2Array([
-				Vector2(0, -18),
-				Vector2(12, -14),
-				Vector2(18, 0),
-				Vector2(12, 14),
-				Vector2(0, 18),
-				Vector2(-12, 14),
-				Vector2(-18, 0),
-				Vector2(-12, -14),
+				Vector2(0, -26),
+				Vector2(14, 4),
+				Vector2(0, 16),
+				Vector2(-14, 4),
 			])
+			visual.scale = Vector2(0.72, 0.72)
+			_set_collision_radius(14.0)
+
+func _set_collision_radius(radius: float) -> void:
+	if collision_shape == null:
+		return
+	var circle := collision_shape.shape as CircleShape2D
+	if circle != null:
+		circle.radius = radius
 
 func _current_time_seconds() -> float:
 	return Time.get_ticks_msec() / 1000.0
@@ -443,8 +461,22 @@ func _queue_free_after_flash() -> void:
 func _apply_motion_polish(now: float) -> void:
 	if body_root == null:
 		return
-	var bob_amount := 3.5 if enemy_type != EnemyType.BOSS else 5.0
-	var bob := sin(now * 3.4 + _idle_phase) * bob_amount
+	var bob_amount := 3.5
+	var bob_frequency := 3.4
+	match enemy_type:
+		EnemyType.CHASER:
+			bob_amount = 3.8
+			bob_frequency = 5.3
+		EnemyType.SPITTER:
+			bob_amount = 2.8
+			bob_frequency = 2.7
+		EnemyType.CHARGER:
+			bob_amount = 2.2
+			bob_frequency = 1.9
+		EnemyType.BOSS:
+			bob_amount = 5.8
+			bob_frequency = 1.6
+	var bob := sin(now * bob_frequency + _idle_phase) * bob_amount
 	var scale := Vector2.ONE
 	if enemy_type == EnemyType.CHASER and now < _lunge_windup_ends_at:
 		scale = Vector2(1.1, 0.88)

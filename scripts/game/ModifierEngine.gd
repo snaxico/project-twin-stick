@@ -43,6 +43,15 @@ func get_death_explosion_damage(modifier: Dictionary) -> int:
 func get_enemy_contact_damage_bonus(modifier: Dictionary) -> int:
 	return int(modifier.get("enemy_contact_damage_bonus", 0))
 
+func get_vision_radius(modifier: Dictionary) -> float:
+	return float(modifier.get("vision_radius", 0.0))
+
+func get_spawn_side(modifier: Dictionary) -> String:
+	return str(modifier.get("spawn_side", ""))
+
+func is_friendly_fire(modifier: Dictionary) -> bool:
+	return bool(modifier.get("friendly_fire", false))
+
 func _load_modifiers(definitions_path: String) -> void:
 	var file := FileAccess.open(definitions_path, FileAccess.READ)
 	if file == null:
