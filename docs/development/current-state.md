@@ -8,7 +8,8 @@ Godot `4.6.2` prototype for a same-screen local co-op twin-stick roguelite. The 
 
 - bootstrap setup menu before gameplay
 - `1–4` player pre-run configuration
-- aim settings are available before the run and from the in-run pause menu
+- settings are available before the run and from the in-run pause menu
+- screen effects level is profile-backed and selectable in both menus
 - node-map run flow with room choices
 - run map is now procedural instead of fixed:
   - `5–7` pre-boss steps
@@ -63,7 +64,12 @@ Godot `4.6.2` prototype for a same-screen local co-op twin-stick roguelite. The 
   - single-room debug launches
   - explicit room/objective/modifier/layout/depth selection
 - JSON-backed items, modifiers, unlocks, enemies, and weapon/loadout tuning
-- per-player aim mode selection now has proper menu/pause UI instead of relying on debug-only controls
+- per-player aim mode selection now lives in the shared settings menu instead of debug-only controls
+- screen effects are user-selectable through the shared settings menu:
+  - `Off`
+  - `Minimal`
+  - `Full`
+- current default profile setting is `Off`
 - styled combat HUD with stacked player bars, modifier chip, timer bar, and polished result/pause/intro panels
 - modifier intro panel plus active room tinting
 - darkness overlay, left-side spawn filtering, and optional friendly fire modifier hooks
@@ -71,8 +77,8 @@ Godot `4.6.2` prototype for a same-screen local co-op twin-stick roguelite. The 
 - gauntlet layout preset: `gauntlet_pockets`
 - arena presentation is now cartoon-styled:
   - thick player/enemy outlines
-  - brighter neutral floor shared across all rooms
-  - no floor grid lines
+  - one shared olive-neutral floor across all rooms
+  - subtle fullscreen grid lines for room texture
   - only subtle room-to-room line/accent changes remain
 - shared placeholder visual language with player color identity and shooter-tinted projectiles/effects
 - juice stack through `J7`: hit flash, knockback, hitstop, shake, particles, procedural SFX, health bars, floating text, motion polish, screen overlays, and transition polish
@@ -89,7 +95,8 @@ Godot `4.6.2` prototype for a same-screen local co-op twin-stick roguelite. The 
 - the combat HUD should read at a glance instead of exposing debug strings
 - grenade and mine roles should stay distinct instead of drifting back into one blended secondary design
 - run structure should vary between attempts through map length, room order, and enemy mix without changing the run-flow contract
-- aim-mode switching should be exposed through real UI, not hidden in developer-facing controls
+- aim-mode switching should stay in the shared settings UI, not developer-facing controls
+- screen effects should be selectable from the same settings flow and default to clear combat readability
 
 ## Known Gaps
 
@@ -113,7 +120,8 @@ If work resumes, prefer tuning and validation:
 - verify `3–4` player pressure, HUD readability, and revive fairness
 - verify enemy silhouettes and the brighter neutral arena stay readable during heavy combat
 - verify `Darkness`, `One-Way`, and `Friendly Fire` individually in live play
-- verify menu and pause aim settings for each player-count configuration
+- verify menu and pause settings for each player-count configuration
+- verify `Off` / `Minimal` / `Full` screen-effect levels behave as expected in live play
 - verify debug single-room launches for combat, elite, rest, shop, and boss
 - verify hit feedback and camera feel in live play
 - verify save/load, unlock gating, and relaunch persistence

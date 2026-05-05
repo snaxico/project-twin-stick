@@ -91,9 +91,7 @@ var _aim_line_recoil := 0.0
 var _outline_pulse := 1.0
 
 func _get_projectile_tint() -> Color:
-	if player_id == 1:
-		return Color(0.42, 1.0, 0.42, 1.0)
-	return player_config.tint.lightened(0.2)
+	return player_config.tint
 
 func setup(config, assigned_gamepad_device_id: int) -> void:
 	player_config = config
@@ -560,6 +558,17 @@ func _update_secondary_preview(now: float) -> void:
 	secondary_target_cross.visible = show_preview
 	if not show_preview:
 		return
+
+	var preview_tint: Color = _get_projectile_tint()
+	var trajectory_tint: Color = preview_tint
+	trajectory_tint.a = 0.95
+	var ring_tint: Color = preview_tint
+	ring_tint.a = 0.82
+	var cross_tint: Color = preview_tint
+	cross_tint.a = 0.95
+	secondary_trajectory.default_color = trajectory_tint
+	secondary_target_ring.default_color = ring_tint
+	secondary_target_cross.default_color = cross_tint
 
 	var origin_offset: Vector2 = aim_direction.normalized() * 22.0
 	var initial_velocity: Vector2 = aim_direction.normalized() * secondary_projectile_speed + Vector2(0.0, -180.0)

@@ -269,7 +269,7 @@ text = "Status"
 
 [node name="SettingsButton" type="Button" parent="MenuPanel/MarginContainer/MenuLayout"]
 layout_mode = 2
-text = "Aim Settings"
+text = "Settings"
 
 [node name="MetaButton" type="Button" parent="MenuPanel/MarginContainer/MenuLayout"]
 layout_mode = 2
@@ -320,14 +320,27 @@ theme_override_constants/separation = 12
 
 [node name="SettingsTitle" type="Label" parent="SettingsPanel/MarginContainer/SettingsLayout"]
 layout_mode = 2
-text = "Aim Settings"
+text = "Settings"
 horizontal_alignment = 1
 
 [node name="SettingsDetail" type="Label" parent="SettingsPanel/MarginContainer/SettingsLayout"]
 layout_mode = 2
 autowrap_mode = 2
-text = "Choose the aim behavior for each active player."
+text = "Adjust player aim controls and visual effects."
 horizontal_alignment = 1
+
+[node name="ScreenEffectsRow" type="HBoxContainer" parent="SettingsPanel/MarginContainer/SettingsLayout"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="ScreenEffectsLabel" type="Label" parent="SettingsPanel/MarginContainer/SettingsLayout/ScreenEffectsRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Screen Effects"
+
+[node name="ScreenEffectsOption" type="OptionButton" parent="SettingsPanel/MarginContainer/SettingsLayout/ScreenEffectsRow"]
+layout_mode = 2
+size_flags_horizontal = 3
 
 [node name="Player1AimRow" type="HBoxContainer" parent="SettingsPanel/MarginContainer/SettingsLayout"]
 layout_mode = 2

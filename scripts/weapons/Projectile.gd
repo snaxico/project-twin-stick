@@ -80,22 +80,32 @@ func _apply_visual_state() -> void:
 		return
 	var projectile_color := _get_projectile_color()
 	var enemy_shot := team == "enemy"
-	visual.color = projectile_color.lightened(0.08) if enemy_shot else projectile_color
-	visual.scale = Vector2(1.26, 1.26) if enemy_shot else Vector2(1.14, 1.14)
-	visual.polygon = PackedVector2Array([
-		Vector2(0, -9),
-		Vector2(9, 0),
-		Vector2(0, 9),
-		Vector2(-9, 0),
-	]) if enemy_shot else PackedVector2Array([
-		Vector2(0, -8),
-		Vector2(10, 0),
-		Vector2(0, 8),
-		Vector2(-10, 0),
-	])
+	if enemy_shot:
+		visual.color = projectile_color.lightened(0.12)
+		visual.scale = Vector2(1.32, 1.32)
+		visual.polygon = PackedVector2Array([
+			Vector2(0, -9),
+			Vector2(9, 0),
+			Vector2(0, 9),
+			Vector2(-9, 0),
+		])
+	else:
+		visual.color = projectile_color
+		visual.scale = Vector2(1.2, 1.2)
+		visual.polygon = PackedVector2Array([
+			Vector2(0, -8),
+			Vector2(10, 0),
+			Vector2(0, 8),
+			Vector2(-10, 0),
+		])
 	if outline != null:
 		outline.visible = true
-		outline.color = Color(1.0, 0.96, 0.88, 0.96) if enemy_shot else Color(0.05, 0.08, 0.12, 0.82)
+		if enemy_shot:
+			outline.color = Color(1.0, 0.92, 0.82, 0.96)
+		else:
+			var player_outline_color: Color = projectile_color
+			player_outline_color.a = 0.88
+			outline.color = player_outline_color
 		outline.scale = visual.scale * 1.24
 		outline.polygon = visual.polygon
 

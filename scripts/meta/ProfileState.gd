@@ -5,6 +5,7 @@ const UNLOCKS_DATA_PATH := "res://data/unlocks.json"
 
 var meta_gold: int = 0
 var unlocked_item_ids: Array = []
+var screen_effect_level: String = "off"
 
 var _unlock_definitions: Array = []
 var _unlock_map: Dictionary = {}
@@ -32,6 +33,7 @@ func load_profile() -> void:
 		return
 
 	meta_gold = max(0, int(parsed.get("meta_gold", 0)))
+	screen_effect_level = _sanitize_screen_effect_level(str(parsed.get("screen_effect_level", "off")))
 	unlocked_item_ids = []
 	var raw_unlocks = parsed.get("unlocked_item_ids", [])
 	if raw_unlocks is Array:
@@ -53,6 +55,7 @@ func save_profile() -> void:
 
 	var payload := {
 		"meta_gold": meta_gold,
+		"screen_effect_level": screen_effect_level,
 		"unlocked_item_ids": unlocked_item_ids,
 	}
 	file.store_string(JSON.stringify(payload, "\t"))
@@ -62,6 +65,13 @@ func reset_profile() -> void:
 
 func has_item_unlock(item_id: String) -> bool:
 	return unlocked_item_ids.has(item_id)
+
+func get_screen_effect_level() -> String:
+	return screen_effect_level
+
+func set_screen_effect_level(level: String) -> void:
+	screen_effect_level = _sanitize_screen_effect_level(level)
+	save_profile()
 
 func get_profile_summary_text() -> String:
 	return "Meta Gold: %d\nUnlocked upgrades: %d / %d" % [meta_gold, unlocked_item_ids.size(), _unlock_definitions.size()]
@@ -184,6 +194,7 @@ func _load_unlock_definitions() -> void:
 
 func _reset_to_defaults(save_after_reset: bool) -> void:
 	meta_gold = 0
+	screen_effect_level = "off"
 	unlocked_item_ids = []
 	for item_id in _starting_unlocked_item_ids:
 		if not unlocked_item_ids.has(item_id):
@@ -201,3 +212,10 @@ func _get_unlock_ids(unlocks: Array) -> Array:
 			continue
 		ids.append(unlock_id)
 	return ids
+
+func _sanitize_screen_effect_level(level: String) -> String:
+	match level:
+		"minimal", "full":
+			return level
+		_:
+			return "off"

@@ -44,9 +44,9 @@ Read this first to restore project context quickly, then read `current-state.md`
 - Grenades use aimed throw behavior.
 - Mines place instantly on secondary press and detonate on proximity fuse.
 - Mine proximity radius was increased by `100%` from the original mine implementation.
-- Layout presets now share one brighter neutral floor treatment.
+- Layout presets now share one uniform olive-neutral floor treatment.
 - Room-to-room identity should come mostly from geometry/objective shape, not full palette swaps.
-- Floor grid lines were removed.
+- Floor grid lines are back as subtle fullscreen room texture.
 - Combat rooms now support two objective styles:
   - `survive`
   - `destroy_generators`
@@ -59,10 +59,12 @@ Read this first to restore project context quickly, then read `current-state.md`
   - top-center modifier chip
   - timer bar
   - styled result/pause/modifier panels
-- Aim mode is now configurable through real UI:
-  - bootstrap menu `Aim Settings`
-  - in-run pause menu `Aim Settings`
-  - modes: `Heavy Auto`, `Full Auto`, `Manual`
+- Settings now live in a shared real UI flow:
+  - bootstrap menu `Settings`
+  - in-run pause menu `Settings`
+  - per-player aim modes: `Heavy Auto`, `Full Auto`, `Manual`
+  - screen effects level: `Off`, `Minimal`, `Full`
+  - default profile setting is currently `Off`
 
 ## Current Run Structure
 
@@ -108,7 +110,9 @@ Read this first to restore project context quickly, then read `current-state.md`
 - `CoopManager.gd`: combat-room orchestration and spawning.
 - `RunFlow.gd`: node-map and room transition flow.
 - `Bootstrap.gd`: pre-run player setup, debug start options, and aim settings menu.
+- `Bootstrap.gd`: pre-run player setup, debug start options, and shared settings menu.
 - `Bootstrap.gd`: also owns the debug run launcher UI.
+- `ScreenEffects.gd`: runtime post-process layer, now controlled by the settings menu.
 - `data/items.json`: shared reward/shop item definitions.
 - `data/modifiers.json`: room modifier tuning.
 - `Enemy.gd`: enemy silhouettes, hitbox sizing, and motion identity.

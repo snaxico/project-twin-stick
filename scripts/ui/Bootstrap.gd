@@ -39,6 +39,8 @@ const RUN_FLOW_SCENE = preload("res://scenes/ui/RunFlow.tscn")
 @onready var player_4_control_row: HBoxContainer = $MenuPanel/MarginContainer/MenuLayout/Player4ControlRow
 @onready var status_label: Label = $MenuPanel/MarginContainer/MenuLayout/StatusLabel
 @onready var settings_panel: Panel = $SettingsPanel
+@onready var settings_screen_effect_row: HBoxContainer = $SettingsPanel/MarginContainer/SettingsLayout/ScreenEffectsRow
+@onready var settings_screen_effect_option: OptionButton = $SettingsPanel/MarginContainer/SettingsLayout/ScreenEffectsRow/ScreenEffectsOption
 @onready var settings_player_1_row: HBoxContainer = $SettingsPanel/MarginContainer/SettingsLayout/Player1AimRow
 @onready var settings_player_1_option: OptionButton = $SettingsPanel/MarginContainer/SettingsLayout/Player1AimRow/Player1AimOption
 @onready var settings_player_2_row: HBoxContainer = $SettingsPanel/MarginContainer/SettingsLayout/Player2AimRow
@@ -77,6 +79,7 @@ var _modifier_engine = ModifierEngineData.new()
 var _modifier_definitions: Array = []
 
 func _ready() -> void:
+	_player_aim_modes[0] = PlayerConfigData.AimMode.HEAVY_AUTO
 	_settings_rows = [
 		settings_player_1_row,
 		settings_player_2_row,
@@ -109,6 +112,7 @@ func _ready() -> void:
 	unlock_button_2.pressed.connect(_on_unlock_button_2_pressed)
 	unlock_button_3.pressed.connect(_on_unlock_button_3_pressed)
 	unlock_button_4.pressed.connect(_on_unlock_button_4_pressed)
+	settings_screen_effect_option.item_selected.connect(_on_settings_screen_effect_selected)
 	for index in range(_settings_options.size()):
 		_settings_options[index].item_selected.connect(_on_settings_aim_mode_selected.bind(index))
 	settings_back_button.pressed.connect(_on_settings_back_button_pressed)
@@ -191,6 +195,7 @@ func _populate_menu() -> void:
 	debug_starting_gold_spinbox.max_value = 99
 	debug_starting_gold_spinbox.step = 1
 	debug_starting_gold_spinbox.value = 0
+	_populate_screen_effect_option(settings_screen_effect_option, ProfileState.get_screen_effect_level())
 	for index in range(_settings_options.size()):
 		_populate_aim_mode_option(_settings_options[index], _player_aim_modes[index])
 
@@ -247,9 +252,30 @@ func _populate_aim_mode_option(option_button: OptionButton, selected_aim_mode: i
 		option_button.set_item_metadata(index, int(entry.get("value", PlayerConfigData.AimMode.HEAVY_AUTO)))
 	_select_option_by_metadata(option_button, selected_aim_mode)
 
+func _populate_screen_effect_option(option_button: OptionButton, selected_level: String) -> void:
+	option_button.clear()
+	var entries := [
+		{"label": "Off", "value": "off"},
+		{"label": "Minimal", "value": "minimal"},
+		{"label": "Full", "value": "full"},
+	]
+	for index in range(entries.size()):
+		var entry: Dictionary = entries[index]
+		option_button.add_item(str(entry.get("label", "Effects")))
+		option_button.set_item_metadata(index, str(entry.get("value", "off")))
+	_select_string_option_by_metadata(option_button, selected_level)
+
 func _select_option_by_metadata(option_button: OptionButton, target_value: int) -> void:
 	for index in range(option_button.item_count):
 		if option_button.get_item_metadata(index) == target_value:
+			option_button.select(index)
+			return
+	if option_button.item_count > 0:
+		option_button.select(0)
+
+func _select_string_option_by_metadata(option_button: OptionButton, target_value: String) -> void:
+	for index in range(option_button.item_count):
+		if str(option_button.get_item_metadata(index)) == target_value:
 			option_button.select(index)
 			return
 	if option_button.item_count > 0:
@@ -300,6 +326,8 @@ func _refresh_menu_state() -> void:
 	start_button.text = "Launch Debug Room" if debug_enabled and single_room_mode else "Start"
 
 func _refresh_settings_panel() -> void:
+	settings_screen_effect_row.visible = true
+	_select_string_option_by_metadata(settings_screen_effect_option, ProfileState.get_screen_effect_level())
 	var player_count := get_selected_player_count()
 	var settings_slot_count := mini(_settings_rows.size(), _settings_options.size())
 	for index in range(settings_slot_count):
@@ -473,6 +501,13 @@ func _on_settings_aim_mode_selected(selected_index: int, player_index: int) -> v
 	_player_aim_modes[player_index] = int(_settings_options[player_index].get_item_metadata(selected_index))
 	_refresh_settings_panel()
 
+func _on_settings_screen_effect_selected(selected_index: int) -> void:
+	if settings_screen_effect_option == null:
+		return
+	_play_ui_click()
+	ProfileState.set_screen_effect_level(str(settings_screen_effect_option.get_item_metadata(selected_index)))
+	_refresh_settings_panel()
+
 func _on_settings_back_button_pressed() -> void:
 	_play_ui_click()
 	_set_panel_state(settings_panel, false)
@@ -530,6 +565,7 @@ func _register_button_animations() -> void:
 		meta_button,
 		reset_profile_button,
 		start_button,
+		settings_screen_effect_option,
 		settings_player_1_option,
 		settings_player_2_option,
 		settings_player_3_option,
@@ -565,6 +601,7 @@ func _configure_menu_focus() -> void:
 		meta_button,
 		reset_profile_button,
 		start_button,
+		settings_screen_effect_option,
 		settings_player_1_option,
 		settings_player_2_option,
 		settings_player_3_option,
@@ -597,6 +634,9 @@ func _focus_meta_panel() -> void:
 	meta_back_button.grab_focus()
 
 func _focus_settings_panel() -> void:
+	if settings_screen_effect_row.visible:
+		settings_screen_effect_option.grab_focus()
+		return
 	var settings_slot_count := mini(_settings_rows.size(), _settings_options.size())
 	for index in range(settings_slot_count):
 		if _settings_rows[index].visible:

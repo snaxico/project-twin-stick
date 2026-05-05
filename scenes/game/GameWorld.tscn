@@ -22,7 +22,7 @@ script = ExtResource("1_4o0x5")
 player_scene = ExtResource("1_3sby6")
 
 [node name="Floor" type="Polygon2D" parent="."]
-color = Color(0.14, 0.16, 0.18, 1)
+color = Color(0.28, 0.3, 0.25, 1)
 polygon = PackedVector2Array(0, 0, 1920, 0, 1920, 1080, 0, 1080)
 
 [node name="FloorGrid" type="Node2D" parent="."]
@@ -319,7 +319,7 @@ horizontal_alignment = 1
 text = "Resume"
 
 [node name="PauseSettingsButton" type="Button" parent="UI/PausePanel/MarginContainer/PauseLayout"]
-text = "Aim Settings"
+text = "Settings"
 
 [node name="PauseRetryButton" type="Button" parent="UI/PausePanel/MarginContainer/PauseLayout"]
 text = "Restart Room"
@@ -348,13 +348,23 @@ offset_bottom = 308.0
 theme_override_constants/separation = 14
 
 [node name="SettingsTitle" type="Label" parent="UI/SettingsPanel/MarginContainer/SettingsLayout"]
-text = "Aim Settings"
+text = "Settings"
 horizontal_alignment = 1
 
 [node name="SettingsDetail" type="Label" parent="UI/SettingsPanel/MarginContainer/SettingsLayout"]
 autowrap_mode = 2
-text = "Change each active player's aim mode without leaving the run."
+text = "Change player aim controls and visual effects without leaving the run."
 horizontal_alignment = 1
+
+[node name="ScreenEffectsRow" type="HBoxContainer" parent="UI/SettingsPanel/MarginContainer/SettingsLayout"]
+theme_override_constants/separation = 12
+
+[node name="ScreenEffectsLabel" type="Label" parent="UI/SettingsPanel/MarginContainer/SettingsLayout/ScreenEffectsRow"]
+size_flags_horizontal = 3
+text = "Screen Effects"
+
+[node name="ScreenEffectsOption" type="OptionButton" parent="UI/SettingsPanel/MarginContainer/SettingsLayout/ScreenEffectsRow"]
+size_flags_horizontal = 3
 
 [node name="Player1AimRow" type="HBoxContainer" parent="UI/SettingsPanel/MarginContainer/SettingsLayout"]
 theme_override_constants/separation = 12

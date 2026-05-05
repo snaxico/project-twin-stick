@@ -47,11 +47,15 @@ func _ready() -> void:
 			Vector2(-10, 4),
 		])
 	if outline != null:
-		outline.color = Color(0.05, 0.08, 0.12, 0.82)
+		var outline_tint: Color = _tint_color
+		outline_tint.a = 0.88
+		outline.color = outline_tint
 		outline.scale = Vector2(1.52, 1.52)
 		outline.polygon = visual.polygon if visual != null else outline.polygon
 	if proximity_ring != null:
-		proximity_ring.default_color = _tint_color.lightened(0.22)
+		var ring_tint: Color = _tint_color
+		ring_tint.a = 0.56
+		proximity_ring.default_color = ring_tint
 		proximity_ring.visible = false
 		proximity_ring.points = _build_circle_points(proximity_radius, 24)
 

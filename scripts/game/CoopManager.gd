@@ -40,7 +40,7 @@ void fragment() {
 	COLOR = vec4(darkness_color.rgb, alpha);
 }
 """
-const UNIFORM_ARENA_FLOOR_COLOR := Color(0.56, 0.57, 0.58, 1.0)
+const UNIFORM_ARENA_FLOOR_COLOR := Color(0.28, 0.30, 0.25, 1.0)
 const UNIFORM_ARENA_ACCENT_COLOR := Color(0.44, 0.46, 0.48, 0.16)
 const LAYOUT_PALETTES := {
 	"default": {
@@ -162,6 +162,8 @@ signal player_revived(player)
 @onready var pause_settings_button: Button = $UI/PausePanel/MarginContainer/PauseLayout/PauseSettingsButton
 @onready var pause_retry_button: Button = $UI/PausePanel/MarginContainer/PauseLayout/PauseRetryButton
 @onready var settings_panel: Panel = $UI/SettingsPanel
+@onready var settings_screen_effect_row: HBoxContainer = $UI/SettingsPanel/MarginContainer/SettingsLayout/ScreenEffectsRow
+@onready var settings_screen_effect_option: OptionButton = $UI/SettingsPanel/MarginContainer/SettingsLayout/ScreenEffectsRow/ScreenEffectsOption
 @onready var settings_player_1_row: HBoxContainer = $UI/SettingsPanel/MarginContainer/SettingsLayout/Player1AimRow
 @onready var settings_player_1_option: OptionButton = $UI/SettingsPanel/MarginContainer/SettingsLayout/Player1AimRow/Player1AimOption
 @onready var settings_player_2_row: HBoxContainer = $UI/SettingsPanel/MarginContainer/SettingsLayout/Player2AimRow
@@ -211,7 +213,6 @@ var _timer_label: Label = null
 var _encounter_status_label: Label = null
 var _darkness_overlay: ColorRect = null
 var _darkness_material: ShaderMaterial = null
-var _floor_landmarks: Node2D = null
 var _survival_spawn_warning_pending := false
 var _boss_support_warning_pending := false
 var _pending_survival_wave_plan: Array = []
@@ -260,14 +261,15 @@ func _ready() -> void:
 		settings_player_3_option,
 		settings_player_4_option,
 	]
+	_populate_screen_effect_option(settings_screen_effect_option, ProfileState.get_screen_effect_level())
 	for index in range(_settings_options.size()):
 		var aim_mode_value: int = PlayerConfigData.AimMode.FULL_AUTO
 		if index < _player_configs.size():
 			aim_mode_value = int(_player_configs[index].aim_mode)
 		_populate_aim_mode_option(_settings_options[index], aim_mode_value)
+	settings_screen_effect_option.item_selected.connect(_on_pause_screen_effect_selected)
 	_build_hud()
-	_ensure_floor_landmarks()
-
+	_apply_screen_effect_setting()
 	_is_initialized = true
 	_spawn_players()
 	_start_room()
@@ -456,6 +458,19 @@ func _populate_aim_mode_option(option_button: OptionButton, selected_aim_mode: i
 		option_button.set_item_metadata(index, int(entry.get("value", PlayerConfigData.AimMode.HEAVY_AUTO)))
 	_select_option_by_metadata(option_button, selected_aim_mode)
 
+func _populate_screen_effect_option(option_button: OptionButton, selected_level: String) -> void:
+	option_button.clear()
+	var entries := [
+		{"label": "Off", "value": "off"},
+		{"label": "Minimal", "value": "minimal"},
+		{"label": "Full", "value": "full"},
+	]
+	for index in range(entries.size()):
+		var entry: Dictionary = entries[index]
+		option_button.add_item(str(entry.get("label", "Effects")))
+		option_button.set_item_metadata(index, str(entry.get("value", "off")))
+	_select_string_option_by_metadata(option_button, selected_level)
+
 func _select_option_by_metadata(option_button: OptionButton, target_value: int) -> void:
 	for index in range(option_button.item_count):
 		if option_button.get_item_metadata(index) == target_value:
@@ -464,7 +479,17 @@ func _select_option_by_metadata(option_button: OptionButton, target_value: int) 
 	if option_button.item_count > 0:
 		option_button.select(0)
 
+func _select_string_option_by_metadata(option_button: OptionButton, target_value: String) -> void:
+	for index in range(option_button.item_count):
+		if str(option_button.get_item_metadata(index)) == target_value:
+			option_button.select(index)
+			return
+	if option_button.item_count > 0:
+		option_button.select(0)
+
 func _refresh_pause_settings_panel() -> void:
+	settings_screen_effect_row.visible = true
+	_select_string_option_by_metadata(settings_screen_effect_option, ProfileState.get_screen_effect_level())
 	var settings_slot_count := mini(_settings_rows.size(), _settings_options.size())
 	for index in range(settings_slot_count):
 		var has_player := index < _player_configs.size()
@@ -473,6 +498,9 @@ func _refresh_pause_settings_panel() -> void:
 			_select_option_by_metadata(_settings_options[index], int(_player_configs[index].aim_mode))
 
 func _focus_pause_settings_panel() -> void:
+	if settings_screen_effect_row.visible:
+		settings_screen_effect_option.grab_focus()
+		return
 	var settings_slot_count := mini(_settings_rows.size(), _settings_options.size())
 	for index in range(settings_slot_count):
 		if _settings_rows[index].visible:
@@ -1204,16 +1232,7 @@ func _show_room_intro() -> void:
 func _apply_modifier_visuals() -> void:
 	if modifier_tint == null:
 		return
-
-	var target_color := Color(1.0, 1.0, 1.0, 1.0)
-	if _is_boss_room():
-		target_color = Color(1.0, 1.0, 1.0, 1.0)
-	else:
-		var tint: Color = _modifier_engine.get_tint_color(_active_modifier)
-		target_color = tint.darkened(0.3)
-
-	var tween := create_tween()
-	tween.tween_property(modifier_tint, "color", target_color, 0.28)
+	modifier_tint.color = Color(1.0, 1.0, 1.0, 1.0)
 	_refresh_modifier_chip()
 
 func _get_spawn_interval() -> float:
@@ -1264,6 +1283,14 @@ func _on_pause_aim_mode_selected(selected_index: int, player_index: int) -> void
 		return
 	_play_ui_click()
 	_apply_player_aim_mode(player_index, int(_settings_options[player_index].get_item_metadata(selected_index)))
+
+func _on_pause_screen_effect_selected(selected_index: int) -> void:
+	if settings_screen_effect_option == null:
+		return
+	_play_ui_click()
+	ProfileState.set_screen_effect_level(str(settings_screen_effect_option.get_item_metadata(selected_index)))
+	_apply_screen_effect_setting()
+	_refresh_pause_settings_panel()
 
 func _on_pause_retry_button_pressed() -> void:
 	_on_retry_button_pressed()
@@ -1400,7 +1427,6 @@ func _apply_layout_preset(layout_id: String) -> void:
 	right_wall_visual.visible = false
 	_apply_layout_palette(layout_id)
 	_rebuild_floor_grid(floor_points, _get_layout_palette(layout_id).get("grid_color", Color(0.2, 0.22, 0.24, 0.5)))
-	_rebuild_floor_landmarks(layout_id, floor_points)
 	_apply_collision_bounds_from_floor(floor_points)
 	player_1_spawn.position = player_positions[0]
 	player_2_spawn.position = player_positions[1]
@@ -1426,21 +1452,12 @@ func _play_intro_juice() -> void:
 	tween.tween_property(camera, "zoom", camera.zoom, 0.18)
 
 func _play_damage_juice() -> void:
-	if modifier_tint == null or camera == null:
+	if camera == null:
 		return
-	var base_color: Color = modifier_tint.color
 	_add_camera_trauma(0.3)
-	var tween := create_tween()
-	tween.tween_property(modifier_tint, "color", Color(1.0, 0.72, 0.72, 1.0), 0.08)
-	tween.tween_property(modifier_tint, "color", base_color, 0.14)
 
 func _play_revive_juice() -> void:
-	if modifier_tint == null:
-		return
-	var base_color: Color = modifier_tint.color
-	var tween := create_tween()
-	tween.tween_property(modifier_tint, "color", Color(0.78, 1.0, 0.82, 1.0), 0.1)
-	tween.tween_property(modifier_tint, "color", base_color, 0.16)
+	return
 
 func _play_clear_juice() -> void:
 	if camera == null:
@@ -1728,6 +1745,7 @@ func _configure_menu_focus() -> void:
 		resume_button,
 		pause_settings_button,
 		pause_retry_button,
+		settings_screen_effect_option,
 		settings_player_1_option,
 		settings_player_2_option,
 		settings_player_3_option,
@@ -1761,6 +1779,10 @@ func _update_screen_effects() -> void:
 	screen_effects.set_low_health_ratio(lowest_ratio)
 	screen_effects.set_combat_intensity(intensity)
 	_update_darkness_overlay()
+
+func _apply_screen_effect_setting() -> void:
+	if screen_effects != null and screen_effects.has_method("set_effect_level"):
+		screen_effects.set_effect_level(ProfileState.get_screen_effect_level())
 
 func _build_compact_secondary_status(player) -> String:
 	if player.is_downed():
@@ -1834,15 +1856,6 @@ func _get_active_hud_accent() -> Color:
 		return Color(0.34, 0.72, 0.98, 1.0)
 	return _modifier_engine.get_tint_color(_active_modifier)
 
-func _ensure_floor_landmarks() -> void:
-	if _floor_landmarks != null:
-		return
-	_floor_landmarks = Node2D.new()
-	_floor_landmarks.name = "FloorLandmarks"
-	add_child(_floor_landmarks)
-	if floor_grid != null:
-		move_child(_floor_landmarks, floor_grid.get_index() + 1)
-
 func _get_layout_palette(layout_id: String) -> Dictionary:
 	return LAYOUT_PALETTES.get(layout_id, LAYOUT_PALETTES["default"])
 
@@ -1852,147 +1865,6 @@ func _apply_layout_palette(layout_id: String) -> void:
 	back_wall_visual.color = palette.get("wall_color", back_wall_visual.color)
 	left_wall_visual.color = palette.get("side_wall_color", left_wall_visual.color)
 	right_wall_visual.color = palette.get("side_wall_color", right_wall_visual.color)
-
-func _rebuild_floor_landmarks(layout_id: String, floor_points: PackedVector2Array) -> void:
-	_ensure_floor_landmarks()
-	if _floor_landmarks == null:
-		return
-	for child in _floor_landmarks.get_children():
-		child.queue_free()
-
-	var bounds := _compute_bounds(floor_points)
-	var min_x: float = bounds["min_x"]
-	var max_x: float = bounds["max_x"]
-	var min_y: float = bounds["min_y"]
-	var max_y: float = bounds["max_y"]
-	var center := Vector2((min_x + max_x) * 0.5, (min_y + max_y) * 0.5)
-	var width := max_x - min_x
-	var height := max_y - min_y
-	var accent: Color = UNIFORM_ARENA_ACCENT_COLOR
-
-	match layout_id:
-		"crossfire":
-			_add_floor_landmark(PackedVector2Array([
-				center + Vector2(-110.0, -14.0),
-				center + Vector2(110.0, -14.0),
-				center + Vector2(110.0, 14.0),
-				center + Vector2(-110.0, 14.0),
-			]), accent)
-			_add_floor_landmark(PackedVector2Array([
-				Vector2(min_x + 48.0, min_y + 48.0),
-				Vector2(min_x + 124.0, min_y + 48.0),
-				Vector2(min_x + 48.0, min_y + 124.0),
-			]), accent.darkened(0.15))
-			_add_floor_landmark(PackedVector2Array([
-				Vector2(max_x - 48.0, max_y - 48.0),
-				Vector2(max_x - 124.0, max_y - 48.0),
-				Vector2(max_x - 48.0, max_y - 124.0),
-			]), accent.darkened(0.15))
-		"pinch":
-			_add_floor_landmark(PackedVector2Array([
-				Vector2(center.x - 22.0, min_y + height * 0.22),
-				Vector2(center.x + 22.0, min_y + height * 0.22),
-				Vector2(center.x + 56.0, max_y - height * 0.18),
-				Vector2(center.x - 56.0, max_y - height * 0.18),
-			]), accent)
-			_add_floor_landmark(PackedVector2Array([
-				Vector2(min_x + 82.0, max_y - 54.0),
-				Vector2(min_x + 150.0, max_y - 54.0),
-				Vector2(min_x + 116.0, max_y - 120.0),
-			]), accent.darkened(0.1))
-			_add_floor_landmark(PackedVector2Array([
-				Vector2(max_x - 82.0, max_y - 54.0),
-				Vector2(max_x - 150.0, max_y - 54.0),
-				Vector2(max_x - 116.0, max_y - 120.0),
-			]), accent.darkened(0.1))
-		"offset":
-			_add_floor_landmark(PackedVector2Array([
-				center + Vector2(-150.0, -28.0),
-				center + Vector2(-34.0, -28.0),
-				center + Vector2(-34.0, 28.0),
-				center + Vector2(-150.0, 28.0),
-			]), accent)
-			_add_floor_landmark(PackedVector2Array([
-				Vector2(max_x - 180.0, min_y + 64.0),
-				Vector2(max_x - 120.0, min_y + 38.0),
-				Vector2(max_x - 96.0, min_y + 118.0),
-				Vector2(max_x - 156.0, min_y + 142.0),
-			]), accent.darkened(0.14))
-			_add_floor_landmark(PackedVector2Array([
-				Vector2(min_x + 62.0, max_y - 74.0),
-				Vector2(min_x + 134.0, max_y - 96.0),
-				Vector2(min_x + 158.0, max_y - 28.0),
-				Vector2(min_x + 82.0, max_y - 12.0),
-			]), accent.darkened(0.14))
-		"gauntlet_pockets":
-			_add_floor_landmark(PackedVector2Array([
-				center + Vector2(-54.0, -150.0),
-				center + Vector2(54.0, -150.0),
-				center + Vector2(54.0, 150.0),
-				center + Vector2(-54.0, 150.0),
-			]), accent)
-			_add_floor_landmark(PackedVector2Array([
-				center + Vector2(-238.0, -76.0),
-				center + Vector2(-158.0, -116.0),
-				center + Vector2(-110.0, -34.0),
-				center + Vector2(-186.0, 12.0),
-			]), accent.darkened(0.12))
-			_add_floor_landmark(PackedVector2Array([
-				center + Vector2(238.0, -76.0),
-				center + Vector2(158.0, -116.0),
-				center + Vector2(110.0, -34.0),
-				center + Vector2(186.0, 12.0),
-			]), accent.darkened(0.12))
-			_add_floor_landmark(PackedVector2Array([
-				center + Vector2(0.0, 162.0),
-				center + Vector2(76.0, 218.0),
-				center + Vector2(0.0, 262.0),
-				center + Vector2(-76.0, 218.0),
-			]), accent.darkened(0.18))
-		"boss_gate":
-			_add_floor_landmark(PackedVector2Array([
-				Vector2(center.x - 150.0, min_y + 84.0),
-				Vector2(center.x + 150.0, min_y + 84.0),
-				Vector2(center.x + 120.0, min_y + 136.0),
-				Vector2(center.x - 120.0, min_y + 136.0),
-			]), accent)
-			_add_floor_landmark(PackedVector2Array([
-				center + Vector2(-64.0, -24.0),
-				center + Vector2(0.0, -72.0),
-				center + Vector2(64.0, -24.0),
-				center + Vector2(28.0, 44.0),
-				center + Vector2(-28.0, 44.0),
-			]), accent.darkened(0.06))
-			_add_floor_landmark(PackedVector2Array([
-				Vector2(min_x + 56.0, max_y - 56.0),
-				Vector2(min_x + 134.0, max_y - 56.0),
-				Vector2(min_x + 56.0, max_y - 134.0),
-			]), accent.darkened(0.12))
-		_:
-			_add_floor_landmark(PackedVector2Array([
-				center + Vector2(0.0, -42.0),
-				center + Vector2(42.0, 0.0),
-				center + Vector2(0.0, 42.0),
-				center + Vector2(-42.0, 0.0),
-			]), accent)
-			_add_floor_landmark(PackedVector2Array([
-				Vector2(min_x + 54.0, min_y + 54.0),
-				Vector2(min_x + 128.0, min_y + 54.0),
-				Vector2(min_x + 54.0, min_y + 128.0),
-			]), accent.darkened(0.12))
-			_add_floor_landmark(PackedVector2Array([
-				Vector2(max_x - 54.0, min_y + 54.0),
-				Vector2(max_x - 128.0, min_y + 54.0),
-				Vector2(max_x - 54.0, min_y + 128.0),
-			]), accent.darkened(0.12))
-
-func _add_floor_landmark(points: PackedVector2Array, color: Color) -> void:
-	if _floor_landmarks == null:
-		return
-	var landmark := Polygon2D.new()
-	landmark.polygon = points
-	landmark.color = color
-	_floor_landmarks.add_child(landmark)
 
 func _update_darkness_overlay() -> void:
 	if _darkness_overlay == null or _darkness_material == null:
@@ -2087,55 +1959,36 @@ func _scale_vector_array(points: Array, center: Vector2, scale_factor: float) ->
 		scaled.append(center + (point - center) * scale_factor)
 	return scaled
 
-func _rebuild_floor_grid(floor_points: PackedVector2Array, _grid_color: Color) -> void:
+func _rebuild_floor_grid(floor_points: PackedVector2Array, grid_color: Color) -> void:
 	if floor_grid == null:
 		return
 	for child in floor_grid.get_children():
 		child.queue_free()
 
-func _add_wall_borders(floor_points: PackedVector2Array, layout_id: String) -> void:
-	if floor_grid == null or floor_points.size() < 4:
-		return
-	var border_color := Color(0.05, 0.07, 0.09, 0.88)
-	var highlight_color: Color = Color(0.76, 0.78, 0.8, 0.18)
-	var top_left: Vector2 = floor_points[0]
-	var top_right: Vector2 = floor_points[1]
-	var bottom_right: Vector2 = floor_points[2]
-	var bottom_left: Vector2 = floor_points[3]
+	var bounds := _compute_bounds(floor_points)
+	var min_x: float = bounds["min_x"]
+	var max_x: float = bounds["max_x"]
+	var min_y: float = bounds["min_y"]
+	var max_y: float = bounds["max_y"]
+	var spacing := 120.0
 
-	var frame := Line2D.new()
-	frame.width = 6.0
-	frame.closed = true
-	frame.default_color = Color(0.03, 0.05, 0.07, 0.94)
-	frame.points = PackedVector2Array([
-		top_left + Vector2(-8.0, -8.0),
-		top_right + Vector2(8.0, -8.0),
-		bottom_right + Vector2(8.0, 8.0),
-		bottom_left + Vector2(-8.0, 8.0),
-	])
-	floor_grid.add_child(frame)
+	var x := min_x + spacing
+	while x < max_x:
+		var vertical := Line2D.new()
+		vertical.width = 2.0
+		vertical.default_color = grid_color
+		vertical.points = PackedVector2Array([Vector2(x, min_y), Vector2(x, max_y)])
+		floor_grid.add_child(vertical)
+		x += spacing
 
-	var edges := [
-		PackedVector2Array([top_left, top_right]),
-		PackedVector2Array([top_right, bottom_right]),
-		PackedVector2Array([bottom_right, bottom_left]),
-		PackedVector2Array([bottom_left, top_left]),
-	]
-	for edge_points in edges:
-		var border := Line2D.new()
-		border.width = 5.0
-		border.default_color = border_color
-		border.points = edge_points
-		floor_grid.add_child(border)
-
-	var highlight := Line2D.new()
-	highlight.width = 2.5
-	highlight.default_color = highlight_color
-	highlight.points = PackedVector2Array([
-		top_left + Vector2(0.0, -18.0),
-		top_right + Vector2(0.0, -18.0),
-	])
-	floor_grid.add_child(highlight)
+	var y := min_y + spacing
+	while y < max_y:
+		var horizontal := Line2D.new()
+		horizontal.width = 2.0
+		horizontal.default_color = grid_color
+		horizontal.points = PackedVector2Array([Vector2(min_x, y), Vector2(max_x, y)])
+		floor_grid.add_child(horizontal)
+		y += spacing
 
 func _apply_collision_bounds_from_floor(_floor_points: PackedVector2Array) -> void:
 	var wall_thickness := 16.0
