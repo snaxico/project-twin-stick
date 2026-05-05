@@ -50,6 +50,29 @@ Read this first to restore project context quickly, then read `current-state.md`
   - top-center modifier chip
   - timer bar
   - styled result/pause/modifier panels
+- Aim mode is now configurable through real UI:
+  - bootstrap menu `Aim Settings`
+  - in-run pause menu `Aim Settings`
+  - modes: `Heavy Auto`, `Full Auto`, `Manual`
+
+## Current Run Structure
+
+- Run map is now procedural, not the old fixed six-step pattern.
+- Each run now generates:
+  - `5–7` pre-boss steps
+  - one guaranteed rest slot
+  - one guaranteed shop slot
+  - mixed combat/elite pressure rooms
+  - a final boss step
+- Room rewards and pressure now scale by depth:
+  - gold reward
+  - survival duration
+  - enemy spawn interval
+- Survival waves are depth-aware:
+  - early rooms favor `Chaser`
+  - mid rooms balance all three enemy types
+  - later rooms lean harder on `Spitter` and `Charger`
+- Boss HP now scales slightly with how many rooms were cleared before the boss.
 
 ## Current Priorities
 
@@ -59,6 +82,8 @@ Read this first to restore project context quickly, then read `current-state.md`
 - Keep projectile, aim-line, and arena contrast readable.
 - Keep grenade and mine roles distinct instead of blending them back together.
 - Validate the new HUD and modifier readability in live combat, not just parse/startup.
+- Validate procedural run pacing and variation in live play, not just generation logic.
+- Validate the new aim-settings flow at `1–4` players.
 - Validate `3–4` player behavior and full-run pacing later; do not expand scope casually.
 
 ## Important Runtime Ownership
@@ -67,6 +92,7 @@ Read this first to restore project context quickly, then read `current-state.md`
 - `ProfileState.gd`: persistent profile, meta gold, unlock ownership.
 - `CoopManager.gd`: combat-room orchestration and spawning.
 - `RunFlow.gd`: node-map and room transition flow.
+- `Bootstrap.gd`: pre-run player setup, debug start options, and aim settings menu.
 - `data/items.json`: shared reward/shop item definitions.
 - `data/modifiers.json`: room modifier tuning.
 - `Enemy.gd`: enemy silhouettes, hitbox sizing, and motion identity.

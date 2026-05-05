@@ -8,7 +8,12 @@ Godot `4.6.2` prototype for a same-screen local co-op twin-stick roguelite. The 
 
 - bootstrap setup menu before gameplay
 - `1–4` player pre-run configuration
+- aim settings are available before the run and from the in-run pause menu
 - node-map run flow with room choices
+- run map is now procedural instead of fixed:
+  - `5–7` pre-boss steps
+  - guaranteed rest/shop presence
+  - contrasting room options per step
 - shared gold, shared upgrades, and shop flow
 - persistent meta-gold, unlock purchases, and return-to-menu spending loop
 - combat rooms with downed/revive flow
@@ -30,6 +35,8 @@ Godot `4.6.2` prototype for a same-screen local co-op twin-stick roguelite. The 
 - mine proximity radius was doubled from the initial mine implementation
 - expanded shared item pool now supports `20` items
 - modifier pool now includes tactical rules, not just stat pressure
+- wave composition now scales by room depth instead of using one fixed enemy mix
+- boss health now scales modestly with rooms survived before the boss
 - enemy roster:
   - `Chaser`: small red dart silhouette
   - `Spitter`: medium magenta hex silhouette
@@ -43,6 +50,7 @@ Godot `4.6.2` prototype for a same-screen local co-op twin-stick roguelite. The 
 - `RunFlow` for node selection and room transitions
 - `CoopManager` for room orchestration, combat spawning, and room-state signaling
 - JSON-backed items, modifiers, unlocks, enemies, and weapon/loadout tuning
+- per-player aim mode selection now has proper menu/pause UI instead of relying on debug-only controls
 - styled combat HUD with stacked player bars, modifier chip, timer bar, and polished result/pause/intro panels
 - modifier intro panel plus active room tinting
 - darkness overlay, left-side spawn filtering, and optional friendly fire modifier hooks
@@ -61,25 +69,29 @@ Godot `4.6.2` prototype for a same-screen local co-op twin-stick roguelite. The 
 - layouts should feel like distinct places even with placeholder art
 - the combat HUD should read at a glance instead of exposing debug strings
 - grenade and mine roles should stay distinct instead of drifting back into one blended secondary design
+- run structure should vary between attempts through map length, room order, and enemy mix without changing the run-flow contract
+- aim-mode switching should be exposed through real UI, not hidden in developer-facing controls
 
 ## Known Gaps
 
 - `3–4` player runtime validation and tuning still need real play coverage
 - full-run pacing and solo-vs-group balance are still not finished
 - grenade-vs-mine role clarity still needs a live feel pass
+- procedural run pacing and boss scaling still need live validation across several attempts
 - new tactical modifiers still need live-behavior tuning and edge-case validation
 - `J1` and `J2` feedback layers still need final intensity tuning in active play
-- runtime aim-mode switching is still a debug HUD, not the final UX
 - no custom art, audio asset pipeline, export flow, or distribution polish yet
 
 ## Next Step
 
 If work resumes, prefer tuning and validation:
 
+- verify multiple run seeds for map variety, pacing, and boss scaling
 - verify grenade and mine usefulness, cooldowns, and role separation
 - verify `3–4` player pressure, HUD readability, and revive fairness
 - verify enemy silhouettes and layout landmarks stay readable during heavy combat
 - verify `Darkness`, `One-Way`, and `Friendly Fire` individually in live play
+- verify menu and pause aim settings for each player-count configuration
 - verify hit feedback and camera feel in live play
 - verify save/load, unlock gating, and relaunch persistence
 - tune full-run duration toward the intended `10–15` minute target

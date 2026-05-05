@@ -559,8 +559,8 @@ func _build_survival_wave_plan() -> Array:
 	var spawn_points := _get_enemy_spawn_positions()
 	var step_index := int(_room_config.get("step_index", 0))
 	var is_elite := str(_room_config.get("room_type", "")) == "elite"
-	var enemy_types := _roll_wave_composition(step_index, is_elite)
 	var spawn_count := _compute_wave_size(step_index, is_elite, spawn_points.size())
+	var enemy_types := _roll_wave_composition(step_index, is_elite, max(spawn_count, 1))
 	var plan: Array = []
 
 	for index in range(spawn_count):
@@ -590,7 +590,7 @@ func _spawn_boss() -> void:
 	enemies.add_child(boss)
 	_boss_node = boss
 
-func _roll_wave_composition(step_index: int, is_elite: bool) -> Array:
+func _roll_wave_composition(step_index: int, is_elite: bool, composition_size: int) -> Array:
 	var weights := [5, 2, 0]
 	if step_index >= 4:
 		weights = [1, 3, 4]
@@ -613,7 +613,7 @@ func _roll_wave_composition(step_index: int, is_elite: bool) -> Array:
 		weighted_pool.append("chaser")
 
 	var composition: Array = []
-	while composition.size() < 6:
+	while composition.size() < composition_size:
 		composition.append(weighted_pool[_wave_random.randi_range(0, weighted_pool.size() - 1)])
 	composition.shuffle()
 	return composition

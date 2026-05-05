@@ -27,7 +27,6 @@ var _items: Array = []
 var _items_by_id: Dictionary = {}
 
 func _ready() -> void:
-	_random.randomize()
 	_load_items()
 
 func start_new_run(configs: Array, debug_options: Dictionary = {}) -> void:
@@ -192,9 +191,12 @@ func _generate_node_map() -> Array:
 	var support_slots: Array = []
 	for slot_index in range(1, run_length):
 		support_slots.append(slot_index)
+	if support_slots.size() < 2:
+		print("[RunState] Support slot generation underflow. Falling back to default pattern.")
+		return _generate_fallback_node_map()
 	support_slots.shuffle()
 	var rest_slot: int = int(support_slots.pop_back())
-	var shop_slot: int = int(support_slots.pop_back()) if not support_slots.is_empty() else 0
+	var shop_slot: int = int(support_slots.pop_back())
 
 	for step_index in range(run_length):
 		if step_index == rest_slot:
