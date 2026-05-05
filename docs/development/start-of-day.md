@@ -59,6 +59,10 @@ Read this first to restore project context quickly, then read `current-state.md`
   - top-center modifier chip
   - timer bar
   - styled result/pause/modifier panels
+- Player visuals are now in transition from pure procedural shapes toward real sprites:
+  - player 1 uses a sprite-backed body
+  - players 2–4 still use the current procedural polygon body
+  - gameplay hitbox remains the existing circular collision, with sprite fit adjusted to match it
 - Settings now live in a shared real UI flow:
   - bootstrap menu `Settings`
   - in-run pause menu `Settings`
@@ -113,6 +117,8 @@ Read this first to restore project context quickly, then read `current-state.md`
 - `Bootstrap.gd`: pre-run player setup, debug start options, and shared settings menu.
 - `Bootstrap.gd`: also owns the debug run launcher UI.
 - `ScreenEffects.gd`: runtime post-process layer, now controlled by the settings menu.
+- `assets/sprites/`: runtime sprite assets used by the game.
+- `sprites/guidelines/`: sprite-generation prompts and rules, kept separate from runtime assets.
 - `data/items.json`: shared reward/shop item definitions.
 - `data/modifiers.json`: room modifier tuning.
 - `Enemy.gd`: enemy silhouettes, hitbox sizing, and motion identity.

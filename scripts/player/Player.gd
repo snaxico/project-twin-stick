@@ -39,6 +39,7 @@ signal damage_taken(player, amount, current_health)
 @onready var body_root: Node2D = $BodyRoot
 @onready var outline: Polygon2D = $BodyRoot/Outline
 @onready var visual: Polygon2D = $BodyRoot/Visual
+@onready var sprite_visual: Sprite2D = $BodyRoot/SpriteVisual
 @onready var aim_pivot: Node2D = $BodyRoot/AimPivot
 @onready var aim_line_backdrop: Line2D = $BodyRoot/AimPivot/AimLineBackdrop
 @onready var aim_line: Line2D = $BodyRoot/AimPivot/AimLine
@@ -83,6 +84,7 @@ var _flash_material: ShaderMaterial = null
 var _flash_tween: Tween = null
 var _next_dash_trail_at := 0.0
 var _base_visual_scale := Vector2.ONE
+var _base_sprite_scale := Vector2.ONE
 var _base_shadow_scale := Vector2.ONE
 var _display_move_input := Vector2.ZERO
 var _previous_move_input := Vector2.ZERO
@@ -240,6 +242,8 @@ func _ready() -> void:
 	_base_collision_mask = collision_mask
 	if visual != null:
 		_base_visual_scale = visual.scale
+	if sprite_visual != null:
+		_base_sprite_scale = sprite_visual.scale
 	if shadow != null:
 		_base_shadow_scale = shadow.scale
 	current_health = max_health
@@ -463,22 +467,35 @@ func _apply_visual_state(now: float, delta: float = 0.0) -> void:
 		return
 	var dash_active: bool = _dash != null and _dash.is_active(now)
 	var downed_pulse: float = 0.5 + 0.5 * sin(now * 6.0)
-	var tint: Color = player_config.tint.darkened(0.45) if _is_downed else player_config.tint
-	tint.a = 0.56 + 0.24 * downed_pulse if _is_downed else 1.0
-	visual.color = tint
+	var use_sprite: bool = _uses_sprite_visual()
+	var fill_tint: Color = player_config.tint.darkened(0.45) if _is_downed else player_config.tint
+	fill_tint.a = 0.56 + 0.24 * downed_pulse if _is_downed else 1.0
 	if delta > 0.0:
 		_outline_pulse = move_toward(_outline_pulse, 1.0, delta * 5.0)
 	var dash_scale: float = 1.15 if dash_active else 1.0
 	var move_stretch: float = clamp(velocity.length() / max(move_speed, 1.0), 0.0, 1.0) * 0.06
 	var squash_x: float = 1.0 + _turn_squash * 0.18 - move_stretch * 0.03
 	var squash_y: float = 1.0 - _turn_squash * 0.12 + move_stretch
-	visual.scale = Vector2(_base_visual_scale.x * dash_scale * squash_x, _base_visual_scale.y * dash_scale * squash_y)
+	var scaled_visual: Vector2 = Vector2(_base_visual_scale.x * dash_scale * squash_x, _base_visual_scale.y * dash_scale * squash_y)
+	visual.visible = not use_sprite
+	if visual.visible:
+		visual.color = fill_tint
+		visual.scale = scaled_visual
 	if outline != null:
-		outline.polygon = visual.polygon
-		outline.scale = visual.scale * 1.28 * _outline_pulse
-		var outline_color := Color(0.04, 0.06, 0.08, 0.92)
-		outline_color.a = 0.52 + 0.28 * downed_pulse if _is_downed else 0.92
-		outline.color = outline_color
+		outline.visible = not use_sprite
+		if outline.visible:
+			outline.polygon = visual.polygon
+			outline.scale = scaled_visual * 1.28 * _outline_pulse
+			var outline_color := Color(0.04, 0.06, 0.08, 0.92)
+			outline_color.a = 0.52 + 0.28 * downed_pulse if _is_downed else 0.92
+			outline.color = outline_color
+	if sprite_visual != null:
+		sprite_visual.visible = use_sprite
+		if sprite_visual.visible:
+			sprite_visual.scale = Vector2(_base_sprite_scale.x * dash_scale * squash_x, _base_sprite_scale.y * dash_scale * squash_y)
+			var sprite_modulate := Color(1.0, 1.0, 1.0, 1.0)
+			sprite_modulate.a = 0.56 + 0.24 * downed_pulse if _is_downed else 1.0
+			sprite_visual.modulate = sprite_modulate
 	if shadow != null:
 		shadow.scale = Vector2(
 			_base_shadow_scale.x * (1.0 + _turn_squash * 0.08),
@@ -525,7 +542,7 @@ func _play_fire_recoil() -> void:
 	_turn_squash = max(_turn_squash, 0.3)
 
 func _play_damage_flash() -> void:
-	if visual == null:
+	if _get_flash_target() == null:
 		return
 	_outline_pulse = 1.18
 	var material := _get_flash_material()
@@ -536,7 +553,8 @@ func _play_damage_flash() -> void:
 	_flash_tween.tween_property(material, "shader_parameter/flash_intensity", 0.0, 0.12)
 
 func _get_flash_material() -> ShaderMaterial:
-	if _flash_material != null:
+	var flash_target := _get_flash_target()
+	if _flash_material != null and flash_target != null and flash_target.material == _flash_material:
 		return _flash_material
 	_flash_material = ShaderMaterial.new()
 	var shader := Shader.new()
@@ -544,8 +562,17 @@ func _get_flash_material() -> ShaderMaterial:
 	_flash_material.shader = shader
 	_flash_material.set_shader_parameter("flash_intensity", 0.0)
 	_flash_material.set_shader_parameter("flash_color", Color(1.0, 0.2, 0.2, 1.0))
-	visual.material = _flash_material
+	if flash_target != null:
+		flash_target.material = _flash_material
 	return _flash_material
+
+func _get_flash_target() -> CanvasItem:
+	if _uses_sprite_visual() and sprite_visual != null:
+		return sprite_visual
+	return visual
+
+func _uses_sprite_visual() -> bool:
+	return player_id == 1 and sprite_visual != null and sprite_visual.texture != null
 
 func _update_secondary_preview(now: float) -> void:
 	if secondary_preview == null or secondary_trajectory == null or secondary_target_ring == null or secondary_target_cross == null:

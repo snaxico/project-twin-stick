@@ -80,8 +80,13 @@ Godot `4.6.2` prototype for a same-screen local co-op twin-stick roguelite. The 
   - one shared olive-neutral floor across all rooms
   - subtle fullscreen grid lines for room texture
   - only subtle room-to-room line/accent changes remain
+- player visuals are now partially sprite-backed:
+  - player 1 uses `assets/sprites/player/player_p1_base.png`
+  - players 2–4 still use the procedural polygon body
+  - the sprite was normalized to a transparent `128x128` asset and scaled to match the existing collision radius
 - shared placeholder visual language with player color identity and shooter-tinted projectiles/effects
 - juice stack through `J7`: hit flash, knockback, hitstop, shake, particles, procedural SFX, health bars, floating text, motion polish, screen overlays, and transition polish
+- sprite-generation documentation now lives in-project under `sprites/guidelines/`, separate from runtime assets in `assets/sprites/`
 
 ## Recent Accepted Direction
 
@@ -97,6 +102,7 @@ Godot `4.6.2` prototype for a same-screen local co-op twin-stick roguelite. The 
 - run structure should vary between attempts through map length, room order, and enemy mix without changing the run-flow contract
 - aim-mode switching should stay in the shared settings UI, not developer-facing controls
 - screen effects should be selectable from the same settings flow and default to clear combat readability
+- sprite generation should follow the in-project guidelines and stay separate from runtime asset storage
 
 ## Known Gaps
 
@@ -122,6 +128,7 @@ If work resumes, prefer tuning and validation:
 - verify `Darkness`, `One-Way`, and `Friendly Fire` individually in live play
 - verify menu and pause settings for each player-count configuration
 - verify `Off` / `Minimal` / `Full` screen-effect levels behave as expected in live play
+- verify player 1 sprite fit, weapon gap, and motion readability against the existing hitbox
 - verify debug single-room launches for combat, elite, rest, shop, and boss
 - verify hit feedback and camera feel in live play
 - verify save/load, unlock gating, and relaunch persistence

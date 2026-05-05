@@ -1,6 +1,7 @@
-[gd_scene load_steps=3 format=3 uid="uid://duj7gr8f4jk4j"]
+[gd_scene load_steps=4 format=3 uid="uid://duj7gr8f4jk4j"]
 
 [ext_resource type="Script" path="res://scripts/player/Player.gd" id="1_n0xfx"]
+[ext_resource type="Texture2D" path="res://assets/sprites/player/player_p1_base.png" id="2_a3s1m"]
 
 [sub_resource type="CircleShape2D" id="CircleShape2D_body"]
 radius = 22.0
@@ -47,6 +48,11 @@ scale = Vector2(1.28, 1.28)
 [node name="Visual" type="Polygon2D" parent="BodyRoot"]
 polygon = PackedVector2Array(0, -26, 14, -18, 18, -4, 15, 14, 0, 24, -15, 14, -18, -4, -14, -18)
 scale = Vector2(1.02, 1.22)
+
+[node name="SpriteVisual" type="Sprite2D" parent="BodyRoot"]
+visible = false
+scale = Vector2(0.42, 0.42)
+texture = ExtResource("2_a3s1m")
 
 [node name="AimPivot" type="Node2D" parent="BodyRoot"]
 
