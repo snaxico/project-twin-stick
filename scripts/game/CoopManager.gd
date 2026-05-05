@@ -69,6 +69,13 @@ const LAYOUT_PALETTES := {
 		"grid_color": Color(0.67, 0.76, 0.54, 0.32),
 		"accent_color": Color(0.82, 0.9, 0.64, 0.2),
 	},
+	"gauntlet_pockets": {
+		"floor_color": Color(0.5, 0.48, 0.42, 1.0),
+		"wall_color": Color(0.19, 0.18, 0.16, 1.0),
+		"side_wall_color": Color(0.24, 0.23, 0.2, 1.0),
+		"grid_color": Color(0.78, 0.7, 0.54, 0.26),
+		"accent_color": Color(0.92, 0.78, 0.46, 0.22),
+	},
 	"boss_gate": {
 		"floor_color": Color(0.26, 0.08, 0.1, 1.0),
 		"wall_color": Color(0.05, 0.04, 0.05, 1.0),
@@ -82,6 +89,8 @@ const LAYOUT_PALETTES := {
 @export var projectile_scene: PackedScene
 @export var grenade_projectile_scene: PackedScene
 @export var mine_projectile_scene: PackedScene
+@export var generator_scene: PackedScene
+@export var pickup_scene: PackedScene
 @export var survival_duration: float = 30.0
 @export var enemy_spawn_interval: float = 4.0
 @export var modifier_intro_duration: float = 1.8
@@ -98,6 +107,8 @@ signal player_revived(player)
 @onready var players: Node2D = $Players
 @onready var projectiles: Node2D = $Projectiles
 @onready var enemies: Node2D = $Enemies
+@onready var generators: Node2D = $Generators
+@onready var pickups: Node2D = $Pickups
 @onready var effects: Node2D = $Effects
 @onready var floor_visual: Polygon2D = $Floor
 @onready var floor_grid: Node2D = $FloorGrid
@@ -209,6 +220,10 @@ var _vision_radius := 0.0
 var _wave_random := RandomNumberGenerator.new()
 var _settings_rows: Array = []
 var _settings_options: Array = []
+var _generator_nodes: Array = []
+var _generator_slot_positions: Array = []
+var _generator_total_count: int = 0
+var _room_random := RandomNumberGenerator.new()
 
 func _ready() -> void:
 	if player_scene == null:
@@ -221,8 +236,13 @@ func _ready() -> void:
 		grenade_projectile_scene = load("res://scenes/weapons/GrenadeProjectile.tscn")
 	if mine_projectile_scene == null:
 		mine_projectile_scene = load("res://scenes/weapons/MineProjectile.tscn")
+	if generator_scene == null:
+		generator_scene = load("res://scenes/game/GeneratorObjective.tscn")
+	if pickup_scene == null:
+		pickup_scene = load("res://scenes/game/RoomPickup.tscn")
 	_modifier_engine = ModifierEngineData.new()
 	_wave_random.randomize()
+	_room_random.randomize()
 	_sfx_engine = get_tree().get_first_node_in_group("sfx_engine")
 	_status_labels = [p1_status_label, p2_status_label, p3_status_label, p4_status_label]
 	_secondary_labels = [p1_secondary_label, p2_secondary_label, p3_secondary_label, p4_secondary_label]
@@ -530,11 +550,16 @@ func _start_room() -> void:
 	_pending_survival_wave_plan = []
 	_pending_boss_support_plan = []
 	_boss_node = null
+	_generator_nodes = []
+	_generator_slot_positions = []
+	_generator_total_count = 0
 	_active_modifier = {} if _is_boss_room() else _room_config.get("modifier", _modifier_engine.get_random_modifier()).duplicate(true)
 	_friendly_fire_enabled = _modifier_engine.is_friendly_fire(_active_modifier)
 	_vision_radius = _modifier_engine.get_vision_radius(_active_modifier)
 	_clear_container(projectiles)
 	_clear_container(enemies)
+	_clear_container(generators)
+	_clear_container(pickups)
 	_clear_container(effects)
 	_clear_spawn_warning_effects()
 	if screen_shake != null:
@@ -547,11 +572,16 @@ func _start_room() -> void:
 	_show_room_intro()
 	_play_intro_juice()
 	room_status_label.text = "Room status: Incoming encounter"
-	_set_room_progress_ui("Deploying", "Incoming encounter", 1.0, _get_active_hud_accent())
+	if _is_generator_room():
+		_set_room_progress_ui("Deploying", "Destroy Generators", 1.0, _get_active_hud_accent())
+	else:
+		_set_room_progress_ui("Deploying", "Incoming encounter", 1.0, _get_active_hud_accent())
 
 func _spawn_room_opening_encounter() -> void:
 	if _is_boss_room():
 		_spawn_boss()
+	elif _is_generator_room():
+		_spawn_generators()
 	else:
 		_spawn_survival_wave(_build_survival_wave_plan())
 
@@ -728,6 +758,144 @@ func _spawn_mine(origin: Vector2, direction: Vector2, speed: float, damage: int,
 func _is_mine_secondary_kind(kind: String) -> bool:
 	return kind == "mine" or kind == "shrapnel_mine" or kind == "heavy_mine" or kind == "cluster_mine" or kind == "siege_mine"
 
+func _spawn_generators() -> void:
+	_clear_container(generators)
+	_generator_nodes.clear()
+	_generator_total_count = 0
+	var configured_slots: Array = _generator_slot_positions.duplicate()
+	if configured_slots.is_empty():
+		configured_slots = [
+			Vector2(420.0, 320.0),
+			Vector2(860.0, 320.0),
+			Vector2(640.0, 520.0),
+		]
+	var generator_count: int = mini(int(_room_config.get("generator_count", 2)), configured_slots.size())
+	var generator_config := {
+		"is_elite": str(_room_config.get("room_type", "")) == "elite",
+		"max_health": 14 if str(_room_config.get("room_type", "")) == "elite" else 10,
+		"spawn_interval": float(_room_config.get("generator_spawn_interval", 3.2)),
+		"spitter_chance": float(_room_config.get("generator_spitter_chance", 0.0)),
+	}
+	for index in range(generator_count):
+		var generator = generator_scene.instantiate()
+		generator.global_position = configured_slots[index]
+		generator.setup(generator_config)
+		generator.generator_destroyed.connect(_on_generator_destroyed)
+		generator.hit_received.connect(_on_generator_hit_received)
+		generator.spawn_requested.connect(_on_generator_spawn_requested)
+		generators.add_child(generator)
+		_generator_nodes.append(generator)
+		_spawn_world_effect(
+			ParticleFactoryData.create_explosion_burst(Color(0.8, 0.92, 0.44, 1.0)),
+			generator.global_position
+		)
+	_generator_total_count = _generator_nodes.size()
+
+func _on_generator_destroyed(generator) -> void:
+	_trigger_hitstop(0.05)
+	_add_camera_trauma(0.45)
+	_play_sfx_enemy_death()
+	_spawn_world_effect(
+		ParticleFactoryData.create_explosion_burst(Color(0.96, 0.62, 0.28, 1.0)),
+		generator.global_position
+	)
+	_drop_pickups_for_generator(generator)
+	call_deferred("_evaluate_generator_room_clear")
+
+func _on_generator_hit_received(generator, damage_amount: int, _lethal: bool) -> void:
+	if generator != null and is_instance_valid(generator):
+		_spawn_world_floating_text("-%d" % damage_amount, Color(1.0, 0.88, 0.72, 1.0), generator.global_position + Vector2(0.0, -42.0))
+	_play_sfx_hit()
+
+func _on_generator_spawn_requested(generator, enemy_type: String) -> void:
+	if _room_is_cleared or _room_is_failed or _room_is_in_intro:
+		return
+	if generator == null or not is_instance_valid(generator) or not generator.is_alive():
+		return
+	var enemy_cap: int = int(_room_config.get("generator_enemy_cap", 6))
+	if enemies.get_child_count() >= enemy_cap:
+		return
+	_spawn_generator_enemy(generator, enemy_type)
+
+func _spawn_generator_enemy(generator, enemy_type: String) -> void:
+	var spawn_position: Vector2 = generator.global_position + Vector2(
+		_room_random.randf_range(-24.0, 24.0),
+		_room_random.randf_range(-18.0, 18.0)
+	)
+	_spawn_enemy_wave([{
+		"position": spawn_position,
+		"type": enemy_type,
+		"apply_modifier": true,
+	}])
+
+func _drop_pickups_for_enemy(enemy) -> void:
+	if enemy == null or not is_instance_valid(enemy):
+		return
+	if enemy.has_method("is_boss") and enemy.is_boss():
+		return
+	if _room_random.randf() > 0.2:
+		return
+	_spawn_pickup("gold", enemy.global_position, 1)
+
+func _drop_pickups_for_generator(generator) -> void:
+	if generator == null:
+		return
+	_spawn_pickup("gold", generator.global_position + Vector2(-14.0, 4.0), 1)
+	_spawn_pickup("food", generator.global_position + Vector2(14.0, -4.0), 1)
+
+func _spawn_pickup(pickup_type: String, origin: Vector2, value: int = 1) -> void:
+	var pickup = pickup_scene.instantiate()
+	pickup.global_position = origin
+	pickup.setup(pickup_type, value)
+	pickup.pickup_collected.connect(_on_pickup_collected)
+	pickups.add_child(pickup)
+
+func _on_pickup_collected(pickup, collector, pickup_type: String, value: int) -> void:
+	var pickup_position: Vector2 = pickup.global_position if pickup != null and is_instance_valid(pickup) else Vector2.ZERO
+	match pickup_type:
+		"food":
+			if collector != null and is_instance_valid(collector) and collector.has_method("heal"):
+				var healed_amount: int = int(collector.heal(value))
+				if healed_amount > 0:
+					_spawn_world_floating_text("+%d HP" % healed_amount, Color(0.74, 0.96, 0.48, 1.0), collector.global_position + Vector2(0.0, -46.0))
+		_:
+			RunState.gold += value
+			_spawn_world_floating_text("+%d Gold" % value, Color(1.0, 0.88, 0.28, 1.0), pickup_position + Vector2(0.0, -24.0))
+
+func _auto_collect_remaining_pickups() -> void:
+	var remaining_pickups: Array = pickups.get_children()
+	for pickup in remaining_pickups:
+		if pickup == null or not is_instance_valid(pickup):
+			continue
+		var pickup_kind := str(pickup.pickup_type)
+		if pickup_kind == "food":
+			var injured_player: Node = _find_lowest_health_living_player()
+			if injured_player != null:
+				pickup.collect(injured_player)
+			else:
+				pickup.queue_free()
+		else:
+			var active_players: Array = get_active_players()
+			var collector: Node = active_players[0] if not active_players.is_empty() else null
+			pickup.collect(collector)
+
+func _find_lowest_health_living_player() -> Node:
+	var lowest_player: Node = null
+	var lowest_ratio := 2.0
+	for player in get_active_players():
+		if not is_instance_valid(player):
+			continue
+		var health_state: Dictionary = player.get_health_state()
+		var current_health: int = int(health_state.get("current", 0))
+		var max_health: int = max(int(health_state.get("max", 1)), 1)
+		if current_health >= max_health:
+			continue
+		var ratio: float = float(current_health) / float(max_health)
+		if ratio < lowest_ratio:
+			lowest_ratio = ratio
+			lowest_player = player
+	return lowest_player
+
 func _on_enemy_died(enemy) -> void:
 	_trigger_hitstop(0.04)
 	_add_camera_trauma(0.4)
@@ -740,7 +908,10 @@ func _on_enemy_died(enemy) -> void:
 		_boss_node = null
 		_handle_room_clear("Boss Defeated", "The boss collapsed and the run can continue.")
 		return
+	_drop_pickups_for_enemy(enemy)
 	call_deferred("_evaluate_room_state")
+	if _is_generator_room():
+		call_deferred("_evaluate_generator_room_clear")
 
 func _on_player_health_changed(_current_health: int, _max_health: int) -> void:
 	_refresh_debug_ui()
@@ -802,9 +973,13 @@ func _evaluate_room_state() -> void:
 		_set_room_progress_ui("Defeat", "All players down", 0.0, Color(0.94, 0.32, 0.28, 1.0))
 		_clear_container(projectiles)
 		_clear_container(enemies)
+		_clear_container(generators)
+		_clear_container(pickups)
 		var defeat_text := "All players were downed before the timer expired."
 		if _is_boss_room():
 			defeat_text = "All players were downed before the boss was defeated."
+		elif _is_generator_room():
+			defeat_text = "All players were downed before the generators were destroyed."
 		_show_result("Defeat", defeat_text)
 		all_players_dead.emit()
 
@@ -815,7 +990,7 @@ func _update_room_progress(delta: float) -> void:
 	var now := _current_time_seconds()
 	if _room_is_in_intro:
 		var intro_remaining: float = max(_room_intro_ends_at - now, 0.0)
-		var intro_label := str(_room_config.get("title", "Room")) if _is_boss_room() else str(_active_modifier.get("name", "Modifier"))
+		var intro_label := str(_room_config.get("title", "Room")) if _is_boss_room() else ("Destroy Generators" if _is_generator_room() else str(_active_modifier.get("name", "Modifier")))
 		room_status_label.text = "Room status: %s in %.1fs" % [intro_label, intro_remaining]
 		_set_room_progress_ui("%.1fs" % intro_remaining, intro_label, clamp(intro_remaining / max(modifier_intro_duration, 0.01), 0.0, 1.0), _get_active_hud_accent())
 		if now >= _room_intro_ends_at:
@@ -830,6 +1005,10 @@ func _update_room_progress(delta: float) -> void:
 
 	if _is_boss_room():
 		_update_boss_room(now)
+		return
+
+	if _is_generator_room():
+		_update_generator_room(now, delta)
 		return
 
 	var elapsed := now - _room_started_at
@@ -896,6 +1075,45 @@ func _update_boss_room(now: float) -> void:
 		_get_active_hud_accent()
 	)
 
+func _update_generator_room(now: float, _delta: float) -> void:
+	_apply_stationary_modifier(now)
+	_evaluate_generator_room_clear()
+	if _room_is_cleared or _room_is_failed:
+		return
+
+	var alive_generators: Array = _get_alive_generators()
+	var destroyed_count: int = max(_generator_total_count - alive_generators.size(), 0)
+	var revive_suffix: String = _build_revive_status_suffix()
+	if alive_generators.is_empty():
+		room_status_label.text = "Room status: Sweep the room | Enemies: %d%s" % [enemies.get_child_count(), revive_suffix]
+		_set_room_progress_ui("Sweep", "Clear Remaining Enemies%s" % revive_suffix, 1.0, _get_active_hud_accent())
+		_reset_room_status_pulse()
+		return
+
+	room_status_label.text = "Room status: Destroy generators | %d/%d down | Enemies: %d%s" % [
+		destroyed_count,
+		_generator_total_count,
+		enemies.get_child_count(),
+		revive_suffix,
+	]
+	_set_room_progress_ui(
+		"Gens %d/%d" % [destroyed_count, _generator_total_count],
+		"Destroy Generators%s" % revive_suffix,
+		clamp(float(destroyed_count) / max(float(_generator_total_count), 1.0), 0.0, 1.0),
+		_get_active_hud_accent()
+	)
+	_reset_room_status_pulse()
+
+func _evaluate_generator_room_clear() -> void:
+	if not _is_generator_room() or _room_is_cleared or _room_is_failed or _room_is_in_intro:
+		return
+	if not _get_alive_generators().is_empty():
+		return
+	if enemies.get_child_count() > 0:
+		return
+	_auto_collect_remaining_pickups()
+	_handle_room_clear("Generators Down", "All generators destroyed. Area clear.")
+
 func _update_revive_state(delta: float) -> void:
 	var downed_players := get_downed_players()
 	if downed_players.is_empty():
@@ -941,6 +1159,8 @@ func _handle_room_clear(title: String, detail: String) -> void:
 	_room_is_cleared = true
 	_clear_container(projectiles)
 	_clear_container(enemies)
+	_clear_container(generators)
+	_clear_container(pickups)
 	_clear_spawn_warning_effects()
 	if _boss_node != null and is_instance_valid(_boss_node):
 		_boss_node = null
@@ -965,6 +1185,14 @@ func _show_room_intro() -> void:
 	if _is_boss_room():
 		modifier_intro_title_label.text = "Incoming Boss: %s" % str(_room_config.get("title", "Boss"))
 		modifier_intro_detail_label.text = str(_room_config.get("description", "Defeat the boss to finish the run."))
+	elif _is_generator_room():
+		modifier_intro_title_label.text = "Objective: Destroy Generators"
+		var detail_lines := [
+			str(_room_config.get("description", "Break the generators, then sweep the room.")),
+		]
+		if not _active_modifier.is_empty():
+			detail_lines.append("Modifier: %s" % str(_active_modifier.get("name", "Unknown")))
+		modifier_intro_detail_label.text = "\n".join(detail_lines)
 	else:
 		modifier_intro_title_label.text = "Incoming Modifier: %s" % str(_active_modifier.get("name", "Unknown"))
 		modifier_intro_detail_label.text = str(_active_modifier.get("description", ""))
@@ -1050,8 +1278,18 @@ func _restore_player_health_states() -> void:
 		if is_instance_valid(player):
 			player.set_health_state(RunState.player_health_states[index])
 
+func _is_generator_room() -> bool:
+	return str(_room_config.get("room_objective", "survive")) == "destroy_generators"
+
 func _is_boss_room() -> bool:
 	return str(_room_config.get("room_type", "")) == "boss"
+
+func _get_alive_generators() -> Array:
+	var alive_generators: Array = []
+	for generator in _generator_nodes:
+		if generator != null and is_instance_valid(generator) and generator.is_alive():
+			alive_generators.append(generator)
+	return alive_generators
 
 func _get_enemy_spawn_positions() -> Array:
 	var spawn_positions := [
@@ -1118,6 +1356,11 @@ func _apply_layout_preset(layout_id: String) -> void:
 		Vector2(1060, 570),
 		Vector2(640, 160),
 		Vector2(640, 610),
+	]
+	var generator_positions := [
+		Vector2(380, 320),
+		Vector2(900, 320),
+		Vector2(640, 520),
 	]
 
 	match layout_id:
@@ -1205,6 +1448,35 @@ func _apply_layout_preset(layout_id: String) -> void:
 			player_positions = [Vector2(390, 340), Vector2(760, 300), Vector2(520, 500), Vector2(900, 470)]
 			enemy_positions = [Vector2(210, 190), Vector2(1090, 170), Vector2(140, 590), Vector2(1130, 550), Vector2(820, 120), Vector2(470, 630)]
 			camera_zoom = Vector2(0.78, 0.78)
+		"gauntlet_pockets":
+			floor_points = PackedVector2Array([
+				Vector2(120, 92),
+				Vector2(1160, 92),
+				Vector2(1210, 660),
+				Vector2(70, 660),
+			])
+			back_wall_points = PackedVector2Array([
+				Vector2(120, 58),
+				Vector2(1160, 58),
+				Vector2(1160, 106),
+				Vector2(120, 106),
+			])
+			left_wall_points = PackedVector2Array([
+				Vector2(92, 92),
+				Vector2(120, 92),
+				Vector2(70, 660),
+				Vector2(42, 660),
+			])
+			right_wall_points = PackedVector2Array([
+				Vector2(1160, 92),
+				Vector2(1188, 92),
+				Vector2(1238, 660),
+				Vector2(1210, 660),
+			])
+			player_positions = [Vector2(520, 500), Vector2(760, 500), Vector2(430, 580), Vector2(850, 580)]
+			enemy_positions = [Vector2(230, 180), Vector2(1050, 180), Vector2(200, 560), Vector2(1080, 560), Vector2(640, 140), Vector2(640, 620)]
+			generator_positions = [Vector2(360, 320), Vector2(920, 320), Vector2(640, 520)]
+			camera_zoom = Vector2(0.76, 0.76)
 		"boss_gate":
 			floor_points = PackedVector2Array([
 				Vector2(100, 84),
@@ -1273,6 +1545,7 @@ func _apply_layout_preset(layout_id: String) -> void:
 	right_wall_points = _scale_points(right_wall_points, layout_center, MAP_SCALE)
 	player_positions = _scale_vector_array(player_positions, layout_center, MAP_SCALE)
 	enemy_positions = _scale_vector_array(enemy_positions, layout_center, MAP_SCALE)
+	generator_positions = _scale_vector_array(generator_positions, layout_center, MAP_SCALE)
 	camera.position = layout_center
 	camera_zoom *= 1.55
 
@@ -1294,6 +1567,7 @@ func _apply_layout_preset(layout_id: String) -> void:
 	enemy_spawn_4.position = enemy_positions[3]
 	enemy_spawn_5.position = enemy_positions[4]
 	enemy_spawn_6.position = enemy_positions[5]
+	_generator_slot_positions = generator_positions.duplicate()
 	camera.zoom = camera_zoom
 
 func _play_intro_juice() -> void:
@@ -1803,6 +2077,31 @@ func _rebuild_floor_landmarks(layout_id: String, floor_points: PackedVector2Arra
 				Vector2(min_x + 158.0, max_y - 28.0),
 				Vector2(min_x + 82.0, max_y - 12.0),
 			]), accent.darkened(0.14))
+		"gauntlet_pockets":
+			_add_floor_landmark(PackedVector2Array([
+				center + Vector2(-54.0, -150.0),
+				center + Vector2(54.0, -150.0),
+				center + Vector2(54.0, 150.0),
+				center + Vector2(-54.0, 150.0),
+			]), accent)
+			_add_floor_landmark(PackedVector2Array([
+				center + Vector2(-238.0, -76.0),
+				center + Vector2(-158.0, -116.0),
+				center + Vector2(-110.0, -34.0),
+				center + Vector2(-186.0, 12.0),
+			]), accent.darkened(0.12))
+			_add_floor_landmark(PackedVector2Array([
+				center + Vector2(238.0, -76.0),
+				center + Vector2(158.0, -116.0),
+				center + Vector2(110.0, -34.0),
+				center + Vector2(186.0, 12.0),
+			]), accent.darkened(0.12))
+			_add_floor_landmark(PackedVector2Array([
+				center + Vector2(0.0, 162.0),
+				center + Vector2(76.0, 218.0),
+				center + Vector2(0.0, 262.0),
+				center + Vector2(-76.0, 218.0),
+			]), accent.darkened(0.18))
 		"boss_gate":
 			_add_floor_landmark(PackedVector2Array([
 				Vector2(center.x - 150.0, min_y + 84.0),

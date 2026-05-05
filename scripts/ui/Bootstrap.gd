@@ -1,6 +1,7 @@
 extends Control
 
 const PlayerConfigData = preload("res://scripts/player/PlayerConfig.gd")
+const ModifierEngineData = preload("res://scripts/game/ModifierEngine.gd")
 const RUN_FLOW_SCENE = preload("res://scenes/ui/RunFlow.tscn")
 @onready var game_container: Control = $GameContainer
 @onready var sfx_engine = $SfxEngine
@@ -11,10 +12,24 @@ const RUN_FLOW_SCENE = preload("res://scenes/ui/RunFlow.tscn")
 @onready var player_3_control_option: OptionButton = $MenuPanel/MarginContainer/MenuLayout/Player3ControlRow/Player3ControlOption
 @onready var player_4_control_option: OptionButton = $MenuPanel/MarginContainer/MenuLayout/Player4ControlRow/Player4ControlOption
 @onready var debug_mode_check: CheckBox = $MenuPanel/MarginContainer/MenuLayout/DebugModeCheck
+@onready var debug_launch_mode_row: HBoxContainer = $MenuPanel/MarginContainer/MenuLayout/DebugLaunchModeRow
+@onready var debug_launch_mode_option: OptionButton = $MenuPanel/MarginContainer/MenuLayout/DebugLaunchModeRow/DebugLaunchModeOption
 @onready var debug_primary_row: HBoxContainer = $MenuPanel/MarginContainer/MenuLayout/DebugPrimaryRow
 @onready var debug_primary_option: OptionButton = $MenuPanel/MarginContainer/MenuLayout/DebugPrimaryRow/DebugPrimaryOption
 @onready var debug_secondary_row: HBoxContainer = $MenuPanel/MarginContainer/MenuLayout/DebugSecondaryRow
 @onready var debug_secondary_option: OptionButton = $MenuPanel/MarginContainer/MenuLayout/DebugSecondaryRow/DebugSecondaryOption
+@onready var debug_starting_gold_row: HBoxContainer = $MenuPanel/MarginContainer/MenuLayout/DebugStartingGoldRow
+@onready var debug_starting_gold_spinbox: SpinBox = $MenuPanel/MarginContainer/MenuLayout/DebugStartingGoldRow/DebugStartingGoldSpinBox
+@onready var debug_room_type_row: HBoxContainer = $MenuPanel/MarginContainer/MenuLayout/DebugRoomTypeRow
+@onready var debug_room_type_option: OptionButton = $MenuPanel/MarginContainer/MenuLayout/DebugRoomTypeRow/DebugRoomTypeOption
+@onready var debug_room_objective_row: HBoxContainer = $MenuPanel/MarginContainer/MenuLayout/DebugRoomObjectiveRow
+@onready var debug_room_objective_option: OptionButton = $MenuPanel/MarginContainer/MenuLayout/DebugRoomObjectiveRow/DebugRoomObjectiveOption
+@onready var debug_modifier_row: HBoxContainer = $MenuPanel/MarginContainer/MenuLayout/DebugModifierRow
+@onready var debug_modifier_option: OptionButton = $MenuPanel/MarginContainer/MenuLayout/DebugModifierRow/DebugModifierOption
+@onready var debug_layout_row: HBoxContainer = $MenuPanel/MarginContainer/MenuLayout/DebugLayoutRow
+@onready var debug_layout_option: OptionButton = $MenuPanel/MarginContainer/MenuLayout/DebugLayoutRow/DebugLayoutOption
+@onready var debug_step_row: HBoxContainer = $MenuPanel/MarginContainer/MenuLayout/DebugStepRow
+@onready var debug_step_spinbox: SpinBox = $MenuPanel/MarginContainer/MenuLayout/DebugStepRow/DebugStepSpinBox
 @onready var settings_button: Button = $MenuPanel/MarginContainer/MenuLayout/SettingsButton
 @onready var meta_button: Button = $MenuPanel/MarginContainer/MenuLayout/MetaButton
 @onready var reset_profile_button: Button = $MenuPanel/MarginContainer/MenuLayout/ResetProfileButton
@@ -58,6 +73,8 @@ var _player_aim_modes := [
 ]
 var _settings_rows: Array = []
 var _settings_options: Array = []
+var _modifier_engine = ModifierEngineData.new()
+var _modifier_definitions: Array = []
 
 func _ready() -> void:
 	_settings_rows = [
@@ -75,8 +92,15 @@ func _ready() -> void:
 	_populate_menu()
 	player_count_option.item_selected.connect(_on_player_count_changed)
 	debug_mode_check.toggled.connect(_on_debug_mode_toggled)
+	debug_launch_mode_option.item_selected.connect(_on_debug_loadout_changed)
 	debug_primary_option.item_selected.connect(_on_debug_loadout_changed)
 	debug_secondary_option.item_selected.connect(_on_debug_loadout_changed)
+	debug_room_type_option.item_selected.connect(_on_debug_loadout_changed)
+	debug_room_objective_option.item_selected.connect(_on_debug_loadout_changed)
+	debug_modifier_option.item_selected.connect(_on_debug_loadout_changed)
+	debug_layout_option.item_selected.connect(_on_debug_loadout_changed)
+	debug_step_spinbox.value_changed.connect(_on_debug_numeric_value_changed)
+	debug_starting_gold_spinbox.value_changed.connect(_on_debug_numeric_value_changed)
 	start_button.pressed.connect(_on_start_pressed)
 	settings_button.pressed.connect(_on_settings_button_pressed)
 	meta_button.pressed.connect(_on_meta_button_pressed)
@@ -133,8 +157,56 @@ func _populate_menu() -> void:
 		{"label": "Shrapnel Mine", "value": "shrapnel_mine"},
 		{"label": "Heavy Mine", "value": "heavy_mine"},
 	], "mine")
+	_populate_profile_option(debug_launch_mode_option, [
+		{"label": "Normal Run", "value": "normal_run"},
+		{"label": "Single Room", "value": "single_room"},
+	], "normal_run")
+	_populate_profile_option(debug_room_type_option, [
+		{"label": "Combat", "value": "combat"},
+		{"label": "Elite", "value": "elite"},
+		{"label": "Rest", "value": "rest"},
+		{"label": "Shop", "value": "shop"},
+		{"label": "Boss", "value": "boss"},
+	], "combat")
+	_populate_profile_option(debug_room_objective_option, [
+		{"label": "Survive", "value": "survive"},
+		{"label": "Destroy Generators", "value": "destroy_generators"},
+	], "survive")
+	_modifier_definitions = _modifier_engine.get_modifiers()
+	_populate_modifier_option()
+	_populate_profile_option(debug_layout_option, [
+		{"label": "Random", "value": "random"},
+		{"label": "Default", "value": "default"},
+		{"label": "Crossfire", "value": "crossfire"},
+		{"label": "Pinch", "value": "pinch"},
+		{"label": "Offset", "value": "offset"},
+		{"label": "Gauntlet Pockets", "value": "gauntlet_pockets"},
+		{"label": "Boss Gate", "value": "boss_gate"},
+	], "random")
+	debug_step_spinbox.min_value = 0
+	debug_step_spinbox.max_value = 12
+	debug_step_spinbox.step = 1
+	debug_step_spinbox.value = 0
+	debug_starting_gold_spinbox.min_value = 0
+	debug_starting_gold_spinbox.max_value = 99
+	debug_starting_gold_spinbox.step = 1
+	debug_starting_gold_spinbox.value = 0
 	for index in range(_settings_options.size()):
 		_populate_aim_mode_option(_settings_options[index], _player_aim_modes[index])
+
+func _populate_modifier_option() -> void:
+	debug_modifier_option.clear()
+	var entries: Array = [
+		{"label": "Random", "value": "random"},
+		{"label": "None", "value": "none"},
+	]
+	for modifier in _modifier_definitions:
+		if modifier is Dictionary:
+			entries.append({
+				"label": str(modifier.get("name", "Modifier")),
+				"value": "specific:%s" % str(modifier.get("id", "")),
+			})
+	_populate_profile_option(debug_modifier_option, entries, "random")
 
 func _populate_control_option(option_button: OptionButton, default_value: String) -> void:
 	option_button.clear()
@@ -188,19 +260,44 @@ func _refresh_menu_state() -> void:
 	player_2_control_row.visible = player_count > 1
 	player_3_control_row.visible = player_count > 2
 	player_4_control_row.visible = player_count > 3
-	debug_primary_row.visible = debug_mode_check.button_pressed
-	debug_secondary_row.visible = debug_mode_check.button_pressed
+	var debug_enabled := debug_mode_check.button_pressed
+	var single_room_mode := _get_debug_launch_mode() == "single_room"
+	var room_type := _get_debug_room_type()
+	var combat_room := room_type == "combat" or room_type == "elite"
+	var supports_layout := combat_room or room_type == "boss"
+	debug_launch_mode_row.visible = debug_enabled
+	debug_primary_row.visible = debug_enabled
+	debug_secondary_row.visible = debug_enabled
+	debug_starting_gold_row.visible = debug_enabled
+	debug_room_type_row.visible = debug_enabled and single_room_mode
+	debug_room_objective_row.visible = debug_enabled and single_room_mode and combat_room
+	debug_modifier_row.visible = debug_enabled and single_room_mode and combat_room
+	debug_layout_row.visible = debug_enabled and single_room_mode and supports_layout
+	debug_step_row.visible = debug_enabled and single_room_mode
 	_refresh_settings_panel()
 	var debug_text := ""
-	if debug_mode_check.button_pressed:
-		debug_text = "\nDebug start active: %s / %s" % [
+	if debug_enabled:
+		debug_text = "\nDebug: %s | %s / %s | Gold %d" % [
+			debug_launch_mode_option.get_item_text(debug_launch_mode_option.selected),
 			debug_primary_option.get_item_text(debug_primary_option.selected),
 			debug_secondary_option.get_item_text(debug_secondary_option.selected),
+			int(debug_starting_gold_spinbox.value),
 		]
+		if single_room_mode:
+			debug_text += "\nRoom: %s" % debug_room_type_option.get_item_text(debug_room_type_option.selected)
+			if combat_room:
+				debug_text += " | Objective: %s | Modifier: %s" % [
+					debug_room_objective_option.get_item_text(debug_room_objective_option.selected),
+					debug_modifier_option.get_item_text(debug_modifier_option.selected),
+				]
+			if supports_layout:
+				debug_text += " | Layout: %s" % debug_layout_option.get_item_text(debug_layout_option.selected)
+			debug_text += " | Step %d" % int(debug_step_spinbox.value)
 	status_label.text = "%s\nPatch 9 adds persistent unlocks. Player 3 and Player 4 are still intended for gamepad play in the current prototype.%s" % [
 		ProfileState.get_profile_summary_text(),
 		debug_text,
 	]
+	start_button.text = "Launch Debug Room" if debug_enabled and single_room_mode else "Start"
 
 func _refresh_settings_panel() -> void:
 	var player_count := get_selected_player_count()
@@ -222,6 +319,9 @@ func _on_debug_mode_toggled(_enabled: bool) -> void:
 
 func _on_debug_loadout_changed(_index: int) -> void:
 	_play_ui_click()
+	_refresh_menu_state()
+
+func _on_debug_numeric_value_changed(_value: float) -> void:
 	_refresh_menu_state()
 
 func _on_start_pressed() -> void:
@@ -261,11 +361,39 @@ func _build_player_configs() -> Array:
 	return configs
 
 func _build_debug_start_options() -> Dictionary:
-	return {
+	var options := {
 		"enabled": debug_mode_check.button_pressed,
+		"launch_mode": _get_debug_launch_mode(),
 		"primary_profile": str(debug_primary_option.get_selected_metadata()),
 		"secondary_profile": str(debug_secondary_option.get_selected_metadata()),
+		"starting_gold": int(debug_starting_gold_spinbox.value),
 	}
+	if not debug_mode_check.button_pressed:
+		return options
+	if _get_debug_launch_mode() != "single_room":
+		return options
+
+	options["step_index"] = int(debug_step_spinbox.value)
+	options["room_type"] = _get_debug_room_type()
+	options["room_objective"] = str(debug_room_objective_option.get_selected_metadata())
+	options["layout_id"] = str(debug_layout_option.get_selected_metadata())
+	var modifier_selection := str(debug_modifier_option.get_selected_metadata())
+	if modifier_selection == "none":
+		options["modifier_mode"] = "none"
+		options["modifier_id"] = ""
+	elif modifier_selection.begins_with("specific:"):
+		options["modifier_mode"] = "specific"
+		options["modifier_id"] = modifier_selection.trim_prefix("specific:")
+	else:
+		options["modifier_mode"] = "random"
+		options["modifier_id"] = ""
+	return options
+
+func _get_debug_launch_mode() -> String:
+	return str(debug_launch_mode_option.get_selected_metadata())
+
+func _get_debug_room_type() -> String:
+	return str(debug_room_type_option.get_selected_metadata())
 
 func _launch_game(player_configs: Array) -> void:
 	if _active_game != null and is_instance_valid(_active_game):
@@ -389,8 +517,15 @@ func _register_button_animations() -> void:
 		player_3_control_option,
 		player_4_control_option,
 		debug_mode_check,
+		debug_launch_mode_option,
 		debug_primary_option,
 		debug_secondary_option,
+		debug_starting_gold_spinbox,
+		debug_room_type_option,
+		debug_room_objective_option,
+		debug_modifier_option,
+		debug_layout_option,
+		debug_step_spinbox,
 		settings_button,
 		meta_button,
 		reset_profile_button,
@@ -417,8 +552,15 @@ func _configure_menu_focus() -> void:
 		player_3_control_option,
 		player_4_control_option,
 		debug_mode_check,
+		debug_launch_mode_option,
 		debug_primary_option,
 		debug_secondary_option,
+		debug_starting_gold_spinbox,
+		debug_room_type_option,
+		debug_room_objective_option,
+		debug_modifier_option,
+		debug_layout_option,
+		debug_step_spinbox,
 		settings_button,
 		meta_button,
 		reset_profile_button,
@@ -440,6 +582,9 @@ func _configure_menu_focus() -> void:
 		control.focus_mode = Control.FOCUS_ALL
 
 func _focus_menu_panel() -> void:
+	if debug_mode_check.button_pressed and _get_debug_launch_mode() == "single_room":
+		debug_room_type_option.grab_focus()
+		return
 	if debug_mode_check.button_pressed:
 		debug_primary_option.grab_focus()
 		return

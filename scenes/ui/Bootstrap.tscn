@@ -134,7 +134,21 @@ size_flags_horizontal = 3
 
 [node name="DebugModeCheck" type="CheckBox" parent="MenuPanel/MarginContainer/MenuLayout"]
 layout_mode = 2
-text = "Debug Mode: choose starting gear"
+text = "Debug Setup"
+
+[node name="DebugLaunchModeRow" type="HBoxContainer" parent="MenuPanel/MarginContainer/MenuLayout"]
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="DebugLaunchModeLabel" type="Label" parent="MenuPanel/MarginContainer/MenuLayout/DebugLaunchModeRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Debug Launch"
+
+[node name="DebugLaunchModeOption" type="OptionButton" parent="MenuPanel/MarginContainer/MenuLayout/DebugLaunchModeRow"]
+layout_mode = 2
+size_flags_horizontal = 3
 
 [node name="DebugPrimaryRow" type="HBoxContainer" parent="MenuPanel/MarginContainer/MenuLayout"]
 visible = false
@@ -161,6 +175,90 @@ size_flags_horizontal = 3
 text = "Starting Secondary"
 
 [node name="DebugSecondaryOption" type="OptionButton" parent="MenuPanel/MarginContainer/MenuLayout/DebugSecondaryRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="DebugStartingGoldRow" type="HBoxContainer" parent="MenuPanel/MarginContainer/MenuLayout"]
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="DebugStartingGoldLabel" type="Label" parent="MenuPanel/MarginContainer/MenuLayout/DebugStartingGoldRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Starting Gold"
+
+[node name="DebugStartingGoldSpinBox" type="SpinBox" parent="MenuPanel/MarginContainer/MenuLayout/DebugStartingGoldRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="DebugRoomTypeRow" type="HBoxContainer" parent="MenuPanel/MarginContainer/MenuLayout"]
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="DebugRoomTypeLabel" type="Label" parent="MenuPanel/MarginContainer/MenuLayout/DebugRoomTypeRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Room Type"
+
+[node name="DebugRoomTypeOption" type="OptionButton" parent="MenuPanel/MarginContainer/MenuLayout/DebugRoomTypeRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="DebugRoomObjectiveRow" type="HBoxContainer" parent="MenuPanel/MarginContainer/MenuLayout"]
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="DebugRoomObjectiveLabel" type="Label" parent="MenuPanel/MarginContainer/MenuLayout/DebugRoomObjectiveRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Objective"
+
+[node name="DebugRoomObjectiveOption" type="OptionButton" parent="MenuPanel/MarginContainer/MenuLayout/DebugRoomObjectiveRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="DebugModifierRow" type="HBoxContainer" parent="MenuPanel/MarginContainer/MenuLayout"]
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="DebugModifierLabel" type="Label" parent="MenuPanel/MarginContainer/MenuLayout/DebugModifierRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Modifier"
+
+[node name="DebugModifierOption" type="OptionButton" parent="MenuPanel/MarginContainer/MenuLayout/DebugModifierRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="DebugLayoutRow" type="HBoxContainer" parent="MenuPanel/MarginContainer/MenuLayout"]
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="DebugLayoutLabel" type="Label" parent="MenuPanel/MarginContainer/MenuLayout/DebugLayoutRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Layout"
+
+[node name="DebugLayoutOption" type="OptionButton" parent="MenuPanel/MarginContainer/MenuLayout/DebugLayoutRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="DebugStepRow" type="HBoxContainer" parent="MenuPanel/MarginContainer/MenuLayout"]
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="DebugStepLabel" type="Label" parent="MenuPanel/MarginContainer/MenuLayout/DebugStepRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Room Step"
+
+[node name="DebugStepSpinBox" type="SpinBox" parent="MenuPanel/MarginContainer/MenuLayout/DebugStepRow"]
 layout_mode = 2
 size_flags_horizontal = 3
 

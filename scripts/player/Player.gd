@@ -199,6 +199,20 @@ func apply_damage(amount: int) -> void:
 	if current_health == 0:
 		_enter_downed_state()
 
+func heal(amount: int) -> int:
+	if _is_downed:
+		return 0
+	var applied_heal: int = max(amount, 0)
+	if applied_heal <= 0:
+		return 0
+	var previous_health: int = current_health
+	current_health = min(current_health + applied_heal, max_health)
+	var healed_amount: int = current_health - previous_health
+	if healed_amount > 0:
+		health_changed.emit(current_health, max_health)
+		_apply_visual_state(_current_time_seconds())
+	return healed_amount
+
 func revive(health_amount: int) -> void:
 	if not _is_downed:
 		return

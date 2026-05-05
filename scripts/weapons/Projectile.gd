@@ -30,6 +30,7 @@ func setup(projectile_team: String, projectile_direction: Vector2, projectile_sp
 
 func _ready() -> void:
 	body_entered.connect(_on_body_entered)
+	area_entered.connect(_on_area_entered)
 	_expires_at = _current_time_seconds() + lifetime
 	rotation = direction.angle()
 	_apply_visual_state()
@@ -48,19 +49,28 @@ func _on_body_entered(body: Node) -> void:
 		queue_free()
 		return
 
-	if body.has_method("get_team") and body.get_team() == team:
-		if allow_friendly_fire and team == "player" and body.get_team() == "player" and body != _shooter_node:
-			pass
-		else:
-			return
+	_attempt_hit_target(body)
 
-	if body.has_method("apply_damage"):
-		if body.has_method("apply_knockback"):
-			body.apply_knockback(direction, 200.0)
-		body.apply_damage(damage)
-		impact_requested.emit(global_position, -direction, team, _get_projectile_color())
-		queue_free()
+func _on_area_entered(area: Area2D) -> void:
+	_attempt_hit_target(area)
+
+func _attempt_hit_target(target: Node) -> void:
+	if target == null or not is_instance_valid(target):
 		return
+	if not target.has_method("apply_damage"):
+		return
+	if target.has_method("get_team"):
+		var target_team := str(target.get_team())
+		if target_team == team:
+			if allow_friendly_fire and team == "player" and target_team == "player" and target != _shooter_node:
+				pass
+			else:
+				return
+	if target.has_method("apply_knockback"):
+		target.apply_knockback(direction, 200.0)
+	target.apply_damage(damage)
+	impact_requested.emit(global_position, -direction, team, _get_projectile_color())
+	queue_free()
 
 func _current_time_seconds() -> float:
 	return Time.get_ticks_msec() / 1000.0

@@ -45,6 +45,13 @@ Read this first to restore project context quickly, then read `current-state.md`
 - Mines place instantly on secondary press and detonate on proximity fuse.
 - Mine proximity radius was increased by `100%` from the original mine implementation.
 - Layout presets now have distinct palettes and floor landmarks.
+- Combat rooms now support two objective styles:
+  - `survive`
+  - `destroy_generators`
+- Generator rooms use:
+  - neutral monster generators
+  - gold and food pickups
+  - `gauntlet_pockets` layout for the current V1 authored placement
 - Combat HUD is no longer the old debug text layout:
   - stacked player health bars
   - top-center modifier chip
@@ -73,6 +80,11 @@ Read this first to restore project context quickly, then read `current-state.md`
   - mid rooms balance all three enemy types
   - later rooms lean harder on `Spitter` and `Charger`
 - Boss HP now scales slightly with how many rooms were cleared before the boss.
+- Debug setup is now a real launcher, not just starting-gear overrides:
+  - `Normal Run` or `Single Room`
+  - explicit room type, objective, modifier, layout, and step selection
+  - starting primary, secondary, and gold selection
+  - single-room relaunch flow through `RunFlow`
 
 ## Current Priorities
 
@@ -93,9 +105,11 @@ Read this first to restore project context quickly, then read `current-state.md`
 - `CoopManager.gd`: combat-room orchestration and spawning.
 - `RunFlow.gd`: node-map and room transition flow.
 - `Bootstrap.gd`: pre-run player setup, debug start options, and aim settings menu.
+- `Bootstrap.gd`: also owns the debug run launcher UI.
 - `data/items.json`: shared reward/shop item definitions.
 - `data/modifiers.json`: room modifier tuning.
 - `Enemy.gd`: enemy silhouettes, hitbox sizing, and motion identity.
+- `CoopManager.gd`: now also owns generator-room orchestration and pickup handling.
 
 ## Validation Reminder
 

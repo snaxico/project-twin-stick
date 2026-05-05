@@ -9,6 +9,7 @@ const MIN_COMBAT_ROOMS_BEFORE_BOSS := 2
 const BASE_GOLD_COMBAT := 2
 const BASE_GOLD_ELITE := 3
 const GOLD_PER_STEP := 0.5
+const GAUNTLET_ROOM_CHANCE := 0.5
 
 var player_configs: Array = []
 var player_health_states: Array = []
@@ -20,6 +21,7 @@ var gold: int = 0
 var acquired_item_ids: Array = []
 var build_state: Dictionary = {}
 var run_outcome: String = "in_progress"
+var debug_run_setup: Dictionary = {}
 
 var _modifier_engine = ModifierEngineData.new()
 var _random := RandomNumberGenerator.new()
@@ -32,6 +34,8 @@ func _ready() -> void:
 func start_new_run(configs: Array, debug_options: Dictionary = {}) -> void:
 	_load_items()
 	_random.randomize()
+	debug_run_setup = _build_default_debug_run_setup()
+	_apply_debug_start_options(debug_options)
 	player_configs = []
 	for config in configs:
 		player_configs.append(config)
@@ -51,7 +55,7 @@ func start_new_run(configs: Array, debug_options: Dictionary = {}) -> void:
 	gold = 0
 	acquired_item_ids = []
 	build_state = _build_default_build_state()
-	_apply_debug_start_options(debug_options)
+	_apply_debug_loadout_overrides()
 	run_outcome = "in_progress"
 
 func get_current_options() -> Array:
@@ -73,7 +77,8 @@ func resolve_current_noncombat_node() -> Dictionary:
 
 	match room_type:
 		"shop":
-			_advance_progress()
+			if not is_debug_single_room_mode():
+				_advance_progress()
 			outcome["summary"] = "Shared Gold: %d\nChoose one shared prototype upgrade or leave the shop." % gold
 			outcome["action"] = "shop"
 			outcome["button_text"] = "Open Shop"
@@ -81,8 +86,14 @@ func resolve_current_noncombat_node() -> Dictionary:
 			outcome["choices"] = _roll_item_choices("shop", 3)
 		_:
 			var result_text := _apply_reward(current_node.get("reward", {}))
-			_advance_progress()
+			if not is_debug_single_room_mode():
+				_advance_progress()
 			outcome["summary"] = "%s\n%s" % [room_description, result_text]
+
+	if is_debug_single_room_mode():
+		outcome["title"] = "Debug Room Ready"
+		outcome["post_action"] = "complete"
+		outcome["button_text"] = "Return to Debug Map"
 
 	return outcome
 
@@ -110,6 +121,12 @@ func resolve_current_combat_victory(health_states: Array) -> Dictionary:
 		var result_text := _apply_reward(reward)
 		outcome["summary"] = "%s\n%s" % [outcome["summary"], result_text]
 
+	if is_debug_single_room_mode():
+		outcome["title"] = "Debug Room Cleared"
+		outcome["post_action"] = "complete"
+		outcome["button_text"] = "Return to Debug Map"
+		return outcome
+
 	_advance_progress()
 	if str(current_node.get("room_type", "")) == "boss" or is_run_complete():
 		run_outcome = "won"
@@ -129,6 +146,9 @@ func set_player_health_states(health_states: Array) -> void:
 
 func is_run_complete() -> bool:
 	return current_step_index >= node_map.size()
+
+func is_debug_single_room_mode() -> bool:
+	return bool(debug_run_setup.get("enabled", false)) and str(debug_run_setup.get("launch_mode", "normal_run")) == "single_room"
 
 func get_run_summary_text() -> String:
 	return "Rooms cleared: %d\nShared Gold: %d" % [rooms_completed, gold]
@@ -183,6 +203,8 @@ func purchase_shop_item(item_id: String) -> Dictionary:
 	return {"success": true, "title": "Purchase Complete", "summary": summary}
 
 func _generate_node_map() -> Array:
+	if is_debug_single_room_mode():
+		return _build_debug_node_map()
 	var run_length := _random.randi_range(RUN_LENGTH_MIN, RUN_LENGTH_MAX)
 	var primary_types: Array = []
 	for _index in range(run_length):
@@ -353,6 +375,18 @@ func _compute_spawn_interval(step_index: int, is_elite: bool) -> float:
 		interval -= 0.4
 	return max(interval, 2.8)
 
+func _roll_room_objective(step_index: int) -> String:
+	if step_index < 2:
+		return "survive"
+	if _random.randf() < GAUNTLET_ROOM_CHANCE:
+		return "destroy_generators"
+	return "survive"
+
+func _compute_generator_spitter_chance(step_index: int, is_elite: bool) -> float:
+	if is_elite:
+		return 0.35 if step_index >= 4 else 0.25
+	return 0.15 if step_index >= 4 else 0.0
+
 func _validate_node_map(map: Array) -> bool:
 	if map.is_empty():
 		return false
@@ -403,18 +437,38 @@ func _build_node(step_index: int, option_index: int, template: Dictionary) -> Di
 
 	match room_type:
 		"combat":
+			var combat_objective := str(template.get("room_objective", _roll_room_objective(step_index)))
 			node["title"] = "Combat Room"
-			node["survival_duration"] = _compute_survival_duration(step_index, false)
-			node["enemy_spawn_interval"] = _compute_spawn_interval(step_index, false)
-			node["modifier"] = _modifier_engine.get_random_modifier()
-			node["layout_id"] = _get_random_layout_id()
+			node["room_objective"] = combat_objective
+			node["modifier"] = template.get("modifier", _modifier_engine.get_random_modifier()).duplicate(true) if template.has("modifier") and template.get("modifier", {}) is Dictionary else _modifier_engine.get_random_modifier()
+			node["layout_id"] = str(template.get("layout_id", "gauntlet_pockets" if combat_objective == "destroy_generators" else _get_random_layout_id()))
+			if combat_objective == "destroy_generators":
+				node["description"] = "Destroy the generators, sweep the room, and collect the drops."
+				node["generator_count"] = int(template.get("generator_count", 2))
+				node["generator_spawn_interval"] = float(template.get("generator_spawn_interval", 3.2))
+				node["generator_enemy_cap"] = int(template.get("generator_enemy_cap", 6))
+				node["generator_spitter_chance"] = float(template.get("generator_spitter_chance", _compute_generator_spitter_chance(step_index, false)))
+			else:
+				node["description"] = "Survive the timer and hold the room."
+				node["survival_duration"] = float(template.get("survival_duration", _compute_survival_duration(step_index, false)))
+				node["enemy_spawn_interval"] = float(template.get("enemy_spawn_interval", _compute_spawn_interval(step_index, false)))
 			node["reward_label"] = "+%d Gold + shared upgrade" % node["currency_reward"]
 		"elite":
+			var elite_objective := str(template.get("room_objective", _roll_room_objective(step_index)))
 			node["title"] = "Elite Room"
-			node["survival_duration"] = _compute_survival_duration(step_index, is_elite)
-			node["enemy_spawn_interval"] = _compute_spawn_interval(step_index, is_elite)
-			node["modifier"] = _modifier_engine.get_random_modifier()
-			node["layout_id"] = _get_random_layout_id()
+			node["room_objective"] = elite_objective
+			node["modifier"] = template.get("modifier", _modifier_engine.get_random_modifier()).duplicate(true) if template.has("modifier") and template.get("modifier", {}) is Dictionary else _modifier_engine.get_random_modifier()
+			node["layout_id"] = str(template.get("layout_id", "gauntlet_pockets" if elite_objective == "destroy_generators" else _get_random_layout_id()))
+			if elite_objective == "destroy_generators":
+				node["description"] = "Break the generators under pressure, then wipe the room."
+				node["generator_count"] = int(template.get("generator_count", 3))
+				node["generator_spawn_interval"] = float(template.get("generator_spawn_interval", 2.6))
+				node["generator_enemy_cap"] = int(template.get("generator_enemy_cap", 8))
+				node["generator_spitter_chance"] = float(template.get("generator_spitter_chance", _compute_generator_spitter_chance(step_index, true)))
+			else:
+				node["description"] = "Survive the elite timer and break through the pressure."
+				node["survival_duration"] = float(template.get("survival_duration", _compute_survival_duration(step_index, is_elite)))
+				node["enemy_spawn_interval"] = float(template.get("enemy_spawn_interval", _compute_spawn_interval(step_index, is_elite)))
 			node["reward_label"] = "+%d Gold + shared upgrade" % node["currency_reward"]
 		"rest":
 			node["title"] = "Rest Room"
@@ -433,7 +487,7 @@ func _build_node(step_index: int, option_index: int, template: Dictionary) -> Di
 			node["currency_reward"] = 0
 			node["modifier"] = {}
 			node["description"] = "Final room. Defeat the placeholder boss to finish the run."
-			node["layout_id"] = "boss_gate"
+			node["layout_id"] = str(template.get("layout_id", "boss_gate"))
 			node["reward_label"] = "Finish the run"
 		_:
 			node["title"] = "Unknown Room"
@@ -472,12 +526,72 @@ func _apply_debug_start_options(debug_options: Dictionary) -> void:
 	if bool(debug_options.get("enabled", false)) == false:
 		return
 
-	var primary_profile := str(debug_options.get("primary_profile", ""))
-	var secondary_profile := str(debug_options.get("secondary_profile", ""))
+	debug_run_setup["enabled"] = true
+	for key in debug_options.keys():
+		debug_run_setup[key] = debug_options[key]
+
+func _apply_debug_loadout_overrides() -> void:
+	if not bool(debug_run_setup.get("enabled", false)):
+		return
+
+	var primary_profile := str(debug_run_setup.get("primary_profile", ""))
+	var secondary_profile := str(debug_run_setup.get("secondary_profile", ""))
 	if not primary_profile.is_empty():
 		build_state["primary_profile"] = primary_profile
 	if not secondary_profile.is_empty():
 		build_state["secondary_profile"] = secondary_profile
+	gold = int(debug_run_setup.get("starting_gold", 0))
+
+func _build_default_debug_run_setup() -> Dictionary:
+	return {
+		"enabled": false,
+		"launch_mode": "normal_run",
+		"primary_profile": "",
+		"secondary_profile": "",
+		"starting_gold": 0,
+		"step_index": 0,
+		"room_type": "combat",
+		"room_objective": "survive",
+		"modifier_mode": "random",
+		"modifier_id": "random",
+		"layout_id": "random",
+	}
+
+func _build_debug_node_map() -> Array:
+	return [[_build_debug_room_node()]]
+
+func _build_debug_room_node() -> Dictionary:
+	var step_index: int = int(debug_run_setup.get("step_index", 0))
+	var room_type := str(debug_run_setup.get("room_type", "combat"))
+	var template := _build_room_template(room_type)
+	if room_type == "combat" or room_type == "elite":
+		template["room_objective"] = str(debug_run_setup.get("room_objective", "survive"))
+		template["modifier"] = _resolve_debug_modifier()
+		var layout_id := str(debug_run_setup.get("layout_id", "random"))
+		if layout_id != "random":
+			template["layout_id"] = layout_id
+		if str(template.get("room_objective", "survive")) == "destroy_generators":
+			template["generator_count"] = 3 if room_type == "elite" else 2
+			template["generator_spawn_interval"] = 2.6 if room_type == "elite" else 3.2
+			template["generator_enemy_cap"] = 8 if room_type == "elite" else 6
+			template["generator_spitter_chance"] = _compute_generator_spitter_chance(step_index, room_type == "elite")
+		else:
+			template["survival_duration"] = _compute_survival_duration(step_index, room_type == "elite")
+			template["enemy_spawn_interval"] = _compute_spawn_interval(step_index, room_type == "elite")
+	elif room_type == "boss":
+		var boss_layout_id := str(debug_run_setup.get("layout_id", "boss_gate"))
+		template["layout_id"] = "boss_gate" if boss_layout_id == "random" else boss_layout_id
+	return _build_node(step_index, 0, template)
+
+func _resolve_debug_modifier() -> Dictionary:
+	var modifier_mode := str(debug_run_setup.get("modifier_mode", "random"))
+	match modifier_mode:
+		"none":
+			return {}
+		"specific":
+			return _modifier_engine.get_modifier_by_id(str(debug_run_setup.get("modifier_id", "")))
+		_:
+			return _modifier_engine.get_random_modifier()
 
 func _get_primary_profile(profile_id: String) -> Dictionary:
 	var profiles := {

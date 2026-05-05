@@ -79,8 +79,12 @@ func _show_map() -> void:
 	_clear_active_game()
 
 	var current_options := RunState.get_current_options()
-	map_title_label.text = "Node Map"
-	map_status_label.text = "Step %d of %d. Shared Gold: %d. Choose the next room." % [RunState.current_step_index + 1, RunState.node_map.size(), RunState.gold]
+	if RunState.is_debug_single_room_mode():
+		map_title_label.text = "Debug Room Launcher"
+		map_status_label.text = "Shared Gold: %d. Launch the configured room again or change the setup from the main menu." % RunState.gold
+	else:
+		map_title_label.text = "Node Map"
+		map_status_label.text = "Step %d of %d. Shared Gold: %d. Choose the next room." % [RunState.current_step_index + 1, RunState.node_map.size(), RunState.gold]
 
 	_configure_option_button(option_button_1, current_options[0] if current_options.size() > 0 else {})
 	_configure_option_button(option_button_2, current_options[1] if current_options.size() > 1 else {})
@@ -100,9 +104,14 @@ func _configure_option_button(button: Button, node: Dictionary) -> void:
 	var description := str(node.get("description", ""))
 	if description.is_empty():
 		description = str(node.get("reward_label", ""))
+	var objective_text := ""
+	var room_type := str(node.get("room_type", ""))
+	if room_type == "combat" or room_type == "elite":
+		objective_text = "\nObjective: %s" % str(node.get("room_objective", "survive"))
 
-	button.text = "%s\nModifier: %s\nReward: %s\n%s" % [
+	button.text = "%s%s\nModifier: %s\nReward: %s\n%s" % [
 		str(node.get("title", "Room")),
+		objective_text,
 		modifier_text,
 		str(node.get("reward_label", "No reward")),
 		description,
@@ -156,6 +165,11 @@ func _on_room_cleared(health_states: Array) -> void:
 	_show_outcome(outcome)
 
 func _on_room_failed() -> void:
+	if RunState.is_debug_single_room_mode():
+		_pending_followup = {}
+		_post_resolution_action = "complete"
+		_show_resolution("Debug Room Failed", "The party was defeated.\nShared Gold: %d" % RunState.gold, "Return to Debug Map")
+		return
 	RunState.run_outcome = "failed"
 	_pending_followup = {}
 	var meta_reward := ProfileState.award_run_meta_gold(RunState.run_outcome, RunState.rooms_completed)

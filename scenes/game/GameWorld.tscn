@@ -77,6 +77,10 @@ script = ExtResource("4_0rmhf")
 
 [node name="Enemies" type="Node2D" parent="."]
 
+[node name="Generators" type="Node2D" parent="."]
+
+[node name="Pickups" type="Node2D" parent="."]
+
 [node name="Effects" type="Node2D" parent="."]
 
 [node name="Player1Spawn" type="Marker2D" parent="."]

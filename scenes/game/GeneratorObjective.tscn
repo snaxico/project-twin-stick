@@ -1,0 +1,37 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/game/GeneratorObjective.gd" id="1_gycc5"]
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_generator"]
+radius = 28.0
+
+[node name="GeneratorObjective" type="Area2D"]
+collision_layer = 1
+collision_mask = 0
+monitoring = true
+monitorable = true
+script = ExtResource("1_gycc5")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+shape = SubResource("CircleShape2D_generator")
+
+[node name="BodyRoot" type="Node2D" parent="."]
+
+[node name="Shadow" type="Polygon2D" parent="BodyRoot"]
+color = Color(0, 0, 0, 0.28)
+polygon = PackedVector2Array(-32, 8, -20, -4, 0, -10, 20, -4, 32, 8, 20, 18, 0, 24, -20, 18)
+scale = Vector2(1.04, 0.52)
+
+[node name="GlowRing" type="Line2D" parent="BodyRoot"]
+default_color = Color(0.68, 0.92, 0.42, 0.68)
+width = 3.0
+closed = true
+points = PackedVector2Array(0, -30, 18, -24, 28, -8, 28, 10, 14, 26, -14, 26, -28, 10, -28, -8, -18, -24)
+
+[node name="Visual" type="Polygon2D" parent="BodyRoot"]
+color = Color(0.3, 0.46, 0.22, 1)
+polygon = PackedVector2Array(0, -34, 18, -26, 30, -4, 28, 18, 12, 30, -12, 30, -28, 18, -30, -4, -18, -26)
+
+[node name="Core" type="Polygon2D" parent="BodyRoot"]
+color = Color(0.84, 0.96, 0.44, 0.92)
+polygon = PackedVector2Array(0, -18, 12, -10, 14, 10, 0, 18, -14, 10, -12, -10)

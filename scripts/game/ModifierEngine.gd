@@ -13,6 +13,19 @@ func get_random_modifier() -> Dictionary:
 		return {}
 	return _modifiers[_random.randi_range(0, _modifiers.size() - 1)].duplicate(true)
 
+func get_modifiers() -> Array:
+	var definitions: Array = []
+	for modifier in _modifiers:
+		if modifier is Dictionary:
+			definitions.append(modifier.duplicate(true))
+	return definitions
+
+func get_modifier_by_id(modifier_id: String) -> Dictionary:
+	for modifier in _modifiers:
+		if modifier is Dictionary and str(modifier.get("id", "")) == modifier_id:
+			return modifier.duplicate(true)
+	return {}
+
 func get_tint_color(modifier: Dictionary) -> Color:
 	var tint_values = modifier.get("tint", [1.0, 1.0, 1.0, 1.0])
 	if tint_values is Array and tint_values.size() == 4:
