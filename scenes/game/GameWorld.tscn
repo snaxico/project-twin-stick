@@ -22,20 +22,23 @@ script = ExtResource("1_4o0x5")
 player_scene = ExtResource("1_3sby6")
 
 [node name="Floor" type="Polygon2D" parent="."]
-color = Color(0.58, 0.64, 0.62, 1)
-polygon = PackedVector2Array(200, 120, 1080, 120, 1180, 620, 100, 620)
+color = Color(0.14, 0.16, 0.18, 1)
+polygon = PackedVector2Array(0, 0, 1920, 0, 1920, 1080, 0, 1080)
 
 [node name="FloorGrid" type="Node2D" parent="."]
 
 [node name="BackWall" type="Polygon2D" parent="."]
+visible = false
 color = Color(0.24, 0.28, 0.29, 1)
 polygon = PackedVector2Array(200, 96, 1080, 96, 1080, 136, 200, 136)
 
 [node name="LeftWallVisual" type="Polygon2D" parent="."]
+visible = false
 color = Color(0.3, 0.34, 0.35, 1)
 polygon = PackedVector2Array(172, 120, 200, 120, 100, 620, 72, 620)
 
 [node name="RightWallVisual" type="Polygon2D" parent="."]
+visible = false
 color = Color(0.3, 0.34, 0.35, 1)
 polygon = PackedVector2Array(1080, 120, 1108, 120, 1208, 620, 1180, 620)
 
@@ -58,9 +61,9 @@ position = Vector2(1224, 360)
 shape = SubResource("RectangleShape2D_right")
 
 [node name="Camera2D" type="Camera2D" parent="."]
-position = Vector2(640, 392)
+position = Vector2(960, 540)
 enabled = true
-zoom = Vector2(0.92, 0.92)
+zoom = Vector2(1, 1)
 
 [node name="ScreenShake" type="Node" parent="Camera2D"]
 script = ExtResource("3_msc66")
@@ -84,34 +87,34 @@ script = ExtResource("4_0rmhf")
 [node name="Effects" type="Node2D" parent="."]
 
 [node name="Player1Spawn" type="Marker2D" parent="."]
-position = Vector2(500, 360)
+position = Vector2(860, 490)
 
 [node name="Player2Spawn" type="Marker2D" parent="."]
-position = Vector2(780, 360)
+position = Vector2(1060, 490)
 
 [node name="Player3Spawn" type="Marker2D" parent="."]
-position = Vector2(500, 438)
+position = Vector2(860, 590)
 
 [node name="Player4Spawn" type="Marker2D" parent="."]
-position = Vector2(780, 438)
+position = Vector2(1060, 590)
 
 [node name="EnemySpawn1" type="Marker2D" parent="."]
-position = Vector2(360, 220)
+position = Vector2(60, 60)
 
 [node name="EnemySpawn2" type="Marker2D" parent="."]
-position = Vector2(920, 220)
+position = Vector2(1860, 60)
 
 [node name="EnemySpawn3" type="Marker2D" parent="."]
-position = Vector2(360, 520)
+position = Vector2(60, 1020)
 
 [node name="EnemySpawn4" type="Marker2D" parent="."]
-position = Vector2(920, 520)
+position = Vector2(1860, 1020)
 
 [node name="EnemySpawn5" type="Marker2D" parent="."]
-position = Vector2(640, 180)
+position = Vector2(960, 40)
 
 [node name="EnemySpawn6" type="Marker2D" parent="."]
-position = Vector2(640, 560)
+position = Vector2(960, 1040)
 
 [node name="UI" type="CanvasLayer" parent="."]
 
@@ -193,25 +196,25 @@ offset_bottom = 364.0
 text = "P4 Secondary"
 
 [node name="ConnectionStatus" type="Label" parent="UI"]
-offset_left = 16.0
-offset_top = 390.0
-offset_right = 640.0
-offset_bottom = 442.0
+offset_left = 1400.0
+offset_top = 900.0
+offset_right = 1880.0
+offset_bottom = 952.0
 text = "Gamepads"
 
 [node name="RoomStatus" type="Label" parent="UI"]
-offset_left = 16.0
-offset_top = 444.0
-offset_right = 780.0
-offset_bottom = 496.0
+offset_left = 1400.0
+offset_top = 954.0
+offset_right = 1880.0
+offset_bottom = 1006.0
 autowrap_mode = 2
 text = "Room status"
 
 [node name="ModifierStatus" type="Label" parent="UI"]
-offset_left = 16.0
-offset_top = 476.0
-offset_right = 780.0
-offset_bottom = 536.0
+offset_left = 1400.0
+offset_top = 1008.0
+offset_right = 1880.0
+offset_bottom = 1068.0
 autowrap_mode = 2
 text = "Modifier status"
 

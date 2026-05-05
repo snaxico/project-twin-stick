@@ -34,6 +34,7 @@ enum EnemyType {
 @onready var shadow: Polygon2D = $Shadow
 @onready var collision_shape: CollisionShape2D = $CollisionShape2D
 @onready var body_root: Node2D = $BodyRoot
+@onready var outline: Polygon2D = $BodyRoot/Outline
 @onready var visual: Polygon2D = $BodyRoot/Visual
 
 var enemy_type: EnemyType = EnemyType.CHASER
@@ -67,6 +68,7 @@ var _charge_windup_ends_at := 0.0
 var _charge_dash_ends_at := 0.0
 var _next_charge_at := 0.0
 var _contact_range := 28.0
+var _outline_pulse := 1.0
 
 func setup(type_name: String, combat_owner) -> void:
 	_combat_owner = combat_owner
@@ -194,7 +196,7 @@ func _physics_process(_delta: float) -> void:
 		_knockback_velocity = _knockback_velocity.move_toward(Vector2.ZERO, 900.0 * _delta)
 		velocity = _knockback_velocity
 		move_and_slide()
-		_apply_motion_polish(now)
+		_apply_motion_polish(now, _delta)
 		return
 
 	var offset: Vector2 = target.global_position - global_position
@@ -215,7 +217,7 @@ func _physics_process(_delta: float) -> void:
 	_knockback_velocity = _knockback_velocity.move_toward(Vector2.ZERO, 900.0 * _delta)
 	velocity = base_velocity + _knockback_velocity
 	move_and_slide()
-	_apply_motion_polish(now)
+	_apply_motion_polish(now, _delta)
 
 	var contact_range := _contact_range
 	if distance <= contact_range and now >= _next_contact_at:
@@ -356,7 +358,7 @@ func _apply_type_visual() -> void:
 
 	match enemy_type:
 		EnemyType.SPITTER:
-			visual.color = Color(0.76, 0.26, 0.78, 1.0)
+			visual.color = Color(0.82, 0.18, 0.88, 1.0)
 			visual.polygon = PackedVector2Array([
 				Vector2(-24, -9),
 				Vector2(-10, -16),
@@ -369,7 +371,7 @@ func _apply_type_visual() -> void:
 			_set_collision_radius(21.0)
 			_contact_range = 32.0
 		EnemyType.CHARGER:
-			visual.color = Color(0.52, 0.26, 0.12, 1.0)
+			visual.color = Color(0.88, 0.44, 0.08, 1.0)
 			visual.polygon = PackedVector2Array([
 				Vector2(-18, -18),
 				Vector2(18, -18),
@@ -381,7 +383,7 @@ func _apply_type_visual() -> void:
 			_set_collision_radius(28.0)
 			_contact_range = 38.0
 		EnemyType.BOSS:
-			visual.color = Color(0.46, 0.03, 0.07, 1.0)
+			visual.color = Color(0.72, 0.06, 0.06, 1.0)
 			visual.polygon = PackedVector2Array([
 				Vector2(0, -42),
 				Vector2(14, -34),
@@ -403,7 +405,7 @@ func _apply_type_visual() -> void:
 			_set_collision_radius(44.0)
 			_contact_range = 54.0
 		_:
-			visual.color = Color(1.0, 0.16, 0.12, 1.0)
+			visual.color = Color(1.0, 0.2, 0.15, 1.0)
 			visual.polygon = PackedVector2Array([
 				Vector2(0, -26),
 				Vector2(14, 4),
@@ -413,6 +415,10 @@ func _apply_type_visual() -> void:
 			visual.scale = Vector2(0.72, 0.72)
 			_set_collision_radius(14.0)
 			_contact_range = 24.0
+	if outline != null:
+		outline.polygon = visual.polygon
+		outline.scale = visual.scale * 1.28
+		outline.color = Color(0.12, 0.02, 0.02, 0.94) if enemy_type == EnemyType.BOSS else Color(0.04, 0.06, 0.08, 0.92)
 
 func _set_collision_radius(radius: float) -> void:
 	if collision_shape == null:
@@ -439,6 +445,7 @@ func _die() -> void:
 func _play_flash(color: Color, duration: float) -> void:
 	if visual == null:
 		return
+	_outline_pulse = 1.2
 	var material := _get_flash_material()
 	material.set_shader_parameter("flash_color", color)
 	material.set_shader_parameter("flash_intensity", 1.0)
@@ -463,9 +470,11 @@ func _queue_free_after_flash() -> void:
 	await get_tree().create_timer(0.1).timeout
 	queue_free()
 
-func _apply_motion_polish(now: float) -> void:
+func _apply_motion_polish(now: float, delta: float = 0.0) -> void:
 	if body_root == null:
 		return
+	if delta > 0.0:
+		_outline_pulse = move_toward(_outline_pulse, 1.0, delta * 5.0)
 	var bob_amount := 3.5
 	var bob_frequency := 3.4
 	match enemy_type:
@@ -494,6 +503,8 @@ func _apply_motion_polish(now: float) -> void:
 	body_root.position = _base_body_root_position + Vector2(0.0, bob)
 	body_root.rotation = lerp_angle(body_root.rotation, clamp(velocity.x / max(move_speed, 1.0), -1.0, 1.0) * 0.08, 0.12)
 	body_root.scale = scale
+	if outline != null:
+		outline.scale = visual.scale * 1.28 * _outline_pulse
 	if shadow != null:
 		shadow.scale = Vector2(
 			_base_shadow_scale.x * (1.0 - abs(bob) * 0.01),
@@ -503,7 +514,7 @@ func _apply_motion_polish(now: float) -> void:
 func _play_spawn_in_animation() -> void:
 	if body_root == null:
 		return
-	body_root.scale = Vector2(0.18, 0.18)
+	body_root.scale = Vector2(0.1, 0.1)
 	body_root.modulate.a = 0.0
 	if shadow != null:
 		shadow.modulate.a = 0.0

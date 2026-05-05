@@ -60,10 +60,10 @@ var _active_game = null
 var _meta_unlocks: Array = []
 var _panel_base_positions: Dictionary = {}
 var _player_tints := [
-	Color(0.2, 0.85, 0.2, 1.0),
-	Color(0.2, 0.45, 1.0, 1.0),
-	Color(0.95, 0.82, 0.22, 1.0),
-	Color(1.0, 0.56, 0.2, 1.0),
+	Color(0.15, 0.92, 0.25, 1.0),
+	Color(0.18, 0.42, 1.0, 1.0),
+	Color(1.0, 0.88, 0.12, 1.0),
+	Color(1.0, 0.5, 0.12, 1.0),
 ]
 var _player_aim_modes := [
 	PlayerConfigData.AimMode.HEAVY_AUTO,

@@ -39,6 +39,11 @@ default_color = Color(1, 0.9, 0.4, 0.95)
 [node name="BodyRoot" type="Node2D" parent="."]
 position = Vector2(0, -20)
 
+[node name="Outline" type="Polygon2D" parent="BodyRoot"]
+color = Color(0.04, 0.06, 0.08, 0.92)
+polygon = PackedVector2Array(0, -26, 14, -18, 18, -4, 15, 14, 0, 24, -15, 14, -18, -4, -14, -18)
+scale = Vector2(1.28, 1.28)
+
 [node name="Visual" type="Polygon2D" parent="BodyRoot"]
 polygon = PackedVector2Array(0, -26, 14, -18, 18, -4, 15, 14, 0, 24, -15, 14, -18, -4, -14, -18)
 scale = Vector2(1.02, 1.22)

@@ -37,6 +37,7 @@ signal damage_taken(player, amount, current_health)
 
 @onready var shadow: Polygon2D = $Shadow
 @onready var body_root: Node2D = $BodyRoot
+@onready var outline: Polygon2D = $BodyRoot/Outline
 @onready var visual: Polygon2D = $BodyRoot/Visual
 @onready var aim_pivot: Node2D = $BodyRoot/AimPivot
 @onready var aim_line_backdrop: Line2D = $BodyRoot/AimPivot/AimLineBackdrop
@@ -87,6 +88,12 @@ var _display_move_input := Vector2.ZERO
 var _previous_move_input := Vector2.ZERO
 var _turn_squash := 0.0
 var _aim_line_recoil := 0.0
+var _outline_pulse := 1.0
+
+func _get_projectile_tint() -> Color:
+	if player_id == 1:
+		return Color(0.42, 1.0, 0.42, 1.0)
+	return player_config.tint.lightened(0.2)
 
 func setup(config, assigned_gamepad_device_id: int) -> void:
 	player_config = config
@@ -264,7 +271,7 @@ func _physics_process(delta: float) -> void:
 	if _is_fire_pressed() and now >= _next_primary_fire_at and aim_direction.length() > 0.0:
 		_next_primary_fire_at = now + primary_fire_interval
 		_play_fire_recoil()
-		var projectile_color: Color = player_config.tint.lightened(0.08)
+		var projectile_color: Color = _get_projectile_tint()
 		muzzle_flash_requested.emit(global_position + aim_direction * 24.0, aim_direction, projectile_color)
 		for projectile_direction in _build_spread_directions(aim_direction, _primary_projectile_count, _primary_spread_radians):
 			fire_requested.emit(
@@ -295,7 +302,7 @@ func _physics_process(delta: float) -> void:
 	velocity = _dash.get_velocity(move_input, aim_direction, move_speed, now)
 	move_and_slide()
 	_update_animation_state(move_input, delta)
-	_apply_visual_state(now)
+	_apply_visual_state(now, delta)
 
 func _get_move_input() -> Vector2:
 	var keyboard_vector := _get_keyboard_move_vector()
@@ -453,7 +460,7 @@ func _build_spread_directions(base_direction: Vector2, projectile_count: int, sp
 		directions.append(normalized_direction.rotated(offset))
 	return directions
 
-func _apply_visual_state(now: float) -> void:
+func _apply_visual_state(now: float, delta: float = 0.0) -> void:
 	if visual == null or aim_pivot == null or aim_line == null or aim_line_backdrop == null or body_root == null:
 		return
 	var dash_active: bool = _dash != null and _dash.is_active(now)
@@ -461,11 +468,19 @@ func _apply_visual_state(now: float) -> void:
 	var tint: Color = player_config.tint.darkened(0.45) if _is_downed else player_config.tint
 	tint.a = 0.56 + 0.24 * downed_pulse if _is_downed else 1.0
 	visual.color = tint
+	if delta > 0.0:
+		_outline_pulse = move_toward(_outline_pulse, 1.0, delta * 5.0)
 	var dash_scale: float = 1.15 if dash_active else 1.0
 	var move_stretch: float = clamp(velocity.length() / max(move_speed, 1.0), 0.0, 1.0) * 0.06
 	var squash_x: float = 1.0 + _turn_squash * 0.18 - move_stretch * 0.03
 	var squash_y: float = 1.0 - _turn_squash * 0.12 + move_stretch
 	visual.scale = Vector2(_base_visual_scale.x * dash_scale * squash_x, _base_visual_scale.y * dash_scale * squash_y)
+	if outline != null:
+		outline.polygon = visual.polygon
+		outline.scale = visual.scale * 1.28 * _outline_pulse
+		var outline_color := Color(0.04, 0.06, 0.08, 0.92)
+		outline_color.a = 0.52 + 0.28 * downed_pulse if _is_downed else 0.92
+		outline.color = outline_color
 	if shadow != null:
 		shadow.scale = Vector2(
 			_base_shadow_scale.x * (1.0 + _turn_squash * 0.08),
@@ -481,7 +496,7 @@ func _apply_visual_state(now: float) -> void:
 	var aim_length: float = max(18.0, 52.0 - _aim_line_recoil)
 	aim_line_backdrop.visible = not _is_downed
 	aim_line_backdrop.points = PackedVector2Array([Vector2.ZERO, Vector2(aim_length, 0.0)])
-	aim_line.default_color = player_config.tint.lightened(0.25)
+	aim_line.default_color = _get_projectile_tint()
 	aim_line.visible = not _is_downed
 	aim_line.points = PackedVector2Array([Vector2.ZERO, Vector2(aim_length, 0.0)])
 	_update_secondary_preview(now)
@@ -514,6 +529,7 @@ func _play_fire_recoil() -> void:
 func _play_damage_flash() -> void:
 	if visual == null:
 		return
+	_outline_pulse = 1.18
 	var material := _get_flash_material()
 	material.set_shader_parameter("flash_intensity", 1.0)
 	if _flash_tween != null and _flash_tween.is_valid():
@@ -610,7 +626,7 @@ func _fire_secondary() -> void:
 	if not _can_activate_secondary(now):
 		return
 	_next_secondary_ready_at = now + secondary_cooldown
-	var secondary_color: Color = player_config.tint.lightened(0.08)
+	var secondary_color: Color = _get_projectile_tint()
 	var secondary_direction: Vector2 = aim_direction.normalized() if aim_direction.length() > 0.0 else Vector2.RIGHT
 	var spawn_origin: Vector2 = global_position + secondary_direction * 14.0 if _is_proximity_mine_secondary() else global_position
 	for projectile_direction in _build_spread_directions(secondary_direction, _secondary_projectile_count, _secondary_spread_radians):

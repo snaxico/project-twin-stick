@@ -18,6 +18,7 @@ var _is_collected := false
 @onready var visual: Polygon2D = $Visual
 @onready var outline: Line2D = $Outline
 @onready var shadow: Polygon2D = $Shadow
+@onready var glyph_label: Label = $GlyphLabel
 
 func setup(next_pickup_type: String, next_value: int = 1) -> void:
 	pickup_type = next_pickup_type
@@ -99,6 +100,8 @@ func _apply_visual_state() -> void:
 	if visual == null or outline == null or shadow == null:
 		return
 	if pickup_type == "food":
+		if glyph_label != null:
+			glyph_label.visible = false
 		visual.color = Color(0.74, 0.92, 0.32, 0.98)
 		visual.polygon = PackedVector2Array([
 			Vector2(-14, -6),
@@ -116,12 +119,20 @@ func _apply_visual_state() -> void:
 		])
 		outline.default_color = Color(0.1, 0.22, 0.08, 0.84)
 	else:
+		if glyph_label != null:
+			glyph_label.visible = true
+			glyph_label.text = "$"
+			glyph_label.modulate = Color(0.36, 0.22, 0.02, 0.96)
 		visual.color = Color(1.0, 0.84, 0.24, 0.98)
 		visual.polygon = PackedVector2Array([
-			Vector2(0, -16),
-			Vector2(12, 0),
-			Vector2(0, 16),
-			Vector2(-12, 0),
+			Vector2(0, -18),
+			Vector2(14, -14),
+			Vector2(18, 0),
+			Vector2(14, 14),
+			Vector2(0, 18),
+			Vector2(-14, 14),
+			Vector2(-18, 0),
+			Vector2(-14, -14),
 		])
 		outline.default_color = Color(0.32, 0.2, 0.04, 0.84)
 	outline.points = visual.polygon

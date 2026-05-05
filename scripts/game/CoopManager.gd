@@ -40,48 +40,50 @@ void fragment() {
 	COLOR = vec4(darkness_color.rgb, alpha);
 }
 """
+const UNIFORM_ARENA_FLOOR_COLOR := Color(0.56, 0.57, 0.58, 1.0)
+const UNIFORM_ARENA_ACCENT_COLOR := Color(0.44, 0.46, 0.48, 0.16)
 const LAYOUT_PALETTES := {
 	"default": {
-		"floor_color": Color(0.58, 0.64, 0.62, 1.0),
-		"wall_color": Color(0.24, 0.28, 0.29, 1.0),
-		"side_wall_color": Color(0.3, 0.34, 0.35, 1.0),
-		"grid_color": Color(0.48, 0.54, 0.46, 0.7),
-		"accent_color": Color(0.74, 0.82, 0.68, 0.3),
+		"floor_color": UNIFORM_ARENA_FLOOR_COLOR,
+		"wall_color": UNIFORM_ARENA_FLOOR_COLOR,
+		"side_wall_color": UNIFORM_ARENA_FLOOR_COLOR,
+		"grid_color": Color(0.28, 0.3, 0.32, 0.26),
+		"accent_color": UNIFORM_ARENA_ACCENT_COLOR,
 	},
 	"crossfire": {
-		"floor_color": Color(0.72, 0.62, 0.48, 1.0),
-		"wall_color": Color(0.42, 0.21, 0.16, 1.0),
-		"side_wall_color": Color(0.48, 0.26, 0.18, 1.0),
-		"grid_color": Color(0.58, 0.42, 0.29, 0.56),
-		"accent_color": Color(0.94, 0.8, 0.62, 0.26),
+		"floor_color": UNIFORM_ARENA_FLOOR_COLOR,
+		"wall_color": UNIFORM_ARENA_FLOOR_COLOR,
+		"side_wall_color": UNIFORM_ARENA_FLOOR_COLOR,
+		"grid_color": Color(0.3, 0.29, 0.28, 0.26),
+		"accent_color": UNIFORM_ARENA_ACCENT_COLOR,
 	},
 	"pinch": {
-		"floor_color": Color(0.42, 0.5, 0.58, 1.0),
-		"wall_color": Color(0.12, 0.19, 0.3, 1.0),
-		"side_wall_color": Color(0.16, 0.24, 0.38, 1.0),
-		"grid_color": Color(0.61, 0.74, 0.86, 0.34),
-		"accent_color": Color(0.76, 0.88, 1.0, 0.22),
+		"floor_color": UNIFORM_ARENA_FLOOR_COLOR,
+		"wall_color": UNIFORM_ARENA_FLOOR_COLOR,
+		"side_wall_color": UNIFORM_ARENA_FLOOR_COLOR,
+		"grid_color": Color(0.27, 0.31, 0.32, 0.26),
+		"accent_color": UNIFORM_ARENA_ACCENT_COLOR,
 	},
 	"offset": {
-		"floor_color": Color(0.46, 0.52, 0.36, 1.0),
-		"wall_color": Color(0.14, 0.21, 0.12, 1.0),
-		"side_wall_color": Color(0.18, 0.28, 0.15, 1.0),
-		"grid_color": Color(0.67, 0.76, 0.54, 0.32),
-		"accent_color": Color(0.82, 0.9, 0.64, 0.2),
+		"floor_color": UNIFORM_ARENA_FLOOR_COLOR,
+		"wall_color": UNIFORM_ARENA_FLOOR_COLOR,
+		"side_wall_color": UNIFORM_ARENA_FLOOR_COLOR,
+		"grid_color": Color(0.31, 0.3, 0.28, 0.26),
+		"accent_color": UNIFORM_ARENA_ACCENT_COLOR,
 	},
 	"gauntlet_pockets": {
-		"floor_color": Color(0.5, 0.48, 0.42, 1.0),
-		"wall_color": Color(0.19, 0.18, 0.16, 1.0),
-		"side_wall_color": Color(0.24, 0.23, 0.2, 1.0),
-		"grid_color": Color(0.78, 0.7, 0.54, 0.26),
-		"accent_color": Color(0.92, 0.78, 0.46, 0.22),
+		"floor_color": UNIFORM_ARENA_FLOOR_COLOR,
+		"wall_color": UNIFORM_ARENA_FLOOR_COLOR,
+		"side_wall_color": UNIFORM_ARENA_FLOOR_COLOR,
+		"grid_color": Color(0.3, 0.31, 0.27, 0.26),
+		"accent_color": UNIFORM_ARENA_ACCENT_COLOR,
 	},
 	"boss_gate": {
-		"floor_color": Color(0.26, 0.08, 0.1, 1.0),
-		"wall_color": Color(0.05, 0.04, 0.05, 1.0),
-		"side_wall_color": Color(0.09, 0.07, 0.08, 1.0),
-		"grid_color": Color(0.68, 0.22, 0.28, 0.24),
-		"accent_color": Color(0.96, 0.32, 0.38, 0.18),
+		"floor_color": UNIFORM_ARENA_FLOOR_COLOR,
+		"wall_color": UNIFORM_ARENA_FLOOR_COLOR,
+		"side_wall_color": UNIFORM_ARENA_FLOOR_COLOR,
+		"grid_color": Color(0.31, 0.28, 0.29, 0.26),
+		"accent_color": UNIFORM_ARENA_ACCENT_COLOR,
 	},
 }
 @export var player_scene: PackedScene
@@ -172,10 +174,10 @@ signal player_revived(player)
 
 var _player_nodes: Array = []
 var _player_configs: Array = [
-	PlayerConfigData.new(1, "hybrid", Color(0.2, 0.85, 0.2, 1.0), PlayerConfigData.AimMode.HEAVY_AUTO),
-	PlayerConfigData.new(2, "hybrid", Color(0.2, 0.45, 1.0, 1.0), PlayerConfigData.AimMode.FULL_AUTO),
-	PlayerConfigData.new(3, "gamepad", Color(0.95, 0.82, 0.22, 1.0), PlayerConfigData.AimMode.FULL_AUTO),
-	PlayerConfigData.new(4, "gamepad", Color(1.0, 0.56, 0.2, 1.0), PlayerConfigData.AimMode.FULL_AUTO),
+	PlayerConfigData.new(1, "hybrid", Color(0.15, 0.92, 0.25, 1.0), PlayerConfigData.AimMode.HEAVY_AUTO),
+	PlayerConfigData.new(2, "hybrid", Color(0.18, 0.42, 1.0, 1.0), PlayerConfigData.AimMode.FULL_AUTO),
+	PlayerConfigData.new(3, "gamepad", Color(1.0, 0.88, 0.12, 1.0), PlayerConfigData.AimMode.FULL_AUTO),
+	PlayerConfigData.new(4, "gamepad", Color(1.0, 0.5, 0.12, 1.0), PlayerConfigData.AimMode.FULL_AUTO),
 ]
 var _is_initialized := false
 var _room_is_cleared := false
@@ -1317,244 +1319,87 @@ func _get_enemy_spawn_positions() -> Array:
 	return filtered_positions if not filtered_positions.is_empty() else spawn_positions
 
 func _apply_layout_preset(layout_id: String) -> void:
-	const MAP_SCALE := 1.15
 	var floor_points: PackedVector2Array = PackedVector2Array([
-		Vector2(120, 84),
-		Vector2(1160, 84),
-		Vector2(1260, 668),
-		Vector2(20, 668),
+		Vector2(0, 0),
+		Vector2(1920, 0),
+		Vector2(1920, 1080),
+		Vector2(0, 1080),
 	])
-	var back_wall_points: PackedVector2Array = PackedVector2Array([
-		Vector2(120, 58),
-		Vector2(1160, 58),
-		Vector2(1160, 106),
-		Vector2(120, 106),
-	])
-	var left_wall_points: PackedVector2Array = PackedVector2Array([
-		Vector2(92, 84),
-		Vector2(120, 84),
-		Vector2(20, 668),
-		Vector2(-8, 668),
-	])
-	var right_wall_points: PackedVector2Array = PackedVector2Array([
-		Vector2(1160, 84),
-		Vector2(1188, 84),
-		Vector2(1288, 668),
-		Vector2(1260, 668),
-	])
-	var camera_zoom := Vector2(0.8, 0.8)
 	var player_positions := [
-		Vector2(470, 380),
-		Vector2(810, 380),
-		Vector2(470, 470),
-		Vector2(810, 470),
+		Vector2(860, 490),
+		Vector2(1060, 490),
+		Vector2(860, 590),
+		Vector2(1060, 590),
 	]
 	var enemy_positions := [
-		Vector2(280, 200),
-		Vector2(1000, 200),
-		Vector2(220, 570),
-		Vector2(1060, 570),
-		Vector2(640, 160),
-		Vector2(640, 610),
+		Vector2(60, 60),
+		Vector2(1860, 60),
+		Vector2(60, 1020),
+		Vector2(1860, 1020),
+		Vector2(960, 40),
+		Vector2(960, 1040),
 	]
 	var generator_positions := [
-		Vector2(380, 320),
-		Vector2(900, 320),
-		Vector2(640, 520),
+		Vector2(540, 380),
+		Vector2(1380, 380),
+		Vector2(960, 760),
 	]
 
 	match layout_id:
 		"crossfire":
-			floor_points = PackedVector2Array([
-				Vector2(80, 96),
-				Vector2(1200, 96),
-				Vector2(1240, 660),
-				Vector2(40, 660),
-			])
-			back_wall_points = PackedVector2Array([
-				Vector2(80, 70),
-				Vector2(1200, 70),
-				Vector2(1200, 118),
-				Vector2(80, 118),
-			])
-			left_wall_points = PackedVector2Array([
-				Vector2(52, 96),
-				Vector2(80, 96),
-				Vector2(40, 660),
-				Vector2(12, 660),
-			])
-			right_wall_points = PackedVector2Array([
-				Vector2(1200, 96),
-				Vector2(1228, 96),
-				Vector2(1268, 660),
-				Vector2(1240, 660),
-			])
-			player_positions = [Vector2(400, 360), Vector2(880, 360), Vector2(540, 500), Vector2(740, 500)]
-			enemy_positions = [Vector2(180, 200), Vector2(1100, 200), Vector2(180, 570), Vector2(1100, 570), Vector2(640, 170), Vector2(640, 610)]
-			camera_zoom = Vector2(0.76, 0.76)
+			enemy_positions = [
+				Vector2(60, 300), Vector2(1860, 300),
+				Vector2(60, 780), Vector2(1860, 780),
+				Vector2(480, 40), Vector2(1440, 40),
+			]
+			generator_positions = [Vector2(420, 380), Vector2(1500, 380), Vector2(960, 700)]
 		"pinch":
-			floor_points = PackedVector2Array([
-				Vector2(160, 84),
-				Vector2(1120, 84),
-				Vector2(1260, 668),
-				Vector2(20, 668),
-			])
-			back_wall_points = PackedVector2Array([
-				Vector2(160, 58),
-				Vector2(1120, 58),
-				Vector2(1120, 110),
-				Vector2(160, 110),
-			])
-			left_wall_points = PackedVector2Array([
-				Vector2(132, 84),
-				Vector2(160, 84),
-				Vector2(20, 668),
-				Vector2(-8, 668),
-			])
-			right_wall_points = PackedVector2Array([
-				Vector2(1120, 84),
-				Vector2(1148, 84),
-				Vector2(1288, 668),
-				Vector2(1260, 668),
-			])
-			player_positions = [Vector2(640, 500), Vector2(720, 500), Vector2(560, 500), Vector2(800, 500)]
-			enemy_positions = [Vector2(260, 220), Vector2(1020, 220), Vector2(180, 600), Vector2(1100, 600), Vector2(640, 150), Vector2(640, 630)]
-			camera_zoom = Vector2(0.78, 0.78)
+			player_positions = [
+				Vector2(910, 540), Vector2(1010, 540),
+				Vector2(860, 540), Vector2(1060, 540),
+			]
+			enemy_positions = [
+				Vector2(60, 200), Vector2(1860, 200),
+				Vector2(60, 880), Vector2(1860, 880),
+				Vector2(960, 40), Vector2(960, 1040),
+			]
+			generator_positions = [Vector2(600, 340), Vector2(1320, 340), Vector2(960, 780)]
 		"offset":
-			floor_points = PackedVector2Array([
-				Vector2(100, 92),
-				Vector2(1160, 68),
-				Vector2(1270, 632),
-				Vector2(30, 680),
-			])
-			back_wall_points = PackedVector2Array([
-				Vector2(100, 58),
-				Vector2(1160, 34),
-				Vector2(1160, 82),
-				Vector2(100, 106),
-			])
-			left_wall_points = PackedVector2Array([
-				Vector2(72, 92),
-				Vector2(100, 92),
-				Vector2(30, 680),
-				Vector2(2, 680),
-			])
-			right_wall_points = PackedVector2Array([
-				Vector2(1160, 68),
-				Vector2(1188, 68),
-				Vector2(1298, 632),
-				Vector2(1270, 632),
-			])
-			player_positions = [Vector2(390, 340), Vector2(760, 300), Vector2(520, 500), Vector2(900, 470)]
-			enemy_positions = [Vector2(210, 190), Vector2(1090, 170), Vector2(140, 590), Vector2(1130, 550), Vector2(820, 120), Vector2(470, 630)]
-			camera_zoom = Vector2(0.78, 0.78)
+			player_positions = [Vector2(820, 500), Vector2(1020, 470), Vector2(900, 620), Vector2(1100, 590)]
+			enemy_positions = [
+				Vector2(60, 140), Vector2(1860, 220),
+				Vector2(60, 960), Vector2(1860, 900),
+				Vector2(760, 40), Vector2(1160, 1040),
+			]
+			generator_positions = [Vector2(500, 320), Vector2(1440, 420), Vector2(1040, 760)]
 		"gauntlet_pockets":
-			floor_points = PackedVector2Array([
-				Vector2(120, 92),
-				Vector2(1160, 92),
-				Vector2(1210, 660),
-				Vector2(70, 660),
-			])
-			back_wall_points = PackedVector2Array([
-				Vector2(120, 58),
-				Vector2(1160, 58),
-				Vector2(1160, 106),
-				Vector2(120, 106),
-			])
-			left_wall_points = PackedVector2Array([
-				Vector2(92, 92),
-				Vector2(120, 92),
-				Vector2(70, 660),
-				Vector2(42, 660),
-			])
-			right_wall_points = PackedVector2Array([
-				Vector2(1160, 92),
-				Vector2(1188, 92),
-				Vector2(1238, 660),
-				Vector2(1210, 660),
-			])
-			player_positions = [Vector2(520, 500), Vector2(760, 500), Vector2(430, 580), Vector2(850, 580)]
-			enemy_positions = [Vector2(230, 180), Vector2(1050, 180), Vector2(200, 560), Vector2(1080, 560), Vector2(640, 140), Vector2(640, 620)]
-			generator_positions = [Vector2(360, 320), Vector2(920, 320), Vector2(640, 520)]
-			camera_zoom = Vector2(0.76, 0.76)
+			player_positions = [Vector2(860, 520), Vector2(1060, 520), Vector2(860, 620), Vector2(1060, 620)]
+			enemy_positions = [
+				Vector2(60, 180), Vector2(1860, 180),
+				Vector2(60, 900), Vector2(1860, 900),
+				Vector2(960, 40), Vector2(960, 1040),
+			]
+			generator_positions = [Vector2(540, 380), Vector2(1380, 380), Vector2(960, 760)]
 		"boss_gate":
-			floor_points = PackedVector2Array([
-				Vector2(100, 84),
-				Vector2(1180, 84),
-				Vector2(1280, 668),
-				Vector2(0, 668),
-			])
-			back_wall_points = PackedVector2Array([
-				Vector2(100, 58),
-				Vector2(1180, 58),
-				Vector2(1180, 106),
-				Vector2(100, 106),
-			])
-			left_wall_points = PackedVector2Array([
-				Vector2(72, 84),
-				Vector2(100, 84),
-				Vector2(0, 668),
-				Vector2(-28, 668),
-			])
-			right_wall_points = PackedVector2Array([
-				Vector2(1180, 84),
-				Vector2(1208, 84),
-				Vector2(1308, 668),
-				Vector2(1280, 668),
-			])
-			player_positions = [Vector2(460, 520), Vector2(820, 520), Vector2(560, 600), Vector2(720, 600)]
-			enemy_positions = [Vector2(200, 200), Vector2(1080, 200), Vector2(150, 580), Vector2(1130, 580), Vector2(640, 140), Vector2(640, 630)]
-			camera_zoom = Vector2(0.74, 0.74)
+			player_positions = [
+				Vector2(860, 700), Vector2(1060, 700),
+				Vector2(910, 800), Vector2(1010, 800),
+			]
+			enemy_positions = [
+				Vector2(200, 60), Vector2(1720, 60),
+				Vector2(60, 540), Vector2(1860, 540),
+				Vector2(960, 40), Vector2(960, 1040),
+			]
+			generator_positions = [Vector2(540, 260), Vector2(1380, 260), Vector2(960, 620)]
 
-	var bounds := _compute_bounds(floor_points)
-	var min_x: float = bounds["min_x"]
-	var max_x: float = bounds["max_x"]
-	var min_y: float = bounds["min_y"]
-	var max_y: float = bounds["max_y"]
-	var wall_depth := 56.0
-	var side_wall_width := 42.0
-	floor_points = PackedVector2Array([
-		Vector2(min_x, min_y),
-		Vector2(max_x, min_y),
-		Vector2(max_x, max_y),
-		Vector2(min_x, max_y),
-	])
-	back_wall_points = PackedVector2Array([
-		Vector2(min_x, min_y - wall_depth),
-		Vector2(max_x, min_y - wall_depth),
-		Vector2(max_x, min_y),
-		Vector2(min_x, min_y),
-	])
-	left_wall_points = PackedVector2Array([
-		Vector2(min_x - side_wall_width, min_y),
-		Vector2(min_x, min_y),
-		Vector2(min_x, max_y),
-		Vector2(min_x - side_wall_width, max_y),
-	])
-	right_wall_points = PackedVector2Array([
-		Vector2(max_x, min_y),
-		Vector2(max_x + side_wall_width, min_y),
-		Vector2(max_x + side_wall_width, max_y),
-		Vector2(max_x, max_y),
-	])
-
-	var layout_center := _compute_polygon_center(floor_points)
-	floor_points = _scale_points(floor_points, layout_center, MAP_SCALE)
-	back_wall_points = _scale_points(back_wall_points, layout_center, MAP_SCALE)
-	left_wall_points = _scale_points(left_wall_points, layout_center, MAP_SCALE)
-	right_wall_points = _scale_points(right_wall_points, layout_center, MAP_SCALE)
-	player_positions = _scale_vector_array(player_positions, layout_center, MAP_SCALE)
-	enemy_positions = _scale_vector_array(enemy_positions, layout_center, MAP_SCALE)
-	generator_positions = _scale_vector_array(generator_positions, layout_center, MAP_SCALE)
-	camera.position = layout_center
-	camera_zoom *= 1.55
-
+	camera.position = Vector2(960, 540)
+	camera.zoom = Vector2(1.0, 1.0)
 	floor_visual.polygon = floor_points
-	back_wall_visual.polygon = back_wall_points
-	left_wall_visual.polygon = left_wall_points
-	right_wall_visual.polygon = right_wall_points
+	back_wall_visual.visible = false
+	left_wall_visual.visible = false
+	right_wall_visual.visible = false
 	_apply_layout_palette(layout_id)
-	_rebuild_floor_grid(floor_points, _get_layout_palette(layout_id).get("grid_color", Color(0.48, 0.54, 0.46, 0.7)))
+	_rebuild_floor_grid(floor_points, _get_layout_palette(layout_id).get("grid_color", Color(0.2, 0.22, 0.24, 0.5)))
 	_rebuild_floor_landmarks(layout_id, floor_points)
 	_apply_collision_bounds_from_floor(floor_points)
 	player_1_spawn.position = player_positions[0]
@@ -1568,7 +1413,6 @@ func _apply_layout_preset(layout_id: String) -> void:
 	enemy_spawn_5.position = enemy_positions[4]
 	enemy_spawn_6.position = enemy_positions[5]
 	_generator_slot_positions = generator_positions.duplicate()
-	camera.zoom = camera_zoom
 
 func _play_intro_juice() -> void:
 	if modifier_intro_panel == null or camera == null:
@@ -1610,7 +1454,7 @@ func _play_clear_juice() -> void:
 func _play_player_spawn_in(player) -> void:
 	if player == null or not is_instance_valid(player):
 		return
-	player.scale = Vector2(0.88, 0.88)
+	player.scale = Vector2(0.08, 0.08)
 	player.modulate.a = 0.0
 	var tween := create_tween()
 	tween.set_parallel(true)
@@ -1702,10 +1546,10 @@ func _build_hud() -> void:
 	_player_hud_container.name = "PlayerHUD"
 	_player_hud_container.anchor_top = 1.0
 	_player_hud_container.anchor_bottom = 1.0
-	_player_hud_container.offset_left = 28.0
-	_player_hud_container.offset_top = -236.0
-	_player_hud_container.offset_right = 340.0
-	_player_hud_container.offset_bottom = -28.0
+	_player_hud_container.offset_left = 20.0
+	_player_hud_container.offset_top = -186.0
+	_player_hud_container.offset_right = 332.0
+	_player_hud_container.offset_bottom = -20.0
 	_player_hud_container.add_theme_constant_override("separation", 10)
 	_hud_root.add_child(_player_hud_container)
 
@@ -1774,7 +1618,7 @@ func _build_hud() -> void:
 	_hud_root.add_child(_encounter_status_label)
 
 	_boss_health_bar = HealthBarHUDData.new()
-	_boss_health_bar.position = Vector2(660.0, 144.0)
+	_boss_health_bar.position = Vector2(660.0, 18.0)
 	_boss_health_bar.size = Vector2(600.0, 40.0)
 	_boss_health_bar.configure("Crimson Gate", Color(0.86, 0.18, 0.18, 1.0))
 	_boss_health_bar.visible = false
@@ -1974,8 +1818,11 @@ func _set_room_progress_ui(timer_text: String, encounter_text: String, ratio: fl
 func _refresh_modifier_chip() -> void:
 	if _modifier_chip_panel == null or _modifier_chip_label == null:
 		return
+	_modifier_chip_panel.visible = not _is_boss_room()
+	if _is_boss_room():
+		return
 	var accent := _get_active_hud_accent()
-	var chip_text := "Boss Room" if _is_boss_room() else str(_active_modifier.get("name", "No Modifier"))
+	var chip_text := str(_active_modifier.get("name", "No Modifier"))
 	_modifier_chip_label.text = chip_text
 	_modifier_chip_label.modulate = accent.lightened(0.5)
 	_apply_panel_style(_modifier_chip_panel, accent)
@@ -2021,7 +1868,7 @@ func _rebuild_floor_landmarks(layout_id: String, floor_points: PackedVector2Arra
 	var center := Vector2((min_x + max_x) * 0.5, (min_y + max_y) * 0.5)
 	var width := max_x - min_x
 	var height := max_y - min_y
-	var accent: Color = _get_layout_palette(layout_id).get("accent_color", Color(1.0, 1.0, 1.0, 0.2))
+	var accent: Color = UNIFORM_ARENA_ACCENT_COLOR
 
 	match layout_id:
 		"crossfire":
@@ -2240,67 +2087,74 @@ func _scale_vector_array(points: Array, center: Vector2, scale_factor: float) ->
 		scaled.append(center + (point - center) * scale_factor)
 	return scaled
 
-func _rebuild_floor_grid(floor_points: PackedVector2Array, grid_color: Color) -> void:
+func _rebuild_floor_grid(floor_points: PackedVector2Array, _grid_color: Color) -> void:
 	if floor_grid == null:
 		return
 	for child in floor_grid.get_children():
 		child.queue_free()
 
-	var bounds := _compute_bounds(floor_points)
-	var min_x: float = bounds["min_x"]
-	var max_x: float = bounds["max_x"]
-	var min_y: float = bounds["min_y"]
-	var max_y: float = bounds["max_y"]
-	var spacing := 96.0
-
-	var x := min_x
-	while x <= max_x:
-		var vertical := Line2D.new()
-		vertical.width = 2.0
-		vertical.default_color = grid_color
-		vertical.points = PackedVector2Array([Vector2(x, min_y), Vector2(x, max_y)])
-		floor_grid.add_child(vertical)
-		x += spacing
-
-	var y := min_y
-	while y <= max_y:
-		var horizontal := Line2D.new()
-		horizontal.width = 2.0
-		horizontal.default_color = grid_color
-		horizontal.points = PackedVector2Array([Vector2(min_x, y), Vector2(max_x, y)])
-		floor_grid.add_child(horizontal)
-		y += spacing
-
-func _apply_collision_bounds_from_floor(floor_points: PackedVector2Array) -> void:
-	if floor_points.is_empty():
+func _add_wall_borders(floor_points: PackedVector2Array, layout_id: String) -> void:
+	if floor_grid == null or floor_points.size() < 4:
 		return
-	var min_x := floor_points[0].x
-	var max_x := floor_points[0].x
-	var min_y := floor_points[0].y
-	var max_y := floor_points[0].y
-	for point in floor_points:
-		min_x = min(min_x, point.x)
-		max_x = max(max_x, point.x)
-		min_y = min(min_y, point.y)
-		max_y = max(max_y, point.y)
+	var border_color := Color(0.05, 0.07, 0.09, 0.88)
+	var highlight_color: Color = Color(0.76, 0.78, 0.8, 0.18)
+	var top_left: Vector2 = floor_points[0]
+	var top_right: Vector2 = floor_points[1]
+	var bottom_right: Vector2 = floor_points[2]
+	var bottom_left: Vector2 = floor_points[3]
 
+	var frame := Line2D.new()
+	frame.width = 6.0
+	frame.closed = true
+	frame.default_color = Color(0.03, 0.05, 0.07, 0.94)
+	frame.points = PackedVector2Array([
+		top_left + Vector2(-8.0, -8.0),
+		top_right + Vector2(8.0, -8.0),
+		bottom_right + Vector2(8.0, 8.0),
+		bottom_left + Vector2(-8.0, 8.0),
+	])
+	floor_grid.add_child(frame)
+
+	var edges := [
+		PackedVector2Array([top_left, top_right]),
+		PackedVector2Array([top_right, bottom_right]),
+		PackedVector2Array([bottom_right, bottom_left]),
+		PackedVector2Array([bottom_left, top_left]),
+	]
+	for edge_points in edges:
+		var border := Line2D.new()
+		border.width = 5.0
+		border.default_color = border_color
+		border.points = edge_points
+		floor_grid.add_child(border)
+
+	var highlight := Line2D.new()
+	highlight.width = 2.5
+	highlight.default_color = highlight_color
+	highlight.points = PackedVector2Array([
+		top_left + Vector2(0.0, -18.0),
+		top_right + Vector2(0.0, -18.0),
+	])
+	floor_grid.add_child(highlight)
+
+func _apply_collision_bounds_from_floor(_floor_points: PackedVector2Array) -> void:
 	var wall_thickness := 16.0
-	var width := max_x - min_x
-	var height := max_y - min_y
+	var width := 1920.0
+	var height := 1080.0
 	var top_shape := top_wall.shape as RectangleShape2D
 	var bottom_shape := bottom_wall.shape as RectangleShape2D
 	var left_shape := left_wall.shape as RectangleShape2D
 	var right_shape := right_wall.shape as RectangleShape2D
 	if top_shape != null:
-		top_shape.size = Vector2(width + wall_thickness, wall_thickness)
+		top_shape.size = Vector2(width, wall_thickness)
 	if bottom_shape != null:
-		bottom_shape.size = Vector2(width + wall_thickness, wall_thickness)
+		bottom_shape.size = Vector2(width, wall_thickness)
 	if left_shape != null:
-		left_shape.size = Vector2(wall_thickness, height + wall_thickness)
+		left_shape.size = Vector2(wall_thickness, height)
 	if right_shape != null:
-		right_shape.size = Vector2(wall_thickness, height + wall_thickness)
+		right_shape.size = Vector2(wall_thickness, height)
 
-	top_wall.position = Vector2((min_x + max_x) * 0.5, min_y - wall_thickness)
-	bottom_wall.position = Vector2((min_x + max_x) * 0.5, max_y + wall_thickness)
-	left_wall.position = Vector2(min_x - wall_thickness, (min_y + max_y) * 0.5)
-	right_wall.position = Vector2(max_x + wall_thickness, (min_y + max_y) * 0.5)
+	top_wall.position = Vector2(960.0, -wall_thickness * 0.5)
+	bottom_wall.position = Vector2(960.0, 1080.0 + wall_thickness * 0.5)
+	left_wall.position = Vector2(-wall_thickness * 0.5, 540.0)
+	right_wall.position = Vector2(1920.0 + wall_thickness * 0.5, 540.0)

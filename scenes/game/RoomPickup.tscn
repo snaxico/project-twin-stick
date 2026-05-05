@@ -27,5 +27,15 @@ width = 2.0
 closed = true
 points = PackedVector2Array(0, -16, 12, 0, 0, 16, -12, 0)
 
+[node name="GlyphLabel" type="Label" parent="."]
+offset_left = -12.0
+offset_top = -18.0
+offset_right = 12.0
+offset_bottom = 18.0
+theme_override_font_sizes/font_size = 30
+text = "$"
+horizontal_alignment = 1
+vertical_alignment = 1
+
 [node name="CollisionShape2D" type="CollisionShape2D" parent="."]
 shape = SubResource("CircleShape2D_pickup")

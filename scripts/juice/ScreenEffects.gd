@@ -7,6 +7,11 @@ shader_type canvas_item;
 uniform float vignette_strength : hint_range(0.0, 1.0) = 0.45;
 uniform float low_health : hint_range(0.0, 1.0) = 0.0;
 uniform float combat_intensity : hint_range(0.0, 1.0) = 0.0;
+uniform float paper_grain : hint_range(0.0, 1.0) = 0.07;
+
+float hash(vec2 p) {
+	return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+}
 
 void fragment() {
 	vec2 centered_uv = UV - vec2(0.5);
@@ -16,8 +21,13 @@ void fragment() {
 	float low_health_edge = vignette * low_health * (0.35 + 0.65 * pulse);
 	vec3 warm_tint = vec3(0.24, 0.14, 0.04) * combat_intensity * vignette * 0.5;
 	vec3 danger_tint = vec3(0.72, 0.08, 0.05) * low_health_edge;
-	float alpha = clamp(vignette * vignette_strength * 0.38 + combat_intensity * vignette * 0.08 + low_health_edge * 0.42, 0.0, 0.7);
-	COLOR = vec4(warm_tint + danger_tint, alpha);
+	vec2 grain_uv = UV * vec2(1280.0, 720.0) * 0.5;
+	float grain_time = floor(TIME * 12.0);
+	float noise = hash(grain_uv + vec2(grain_time * 1.3, grain_time * 0.7));
+	float grain = (noise - 0.5) * paper_grain;
+	float alpha = clamp(vignette * vignette_strength * 0.38 + combat_intensity * vignette * 0.08 + low_health_edge * 0.42 + grain * 0.45, 0.0, 0.74);
+	vec3 grain_tint = vec3(grain * 0.28);
+	COLOR = vec4(warm_tint + danger_tint + grain_tint, alpha);
 }
 """
 
@@ -62,4 +72,5 @@ func _build_overlay() -> void:
 	_material.set_shader_parameter("vignette_strength", 0.28)
 	_material.set_shader_parameter("low_health", 0.0)
 	_material.set_shader_parameter("combat_intensity", 0.0)
+	_material.set_shader_parameter("paper_grain", 0.07)
 	_overlay.material = _material

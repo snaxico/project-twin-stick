@@ -67,9 +67,13 @@ Godot `4.6.2` prototype for a same-screen local co-op twin-stick roguelite. The 
 - styled combat HUD with stacked player bars, modifier chip, timer bar, and polished result/pause/intro panels
 - modifier intro panel plus active room tinting
 - darkness overlay, left-side spawn filtering, and optional friendly fire modifier hooks
-- fixed same-screen arena with layout presets: `default`, `crossfire`, `pinch`, `offset`, `boss gate`
+- fixed fullscreen same-screen arena with layout presets: `default`, `crossfire`, `pinch`, `offset`, `boss gate`
 - gauntlet layout preset: `gauntlet_pockets`
-- each layout now has its own palette and floor landmarks
+- arena presentation is now cartoon-styled:
+  - thick player/enemy outlines
+  - brighter neutral floor shared across all rooms
+  - no floor grid lines
+  - only subtle room-to-room line/accent changes remain
 - shared placeholder visual language with player color identity and shooter-tinted projectiles/effects
 - juice stack through `J7`: hit flash, knockback, hitstop, shake, particles, procedural SFX, health bars, floating text, motion polish, screen overlays, and transition polish
 
@@ -79,8 +83,9 @@ Godot `4.6.2` prototype for a same-screen local co-op twin-stick roguelite. The 
 - current work should favor tuning and readability over new systems
 - ranged pressure has been softened to make the game less oppressive
 - aim lines, projectiles, and arena contrast were pushed toward clearer combat reads
+- arena color should read as one world first, with only minor room accent variation
 - enemy readability now depends on silhouette first, color second
-- layouts should feel like distinct places even with placeholder art
+- layout identity should come from geometry and encounter shape more than full-room palette swaps
 - the combat HUD should read at a glance instead of exposing debug strings
 - grenade and mine roles should stay distinct instead of drifting back into one blended secondary design
 - run structure should vary between attempts through map length, room order, and enemy mix without changing the run-flow contract
@@ -106,7 +111,7 @@ If work resumes, prefer tuning and validation:
 - verify generator-room duration, pickup feel, and enemy-cap pressure in `1P` and `2P`
 - verify grenade and mine usefulness, cooldowns, and role separation
 - verify `3–4` player pressure, HUD readability, and revive fairness
-- verify enemy silhouettes and layout landmarks stay readable during heavy combat
+- verify enemy silhouettes and the brighter neutral arena stay readable during heavy combat
 - verify `Darkness`, `One-Way`, and `Friendly Fire` individually in live play
 - verify menu and pause aim settings for each player-count configuration
 - verify debug single-room launches for combat, elite, rest, shop, and boss

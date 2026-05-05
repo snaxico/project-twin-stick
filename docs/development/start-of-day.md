@@ -44,7 +44,9 @@ Read this first to restore project context quickly, then read `current-state.md`
 - Grenades use aimed throw behavior.
 - Mines place instantly on secondary press and detonate on proximity fuse.
 - Mine proximity radius was increased by `100%` from the original mine implementation.
-- Layout presets now have distinct palettes and floor landmarks.
+- Layout presets now share one brighter neutral floor treatment.
+- Room-to-room identity should come mostly from geometry/objective shape, not full palette swaps.
+- Floor grid lines were removed.
 - Combat rooms now support two objective styles:
   - `survive`
   - `destroy_generators`
@@ -92,6 +94,7 @@ Read this first to restore project context quickly, then read `current-state.md`
 - Favor tuning and readability over adding new systems.
 - Keep enemy ranged pressure under control.
 - Keep projectile, aim-line, and arena contrast readable.
+- Keep the arena bright and neutral enough that combat reads stay above environment styling.
 - Keep grenade and mine roles distinct instead of blending them back together.
 - Validate the new HUD and modifier readability in live combat, not just parse/startup.
 - Validate procedural run pacing and variation in live play, not just generation logic.
