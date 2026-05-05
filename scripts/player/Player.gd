@@ -15,7 +15,7 @@ void fragment() {
 }
 """
 
-signal fire_requested(origin, direction, speed, damage, team, color)
+signal fire_requested(origin, direction, speed, damage, team, color, shooter)
 signal secondary_requested(origin, direction, speed, damage, team, projectile_data, color)
 signal health_changed(current_health, max_health)
 signal downed(player)
@@ -251,7 +251,8 @@ func _physics_process(delta: float) -> void:
 				projectile_speed,
 				projectile_damage,
 				get_team(),
-				projectile_color
+				projectile_color,
+				self
 			)
 
 	var secondary_pressed := _is_secondary_pressed()

@@ -12,6 +12,7 @@ var damage: int = 1
 var team: String = ""
 var tint_color: Color = Color(1.0, 0.96, 0.7, 1.0)
 var allow_friendly_fire := false
+var _shooter_node: Node = null
 
 @onready var visual: Polygon2D = $Visual
 @onready var outline: Polygon2D = $Outline
@@ -19,12 +20,13 @@ var allow_friendly_fire := false
 var _expires_at := 0.0
 var _trail_particles: GPUParticles2D = null
 
-func setup(projectile_team: String, projectile_direction: Vector2, projectile_speed: float, projectile_damage: int, projectile_color: Color = Color(1.0, 0.96, 0.7, 1.0)) -> void:
+func setup(projectile_team: String, projectile_direction: Vector2, projectile_speed: float, projectile_damage: int, projectile_color: Color = Color(1.0, 0.96, 0.7, 1.0), projectile_shooter: Node = null) -> void:
 	team = projectile_team
 	direction = projectile_direction.normalized() if projectile_direction.length() > 0.0 else Vector2.RIGHT
 	speed = projectile_speed
 	damage = projectile_damage
 	tint_color = projectile_color
+	_shooter_node = projectile_shooter
 
 func _ready() -> void:
 	body_entered.connect(_on_body_entered)
@@ -47,7 +49,7 @@ func _on_body_entered(body: Node) -> void:
 		return
 
 	if body.has_method("get_team") and body.get_team() == team:
-		if allow_friendly_fire and team == "player" and body.get_team() == "player":
+		if allow_friendly_fire and team == "player" and body.get_team() == "player" and body != _shooter_node:
 			pass
 		else:
 			return

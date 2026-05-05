@@ -66,6 +66,7 @@ var _charge_direction := Vector2.ZERO
 var _charge_windup_ends_at := 0.0
 var _charge_dash_ends_at := 0.0
 var _next_charge_at := 0.0
+var _contact_range := 28.0
 
 func setup(type_name: String, combat_owner) -> void:
 	_combat_owner = combat_owner
@@ -216,7 +217,7 @@ func _physics_process(_delta: float) -> void:
 	move_and_slide()
 	_apply_motion_polish(now)
 
-	var contact_range := 40.0 if enemy_type == EnemyType.BOSS else 28.0
+	var contact_range := _contact_range
 	if distance <= contact_range and now >= _next_contact_at:
 		_next_contact_at = now + (1.0 if enemy_type == EnemyType.BOSS else 0.75)
 		target.apply_damage(contact_damage)
@@ -366,6 +367,7 @@ func _apply_type_visual() -> void:
 			])
 			visual.scale = Vector2(1.0, 1.0)
 			_set_collision_radius(21.0)
+			_contact_range = 32.0
 		EnemyType.CHARGER:
 			visual.color = Color(0.52, 0.26, 0.12, 1.0)
 			visual.polygon = PackedVector2Array([
@@ -377,6 +379,7 @@ func _apply_type_visual() -> void:
 			])
 			visual.scale = Vector2(1.34, 1.34)
 			_set_collision_radius(28.0)
+			_contact_range = 38.0
 		EnemyType.BOSS:
 			visual.color = Color(0.46, 0.03, 0.07, 1.0)
 			visual.polygon = PackedVector2Array([
@@ -398,6 +401,7 @@ func _apply_type_visual() -> void:
 			])
 			visual.scale = Vector2(1.5, 1.5)
 			_set_collision_radius(44.0)
+			_contact_range = 54.0
 		_:
 			visual.color = Color(1.0, 0.16, 0.12, 1.0)
 			visual.polygon = PackedVector2Array([
@@ -408,6 +412,7 @@ func _apply_type_visual() -> void:
 			])
 			visual.scale = Vector2(0.72, 0.72)
 			_set_collision_radius(14.0)
+			_contact_range = 24.0
 
 func _set_collision_radius(radius: float) -> void:
 	if collision_shape == null:

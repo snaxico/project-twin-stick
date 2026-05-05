@@ -28,7 +28,7 @@ Godot `4.6.2` prototype for a same-screen local co-op twin-stick roguelite. The 
 - grenade path and mine path are now separate scene/script runtimes
 - mines place instantly on secondary press and use proximity fuse detonation
 - mine proximity radius was doubled from the initial mine implementation
-- expanded shared item pool now supports `19` items
+- expanded shared item pool now supports `20` items
 - modifier pool now includes tactical rules, not just stat pressure
 - enemy roster:
   - `Chaser`: small red dart silhouette

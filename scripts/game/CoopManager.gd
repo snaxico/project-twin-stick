@@ -519,10 +519,10 @@ func _clear_container(container: Node) -> void:
 	for child in container.get_children():
 		child.queue_free()
 
-func _on_player_fire_requested(origin: Vector2, direction: Vector2, speed: float, damage: int, team: String, color: Color) -> void:
+func _on_player_fire_requested(origin: Vector2, direction: Vector2, speed: float, damage: int, team: String, color: Color, shooter: Node) -> void:
 	if _room_is_cleared or _room_is_failed:
 		return
-	_spawn_projectile(origin, direction, speed, damage, team, color)
+	_spawn_projectile(origin, direction, speed, damage, team, color, shooter)
 
 func _on_player_secondary_requested(origin: Vector2, direction: Vector2, speed: float, damage: int, team: String, projectile_data: Dictionary, color: Color) -> void:
 	if _room_is_cleared or _room_is_failed:
@@ -539,10 +539,10 @@ func _on_enemy_fire_requested(origin: Vector2, direction: Vector2, speed: float,
 		return
 	_spawn_projectile(origin, direction, speed, damage, team, color)
 
-func _spawn_projectile(origin: Vector2, direction: Vector2, speed: float, damage: int, team: String, color: Color) -> void:
+func _spawn_projectile(origin: Vector2, direction: Vector2, speed: float, damage: int, team: String, color: Color, shooter: Node = null) -> void:
 	var projectile = projectile_scene.instantiate()
 	projectile.global_position = origin
-	projectile.setup(team, direction, speed, damage, color)
+	projectile.setup(team, direction, speed, damage, color, shooter)
 	projectile.allow_friendly_fire = _friendly_fire_enabled and team == "player"
 	projectile.impact_requested.connect(_on_projectile_impact_requested)
 	projectiles.add_child(projectile)
