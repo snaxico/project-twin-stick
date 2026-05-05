@@ -169,6 +169,10 @@ layout_mode = 2
 autowrap_mode = 2
 text = "Status"
 
+[node name="SettingsButton" type="Button" parent="MenuPanel/MarginContainer/MenuLayout"]
+layout_mode = 2
+text = "Aim Settings"
+
 [node name="MetaButton" type="Button" parent="MenuPanel/MarginContainer/MenuLayout"]
 layout_mode = 2
 text = "Meta Progression"
@@ -180,6 +184,108 @@ text = "Reset Meta Profile"
 [node name="StartButton" type="Button" parent="MenuPanel/MarginContainer/MenuLayout"]
 layout_mode = 2
 text = "Start"
+
+[node name="SettingsPanel" type="Panel" parent="."]
+visible = false
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -260.0
+offset_top = -220.0
+offset_right = 260.0
+offset_bottom = 220.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="MarginContainer" type="MarginContainer" parent="SettingsPanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 16.0
+offset_top = 16.0
+offset_right = -16.0
+offset_bottom = -16.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 8
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 8
+theme_override_constants/margin_bottom = 8
+
+[node name="SettingsLayout" type="VBoxContainer" parent="SettingsPanel/MarginContainer"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="SettingsTitle" type="Label" parent="SettingsPanel/MarginContainer/SettingsLayout"]
+layout_mode = 2
+text = "Aim Settings"
+horizontal_alignment = 1
+
+[node name="SettingsDetail" type="Label" parent="SettingsPanel/MarginContainer/SettingsLayout"]
+layout_mode = 2
+autowrap_mode = 2
+text = "Choose the aim behavior for each active player."
+horizontal_alignment = 1
+
+[node name="Player1AimRow" type="HBoxContainer" parent="SettingsPanel/MarginContainer/SettingsLayout"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="Player1AimLabel" type="Label" parent="SettingsPanel/MarginContainer/SettingsLayout/Player1AimRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Player 1 Aim"
+
+[node name="Player1AimOption" type="OptionButton" parent="SettingsPanel/MarginContainer/SettingsLayout/Player1AimRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="Player2AimRow" type="HBoxContainer" parent="SettingsPanel/MarginContainer/SettingsLayout"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="Player2AimLabel" type="Label" parent="SettingsPanel/MarginContainer/SettingsLayout/Player2AimRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Player 2 Aim"
+
+[node name="Player2AimOption" type="OptionButton" parent="SettingsPanel/MarginContainer/SettingsLayout/Player2AimRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="Player3AimRow" type="HBoxContainer" parent="SettingsPanel/MarginContainer/SettingsLayout"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="Player3AimLabel" type="Label" parent="SettingsPanel/MarginContainer/SettingsLayout/Player3AimRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Player 3 Aim"
+
+[node name="Player3AimOption" type="OptionButton" parent="SettingsPanel/MarginContainer/SettingsLayout/Player3AimRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="Player4AimRow" type="HBoxContainer" parent="SettingsPanel/MarginContainer/SettingsLayout"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="Player4AimLabel" type="Label" parent="SettingsPanel/MarginContainer/SettingsLayout/Player4AimRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Player 4 Aim"
+
+[node name="Player4AimOption" type="OptionButton" parent="SettingsPanel/MarginContainer/SettingsLayout/Player4AimRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="SettingsBackButton" type="Button" parent="SettingsPanel/MarginContainer/SettingsLayout"]
+layout_mode = 2
+text = "Back"
 
 [node name="MetaPanel" type="Panel" parent="."]
 visible = false

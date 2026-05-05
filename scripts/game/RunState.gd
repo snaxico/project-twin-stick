@@ -2,6 +2,13 @@ extends Node
 
 const ModifierEngineData = preload("res://scripts/game/ModifierEngine.gd")
 const ITEMS_DATA_PATH = "res://data/items.json"
+const RUN_LENGTH_MIN := 5
+const RUN_LENGTH_MAX := 7
+const MAX_CONSECUTIVE_COMBATS := 3
+const MIN_COMBAT_ROOMS_BEFORE_BOSS := 2
+const BASE_GOLD_COMBAT := 2
+const BASE_GOLD_ELITE := 3
+const GOLD_PER_STEP := 0.5
 
 var player_configs: Array = []
 var player_health_states: Array = []
@@ -25,6 +32,7 @@ func _ready() -> void:
 
 func start_new_run(configs: Array, debug_options: Dictionary = {}) -> void:
 	_load_items()
+	_random.randomize()
 	player_configs = []
 	for config in configs:
 		player_configs.append(config)
@@ -37,6 +45,7 @@ func start_new_run(configs: Array, debug_options: Dictionary = {}) -> void:
 		})
 
 	node_map = _generate_node_map()
+	print("[RunState] Run seed: %d | Steps: %d" % [_random.seed, node_map.size()])
 	current_step_index = 0
 	current_node = {}
 	rooms_completed = 0
@@ -175,79 +184,255 @@ func purchase_shop_item(item_id: String) -> Dictionary:
 	return {"success": true, "title": "Purchase Complete", "summary": summary}
 
 func _generate_node_map() -> Array:
+	var run_length := _random.randi_range(RUN_LENGTH_MIN, RUN_LENGTH_MAX)
+	var primary_types: Array = []
+	for _index in range(run_length):
+		primary_types.append("combat")
+
+	var support_slots: Array = []
+	for slot_index in range(1, run_length):
+		support_slots.append(slot_index)
+	support_slots.shuffle()
+	var rest_slot: int = int(support_slots.pop_back())
+	var shop_slot: int = int(support_slots.pop_back()) if not support_slots.is_empty() else 0
+
+	for step_index in range(run_length):
+		if step_index == rest_slot:
+			primary_types[step_index] = "rest"
+		elif step_index == shop_slot:
+			primary_types[step_index] = "shop"
+		else:
+			primary_types[step_index] = "elite" if _random.randf() < 0.3 else "combat"
+
+	_normalize_primary_room_types(primary_types)
+
 	var steps: Array = []
+	for step_index in range(run_length):
+		var primary_type: String = str(primary_types[step_index])
+		var alternative_type: String = _pick_alternative_type(primary_type)
+		var options: Array = [
+			_build_node(step_index, 0, _build_room_template(primary_type)),
+			_build_node(step_index, 1, _build_room_template(alternative_type)),
+		]
+		steps.append(options)
+
+	steps.append([
+		_build_node(run_length, 0, _build_room_template("boss")),
+	])
+
+	if _validate_node_map(steps):
+		return steps
+	print("[RunState] Generated node map failed validation. Falling back to default pattern.")
+	return _generate_fallback_node_map()
+
+func _generate_fallback_node_map() -> Array:
 	var room_patterns := [
 		[
-			{"room_type": "combat", "currency_reward": 2, "reward": {"type": "loot_choice", "label": "Choose 1 shared upgrade"}, "reward_label": "+2 Gold + shared upgrade"},
-			{"room_type": "rest", "reward": {"type": "heal_all", "amount": 2, "label": "Recover 2 HP"}},
+			_build_room_template("combat"),
+			_build_room_template("rest"),
 		],
 		[
-			{"room_type": "combat", "currency_reward": 2, "reward": {"type": "loot_choice", "label": "Choose 1 shared upgrade"}, "reward_label": "+2 Gold + shared upgrade"},
-			{"room_type": "shop", "reward": {"type": "shop", "label": "Spend shared Gold on one upgrade"}, "reward_label": "Spend shared Gold"},
+			_build_room_template("combat"),
+			_build_room_template("shop"),
 		],
 		[
-			{"room_type": "elite", "currency_reward": 3, "reward": {"type": "loot_choice", "label": "Choose 1 shared upgrade"}, "reward_label": "+3 Gold + shared upgrade"},
-			{"room_type": "combat", "currency_reward": 2, "reward": {"type": "loot_choice", "label": "Choose 1 shared upgrade"}, "reward_label": "+2 Gold + shared upgrade"},
+			_build_room_template("elite"),
+			_build_room_template("combat"),
 		],
 		[
-			{"room_type": "elite", "currency_reward": 3, "reward": {"type": "loot_choice", "label": "Choose 1 shared upgrade"}, "reward_label": "+3 Gold + shared upgrade"},
-			{"room_type": "rest", "reward": {"type": "heal_all", "amount": 2, "label": "Recover 2 HP"}},
+			_build_room_template("elite"),
+			_build_room_template("rest"),
 		],
 		[
-			{"room_type": "combat", "currency_reward": 3, "reward": {"type": "loot_choice", "label": "Choose 1 shared upgrade"}, "reward_label": "+3 Gold + shared upgrade"},
-			{"room_type": "elite", "currency_reward": 4, "reward": {"type": "loot_choice", "label": "Choose 1 shared upgrade"}, "reward_label": "+4 Gold + shared upgrade"},
+			_build_room_template("combat"),
+			_build_room_template("elite"),
 		],
 		[
-			{"room_type": "boss", "reward": {"type": "none", "label": "Defeat the boss"}, "reward_label": "Finish the run"},
+			_build_room_template("boss"),
 		],
 	]
-
+	var steps: Array = []
 	for step_index in range(room_patterns.size()):
 		var options: Array = []
 		for option_index in range(room_patterns[step_index].size()):
 			options.append(_build_node(step_index, option_index, room_patterns[step_index][option_index]))
 		steps.append(options)
-
 	return steps
+
+func _build_room_template(room_type: String) -> Dictionary:
+	match room_type:
+		"combat", "elite":
+			return {
+				"room_type": room_type,
+				"reward": {"type": "loot_choice", "label": "Choose 1 shared upgrade"},
+			}
+		"rest":
+			return {
+				"room_type": "rest",
+				"reward": {"type": "heal_all", "amount": 2, "label": "Recover 2 HP"},
+			}
+		"shop":
+			return {
+				"room_type": "shop",
+				"reward": {"type": "shop", "label": "Spend shared Gold on one upgrade"},
+			}
+		"boss":
+			return {
+				"room_type": "boss",
+				"reward": {"type": "none", "label": "Defeat the boss"},
+			}
+		_:
+			return {"room_type": room_type, "reward": {"type": "none", "label": "No reward"}}
+
+func _normalize_primary_room_types(primary_types: Array) -> void:
+	for index in range(primary_types.size()):
+		if index < MAX_CONSECUTIVE_COMBATS:
+			continue
+		var sequence_is_pressure := true
+		for check_index in range(index - MAX_CONSECUTIVE_COMBATS, index + 1):
+			if not _is_pressure_room_type(str(primary_types[check_index])):
+				sequence_is_pressure = false
+				break
+		if not sequence_is_pressure:
+			continue
+		var replacement_index := index - 1
+		primary_types[replacement_index] = _pick_support_room_type(primary_types)
+
+func _pick_support_room_type(primary_types: Array) -> String:
+	var rest_count := 0
+	var shop_count := 0
+	for room_type_value in primary_types:
+		var room_type: String = str(room_type_value)
+		if room_type == "rest":
+			rest_count += 1
+		elif room_type == "shop":
+			shop_count += 1
+	if rest_count <= shop_count:
+		return "rest"
+	return "shop"
+
+func _pick_alternative_type(primary_type: String) -> String:
+	match primary_type:
+		"combat":
+			return _pick_random_room_type(["rest", "shop", "elite"])
+		"elite":
+			return _pick_random_room_type(["combat", "shop", "rest"])
+		"rest":
+			return _pick_random_room_type(["combat", "elite"])
+		"shop":
+			return _pick_random_room_type(["combat", "elite"])
+		_:
+			return primary_type
+
+func _pick_random_room_type(room_types: Array) -> String:
+	if room_types.is_empty():
+		return "combat"
+	return str(room_types[_random.randi_range(0, room_types.size() - 1)])
+
+func _compute_gold_reward(room_type: String, step_index: int) -> int:
+	var step_bonus := int(floor(float(step_index) * GOLD_PER_STEP))
+	match room_type:
+		"combat":
+			return BASE_GOLD_COMBAT + step_bonus
+		"elite":
+			return BASE_GOLD_ELITE + step_bonus
+		_:
+			return 0
+
+func _compute_survival_duration(step_index: int, is_elite: bool) -> float:
+	var duration := 16.0 + float(step_index) * 1.5
+	if is_elite:
+		duration += 4.0
+	return duration
+
+func _compute_spawn_interval(step_index: int, is_elite: bool) -> float:
+	var interval := 4.0 - float(step_index) * 0.2
+	if is_elite:
+		interval -= 0.4
+	return max(interval, 2.8)
+
+func _validate_node_map(map: Array) -> bool:
+	if map.is_empty():
+		return false
+	var last_step = map[map.size() - 1]
+	if not (last_step is Array) or last_step.size() != 1:
+		return false
+	var boss_node = last_step[0]
+	if not (boss_node is Dictionary) or str(boss_node.get("room_type", "")) != "boss":
+		return false
+
+	var pressure_options := 0
+	var has_rest := false
+	var has_shop := false
+	for step_index in range(map.size() - 1):
+		var step_options = map[step_index]
+		if not (step_options is Array) or step_options.is_empty():
+			return false
+		for option in step_options:
+			if not (option is Dictionary):
+				return false
+			var room_type := str(option.get("room_type", ""))
+			if _is_pressure_room_type(room_type):
+				pressure_options += 1
+			elif room_type == "rest":
+				has_rest = true
+			elif room_type == "shop":
+				has_shop = true
+
+	if pressure_options < MIN_COMBAT_ROOMS_BEFORE_BOSS:
+		return false
+	return has_rest and has_shop
+
+func _is_pressure_room_type(room_type: String) -> bool:
+	return room_type == "combat" or room_type == "elite"
 
 func _build_node(step_index: int, option_index: int, template: Dictionary) -> Dictionary:
 	var room_type := str(template.get("room_type", "combat"))
 	var reward: Dictionary = template.get("reward", {}).duplicate(true)
+	var is_elite := room_type == "elite"
 	var node := {
 		"id": "step_%d_option_%d" % [step_index, option_index],
 		"step_index": step_index,
 		"room_type": room_type,
 		"reward": reward,
 		"reward_label": str(template.get("reward_label", reward.get("label", "No reward"))),
-		"currency_reward": int(template.get("currency_reward", 0)),
+		"currency_reward": _compute_gold_reward(room_type, step_index),
 	}
 
 	match room_type:
 		"combat":
 			node["title"] = "Combat Room"
-			node["survival_duration"] = 18.0
-			node["enemy_spawn_interval"] = 4.0
+			node["survival_duration"] = _compute_survival_duration(step_index, false)
+			node["enemy_spawn_interval"] = _compute_spawn_interval(step_index, false)
 			node["modifier"] = _modifier_engine.get_random_modifier()
 			node["layout_id"] = _get_random_layout_id()
+			node["reward_label"] = "+%d Gold + shared upgrade" % node["currency_reward"]
 		"elite":
 			node["title"] = "Elite Room"
-			node["survival_duration"] = 24.0
-			node["enemy_spawn_interval"] = 3.4
+			node["survival_duration"] = _compute_survival_duration(step_index, is_elite)
+			node["enemy_spawn_interval"] = _compute_spawn_interval(step_index, is_elite)
 			node["modifier"] = _modifier_engine.get_random_modifier()
 			node["layout_id"] = _get_random_layout_id()
+			node["reward_label"] = "+%d Gold + shared upgrade" % node["currency_reward"]
 		"rest":
 			node["title"] = "Rest Room"
+			node["currency_reward"] = 0
 			node["modifier"] = {}
 			node["description"] = "Take a breather and patch everyone up."
+			node["reward_label"] = "Recover 2 HP"
 		"shop":
 			node["title"] = "Shop Room"
+			node["currency_reward"] = 0
 			node["modifier"] = {}
 			node["description"] = "Spend shared Gold on one prototype upgrade."
+			node["reward_label"] = "Spend shared Gold"
 		"boss":
 			node["title"] = "Crimson Gate"
+			node["currency_reward"] = 0
 			node["modifier"] = {}
 			node["description"] = "Final room. Defeat the placeholder boss to finish the run."
 			node["layout_id"] = "boss_gate"
+			node["reward_label"] = "Finish the run"
 		_:
 			node["title"] = "Unknown Room"
 			node["modifier"] = {}

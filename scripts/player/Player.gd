@@ -99,6 +99,14 @@ func cycle_aim_mode() -> void:
 	player_config.cycle_aim_mode()
 	_apply_visual_state(_current_time_seconds())
 
+func set_aim_mode(aim_mode: int) -> void:
+	player_config.aim_mode = clampi(
+		aim_mode,
+		PlayerConfigData.AimMode.HEAVY_AUTO,
+		PlayerConfigData.AimMode.MANUAL
+	)
+	_apply_visual_state(_current_time_seconds())
+
 func get_aim_mode_name() -> String:
 	return player_config.get_aim_mode_name()
 

@@ -15,6 +15,7 @@ const RUN_FLOW_SCENE = preload("res://scenes/ui/RunFlow.tscn")
 @onready var debug_primary_option: OptionButton = $MenuPanel/MarginContainer/MenuLayout/DebugPrimaryRow/DebugPrimaryOption
 @onready var debug_secondary_row: HBoxContainer = $MenuPanel/MarginContainer/MenuLayout/DebugSecondaryRow
 @onready var debug_secondary_option: OptionButton = $MenuPanel/MarginContainer/MenuLayout/DebugSecondaryRow/DebugSecondaryOption
+@onready var settings_button: Button = $MenuPanel/MarginContainer/MenuLayout/SettingsButton
 @onready var meta_button: Button = $MenuPanel/MarginContainer/MenuLayout/MetaButton
 @onready var reset_profile_button: Button = $MenuPanel/MarginContainer/MenuLayout/ResetProfileButton
 @onready var start_button: Button = $MenuPanel/MarginContainer/MenuLayout/StartButton
@@ -22,6 +23,16 @@ const RUN_FLOW_SCENE = preload("res://scenes/ui/RunFlow.tscn")
 @onready var player_3_control_row: HBoxContainer = $MenuPanel/MarginContainer/MenuLayout/Player3ControlRow
 @onready var player_4_control_row: HBoxContainer = $MenuPanel/MarginContainer/MenuLayout/Player4ControlRow
 @onready var status_label: Label = $MenuPanel/MarginContainer/MenuLayout/StatusLabel
+@onready var settings_panel: Panel = $SettingsPanel
+@onready var settings_player_1_row: HBoxContainer = $SettingsPanel/MarginContainer/SettingsLayout/Player1AimRow
+@onready var settings_player_1_option: OptionButton = $SettingsPanel/MarginContainer/SettingsLayout/Player1AimRow/Player1AimOption
+@onready var settings_player_2_row: HBoxContainer = $SettingsPanel/MarginContainer/SettingsLayout/Player2AimRow
+@onready var settings_player_2_option: OptionButton = $SettingsPanel/MarginContainer/SettingsLayout/Player2AimRow/Player2AimOption
+@onready var settings_player_3_row: HBoxContainer = $SettingsPanel/MarginContainer/SettingsLayout/Player3AimRow
+@onready var settings_player_3_option: OptionButton = $SettingsPanel/MarginContainer/SettingsLayout/Player3AimRow/Player3AimOption
+@onready var settings_player_4_row: HBoxContainer = $SettingsPanel/MarginContainer/SettingsLayout/Player4AimRow
+@onready var settings_player_4_option: OptionButton = $SettingsPanel/MarginContainer/SettingsLayout/Player4AimRow/Player4AimOption
+@onready var settings_back_button: Button = $SettingsPanel/MarginContainer/SettingsLayout/SettingsBackButton
 @onready var meta_panel: Panel = $MetaPanel
 @onready var meta_status_label: Label = $MetaPanel/MarginContainer/MetaLayout/MetaStatusLabel
 @onready var unlock_button_1: Button = $MetaPanel/MarginContainer/MetaLayout/UnlockButton1
@@ -45,30 +56,53 @@ var _player_aim_modes := [
 	PlayerConfigData.AimMode.FULL_AUTO,
 	PlayerConfigData.AimMode.FULL_AUTO,
 ]
+var _settings_rows: Array = []
+var _settings_options: Array = []
 
 func _ready() -> void:
+	_settings_rows = [
+		settings_player_1_row,
+		settings_player_2_row,
+		settings_player_3_row,
+		settings_player_4_row,
+	]
+	_settings_options = [
+		settings_player_1_option,
+		settings_player_2_option,
+		settings_player_3_option,
+		settings_player_4_option,
+	]
 	_populate_menu()
 	player_count_option.item_selected.connect(_on_player_count_changed)
 	debug_mode_check.toggled.connect(_on_debug_mode_toggled)
 	debug_primary_option.item_selected.connect(_on_debug_loadout_changed)
 	debug_secondary_option.item_selected.connect(_on_debug_loadout_changed)
 	start_button.pressed.connect(_on_start_pressed)
+	settings_button.pressed.connect(_on_settings_button_pressed)
 	meta_button.pressed.connect(_on_meta_button_pressed)
 	reset_profile_button.pressed.connect(_on_reset_profile_button_pressed)
 	unlock_button_1.pressed.connect(_on_unlock_button_1_pressed)
 	unlock_button_2.pressed.connect(_on_unlock_button_2_pressed)
 	unlock_button_3.pressed.connect(_on_unlock_button_3_pressed)
 	unlock_button_4.pressed.connect(_on_unlock_button_4_pressed)
+	for index in range(_settings_options.size()):
+		_settings_options[index].item_selected.connect(_on_settings_aim_mode_selected.bind(index))
+	settings_back_button.pressed.connect(_on_settings_back_button_pressed)
 	meta_back_button.pressed.connect(_on_meta_back_button_pressed)
 	_register_button_animations()
 	_configure_menu_focus()
 	menu_panel.visible = true
+	settings_panel.visible = false
 	meta_panel.visible = false
 	_refresh_menu_state()
 	call_deferred("_focus_menu_panel")
 
 func _unhandled_input(event: InputEvent) -> void:
 	if not event.is_action_pressed("ui_cancel"):
+		return
+	if settings_panel.visible:
+		_on_settings_back_button_pressed()
+		get_viewport().set_input_as_handled()
 		return
 	if meta_panel.visible:
 		_on_meta_back_button_pressed()
@@ -99,6 +133,8 @@ func _populate_menu() -> void:
 		{"label": "Shrapnel Mine", "value": "shrapnel_mine"},
 		{"label": "Heavy Mine", "value": "heavy_mine"},
 	], "mine")
+	for index in range(_settings_options.size()):
+		_populate_aim_mode_option(_settings_options[index], _player_aim_modes[index])
 
 func _populate_control_option(option_button: OptionButton, default_value: String) -> void:
 	option_button.clear()
@@ -126,6 +162,27 @@ func _populate_profile_option(option_button: OptionButton, entries: Array, defau
 			option_button.select(index)
 			break
 
+func _populate_aim_mode_option(option_button: OptionButton, selected_aim_mode: int) -> void:
+	option_button.clear()
+	var entries := [
+		{"label": "Heavy Auto", "value": PlayerConfigData.AimMode.HEAVY_AUTO},
+		{"label": "Full Auto", "value": PlayerConfigData.AimMode.FULL_AUTO},
+		{"label": "Manual", "value": PlayerConfigData.AimMode.MANUAL},
+	]
+	for index in range(entries.size()):
+		var entry: Dictionary = entries[index]
+		option_button.add_item(str(entry.get("label", "Aim")))
+		option_button.set_item_metadata(index, int(entry.get("value", PlayerConfigData.AimMode.HEAVY_AUTO)))
+	_select_option_by_metadata(option_button, selected_aim_mode)
+
+func _select_option_by_metadata(option_button: OptionButton, target_value: int) -> void:
+	for index in range(option_button.item_count):
+		if option_button.get_item_metadata(index) == target_value:
+			option_button.select(index)
+			return
+	if option_button.item_count > 0:
+		option_button.select(0)
+
 func _refresh_menu_state() -> void:
 	var player_count := get_selected_player_count()
 	player_2_control_row.visible = player_count > 1
@@ -133,6 +190,7 @@ func _refresh_menu_state() -> void:
 	player_4_control_row.visible = player_count > 3
 	debug_primary_row.visible = debug_mode_check.button_pressed
 	debug_secondary_row.visible = debug_mode_check.button_pressed
+	_refresh_settings_panel()
 	var debug_text := ""
 	if debug_mode_check.button_pressed:
 		debug_text = "\nDebug start active: %s / %s" % [
@@ -143,6 +201,13 @@ func _refresh_menu_state() -> void:
 		ProfileState.get_profile_summary_text(),
 		debug_text,
 	]
+
+func _refresh_settings_panel() -> void:
+	var player_count := get_selected_player_count()
+	var settings_slot_count := mini(_settings_rows.size(), _settings_options.size())
+	for index in range(settings_slot_count):
+		_settings_rows[index].visible = index < player_count
+		_select_option_by_metadata(_settings_options[index], _player_aim_modes[index])
 
 func get_selected_player_count() -> int:
 	return player_count_option.selected + 1
@@ -164,6 +229,14 @@ func _on_start_pressed() -> void:
 	var player_configs := _build_player_configs()
 	_launch_game(player_configs)
 
+func _on_settings_button_pressed() -> void:
+	_play_ui_click()
+	_refresh_settings_panel()
+	_set_panel_state(menu_panel, false)
+	_set_panel_state(meta_panel, false)
+	_set_panel_state(settings_panel, true)
+	call_deferred("_focus_settings_panel")
+
 func _build_player_configs() -> Array:
 	var configs: Array = []
 	var player_count := get_selected_player_count()
@@ -173,11 +246,15 @@ func _build_player_configs() -> Array:
 		player_3_control_option,
 		player_4_control_option,
 	]
+	var available_player_slots := mini(
+		player_count,
+		mini(control_options.size(), mini(_player_aim_modes.size(), _player_tints.size()))
+	)
 
-	for index in range(player_count):
+	for index in range(available_player_slots):
 		var option_button: OptionButton = control_options[index]
 		var control_source := str(option_button.get_selected_metadata())
-		var aim_mode = _player_aim_modes[index]
+		var aim_mode: int = int(_player_aim_modes[index])
 		var tint: Color = _player_tints[index]
 		configs.append(PlayerConfigData.new(index + 1, control_source, tint, aim_mode))
 
@@ -199,6 +276,7 @@ func _launch_game(player_configs: Array) -> void:
 	_active_game.return_to_menu_requested.connect(_on_return_to_menu_requested)
 	game_container.add_child(_active_game)
 	_set_panel_state(menu_panel, false)
+	_set_panel_state(settings_panel, false)
 	_set_panel_state(meta_panel, false)
 
 func _on_return_to_menu_requested(open_meta_menu: bool = false) -> void:
@@ -208,17 +286,20 @@ func _on_return_to_menu_requested(open_meta_menu: bool = false) -> void:
 	_refresh_menu_state()
 	if open_meta_menu:
 		_set_panel_state(menu_panel, false)
+		_set_panel_state(settings_panel, false)
 		_set_panel_state(meta_panel, true)
 		_refresh_meta_panel("")
 		call_deferred("_focus_meta_panel")
 		return
 	_set_panel_state(menu_panel, true)
+	_set_panel_state(settings_panel, false)
 	_set_panel_state(meta_panel, false)
 	call_deferred("_focus_menu_panel")
 
 func _on_meta_button_pressed() -> void:
 	_play_ui_click()
 	_set_panel_state(menu_panel, false)
+	_set_panel_state(settings_panel, false)
 	_set_panel_state(meta_panel, true)
 	_refresh_meta_panel("")
 	call_deferred("_focus_meta_panel")
@@ -253,6 +334,20 @@ func _on_unlock_button_4_pressed() -> void:
 func _on_meta_back_button_pressed() -> void:
 	_play_ui_click()
 	_set_panel_state(meta_panel, false)
+	_set_panel_state(menu_panel, true)
+	_refresh_menu_state()
+	call_deferred("_focus_menu_panel")
+
+func _on_settings_aim_mode_selected(selected_index: int, player_index: int) -> void:
+	if player_index < 0 or player_index >= _player_aim_modes.size() or player_index >= _settings_options.size():
+		return
+	_play_ui_click()
+	_player_aim_modes[player_index] = int(_settings_options[player_index].get_item_metadata(selected_index))
+	_refresh_settings_panel()
+
+func _on_settings_back_button_pressed() -> void:
+	_play_ui_click()
+	_set_panel_state(settings_panel, false)
 	_set_panel_state(menu_panel, true)
 	_refresh_menu_state()
 	call_deferred("_focus_menu_panel")
@@ -296,9 +391,15 @@ func _register_button_animations() -> void:
 		debug_mode_check,
 		debug_primary_option,
 		debug_secondary_option,
+		settings_button,
 		meta_button,
 		reset_profile_button,
 		start_button,
+		settings_player_1_option,
+		settings_player_2_option,
+		settings_player_3_option,
+		settings_player_4_option,
+		settings_back_button,
 		unlock_button_1,
 		unlock_button_2,
 		unlock_button_3,
@@ -318,9 +419,15 @@ func _configure_menu_focus() -> void:
 		debug_mode_check,
 		debug_primary_option,
 		debug_secondary_option,
+		settings_button,
 		meta_button,
 		reset_profile_button,
 		start_button,
+		settings_player_1_option,
+		settings_player_2_option,
+		settings_player_3_option,
+		settings_player_4_option,
+		settings_back_button,
 		unlock_button_1,
 		unlock_button_2,
 		unlock_button_3,
@@ -343,6 +450,14 @@ func _focus_meta_panel() -> void:
 		unlock_button_1.grab_focus()
 		return
 	meta_back_button.grab_focus()
+
+func _focus_settings_panel() -> void:
+	var settings_slot_count := mini(_settings_rows.size(), _settings_options.size())
+	for index in range(settings_slot_count):
+		if _settings_rows[index].visible:
+			_settings_options[index].grab_focus()
+			return
+	settings_back_button.grab_focus()
 
 func _register_button_animation(control: Control) -> void:
 	if control == null:

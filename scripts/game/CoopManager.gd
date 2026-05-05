@@ -146,7 +146,18 @@ signal player_revived(player)
 @onready var modifier_intro_detail_label: Label = $UI/ModifierIntroPanel/MarginContainer/IntroLayout/ModifierDetail
 @onready var pause_panel: Panel = $UI/PausePanel
 @onready var resume_button: Button = $UI/PausePanel/MarginContainer/PauseLayout/ResumeButton
+@onready var pause_settings_button: Button = $UI/PausePanel/MarginContainer/PauseLayout/PauseSettingsButton
 @onready var pause_retry_button: Button = $UI/PausePanel/MarginContainer/PauseLayout/PauseRetryButton
+@onready var settings_panel: Panel = $UI/SettingsPanel
+@onready var settings_player_1_row: HBoxContainer = $UI/SettingsPanel/MarginContainer/SettingsLayout/Player1AimRow
+@onready var settings_player_1_option: OptionButton = $UI/SettingsPanel/MarginContainer/SettingsLayout/Player1AimRow/Player1AimOption
+@onready var settings_player_2_row: HBoxContainer = $UI/SettingsPanel/MarginContainer/SettingsLayout/Player2AimRow
+@onready var settings_player_2_option: OptionButton = $UI/SettingsPanel/MarginContainer/SettingsLayout/Player2AimRow/Player2AimOption
+@onready var settings_player_3_row: HBoxContainer = $UI/SettingsPanel/MarginContainer/SettingsLayout/Player3AimRow
+@onready var settings_player_3_option: OptionButton = $UI/SettingsPanel/MarginContainer/SettingsLayout/Player3AimRow/Player3AimOption
+@onready var settings_player_4_row: HBoxContainer = $UI/SettingsPanel/MarginContainer/SettingsLayout/Player4AimRow
+@onready var settings_player_4_option: OptionButton = $UI/SettingsPanel/MarginContainer/SettingsLayout/Player4AimRow/Player4AimOption
+@onready var settings_back_button: Button = $UI/SettingsPanel/MarginContainer/SettingsLayout/SettingsBackButton
 
 var _player_nodes: Array = []
 var _player_configs: Array = [
@@ -195,6 +206,9 @@ var _pending_boss_support_plan: Array = []
 var _pending_warning_effects: Array = []
 var _friendly_fire_enabled := false
 var _vision_radius := 0.0
+var _wave_random := RandomNumberGenerator.new()
+var _settings_rows: Array = []
+var _settings_options: Array = []
 
 func _ready() -> void:
 	if player_scene == null:
@@ -208,9 +222,27 @@ func _ready() -> void:
 	if mine_projectile_scene == null:
 		mine_projectile_scene = load("res://scenes/weapons/MineProjectile.tscn")
 	_modifier_engine = ModifierEngineData.new()
+	_wave_random.randomize()
 	_sfx_engine = get_tree().get_first_node_in_group("sfx_engine")
 	_status_labels = [p1_status_label, p2_status_label, p3_status_label, p4_status_label]
 	_secondary_labels = [p1_secondary_label, p2_secondary_label, p3_secondary_label, p4_secondary_label]
+	_settings_rows = [
+		settings_player_1_row,
+		settings_player_2_row,
+		settings_player_3_row,
+		settings_player_4_row,
+	]
+	_settings_options = [
+		settings_player_1_option,
+		settings_player_2_option,
+		settings_player_3_option,
+		settings_player_4_option,
+	]
+	for index in range(_settings_options.size()):
+		var aim_mode_value: int = PlayerConfigData.AimMode.FULL_AUTO
+		if index < _player_configs.size():
+			aim_mode_value = int(_player_configs[index].aim_mode)
+		_populate_aim_mode_option(_settings_options[index], aim_mode_value)
 	_build_hud()
 	_ensure_floor_landmarks()
 
@@ -221,7 +253,11 @@ func _ready() -> void:
 	p2_mode_button.pressed.connect(_on_p2_mode_button_pressed)
 	retry_button.pressed.connect(_on_retry_button_pressed)
 	resume_button.pressed.connect(_on_resume_button_pressed)
+	pause_settings_button.pressed.connect(_on_pause_settings_button_pressed)
 	pause_retry_button.pressed.connect(_on_pause_retry_button_pressed)
+	for index in range(_settings_options.size()):
+		_settings_options[index].item_selected.connect(_on_pause_aim_mode_selected.bind(index))
+	settings_back_button.pressed.connect(_on_pause_settings_back_button_pressed)
 	Input.joy_connection_changed.connect(_on_joy_connection_changed)
 	_configure_menu_focus()
 	_refresh_debug_ui()
@@ -235,7 +271,10 @@ func _process(delta: float) -> void:
 
 func _input(event: InputEvent) -> void:
 	if get_tree().paused and event.is_action_pressed("ui_cancel") and not event.is_echo():
-		_set_paused(false)
+		if settings_panel.visible:
+			_close_pause_settings()
+		else:
+			_set_paused(false)
 		get_viewport().set_input_as_handled()
 		return
 	if _room_is_cleared or _room_is_failed:
@@ -257,8 +296,9 @@ func _spawn_players() -> void:
 		player_4_spawn.global_position,
 	]
 	var assigned_gamepads := _assign_gamepads(_player_configs)
+	var player_slot_count := mini(_player_configs.size(), mini(spawn_points.size(), assigned_gamepads.size()))
 
-	for index in range(_player_configs.size()):
+	for index in range(player_slot_count):
 		var player = player_scene.instantiate()
 		player.global_position = spawn_points[index]
 		player.setup(_player_configs[index], assigned_gamepads[index])
@@ -277,6 +317,7 @@ func _spawn_players() -> void:
 		_play_player_spawn_in(player)
 		_player_nodes.append(player)
 	_refresh_player_health_bars()
+	_refresh_pause_settings_panel()
 
 func _refresh_debug_ui() -> void:
 	for index in range(_status_labels.size()):
@@ -301,6 +342,7 @@ func _refresh_debug_ui() -> void:
 	_refresh_modifier_chip()
 	_refresh_player_health_bars()
 	_refresh_boss_health_bar()
+	_refresh_pause_settings_panel()
 
 func _build_player_status_text(player) -> String:
 	var dash_state := "Downed" if player.is_downed() else ("Dashing" if player.is_dash_active() else "Ready")
@@ -373,7 +415,76 @@ func _cycle_player_mode(player_index: int) -> void:
 	if player_index < 0 or player_index >= _player_nodes.size():
 		return
 	_player_nodes[player_index].cycle_aim_mode()
+	if player_index < _player_configs.size():
+		_player_configs[player_index].aim_mode = _player_nodes[player_index].player_config.aim_mode
+	if player_index < RunState.player_configs.size():
+		RunState.player_configs[player_index].aim_mode = _player_nodes[player_index].player_config.aim_mode
 	_refresh_debug_ui()
+
+func _populate_aim_mode_option(option_button: OptionButton, selected_aim_mode: int) -> void:
+	option_button.clear()
+	var entries := [
+		{"label": "Heavy Auto", "value": PlayerConfigData.AimMode.HEAVY_AUTO},
+		{"label": "Full Auto", "value": PlayerConfigData.AimMode.FULL_AUTO},
+		{"label": "Manual", "value": PlayerConfigData.AimMode.MANUAL},
+	]
+	for index in range(entries.size()):
+		var entry: Dictionary = entries[index]
+		option_button.add_item(str(entry.get("label", "Aim")))
+		option_button.set_item_metadata(index, int(entry.get("value", PlayerConfigData.AimMode.HEAVY_AUTO)))
+	_select_option_by_metadata(option_button, selected_aim_mode)
+
+func _select_option_by_metadata(option_button: OptionButton, target_value: int) -> void:
+	for index in range(option_button.item_count):
+		if option_button.get_item_metadata(index) == target_value:
+			option_button.select(index)
+			return
+	if option_button.item_count > 0:
+		option_button.select(0)
+
+func _refresh_pause_settings_panel() -> void:
+	var settings_slot_count := mini(_settings_rows.size(), _settings_options.size())
+	for index in range(settings_slot_count):
+		var has_player := index < _player_configs.size()
+		_settings_rows[index].visible = has_player
+		if has_player:
+			_select_option_by_metadata(_settings_options[index], int(_player_configs[index].aim_mode))
+
+func _focus_pause_settings_panel() -> void:
+	var settings_slot_count := mini(_settings_rows.size(), _settings_options.size())
+	for index in range(settings_slot_count):
+		if _settings_rows[index].visible:
+			_settings_options[index].grab_focus()
+			return
+	settings_back_button.grab_focus()
+
+func _apply_player_aim_mode(player_index: int, aim_mode_value: int) -> void:
+	if player_index < 0 or player_index >= _player_configs.size():
+		return
+	var resolved_aim_mode: int = clampi(
+		aim_mode_value,
+		PlayerConfigData.AimMode.HEAVY_AUTO,
+		PlayerConfigData.AimMode.MANUAL
+	)
+	_player_configs[player_index].aim_mode = resolved_aim_mode
+	if player_index < RunState.player_configs.size():
+		RunState.player_configs[player_index].aim_mode = resolved_aim_mode
+	if player_index < _player_nodes.size() and is_instance_valid(_player_nodes[player_index]):
+		_player_nodes[player_index].set_aim_mode(resolved_aim_mode)
+	_refresh_debug_ui()
+
+func _open_pause_settings() -> void:
+	_refresh_pause_settings_panel()
+	pause_panel.visible = false
+	settings_panel.visible = true
+	_apply_panel_style(settings_panel, _get_active_hud_accent())
+	call_deferred("_focus_pause_settings_panel")
+
+func _close_pause_settings() -> void:
+	settings_panel.visible = false
+	if get_tree().paused:
+		pause_panel.visible = true
+		resume_button.grab_focus()
 
 func _on_joy_connection_changed(_device: int, _connected: bool) -> void:
 	_refresh_debug_ui()
@@ -446,8 +557,10 @@ func _spawn_room_opening_encounter() -> void:
 
 func _build_survival_wave_plan() -> Array:
 	var spawn_points := _get_enemy_spawn_positions()
-	var enemy_types := ["chaser", "spitter", "charger", "chaser", "spitter", "charger"]
-	var spawn_count := clampi(4 + max(_player_nodes.size() - 1, 0), 4, enemy_types.size())
+	var step_index := int(_room_config.get("step_index", 0))
+	var is_elite := str(_room_config.get("room_type", "")) == "elite"
+	var enemy_types := _roll_wave_composition(step_index, is_elite)
+	var spawn_count := _compute_wave_size(step_index, is_elite, spawn_points.size())
 	var plan: Array = []
 
 	for index in range(spawn_count):
@@ -468,11 +581,46 @@ func _spawn_boss() -> void:
 	boss.global_position = Vector2(640, 210)
 	boss.setup("boss", self)
 	boss.apply_boss_scale(_player_nodes.size())
+	var rooms_bonus: int = max(RunState.rooms_completed - 2, 0)
+	boss.max_health += rooms_bonus * 3
+	boss.current_health = boss.max_health
 	boss.enemy_died.connect(_on_enemy_died)
 	boss.hit_received.connect(_on_enemy_hit_received)
 	boss.fire_requested.connect(_on_enemy_fire_requested)
 	enemies.add_child(boss)
 	_boss_node = boss
+
+func _roll_wave_composition(step_index: int, is_elite: bool) -> Array:
+	var weights := [5, 2, 0]
+	if step_index >= 4:
+		weights = [1, 3, 4]
+	elif step_index >= 2:
+		weights = [3, 3, 2]
+
+	if is_elite:
+		weights[0] = max(weights[0] - 1, 0)
+		weights[1] += 1
+		weights[2] += 1
+
+	var weighted_pool: Array = []
+	for _index in range(weights[0]):
+		weighted_pool.append("chaser")
+	for _index in range(weights[1]):
+		weighted_pool.append("spitter")
+	for _index in range(weights[2]):
+		weighted_pool.append("charger")
+	if weighted_pool.is_empty():
+		weighted_pool.append("chaser")
+
+	var composition: Array = []
+	while composition.size() < 6:
+		composition.append(weighted_pool[_wave_random.randi_range(0, weighted_pool.size() - 1)])
+	composition.shuffle()
+	return composition
+
+func _compute_wave_size(step_index: int, is_elite: bool, max_spawn_points: int) -> int:
+	var base_size: int = 4 + max(step_index - 1, 0) + (1 if is_elite else 0) + max(_player_nodes.size() - 1, 0)
+	return clampi(base_size, 4, max_spawn_points)
 
 func _build_boss_support_wave_plan() -> Array:
 	var spawn_points := _get_enemy_spawn_positions()
@@ -873,6 +1021,20 @@ func _on_retry_button_pressed() -> void:
 func _on_resume_button_pressed() -> void:
 	_set_paused(false)
 
+func _on_pause_settings_button_pressed() -> void:
+	_play_ui_click()
+	_open_pause_settings()
+
+func _on_pause_settings_back_button_pressed() -> void:
+	_play_ui_click()
+	_close_pause_settings()
+
+func _on_pause_aim_mode_selected(selected_index: int, player_index: int) -> void:
+	if player_index < 0 or player_index >= _settings_options.size() or player_index >= _player_configs.size():
+		return
+	_play_ui_click()
+	_apply_player_aim_mode(player_index, int(_settings_options[player_index].get_item_metadata(selected_index)))
+
 func _on_pause_retry_button_pressed() -> void:
 	_on_retry_button_pressed()
 
@@ -1217,6 +1379,10 @@ func _play_sfx_fire() -> void:
 	if _sfx_engine != null:
 		_sfx_engine.play_fire()
 
+func _play_ui_click() -> void:
+	if _sfx_engine != null:
+		_sfx_engine.play_ui_click()
+
 func _play_sfx_hit() -> void:
 	if _sfx_engine != null:
 		_sfx_engine.play_hit()
@@ -1357,6 +1523,7 @@ func _build_hud() -> void:
 	_apply_panel_style(result_panel, Color(0.34, 0.72, 0.98, 1.0))
 	_apply_panel_style(modifier_intro_panel, Color(0.34, 0.72, 0.98, 1.0))
 	_apply_panel_style(pause_panel, Color(0.34, 0.72, 0.98, 1.0))
+	_apply_panel_style(settings_panel, Color(0.34, 0.72, 0.98, 1.0))
 	_apply_panel_style(_modifier_chip_panel, Color(0.34, 0.72, 0.98, 1.0))
 	_apply_panel_style(_timer_panel, Color(0.34, 0.72, 0.98, 1.0))
 	_set_room_progress_ui("Ready", "Awaiting room", 1.0, Color(0.34, 0.72, 0.98, 1.0))
@@ -1430,11 +1597,25 @@ func _toggle_pause() -> void:
 func _set_paused(paused: bool) -> void:
 	get_tree().paused = paused
 	pause_panel.visible = paused
+	settings_panel.visible = false
 	if paused:
+		_refresh_pause_settings_panel()
 		resume_button.grab_focus()
 
 func _configure_menu_focus() -> void:
-	var controls: Array = [p1_mode_button, p2_mode_button, retry_button, resume_button, pause_retry_button]
+	var controls: Array = [
+		p1_mode_button,
+		p2_mode_button,
+		retry_button,
+		resume_button,
+		pause_settings_button,
+		pause_retry_button,
+		settings_player_1_option,
+		settings_player_2_option,
+		settings_player_3_option,
+		settings_player_4_option,
+		settings_back_button,
+	]
 	for control in controls:
 		if control == null:
 			continue
