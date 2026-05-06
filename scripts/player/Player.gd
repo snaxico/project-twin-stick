@@ -88,6 +88,7 @@ var _base_sprite_scale := Vector2.ONE
 var _base_shadow_scale := Vector2.ONE
 var _display_move_input := Vector2.ZERO
 var _previous_move_input := Vector2.ZERO
+var _sprite_facing_left := false
 var _turn_squash := 0.0
 var _aim_line_recoil := 0.0
 var _outline_pulse := 1.0
@@ -492,7 +493,10 @@ func _apply_visual_state(now: float, delta: float = 0.0) -> void:
 	if sprite_visual != null:
 		sprite_visual.visible = use_sprite
 		if sprite_visual.visible:
-			sprite_visual.scale = Vector2(_base_sprite_scale.x * dash_scale * squash_x, _base_sprite_scale.y * dash_scale * squash_y)
+			var sprite_scale_x := _base_sprite_scale.x * dash_scale * squash_x
+			if _sprite_facing_left:
+				sprite_scale_x *= -1.0
+			sprite_visual.scale = Vector2(sprite_scale_x, _base_sprite_scale.y * dash_scale * squash_y)
 			var sprite_modulate := Color(1.0, 1.0, 1.0, 1.0)
 			sprite_modulate.a = 0.56 + 0.24 * downed_pulse if _is_downed else 1.0
 			sprite_visual.modulate = sprite_modulate
@@ -508,12 +512,8 @@ func _apply_visual_state(now: float, delta: float = 0.0) -> void:
 	body_root.rotation = lerp_angle(body_root.rotation, lean_target, 0.18)
 	aim_pivot.rotation = aim_direction.angle()
 	aim_pivot.position = Vector2(-_aim_line_recoil * 0.2, 0.0)
-	var aim_length: float = max(18.0, 52.0 - _aim_line_recoil)
-	aim_line_backdrop.visible = not _is_downed
-	aim_line_backdrop.points = PackedVector2Array([Vector2.ZERO, Vector2(aim_length, 0.0)])
-	aim_line.default_color = _get_projectile_tint()
-	aim_line.visible = not _is_downed
-	aim_line.points = PackedVector2Array([Vector2.ZERO, Vector2(aim_length, 0.0)])
+	aim_line_backdrop.visible = false
+	aim_line.visible = false
 	_update_secondary_preview(now)
 
 func _current_time_seconds() -> float:
@@ -532,6 +532,10 @@ func _enter_downed_state() -> void:
 func _update_animation_state(move_input: Vector2, delta: float) -> void:
 	if move_input.length() > 0.2 and _previous_move_input.length() > 0.2 and move_input.dot(_previous_move_input) < -0.2:
 		_turn_squash = 1.0
+	if move_input.x <= -0.1:
+		_sprite_facing_left = true
+	elif move_input.x >= 0.1:
+		_sprite_facing_left = false
 	_display_move_input = _display_move_input.lerp(move_input, clamp(delta * 10.0, 0.0, 1.0))
 	_previous_move_input = move_input if move_input.length() > 0.05 else _previous_move_input.move_toward(Vector2.ZERO, delta * 5.0)
 	_turn_squash = move_toward(_turn_squash, 0.0, delta * 3.8)
