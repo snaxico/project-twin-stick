@@ -55,10 +55,12 @@ func add_weapon(weapon_id: String, weapon_type: String, max_level: int = 5) -> S
 			"weapon_id": weapon_id,
 			"level": 1,
 		}
-		if selected_field == "selected_secondary":
-			selected_secondary = slot_index
-		else:
-			selected_primary = slot_index
+		var current_selected: int = selected_secondary if selected_field == "selected_secondary" else selected_primary
+		if current_selected < 0 or current_selected >= slot_group.size() or slot_group[current_selected] == null:
+			if selected_field == "selected_secondary":
+				selected_secondary = slot_index
+			else:
+				selected_primary = slot_index
 		return "equipped"
 	return "slots_full"
 
@@ -79,20 +81,21 @@ func level_up_weapon(weapon_id: String) -> void:
 		return
 
 func replace_weapon(slot_type: String, slot_index: int, new_weapon_id: String) -> void:
-	var slot_group: Array = secondary_slots if slot_type == "secondary" else primary_slots
+	var is_secondary: bool = slot_type == "secondary" or slot_type == "secondary_weapon"
+	var slot_group: Array = secondary_slots if is_secondary else primary_slots
 	if slot_index < 0 or slot_index >= slot_group.size():
 		return
 	slot_group[slot_index] = {
 		"weapon_id": new_weapon_id,
 		"level": 1,
 	}
-	if slot_type == "secondary":
+	if is_secondary:
 		selected_secondary = slot_index
 	else:
 		selected_primary = slot_index
 
-func add_passive(passive_id: String) -> void:
-	if has_passive(passive_id):
+func add_passive(passive_id: String, allow_duplicate: bool = false) -> void:
+	if not allow_duplicate and has_passive(passive_id):
 		return
 	passives.append(passive_id)
 

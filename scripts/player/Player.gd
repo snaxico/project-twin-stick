@@ -110,6 +110,7 @@ var _running_sprite_texture: Texture2D = null
 var _running_sprite_alt_texture: Texture2D = null
 var _weapon_texture: Texture2D = null
 var _weapon_textures_by_id: Dictionary = {}
+var _primary_weapon_id: String = "rifle"
 var _base_weapon_scale := Vector2.ONE
 var _turn_squash := 0.0
 var _aim_line_recoil := 0.0
@@ -639,14 +640,14 @@ func _resolve_selected_slot_index(slot_group: Array, selected_index: int) -> int
 
 func _apply_selected_slot_state() -> void:
 	var primary_slot: Dictionary = _get_selected_primary_slot()
-	var primary_weapon_id: String = str(primary_slot.get("weapon_id", "rifle"))
+	_primary_weapon_id = str(primary_slot.get("weapon_id", "rifle"))
 	_primary_profile_name = str(primary_slot.get("primary_profile_name", "Rifle"))
 	_primary_projectile_count = max(1, int(primary_slot.get("primary_projectile_count", 1)))
 	_primary_spread_radians = float(primary_slot.get("primary_spread_radians", 0.0))
 	primary_fire_interval = float(primary_slot.get("primary_fire_interval", 0.27))
 	projectile_speed = float(primary_slot.get("projectile_speed", 540.0))
 	projectile_damage = max(1, int(primary_slot.get("projectile_damage", 1)))
-	_weapon_texture = _get_weapon_texture_for_primary_id(primary_weapon_id)
+	_weapon_texture = _get_weapon_texture_for_primary_id(_primary_weapon_id)
 
 	var secondary_slot: Dictionary = _get_selected_secondary_slot()
 	_secondary_profile_name = str(secondary_slot.get("secondary_profile_name", "Mine"))
@@ -769,9 +770,10 @@ func _apply_visual_state(now: float, delta: float = 0.0) -> void:
 		weapon_sprite.visible = use_sprite and _weapon_texture != null
 		if weapon_sprite.visible:
 			weapon_sprite.texture = _weapon_texture
+			var weapon_scale_mult: float = 2.0 if _primary_weapon_id == "slug" else 1.0
 			weapon_sprite.scale = Vector2(
-				_base_weapon_scale.x,
-				-_base_weapon_scale.y if aim_direction.x < 0.0 else _base_weapon_scale.y
+				_base_weapon_scale.x * weapon_scale_mult,
+				(-_base_weapon_scale.y if aim_direction.x < 0.0 else _base_weapon_scale.y) * weapon_scale_mult
 			)
 	aim_line_backdrop.visible = false
 	aim_line.visible = false
@@ -917,7 +919,7 @@ func _build_circle_points(center: Vector2, radius: float, point_count: int) -> P
 		points.append(center + Vector2.RIGHT.rotated(angle) * radius)
 	return PackedVector2Array(points)
 
-func _should_show_secondary_preview(now: float) -> bool:
+func _should_show_secondary_preview(_now: float) -> bool:
 	if _is_downed:
 		return false
 	if _is_proximity_mine_secondary():

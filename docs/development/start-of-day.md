@@ -58,7 +58,6 @@ Read this first to restore project context quickly, then read `current-state.md`
   - top-center modifier chip
   - timer bar
   - styled result/pause/modifier panels
-  - passive strip per player
   - lighter transparency so the arena remains visible under HUD cards
 - Player visuals are now in transition from pure procedural shapes toward real sprites:
   - player 1 uses a sprite-backed body
@@ -117,6 +116,8 @@ Read this first to restore project context quickly, then read `current-state.md`
   - gamepad dash is now on `B / O`
   - visible player and weapon sprites were enlarged again by roughly `33%`
   - primary fire intervals and secondary cooldowns are both globally reduced by `20%`
+  - player loadouts now refresh immediately after loot/shop inventory changes
+  - `Rifle` and `Mine` are now valid reward/shop rolls, so the starting weapons can level up
 
 ## Current Priorities
 

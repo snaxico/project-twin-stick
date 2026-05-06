@@ -13,7 +13,7 @@ func set_interaction_enabled(enabled: bool) -> void:
 	if prompt_label != null:
 		prompt_label.visible = enabled
 	if visual != null:
-		visual.visible = true
+		visual.visible = enabled
 
 func is_player_in_range(player: Node2D) -> bool:
 	if player == null or not is_instance_valid(player):

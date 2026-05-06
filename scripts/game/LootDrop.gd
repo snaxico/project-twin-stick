@@ -18,6 +18,8 @@ var _interaction_enabled: bool = true
 
 func _ready() -> void:
 	_base_position = global_position
+	if not item_data.is_empty():
+		_apply_item_visuals()
 	set_prompt_visible(true)
 
 func _process(delta: float) -> void:
@@ -26,11 +28,15 @@ func _process(delta: float) -> void:
 
 func setup(item: Dictionary) -> void:
 	item_data = item.duplicate(true)
+	if is_inside_tree():
+		_apply_item_visuals()
+	set_prompt_visible(true)
+
+func _apply_item_visuals() -> void:
 	if item_label != null:
 		item_label.text = str(item_data.get("name", "Loot"))
 	if visual != null:
 		visual.color = _get_item_color(item_data)
-	set_prompt_visible(true)
 
 func set_prompt_visible(should_show: bool) -> void:
 	if prompt_label == null:

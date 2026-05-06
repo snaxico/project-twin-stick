@@ -107,7 +107,6 @@ Godot `4.6.2` prototype for a same-screen local co-op twin-stick roguelite. The 
   - two secondary slots
   - selected-slot highlight
   - secondary cooldown bars
-  - passive item strip
   - lighter transparency so the arena stays readable behind the HUD
 - modifier intro panel plus active room tinting
 - darkness overlay, left-side spawn filtering, and optional friendly fire modifier hooks
@@ -132,6 +131,12 @@ Godot `4.6.2` prototype for a same-screen local co-op twin-stick roguelite. The 
 - player combat pace is currently bumped above the earlier baseline:
   - primary fire intervals are globally reduced by `20%`
   - secondary cooldowns are globally reduced by `20%`
+- loot/inventory/shop follow-up fixes now also landed:
+  - player loadouts reapply immediately after loot, replacements, and shop purchases
+  - `Rifle` and `Mine` are back in reward/shop pools, so starter weapons can level naturally
+  - loot drops now keep their label/color even though setup happens before `_ready()`
+  - shop reset correctly unlocks the active shopper
+  - duplicate pickup-point gold floating text was removed
 - shared placeholder visual language with player color identity and shooter-tinted projectiles/effects
 - juice stack through `J7`: hit flash, knockback, hitstop, shake, particles, procedural SFX, health bars, floating text, motion polish, screen overlays, and transition polish
 - sprite-generation documentation now lives in-project under `sprites/guidelines/`, separate from runtime assets in `assets/sprites/`

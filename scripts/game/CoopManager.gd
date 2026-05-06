@@ -406,6 +406,18 @@ func _spawn_players() -> void:
 	_refresh_player_inventory_huds()
 	_refresh_pause_settings_panel()
 
+func _reapply_player_loadout(player_index: int) -> void:
+	if player_index < 0 or player_index >= _player_nodes.size():
+		return
+	var player = _player_nodes[player_index]
+	if player == null or not is_instance_valid(player):
+		return
+	player.apply_loadout(RunState.get_player_runtime_loadout_for(player_index))
+
+func _reapply_all_player_loadouts() -> void:
+	for index in range(_player_nodes.size()):
+		_reapply_player_loadout(index)
+
 func _refresh_debug_ui() -> void:
 	p1_mode_button.visible = false
 	p2_mode_button.visible = false
@@ -927,8 +939,7 @@ func _spawn_pickup_deferred(pickup_type: String, origin: Vector2, value: int = 1
 	pickup.pickup_collected.connect(_on_pickup_collected)
 	pickups.call_deferred("add_child", pickup)
 
-func _on_pickup_collected(pickup, collector, pickup_type: String, value: int) -> void:
-	var pickup_position: Vector2 = pickup.global_position if pickup != null and is_instance_valid(pickup) else Vector2.ZERO
+func _on_pickup_collected(_pickup, collector, pickup_type: String, value: int) -> void:
 	match pickup_type:
 		"food":
 			if collector != null and is_instance_valid(collector) and collector.has_method("heal"):
@@ -937,12 +948,10 @@ func _on_pickup_collected(pickup, collector, pickup_type: String, value: int) ->
 					_spawn_world_floating_text("+%d HP" % healed_amount, Color(0.74, 0.96, 0.48, 1.0), collector.global_position + Vector2(0.0, -46.0))
 		_:
 			for inventory_index in range(RunState.player_inventories.size()):
-				var inventory = RunState.player_inventories[inventory_index]
 				if inventory_index < _player_nodes.size() and is_instance_valid(_player_nodes[inventory_index]):
 					var player = _player_nodes[inventory_index]
 					_spawn_world_floating_text("+%d Gold" % value, player.player_config.tint, player.global_position + Vector2(0.0, -32.0))
 			RunState.award_gold_to_all(value)
-			_spawn_world_floating_text("+%d Gold" % value, Color(1.0, 0.88, 0.28, 1.0), pickup_position + Vector2(0.0, -24.0))
 
 func _auto_collect_remaining_pickups() -> void:
 	var remaining_pickups: Array = pickups.get_children()
@@ -1465,6 +1474,8 @@ func _commit_weapon_replacement(cancel_instead: bool) -> void:
 	if replace_source == "shop":
 		var item_id: String = str(_pending_weapon_replace_request.get("item_id", str(entry.get("id", ""))))
 		var purchase_result: Dictionary = RunState.complete_shop_purchase(player_index, item_id, slot_type, _weapon_replace_selected_slot, cancel_instead)
+		if bool(purchase_result.get("success", false)):
+			_reapply_player_loadout(player_index)
 		_weapon_replace_active = false
 		_pending_weapon_replace_request = {}
 		_pending_weapon_replace_result = {}
@@ -1507,6 +1518,7 @@ func _complete_loot_resolution(result: Dictionary) -> void:
 	for player in _player_nodes:
 		if player != null and is_instance_valid(player):
 			player.set_input_locked(false)
+	_reapply_all_player_loadouts()
 	var summary_text: String = str(result.get("summary", "")).strip_edges()
 	if summary_text.is_empty():
 		summary_text = "Loot resolved."
@@ -1609,14 +1621,14 @@ func _trigger_room_exit() -> void:
 	_set_exit_zone_visible(false)
 	room_cleared.emit(resolved_health_states, clear_context)
 
-func _set_exit_zone_visible(visible: bool) -> void:
-	_exit_zone_open = visible
+func _set_exit_zone_visible(should_show: bool) -> void:
+	_exit_zone_open = should_show
 	if exit_zone != null:
-		exit_zone.monitoring = visible
-		exit_zone.monitorable = visible
+		exit_zone.monitoring = should_show
+		exit_zone.monitorable = should_show
 	if exit_zone_visual != null:
-		exit_zone_visual.visible = visible
-	if not visible:
+		exit_zone_visual.visible = should_show
+	if not should_show:
 		_exit_zone_auto_exit_at = 0.0
 		_exit_zone_hold_started_at = -1.0
 
@@ -1755,6 +1767,7 @@ func _update_shop_ui(now: float) -> void:
 				var purchase_result: Dictionary = RunState.complete_shop_purchase(_shop_active_player_index, str(offer.get("id", "")))
 				_shop_status_message = str(purchase_result.get("summary", "Purchase complete."))
 				if bool(purchase_result.get("success", false)):
+					_reapply_player_loadout(_shop_active_player_index)
 					_shop_room_log.append(_shop_status_message)
 	_shop_confirm_pressed = confirm_pressed
 	var cancel_pressed: bool = _is_player_scrap_button_pressed(player)
@@ -1798,6 +1811,8 @@ func _build_shop_summary() -> String:
 	return "\n".join(lines)
 
 func _reset_shop_room_state() -> void:
+	if _shop_active_player_index >= 0 or (_shop_ui != null and is_instance_valid(_shop_ui)):
+		_close_shop_ui()
 	_shop_room_ready_players = {}
 	_shop_ready_deadline = 0.0
 	_shop_active_player_index = -1
@@ -1809,8 +1824,6 @@ func _reset_shop_room_state() -> void:
 	_shop_interact_pressed = {}
 	_shop_status_message = ""
 	_shop_room_log = []
-	if _shop_active_player_index >= 0 or (_shop_ui != null and is_instance_valid(_shop_ui)):
-		_close_shop_ui()
 	if _shop_station != null and is_instance_valid(_shop_station):
 		_shop_station.queue_free()
 	_shop_station = null

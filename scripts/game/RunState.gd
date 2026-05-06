@@ -373,7 +373,6 @@ func resolve_loot_vote(votes: Dictionary, item: Dictionary, health_states: Array
 		if state is Dictionary:
 			resolved_health_states.append((state as Dictionary).duplicate(true))
 
-	var item_id: String = str(item.get("id", ""))
 	var scrap_gold: int = max(1, int(item.get("scrap_gold_value", 1)))
 	var resolved_votes: Dictionary = {}
 	var takers: Array = []
@@ -1244,7 +1243,7 @@ func _apply_passive_to_player(player_index: int, passive: Dictionary, health_sta
 			"outcome": "already_owned",
 			"summary": "%s was already owned, so the drop was converted to Gold." % str(passive.get("name", "Passive")),
 		}
-	inventory.add_passive(passive_id)
+	inventory.add_passive(passive_id, bool(passive.get("stackable", false)))
 	var effects: Dictionary = passive.get("passive_effects", {})
 	if effects.has("max_health_bonus") and not health_state.is_empty():
 		var max_health_bonus: int = int(effects.get("max_health_bonus", 0))
@@ -1337,7 +1336,7 @@ func _apply_passive_to_all_players(passive: Dictionary) -> String:
 	for inventory in player_inventories:
 		var player_inventory: PlayerInventoryData = inventory
 		if bool(passive.get("stackable", false)) or not player_inventory.has_passive(passive_id):
-			player_inventory.add_passive(passive_id)
+			player_inventory.add_passive(passive_id, bool(passive.get("stackable", false)))
 	var effects: Dictionary = passive.get("passive_effects", {})
 	if effects.has("max_health_bonus"):
 		var max_health_bonus := int(effects.get("max_health_bonus", 0))

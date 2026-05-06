@@ -8,7 +8,7 @@
       "scrap_gold_value": 2,
       "shop_gold_cost": 3,
       "max_level": 5,
-      "pools": [],
+      "pools": ["reward", "shop"],
       "base_stats": {
         "projectile_count": 1,
         "spread_radians": 0.0,
@@ -196,7 +196,7 @@
       "scrap_gold_value": 2,
       "shop_gold_cost": 3,
       "max_level": 5,
-      "pools": [],
+      "pools": ["reward", "shop"],
       "base_stats": {
         "kind": "mine",
         "projectile_count": 1,

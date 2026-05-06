@@ -41,6 +41,7 @@ func show_result(summary_text: String) -> void:
 
 func _rebuild_vote_rows(player_count: int) -> void:
 	for child in vote_rows.get_children():
+		vote_rows.remove_child(child)
 		child.queue_free()
 	for index in range(player_count):
 		var row_label := Label.new()

@@ -14,7 +14,7 @@ func setup_for_player(player_index: int, offers: Array, gold_value: int, selecte
 	hint_label.text = "Move left/right. Confirm to buy. Select Ready when done. Cancel closes the panel."
 	update_state(player_index, offers, gold_value, selected_index, ready_players, ready_deadline_text, "")
 
-func update_state(player_index: int, offers: Array, gold_value: int, selected_index: int, ready_players: Dictionary, ready_deadline_text: String, status_text: String) -> void:
+func update_state(_player_index: int, offers: Array, gold_value: int, selected_index: int, ready_players: Dictionary, ready_deadline_text: String, status_text: String) -> void:
 	wallet_label.text = "Wallet: %d Gold" % gold_value
 	status_label.text = status_text
 	_set_offer_label(offer_1_label, offers, 0, selected_index == 0)

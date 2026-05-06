@@ -44,8 +44,6 @@ func update_hud(data: Dictionary) -> void:
 	var health_state: Dictionary = data.get("health_state", {})
 	var health_status: String = str(data.get("health_status", ""))
 	_health_bar.set_health(int(health_state.get("current", 0)), int(health_state.get("max", 1)), health_status)
-	var passive_names: Array = data.get("passives", [])
-	_passive_label.text = _build_passive_text(passive_names)
 	var primary_slots: Array = data.get("primary_slots", [])
 	var secondary_slots: Array = data.get("secondary_slots", [])
 	for slot_index in range(_primary_slot_huds.size()):
@@ -104,6 +102,7 @@ func _build() -> void:
 	_passive_label = Label.new()
 	_passive_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_passive_label.modulate = Color(1.0, 1.0, 1.0, 0.82)
+	_passive_label.visible = false
 	layout.add_child(_passive_label)
 	_passive_label.text = _build_passive_text([])
 
