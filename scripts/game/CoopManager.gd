@@ -783,10 +783,10 @@ func _clear_container(container: Node) -> void:
 	for child in container.get_children():
 		child.queue_free()
 
-func _on_player_fire_requested(origin: Vector2, direction: Vector2, speed: float, damage: int, team: String, color: Color, shooter: Node) -> void:
+func _on_player_fire_requested(origin: Vector2, direction: Vector2, speed: float, damage: int, team: String, color: Color, shooter: Node, feedback_profile: String, impact_weight: float) -> void:
 	if _room_is_cleared or _room_is_failed:
 		return
-	_spawn_projectile(origin, direction, speed, damage, team, color, shooter)
+	_spawn_projectile(origin, direction, speed, damage, team, color, shooter, feedback_profile, impact_weight)
 
 func _on_player_secondary_requested(origin: Vector2, direction: Vector2, speed: float, damage: int, team: String, projectile_data: Dictionary, color: Color) -> void:
 	if _room_is_cleared or _room_is_failed:
@@ -803,10 +803,10 @@ func _on_enemy_fire_requested(origin: Vector2, direction: Vector2, speed: float,
 		return
 	_spawn_projectile(origin, direction, speed, damage, team, color)
 
-func _spawn_projectile(origin: Vector2, direction: Vector2, speed: float, damage: int, team: String, color: Color, shooter: Node = null) -> void:
+func _spawn_projectile(origin: Vector2, direction: Vector2, speed: float, damage: int, team: String, color: Color, shooter: Node = null, feedback_profile: String = "rifle", impact_weight: float = 1.0) -> void:
 	var projectile = projectile_scene.instantiate()
 	projectile.global_position = origin
-	projectile.setup(team, direction, speed, damage, color, shooter)
+	projectile.setup(team, direction, speed, damage, color, shooter, feedback_profile, impact_weight)
 	projectile.allow_friendly_fire = _friendly_fire_enabled and team == "player"
 	projectile.impact_requested.connect(_on_projectile_impact_requested)
 	projectiles.add_child(projectile)
@@ -814,7 +814,15 @@ func _spawn_projectile(origin: Vector2, direction: Vector2, speed: float, damage
 func _spawn_grenade(origin: Vector2, direction: Vector2, speed: float, damage: int, team: String, projectile_data: Dictionary, color: Color) -> void:
 	var grenade = grenade_projectile_scene.instantiate()
 	grenade.global_position = origin
-	grenade.setup(team, direction, speed, damage, color)
+	grenade.setup(
+		team,
+		direction,
+		speed,
+		damage,
+		color,
+		str(projectile_data.get("feedback_profile", "grenade")),
+		float(projectile_data.get("impact_weight", 1.6))
+	)
 	grenade.kind = str(projectile_data.get("kind", grenade.kind))
 	grenade.explosion_radius = float(projectile_data.get("explosion_radius", grenade.explosion_radius))
 	grenade.fuse_time = float(projectile_data.get("fuse_time", grenade.fuse_time))
@@ -829,7 +837,15 @@ func _spawn_grenade(origin: Vector2, direction: Vector2, speed: float, damage: i
 func _spawn_mine(origin: Vector2, direction: Vector2, speed: float, damage: int, team: String, projectile_data: Dictionary, color: Color) -> void:
 	var mine = mine_projectile_scene.instantiate()
 	mine.global_position = origin
-	mine.setup(team, direction, speed, damage, color)
+	mine.setup(
+		team,
+		direction,
+		speed,
+		damage,
+		color,
+		str(projectile_data.get("feedback_profile", "mine")),
+		float(projectile_data.get("impact_weight", 1.7))
+	)
 	mine.kind = str(projectile_data.get("kind", mine.kind))
 	mine.explosion_radius = float(projectile_data.get("explosion_radius", mine.explosion_radius))
 	mine.fuse_time = float(projectile_data.get("fuse_time", mine.fuse_time))
@@ -880,9 +896,13 @@ func _spawn_generators() -> void:
 func _on_generator_destroyed(generator) -> void:
 	_trigger_hitstop(0.05)
 	_add_camera_trauma(0.45)
-	_play_sfx_enemy_death()
+	_play_sfx_enemy_death(1.2)
 	_spawn_world_effect(
-		ParticleFactoryData.create_explosion_burst(Color(0.96, 0.62, 0.28, 1.0)),
+		ParticleFactoryData.create_explosion_burst(Color(0.96, 0.62, 0.28, 1.0), 1.25),
+		generator.global_position
+	)
+	_spawn_world_effect(
+		ParticleFactoryData.create_explosion_ring(Color(1.0, 0.72, 0.32, 0.78), 72.0, 4.0),
 		generator.global_position
 	)
 	_drop_pickups_for_generator(generator)
@@ -988,11 +1008,17 @@ func _find_lowest_health_living_player() -> Node:
 	return lowest_player
 
 func _on_enemy_died(enemy) -> void:
-	_trigger_hitstop(0.04)
-	_add_camera_trauma(0.4)
-	_play_sfx_enemy_death()
+	var enemy_weight: float = enemy.get_feedback_weight() if enemy != null and is_instance_valid(enemy) and enemy.has_method("get_feedback_weight") else 1.0
+	var enemy_color: Color = enemy.get_feedback_color() if enemy != null and is_instance_valid(enemy) and enemy.has_method("get_feedback_color") else Color(1.0, 0.28, 0.28, 1.0)
+	_trigger_hitstop(0.03 + enemy_weight * 0.014)
+	_add_camera_trauma(0.18 + enemy_weight * 0.16)
+	_play_sfx_enemy_death(enemy_weight)
 	_spawn_world_effect(
-		ParticleFactoryData.create_death_burst(Color(1.0, 0.28, 0.28, 1.0)),
+		ParticleFactoryData.create_death_burst(enemy_color, enemy_weight),
+		enemy.global_position
+	)
+	_spawn_world_effect(
+		ParticleFactoryData.create_explosion_ring(enemy_color.lightened(0.22), 36.0 + enemy_weight * 20.0, 2.5 + enemy_weight),
 		enemy.global_position
 	)
 	if _is_boss_room() and enemy != null and enemy.has_method("is_boss") and enemy.is_boss():
@@ -1027,31 +1053,51 @@ func _on_player_revived(player) -> void:
 	)
 	_refresh_debug_ui()
 
-func _on_explosive_detonated(_origin: Vector2, color: Color) -> void:
-	_play_sfx_explosion()
-	_spawn_world_effect(
-		ParticleFactoryData.create_explosion_burst(color),
-		_origin
-	)
-	_play_zoom_punch(0.06, 0.05, 0.12)
+func _on_explosive_detonated(origin: Vector2, color: Color, feedback_profile: String, impact_weight: float, explosion_radius: float) -> void:
+	_play_sfx_explosion(impact_weight, feedback_profile)
+	_spawn_world_effect(ParticleFactoryData.create_explosion_burst(color, impact_weight), origin)
+	_spawn_world_effect(ParticleFactoryData.create_explosion_ring(color.lightened(0.1), max(explosion_radius, 46.0), 3.0 + impact_weight), origin)
+	_add_camera_trauma(0.16 + impact_weight * 0.14)
+	_play_zoom_punch(0.04 + impact_weight * 0.018, 0.04, 0.1 + impact_weight * 0.03)
 
-func _on_player_muzzle_flash_requested(origin: Vector2, direction: Vector2, color: Color) -> void:
-	_play_sfx_fire()
-	_spawn_world_effect(ParticleFactoryData.create_muzzle_flash(color, direction), origin)
+func _on_player_muzzle_flash_requested(origin: Vector2, direction: Vector2, color: Color, feedback_profile: String, impact_weight: float) -> void:
+	_play_sfx_fire(feedback_profile, impact_weight)
+	_spawn_world_effect(ParticleFactoryData.create_muzzle_flash(color, direction, feedback_profile, impact_weight), origin)
+	if feedback_profile == "slug":
+		_add_camera_trauma(0.08)
+	elif feedback_profile == "scatter":
+		_add_camera_trauma(0.04)
+	else:
+		_add_camera_trauma(0.02)
 
 func _on_player_dash_trail_requested(origin: Vector2, color: Color) -> void:
-	_spawn_world_effect(ParticleFactoryData.create_dash_trail(color.darkened(0.15)), origin)
+	_spawn_world_effect(ParticleFactoryData.create_dash_trail(color.darkened(0.15), 1.1), origin)
 
-func _on_player_dash_started(_origin: Vector2) -> void:
-	_play_sfx_dash()
+func _on_player_dash_started(origin: Vector2, color: Color, shield_duration: float) -> void:
+	_play_sfx_dash(1.1)
+	_spawn_world_effect(ParticleFactoryData.create_dash_burst(color.lightened(0.08), Vector2.UP, 1.1), origin)
+	var shield_ring_color: Color = color.lightened(0.22)
+	shield_ring_color.a = min(0.72, 0.46 + shield_duration * 0.4)
+	_spawn_world_effect(ParticleFactoryData.create_impact_ring(shield_ring_color, 28.0, 3.5), origin)
+	_add_camera_trauma(0.07)
 
-func _on_enemy_hit_received(enemy, damage_amount: int, _lethal: bool) -> void:
-	_play_sfx_hit()
+func _on_enemy_hit_received(enemy, damage_amount: int, lethal: bool) -> void:
+	var enemy_weight: float = enemy.get_feedback_weight() if enemy != null and is_instance_valid(enemy) and enemy.has_method("get_feedback_weight") else 1.0
+	_play_sfx_hit(enemy_weight)
+	if not lethal:
+		_trigger_hitstop(0.01 + enemy_weight * 0.006)
 	if enemy != null and is_instance_valid(enemy):
-		_spawn_world_floating_text("-%d" % damage_amount, Color(1.0, 0.85, 0.7, 1.0), enemy.global_position + Vector2(0.0, -36.0))
+		var text_color: Color = Color(1.0, 0.85, 0.7, 1.0)
+		if lethal:
+			text_color = enemy.get_feedback_color().lightened(0.35) if enemy.has_method("get_feedback_color") else Color(1.0, 0.72, 0.72, 1.0)
+		var jitter := Vector2(_room_random.randf_range(-10.0, 10.0), _room_random.randf_range(-4.0, 4.0))
+		_spawn_world_floating_text("-%d" % damage_amount, text_color, enemy.global_position + Vector2(0.0, -36.0) + jitter)
 
-func _on_projectile_impact_requested(origin: Vector2, direction: Vector2, _team: String, color: Color) -> void:
-	_spawn_world_effect(ParticleFactoryData.create_impact_sparks(color, direction), origin)
+func _on_projectile_impact_requested(origin: Vector2, direction: Vector2, _team: String, color: Color, _feedback_profile: String, impact_weight: float, target) -> void:
+	_spawn_world_effect(ParticleFactoryData.create_impact_sparks(color, direction, impact_weight), origin)
+	_spawn_world_effect(ParticleFactoryData.create_impact_ring(color.lightened(0.15), 12.0 + impact_weight * 8.0, 2.0 + impact_weight), origin)
+	if target != null and is_instance_valid(target) and target.has_method("get_team") and str(target.get_team()) == "enemy":
+		_add_camera_trauma(0.015 + impact_weight * 0.015)
 
 func _evaluate_room_state() -> void:
 	if _room_is_failed or _room_is_cleared:
@@ -1409,10 +1455,6 @@ func _begin_shop_weapon_replacement(player_index: int, offer: Dictionary, previe
 
 func _show_weapon_replacement_ui() -> void:
 	_weapon_replace_selected_slot = 0
-	_weapon_replace_left_pressed = false
-	_weapon_replace_right_pressed = false
-	_weapon_replace_confirm_pressed = false
-	_weapon_replace_cancel_pressed = false
 	_weapon_replace_active = true
 	_close_shop_ui(false)
 	if _loot_vote_ui != null and is_instance_valid(_loot_vote_ui):
@@ -1426,6 +1468,11 @@ func _show_weapon_replacement_ui() -> void:
 	var player_index: int = int(_pending_weapon_replace_request.get("player_index", 0))
 	var slot_type: String = str(_pending_weapon_replace_request.get("slot_type", "primary"))
 	var slot_rows: Array = RunState.get_player_weapon_slot_display(player_index, slot_type)
+	var player = _player_nodes[player_index] if player_index >= 0 and player_index < _player_nodes.size() else null
+	_weapon_replace_left_pressed = _is_player_nav_left_pressed(player)
+	_weapon_replace_right_pressed = _is_player_nav_right_pressed(player)
+	_weapon_replace_confirm_pressed = _is_player_take_button_pressed(player)
+	_weapon_replace_cancel_pressed = _is_player_scrap_button_pressed(player)
 	_weapon_replace_ui = weapon_replace_ui_scene.instantiate()
 	ui_layer.add_child(_weapon_replace_ui)
 	_weapon_replace_ui.setup_for_replacement(player_index, _pending_weapon_replace_request.get("entry", {}), slot_type, slot_rows)
@@ -2220,33 +2267,33 @@ func _spawn_world_effect(effect: Node2D, origin: Vector2) -> void:
 	effects.add_child(effect)
 	effect.global_position = origin
 
-func _play_sfx_fire() -> void:
+func _play_sfx_fire(profile: String = "rifle", weight: float = 1.0) -> void:
 	if _sfx_engine != null:
-		_sfx_engine.play_fire()
+		_sfx_engine.play_fire(profile, weight)
 
 func _play_ui_click() -> void:
 	if _sfx_engine != null:
 		_sfx_engine.play_ui_click()
 
-func _play_sfx_hit() -> void:
+func _play_sfx_hit(weight: float = 1.0) -> void:
 	if _sfx_engine != null:
-		_sfx_engine.play_hit()
+		_sfx_engine.play_impact(weight)
 
-func _play_sfx_explosion() -> void:
+func _play_sfx_explosion(weight: float = 1.0, profile: String = "grenade") -> void:
 	if _sfx_engine != null:
-		_sfx_engine.play_explosion()
+		_sfx_engine.play_explosion(weight, profile)
 
-func _play_sfx_dash() -> void:
+func _play_sfx_dash(weight: float = 1.0) -> void:
 	if _sfx_engine != null:
-		_sfx_engine.play_dash()
+		_sfx_engine.play_dash(weight)
 
 func _play_sfx_damage() -> void:
 	if _sfx_engine != null:
 		_sfx_engine.play_damage()
 
-func _play_sfx_enemy_death() -> void:
+func _play_sfx_enemy_death(weight: float = 1.0) -> void:
 	if _sfx_engine != null:
-		_sfx_engine.play_enemy_death()
+		_sfx_engine.play_enemy_death(weight)
 
 func _play_sfx_room_clear() -> void:
 	if _sfx_engine != null:
@@ -2420,7 +2467,7 @@ func _refresh_player_inventory_huds() -> void:
 		if index < RunState.player_inventories.size():
 			gold_value = int((RunState.player_inventories[index] as PlayerInventoryData).gold)
 		hud.update_hud({
-			"header": "P%d  %s" % [player.player_id, player.get_aim_mode_name()],
+			"header": "P%d" % player.player_id,
 			"gold": gold_value,
 			"health_state": player.get_health_state(),
 			"health_status": player.get_health_status_text(),
@@ -2430,11 +2477,11 @@ func _refresh_player_inventory_huds() -> void:
 		})
 
 func _get_player_inventory_hud_rect(index: int) -> Rect2:
-	var width: float = 300.0
-	var height: float = 164.0
+	var width: float = 220.0
+	var height: float = 146.0
 	var side_margin: float = 32.0
-	var bottom_margin: float = 180.0
-	var row_spacing: float = 16.0
+	var bottom_margin: float = 142.0
+	var row_spacing: float = 12.0
 	var row_index: int = 0 if index < 2 else 1
 	var column_index: int = index % 2
 	var right_aligned: bool = column_index == 1

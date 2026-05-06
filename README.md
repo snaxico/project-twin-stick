@@ -12,6 +12,7 @@ Personal couch co-op twin-stick roguelite prototype built in Godot 4.6.2.
 - The current build now also includes a working pause flow, gamepad-driven menu confirm/back navigation, and shooter-colored projectiles.
 - The current build now also includes a readability-and-balance follow-up: lower ranged pressure, clearer aiming/projectile contrast, and separate grenade and mine secondary families.
 - The current build now also includes a connected route map, run-mode selection, personal loot/shop flow, manual room exits, and the first sprite-backed player/weapon pass.
+- The current build now also includes a combat spectacle pass, a short post-dash shield, and a compact icon-first player HUD.
 
 ## Stack
 
@@ -71,7 +72,7 @@ Personal couch co-op twin-stick roguelite prototype built in Godot 4.6.2.
 - return-to-menu flow after a run so meta unlocks can be spent
 - connected map with linked route selection before each room
 - first sprite-backed presentation pass for player 1, the rifle, and player bullets
-- player-facing HUD with per-player wallets, weapon slots, cooldowns, timer/objective header, and boss bar
+- player-facing HUD with compact per-player wallets, icon-based weapon slots, passive chips, cooldowns, timer/objective header, and boss bar
 
 ## Controls
 
@@ -102,6 +103,7 @@ Personal couch co-op twin-stick roguelite prototype built in Godot 4.6.2.
   - `P4`: orange
   - enemies: colored placeholder silhouettes
 - Players `2–4` still use procedural bodies.
+- The current HUD uses real rifle / scatter / slug sprites as primary-slot icons; secondaries and passives still use placeholder badges.
 
 ## Documentation
 

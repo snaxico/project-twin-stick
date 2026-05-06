@@ -16,6 +16,13 @@ color = Color(0, 0, 0, 0.25)
 polygon = PackedVector2Array(-20, 0, -15, -5, 0, -7, 15, -5, 20, 0, 15, 5, 0, 7, -15, 5)
 scale = Vector2(1.5694, 0.7714)
 
+[node name="DashShieldRing" type="Line2D" parent="."]
+visible = false
+width = 4.0
+default_color = Color(0.4, 0.9, 1, 0.6)
+closed = true
+points = PackedVector2Array(0, -47, 18, -43, 34, -31, 44, -15, 47, 0, 44, 15, 34, 31, 18, 43, 0, 47, -18, 43, -34, 31, -44, 15, -47, 0, -44, -15, -34, -31, -18, -43)
+
 [node name="CollisionShape2D" type="CollisionShape2D" parent="."]
 shape = SubResource("CircleShape2D_body")
 

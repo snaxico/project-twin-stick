@@ -5,7 +5,7 @@ const PLAYER_BULLET_TEXTURE_PATH := "res://assets/sprites/weapons/player_bullet.
 
 @export var lifetime: float = 1.8
 
-signal impact_requested(origin, direction, team, color)
+signal impact_requested(origin, direction, team, color, feedback_profile, impact_weight, target)
 
 var direction: Vector2 = Vector2.RIGHT
 var speed: float = 500.0
@@ -13,6 +13,8 @@ var damage: int = 1
 var team: String = ""
 var tint_color: Color = Color(1.0, 0.96, 0.7, 1.0)
 var allow_friendly_fire := false
+var feedback_profile: String = "rifle"
+var impact_weight: float = 1.0
 var _shooter_node: Node = null
 
 @onready var visual: Polygon2D = $Visual
@@ -23,13 +25,15 @@ var _expires_at := 0.0
 var _trail_particles: GPUParticles2D = null
 var _player_bullet_texture: Texture2D = null
 
-func setup(projectile_team: String, projectile_direction: Vector2, projectile_speed: float, projectile_damage: int, projectile_color: Color = Color(1.0, 0.96, 0.7, 1.0), projectile_shooter: Node = null) -> void:
+func setup(projectile_team: String, projectile_direction: Vector2, projectile_speed: float, projectile_damage: int, projectile_color: Color = Color(1.0, 0.96, 0.7, 1.0), projectile_shooter: Node = null, projectile_feedback_profile: String = "rifle", projectile_impact_weight: float = 1.0) -> void:
 	team = projectile_team
 	direction = projectile_direction.normalized() if projectile_direction.length() > 0.0 else Vector2.RIGHT
 	speed = projectile_speed
 	damage = projectile_damage
 	tint_color = projectile_color
 	_shooter_node = projectile_shooter
+	feedback_profile = projectile_feedback_profile
+	impact_weight = projectile_impact_weight
 
 func _ready() -> void:
 	body_entered.connect(_on_body_entered)
@@ -49,7 +53,7 @@ func _physics_process(delta: float) -> void:
 
 func _on_body_entered(body: Node) -> void:
 	if body is StaticBody2D:
-		impact_requested.emit(global_position, -direction, team, _get_projectile_color())
+		impact_requested.emit(global_position, -direction, team, _get_projectile_color(), feedback_profile, impact_weight, body)
 		queue_free()
 		return
 
@@ -71,9 +75,9 @@ func _attempt_hit_target(target: Node) -> void:
 			else:
 				return
 	if target.has_method("apply_knockback"):
-		target.apply_knockback(direction, 200.0)
+		target.apply_knockback(direction, 180.0 + impact_weight * 90.0)
 	target.apply_damage(damage)
-	impact_requested.emit(global_position, -direction, team, _get_projectile_color())
+	impact_requested.emit(global_position, -direction, team, _get_projectile_color(), feedback_profile, impact_weight, target)
 	queue_free()
 
 func _current_time_seconds() -> float:

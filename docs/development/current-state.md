@@ -101,12 +101,14 @@ Godot `4.6.2` prototype for a same-screen local co-op twin-stick roguelite. The 
 - current default profile setting is `Off`
 - styled combat HUD with per-player inventory panels, modifier chip, timer bar, and polished result/pause/intro panels
 - each player HUD now exposes:
-  - wallet value
+  - compact wallet value
   - health state
   - two primary slots
   - two secondary slots
   - selected-slot highlight
   - secondary cooldown bars
+  - passive chips
+  - icon-first slot rendering with real primary weapon sprites where available
   - lighter transparency so the arena stays readable behind the HUD
 - modifier intro panel plus active room tinting
 - darkness overlay, left-side spawn filtering, and optional friendly fire modifier hooks
@@ -131,12 +133,22 @@ Godot `4.6.2` prototype for a same-screen local co-op twin-stick roguelite. The 
 - player combat pace is currently bumped above the earlier baseline:
   - primary fire intervals are globally reduced by `20%`
   - secondary cooldowns are globally reduced by `20%`
+- dash follow-up changed the defensive timing:
+  - dash cooldown is now `2.0s`
+  - each successful dash grants a visible shield for `0.5s`
 - loot/inventory/shop follow-up fixes now also landed:
   - player loadouts reapply immediately after loot, replacements, and shop purchases
   - `Rifle` and `Mine` are back in reward/shop pools, so starter weapons can level naturally
   - loot drops now keep their label/color even though setup happens before `_ready()`
   - shop reset correctly unlocks the active shopper
   - duplicate pickup-point gold floating text was removed
+- replacement UI now ignores the same held confirm/cancel press that opened it, so it no longer closes instantly on entry
+- recent combat spectacle pass also landed:
+  - runtime weapon loadouts now carry `feedback_profile` and `impact_weight`
+  - dash has a short input buffer and slow primaries like `Slug` have a short fire buffer
+  - primary fire now drives weapon-specific muzzle flash, recoil, camera kick, and procedural SFX variation
+  - enemy hits/deaths now use stronger hitstop, burst/ring effects, and heavier camera/audio response
+  - grenade and mine detonations now use layered burst plus expanding ring feedback
 - shared placeholder visual language with player color identity and shooter-tinted projectiles/effects
 - juice stack through `J7`: hit flash, knockback, hitstop, shake, particles, procedural SFX, health bars, floating text, motion polish, screen overlays, and transition polish
 - sprite-generation documentation now lives in-project under `sprites/guidelines/`, separate from runtime assets in `assets/sprites/`
@@ -152,6 +164,7 @@ Godot `4.6.2` prototype for a same-screen local co-op twin-stick roguelite. The 
 - enemy readability now depends on silhouette first, color second
 - layout identity should come from geometry and encounter shape more than full-room palette swaps
 - the combat HUD should read at a glance instead of exposing debug strings
+- the combat HUD should stay compact and icon-first where possible, not drift back toward text-heavy debug cards
 - the loot, shop, and replacement flows should feel player-facing rather than tool-like
 - grenade and mine roles should stay distinct instead of drifting back into one blended secondary design
 - run structure should vary between attempts through map length, room order, and enemy mix without changing the run-flow contract
@@ -166,6 +179,7 @@ Godot `4.6.2` prototype for a same-screen local co-op twin-stick roguelite. The 
 - full-run pacing and solo-vs-group balance are still not finished
 - menu cleanup is partially in; there is now a real front door, but setup/debug/meta presentation still needs more polish
 - new loot, shop, and replacement flows still need live UX validation
+- the new compact icon HUD still needs a live readability pass, especially for placeholder secondary/passive chips
 - grenade-vs-mine role clarity still needs a live feel pass
 - procedural run pacing and boss scaling still need live validation across several attempts
 - connected-map readability, route feel, and row-to-row pathing still need live validation

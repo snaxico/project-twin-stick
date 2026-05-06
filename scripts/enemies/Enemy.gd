@@ -168,6 +168,20 @@ func get_health_ratio() -> float:
 		return 0.0
 	return clamp(float(current_health) / float(max_health), 0.0, 1.0)
 
+func get_feedback_weight() -> float:
+	match enemy_type:
+		EnemyType.SPITTER:
+			return 1.0
+		EnemyType.CHARGER:
+			return 1.35
+		EnemyType.BOSS:
+			return 1.9
+		_:
+			return 0.9
+
+func get_feedback_color() -> Color:
+	return visual.color if visual != null else Color(1.0, 0.28, 0.28, 1.0)
+
 func apply_damage(amount: int) -> void:
 	if _is_dead:
 		return
@@ -456,7 +470,7 @@ func _die() -> void:
 	collision_mask = 0
 	if _combat_owner != null and _death_explosion_radius > 0.0 and _death_explosion_damage > 0:
 		_combat_owner.handle_enemy_death_explosion(global_position, _death_explosion_radius, _death_explosion_damage)
-	_play_flash(Color.WHITE, 0.14)
+	_play_flash(Color.WHITE, 0.18)
 	enemy_died.emit(self)
 	_queue_free_after_flash()
 
@@ -485,7 +499,7 @@ func _get_flash_material() -> ShaderMaterial:
 	return _flash_material
 
 func _queue_free_after_flash() -> void:
-	await get_tree().create_timer(0.1).timeout
+	await get_tree().create_timer(0.12).timeout
 	queue_free()
 
 func _apply_motion_polish(now: float, delta: float = 0.0) -> void:

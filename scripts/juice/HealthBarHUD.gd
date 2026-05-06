@@ -15,7 +15,7 @@ var _ghost_tween: Tween = null
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	custom_minimum_size = Vector2(300.0, 40.0)
+	custom_minimum_size = Vector2(220.0, 28.0)
 	_build()
 	_layout_children()
 
@@ -24,6 +24,7 @@ func configure(title_text: String, fill_color: Color) -> void:
 	_fill_color = fill_color
 	if _title_label != null:
 		_title_label.text = title_text
+		_title_label.visible = not title_text.is_empty()
 	if _fill_rect != null:
 		_fill_rect.color = fill_color
 
@@ -41,6 +42,7 @@ func set_health(current_health: int, max_health: int, status_text: String = "") 
 		_value_label.text = status_text if not status_text.is_empty() else "%d/%d" % [current_health, max_health]
 	if _title_label != null:
 		_title_label.text = _title_text
+		_title_label.visible = not _title_text.is_empty()
 
 	_apply_fill_ratio(_current_ratio)
 	if _ghost_tween != null and _ghost_tween.is_valid():
@@ -89,13 +91,13 @@ func _layout_children() -> void:
 	if _title_label == null:
 		return
 	var width: float = max(size.x, custom_minimum_size.x)
-	var bar_top: float = 20.0
-	var bar_height: float = 14.0
+	var bar_top: float = 14.0 if _title_text.is_empty() else 18.0
+	var bar_height: float = 10.0
 
 	_title_label.position = Vector2.ZERO
-	_title_label.size = Vector2(width * 0.55, 18.0)
-	_value_label.position = Vector2(width * 0.55, 0.0)
-	_value_label.size = Vector2(width * 0.45, 18.0)
+	_title_label.size = Vector2(width * 0.5, 16.0)
+	_value_label.position = Vector2(width * 0.5, 0.0)
+	_value_label.size = Vector2(width * 0.5, 16.0)
 
 	_background_rect.position = Vector2(0.0, bar_top)
 	_background_rect.size = Vector2(width, bar_height)

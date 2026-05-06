@@ -59,6 +59,7 @@ Read this first to restore project context quickly, then read `current-state.md`
   - timer bar
   - styled result/pause/modifier panels
   - lighter transparency so the arena remains visible under HUD cards
+  - latest pass makes the player cards smaller and icon-first, with placeholder passive chips
 - Player visuals are now in transition from pure procedural shapes toward real sprites:
   - player 1 uses a sprite-backed body
   - player 1 uses one standing frame and two alternating running frames
@@ -114,10 +115,14 @@ Read this first to restore project context quickly, then read `current-state.md`
   - room exits now open after loot/shop resolution instead of auto-transitioning
 - Current combat-input/runtime follow-up:
   - gamepad dash is now on `B / O`
+  - dash cooldown is now `2.0s`
+  - a successful dash now grants a visible `0.5s` shield window
   - visible player and weapon sprites were enlarged again by roughly `33%`
   - primary fire intervals and secondary cooldowns are both globally reduced by `20%`
   - player loadouts now refresh immediately after loot/shop inventory changes
   - `Rifle` and `Mine` are now valid reward/shop rolls, so the starting weapons can level up
+  - replacement UI now seeds its held-button state on open, so it no longer instantly confirms/cancels
+  - combat spectacle now uses weapon-weighted muzzle flash, impact, death, dash, and explosion feedback
 
 ## Current Priorities
 
@@ -128,6 +133,7 @@ Read this first to restore project context quickly, then read `current-state.md`
 - Keep the arena bright and neutral enough that combat reads stay above environment styling.
 - Keep grenade and mine roles distinct instead of blending them back together.
 - Validate the new HUD and modifier readability in live combat, not just parse/startup.
+- Validate the new compact icon HUD and passive chips in live play, especially for secondaries that still use placeholder icon badges.
 - Validate procedural run pacing and variation in live play, not just generation logic.
 - Validate connected-map readability and route feel in live play, not just graph generation.
 - Validate the new aim-settings flow at `1–4` players.

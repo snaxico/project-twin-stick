@@ -1,6 +1,6 @@
 extends Area2D
 
-signal exploded(origin, color)
+signal exploded(origin, color, feedback_profile, impact_weight, explosion_radius)
 
 @export var gravity_force: float = 520.0
 @export var fuse_time: float = 1.0
@@ -15,6 +15,8 @@ var direction: Vector2 = Vector2.RIGHT
 var speed: float = 320.0
 var damage: int = 3
 var team: String = ""
+var impact_weight: float = 1.6
+var feedback_profile: String = "grenade"
 
 @onready var visual: Polygon2D = $Visual
 @onready var outline: Polygon2D = $Outline
@@ -24,12 +26,14 @@ var _explode_at := 0.0
 var _tint_color: Color = Color(1.0, 0.72, 0.28, 1.0)
 var _has_exploded := false
 
-func setup(projectile_team: String, projectile_direction: Vector2, projectile_speed: float, projectile_damage: int, projectile_color: Color = Color(1.0, 0.72, 0.28, 1.0)) -> void:
+func setup(projectile_team: String, projectile_direction: Vector2, projectile_speed: float, projectile_damage: int, projectile_color: Color = Color(1.0, 0.72, 0.28, 1.0), projectile_feedback_profile: String = "grenade", projectile_impact_weight: float = 1.6) -> void:
 	team = projectile_team
 	direction = projectile_direction.normalized() if projectile_direction.length() > 0.0 else Vector2.RIGHT
 	speed = projectile_speed
 	damage = projectile_damage
 	_tint_color = projectile_color
+	feedback_profile = projectile_feedback_profile
+	impact_weight = projectile_impact_weight
 	_velocity = direction * speed + Vector2(0.0, -180.0)
 
 func _ready() -> void:
@@ -69,7 +73,7 @@ func _explode() -> void:
 			_explode_siege_grenade()
 		_:
 			_apply_explosion_damage(global_position, explosion_radius, damage)
-			exploded.emit(global_position, _tint_color)
+			exploded.emit(global_position, _tint_color, feedback_profile, impact_weight, explosion_radius)
 			queue_free()
 
 func _explode_cluster_grenade() -> void:
@@ -83,12 +87,12 @@ func _explode_cluster_grenade() -> void:
 	var blast_damage: int = max(1, int(round(float(damage) * 0.7)))
 	for blast_point in blast_points:
 		_apply_explosion_damage(blast_point, blast_radius, blast_damage)
-		exploded.emit(blast_point, _tint_color)
+		exploded.emit(blast_point, _tint_color, feedback_profile, impact_weight, blast_radius)
 	queue_free()
 
 func _explode_siege_grenade() -> void:
 	_apply_explosion_damage(global_position, explosion_radius, damage)
-	exploded.emit(global_position, _tint_color)
+	exploded.emit(global_position, _tint_color, feedback_profile, impact_weight, explosion_radius)
 	if pulse_count <= 1:
 		queue_free()
 		return
@@ -102,8 +106,9 @@ func _explode_siege_grenade() -> void:
 			return
 		var pulse_scale: float = 1.0 + float(pulse_index) * 0.18
 		var pulse_damage: int = max(1, damage - pulse_index)
-		_apply_explosion_damage(global_position, explosion_radius * pulse_scale, pulse_damage)
-		exploded.emit(global_position, _tint_color)
+		var pulse_radius: float = explosion_radius * pulse_scale
+		_apply_explosion_damage(global_position, pulse_radius, pulse_damage)
+		exploded.emit(global_position, _tint_color, feedback_profile, impact_weight, pulse_radius)
 	queue_free()
 
 func _apply_explosion_damage(origin: Vector2, radius: float, damage_amount: int) -> void:

@@ -891,10 +891,15 @@ func _build_runtime_slot_array(slot_entries: Array, passive_state: Dictionary, f
 
 func _compile_slot_loadout(slot_entry: Dictionary, passive_state: Dictionary, fallback_id: String) -> Dictionary:
 	var profile: Dictionary = _build_profile_from_inventory_slot(slot_entry, fallback_id)
+	var weapon_id: String = str(slot_entry.get("weapon_id", fallback_id))
 	var weapon_level: int = int(slot_entry.get("level", 1))
+	var feedback_profile: String = _get_feedback_profile_for_weapon_id(weapon_id, str(profile.get("kind", "")))
+	var impact_weight: float = _get_impact_weight_for_feedback_profile(feedback_profile)
 	var slot_loadout := {
-		"weapon_id": str(slot_entry.get("weapon_id", fallback_id)),
+		"weapon_id": weapon_id,
 		"weapon_level": weapon_level,
+		"feedback_profile": feedback_profile,
+		"impact_weight": impact_weight,
 		"weapon_level_description": str(profile.get("level_description", "")),
 		"primary_profile_name": str(profile.get("label", "Rifle")),
 		"secondary_profile_name": str(profile.get("label", "Mine")),
@@ -919,6 +924,38 @@ func _compile_slot_loadout(slot_entry: Dictionary, passive_state: Dictionary, fa
 		"secondary_proximity_radius": float(profile.get("base_proximity_radius", 52.0)) * float(profile.get("proximity_radius_mult", 1.0)),
 	}
 	return slot_loadout
+
+func _get_feedback_profile_for_weapon_id(weapon_id: String, projectile_kind: String = "") -> String:
+	match weapon_id:
+		"scatter", "spread":
+			return "scatter"
+		"slug":
+			return "slug"
+		"cluster_grenade", "siege_grenade", "grenade":
+			return "grenade"
+		"shrapnel_mine", "heavy_mine", "mine":
+			return "mine"
+		_:
+			match projectile_kind:
+				"cluster_grenade", "siege_grenade", "grenade":
+					return "grenade"
+				"shrapnel_mine", "heavy_mine", "mine":
+					return "mine"
+				_:
+					return "rifle"
+
+func _get_impact_weight_for_feedback_profile(feedback_profile: String) -> float:
+	match feedback_profile:
+		"scatter":
+			return 1.2
+		"slug":
+			return 1.8
+		"grenade":
+			return 1.6
+		"mine":
+			return 1.7
+		_:
+			return 1.0
 
 func get_gold_summary_text(compact: bool = false) -> String:
 	if player_inventories.is_empty():

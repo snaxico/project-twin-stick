@@ -9,6 +9,9 @@ const PLAYER_P1_RUNNING_ALT_TEXTURE_PATH := "res://assets/sprites/player/player_
 const PLAYER_RIFLE_TEXTURE_PATH := "res://assets/sprites/weapons/player_rifle.png"
 const PLAYER_SCATTERGUN_TEXTURE_PATH := "res://assets/sprites/weapons/player_scattergun.png"
 const PLAYER_SLUG_TEXTURE_PATH := "res://assets/sprites/weapons/player_slug.png"
+const DASH_SHIELD_DURATION := 0.5
+const PRIMARY_FIRE_BUFFER_DURATION := 0.08
+const SLOW_PRIMARY_BUFFER_THRESHOLD := 0.34
 const FLASH_SHADER_CODE := """
 shader_type canvas_item;
 
@@ -21,14 +24,14 @@ void fragment() {
 }
 """
 
-signal fire_requested(origin, direction, speed, damage, team, color, shooter)
+signal fire_requested(origin, direction, speed, damage, team, color, shooter, feedback_profile, impact_weight)
 signal secondary_requested(origin, direction, speed, damage, team, projectile_data, color)
 signal health_changed(current_health, max_health)
 signal downed(player)
 signal revived(player)
-signal muzzle_flash_requested(origin, direction, color)
+signal muzzle_flash_requested(origin, direction, color, feedback_profile, impact_weight)
 signal dash_trail_requested(origin, color)
-signal dash_started(origin)
+signal dash_started(origin, color, shield_duration)
 signal damage_taken(player, amount, current_health)
 
 @export_range(1, 4, 1) var player_id: int = 1
@@ -42,6 +45,7 @@ signal damage_taken(player, amount, current_health)
 @export var secondary_damage: int = 3
 
 @onready var shadow: Polygon2D = $Shadow
+@onready var dash_shield_ring: Line2D = $DashShieldRing
 @onready var body_root: Node2D = $BodyRoot
 @onready var outline: Polygon2D = $BodyRoot/Outline
 @onready var visual: Polygon2D = $BodyRoot/Visual
@@ -64,6 +68,7 @@ var current_health: int = 0
 var _aim_assist = null
 var _dash = null
 var _dash_pressed_last_frame := false
+var _fire_pressed_last_frame := false
 var _next_primary_fire_at := 0.0
 var _secondary_pressed_last_frame := false
 var _switch_primary_pressed_last_frame := false
@@ -92,6 +97,8 @@ var _secondary_slots: Array = []
 var _selected_primary_index: int = 0
 var _selected_secondary_index: int = 0
 var _secondary_cooldowns: Array = [0.0, 0.0]
+var _primary_fire_buffered_until: float = 0.0
+var _primary_fire_buffered_direction: Vector2 = Vector2.RIGHT
 var _input_locked: bool = false
 var _base_collision_layer := 0
 var _base_collision_mask := 0
@@ -111,10 +118,15 @@ var _running_sprite_alt_texture: Texture2D = null
 var _weapon_texture: Texture2D = null
 var _weapon_textures_by_id: Dictionary = {}
 var _primary_weapon_id: String = "rifle"
+var _primary_feedback_profile: String = "rifle"
+var _secondary_feedback_profile: String = "mine"
+var _primary_impact_weight: float = 1.0
+var _secondary_impact_weight: float = 1.6
 var _base_weapon_scale := Vector2.ONE
 var _turn_squash := 0.0
 var _aim_line_recoil := 0.0
 var _outline_pulse := 1.0
+var _shield_until: float = 0.0
 
 func _get_projectile_tint() -> Color:
 	return player_config.tint
@@ -145,6 +157,9 @@ func is_dash_active() -> bool:
 	if _dash == null:
 		return false
 	return _dash.is_active(_current_time_seconds())
+
+func is_dash_shield_active() -> bool:
+	return _current_time_seconds() < _shield_until
 
 func get_dash_cooldown_remaining() -> float:
 	if _dash == null:
@@ -200,6 +215,10 @@ func get_health_status_text() -> String:
 func set_input_locked(locked: bool) -> void:
 	_input_locked = locked
 	if locked:
+		if _dash != null:
+			_dash.clear_buffer()
+		_fire_pressed_last_frame = false
+		_primary_fire_buffered_until = 0.0
 		_secondary_hold_active = false
 		_dash_pressed_last_frame = false
 		_secondary_pressed_last_frame = false
@@ -231,6 +250,10 @@ func set_health_state(state: Dictionary) -> void:
 	max_health = target_max
 	current_health = clampi(target_current, 1, max_health)
 	_is_downed = false
+	_shield_until = 0.0
+	if _dash != null:
+		_dash.clear_buffer()
+	_primary_fire_buffered_until = 0.0
 	visible = true
 	collision_layer = _base_collision_layer
 	collision_mask = _base_collision_mask
@@ -240,6 +263,8 @@ func set_health_state(state: Dictionary) -> void:
 
 func apply_damage(amount: int) -> void:
 	if _is_downed:
+		return
+	if is_dash_shield_active():
 		return
 
 	current_health = max(current_health - amount, 0)
@@ -269,6 +294,10 @@ func revive(health_amount: int) -> void:
 
 	current_health = clampi(health_amount, 1, max_health)
 	_is_downed = false
+	_shield_until = 0.0
+	if _dash != null:
+		_dash.clear_buffer()
+	_primary_fire_buffered_until = 0.0
 	visible = true
 	collision_layer = _base_collision_layer
 	collision_mask = _base_collision_mask
@@ -327,10 +356,11 @@ func _physics_process(delta: float) -> void:
 	var dash_pressed := _is_dash_pressed()
 	if dash_pressed and not _dash_pressed_last_frame:
 		var dash_direction := move_input if move_input.length() > 0.0 else aim_direction
-		_dash.try_trigger(dash_direction, now)
-		if dash_direction.length() > 0.0:
-			dash_started.emit(global_position)
+		if _dash.try_trigger(dash_direction, now):
+			_activate_dash_shield(now)
 	_dash_pressed_last_frame = dash_pressed
+	if _dash.consume_buffer_if_ready(now):
+		_activate_dash_shield(now)
 
 	var switch_primary_pressed := _is_switch_primary_pressed()
 	if switch_primary_pressed and not _switch_primary_pressed_last_frame:
@@ -342,21 +372,20 @@ func _physics_process(delta: float) -> void:
 		_cycle_secondary_slot()
 	_switch_secondary_pressed_last_frame = switch_secondary_pressed
 
-	if _is_fire_pressed() and now >= _next_primary_fire_at and aim_direction.length() > 0.0:
-		_next_primary_fire_at = now + primary_fire_interval
-		_play_fire_recoil()
-		var projectile_color: Color = _get_projectile_tint()
-		muzzle_flash_requested.emit(global_position + aim_direction * 24.0, aim_direction, projectile_color)
-		for projectile_direction in _build_spread_directions(aim_direction, _primary_projectile_count, _primary_spread_radians):
-			fire_requested.emit(
-				global_position + projectile_direction * 26.0,
-				projectile_direction,
-				projectile_speed,
-				projectile_damage,
-				get_team(),
-				projectile_color,
-				self
-			)
+	var fire_pressed := _is_fire_pressed()
+	var fire_just_pressed: bool = fire_pressed and not _fire_pressed_last_frame
+	if fire_just_pressed and _should_buffer_primary_fire(now):
+		_primary_fire_buffered_until = now + PRIMARY_FIRE_BUFFER_DURATION
+		_primary_fire_buffered_direction = aim_direction
+	if fire_pressed and now >= _next_primary_fire_at and aim_direction.length() > 0.0:
+		_fire_primary(now, aim_direction)
+	elif _primary_fire_buffered_until > 0.0 and now >= _next_primary_fire_at and now <= _primary_fire_buffered_until:
+		var buffered_direction: Vector2 = _primary_fire_buffered_direction if _primary_fire_buffered_direction.length() > 0.0 else aim_direction
+		if buffered_direction.length() > 0.0:
+			_fire_primary(now, buffered_direction.normalized())
+	elif _primary_fire_buffered_until > 0.0 and now > _primary_fire_buffered_until:
+		_primary_fire_buffered_until = 0.0
+	_fire_pressed_last_frame = fire_pressed
 
 	var secondary_pressed := _is_secondary_pressed()
 	if _uses_hold_to_aim_secondary():
@@ -644,6 +673,8 @@ func _apply_selected_slot_state() -> void:
 	_primary_profile_name = str(primary_slot.get("primary_profile_name", "Rifle"))
 	_primary_projectile_count = max(1, int(primary_slot.get("primary_projectile_count", 1)))
 	_primary_spread_radians = float(primary_slot.get("primary_spread_radians", 0.0))
+	_primary_feedback_profile = str(primary_slot.get("feedback_profile", "rifle"))
+	_primary_impact_weight = float(primary_slot.get("impact_weight", 1.0))
 	primary_fire_interval = float(primary_slot.get("primary_fire_interval", 0.27))
 	projectile_speed = float(primary_slot.get("projectile_speed", 540.0))
 	projectile_damage = max(1, int(primary_slot.get("projectile_damage", 1)))
@@ -653,6 +684,8 @@ func _apply_selected_slot_state() -> void:
 	_secondary_profile_name = str(secondary_slot.get("secondary_profile_name", "Mine"))
 	_secondary_projectile_count = max(1, int(secondary_slot.get("secondary_projectile_count", 1)))
 	_secondary_spread_radians = float(secondary_slot.get("secondary_spread_radians", 0.0))
+	_secondary_feedback_profile = str(secondary_slot.get("feedback_profile", "mine"))
+	_secondary_impact_weight = float(secondary_slot.get("impact_weight", 1.6))
 	secondary_cooldown = float(secondary_slot.get("secondary_cooldown", 4.0))
 	secondary_projectile_speed = float(secondary_slot.get("secondary_projectile_speed", 0.0))
 	secondary_damage = max(1, int(secondary_slot.get("secondary_damage", 3)))
@@ -666,6 +699,8 @@ func _apply_selected_slot_state() -> void:
 		"cluster_blast_count": int(secondary_slot.get("secondary_cluster_blast_count", 0)),
 		"cluster_spread_radius": float(secondary_slot.get("secondary_cluster_spread_radius", 52.0)),
 		"proximity_radius": float(secondary_slot.get("secondary_proximity_radius", 52.0)),
+		"feedback_profile": _secondary_feedback_profile,
+		"impact_weight": _secondary_impact_weight,
 	}
 
 func _cycle_primary_slot() -> void:
@@ -720,6 +755,8 @@ func _apply_visual_state(now: float, delta: float = 0.0) -> void:
 	if visual == null or aim_pivot == null or aim_line == null or aim_line_backdrop == null or body_root == null:
 		return
 	var dash_active: bool = _dash != null and _dash.is_active(now)
+	var dash_shield_active: bool = now < _shield_until
+	var shield_remaining_ratio: float = clamp((_shield_until - now) / DASH_SHIELD_DURATION, 0.0, 1.0)
 	var downed_pulse: float = 0.5 + 0.5 * sin(now * 6.0)
 	var use_sprite: bool = _uses_sprite_visual()
 	var fill_tint: Color = player_config.tint.darkened(0.45) if _is_downed else player_config.tint
@@ -762,6 +799,15 @@ func _apply_visual_state(now: float, delta: float = 0.0) -> void:
 		var shadow_modulate: Color = shadow.modulate
 		shadow_modulate.a = 0.1 + 0.14 * downed_pulse if _is_downed else 0.25
 		shadow.modulate = shadow_modulate
+	if dash_shield_ring != null:
+		dash_shield_ring.visible = dash_shield_active and not _is_downed
+		if dash_shield_ring.visible:
+			var shield_pulse: float = 0.88 + 0.12 * sin(now * 14.0)
+			dash_shield_ring.width = 3.5 + 2.0 * shield_remaining_ratio
+			dash_shield_ring.scale = Vector2.ONE * (0.92 + 0.16 * shield_pulse)
+			var shield_color: Color = player_config.tint.lerp(Color(0.9, 1.0, 1.0, 1.0), 0.45)
+			shield_color.a = 0.42 + 0.28 * shield_remaining_ratio
+			dash_shield_ring.default_color = shield_color
 	var lean_target: float = 0.0 if _is_downed else clamp(_display_move_input.x, -1.0, 1.0) * 0.16
 	body_root.rotation = lerp_angle(body_root.rotation, lean_target, 0.18)
 	aim_pivot.rotation = aim_direction.angle()
@@ -784,6 +830,9 @@ func _current_time_seconds() -> float:
 
 func _enter_downed_state() -> void:
 	_is_downed = true
+	_shield_until = 0.0
+	if _dash != null:
+		_dash.clear_buffer()
 	velocity = Vector2.ZERO
 	_secondary_hold_active = false
 	collision_layer = 0
@@ -805,9 +854,46 @@ func _update_animation_state(move_input: Vector2, delta: float) -> void:
 	_turn_squash = move_toward(_turn_squash, 0.0, delta * 3.8)
 	_aim_line_recoil = move_toward(_aim_line_recoil, 0.0, delta * 85.0)
 
-func _play_fire_recoil() -> void:
-	_aim_line_recoil = max(_aim_line_recoil, 12.0)
-	_turn_squash = max(_turn_squash, 0.3)
+func _activate_dash_shield(now: float) -> void:
+	_shield_until = now + DASH_SHIELD_DURATION
+	dash_started.emit(global_position, player_config.tint, DASH_SHIELD_DURATION)
+
+func _should_buffer_primary_fire(now: float) -> bool:
+	if aim_direction.length() <= 0.0:
+		return false
+	if primary_fire_interval < SLOW_PRIMARY_BUFFER_THRESHOLD:
+		return false
+	var remaining: float = _next_primary_fire_at - now
+	return remaining > 0.0 and remaining <= PRIMARY_FIRE_BUFFER_DURATION
+
+func _fire_primary(now: float, fire_direction: Vector2) -> void:
+	_primary_fire_buffered_until = 0.0
+	_next_primary_fire_at = now + primary_fire_interval
+	_play_fire_recoil(_primary_impact_weight)
+	var projectile_color: Color = _get_projectile_tint()
+	muzzle_flash_requested.emit(
+		global_position + fire_direction * 24.0,
+		fire_direction,
+		projectile_color,
+		_primary_feedback_profile,
+		_primary_impact_weight
+	)
+	for projectile_direction in _build_spread_directions(fire_direction, _primary_projectile_count, _primary_spread_radians):
+		fire_requested.emit(
+			global_position + projectile_direction * 26.0,
+			projectile_direction,
+			projectile_speed,
+			projectile_damage,
+			get_team(),
+			projectile_color,
+			self,
+			_primary_feedback_profile,
+			_primary_impact_weight
+		)
+
+func _play_fire_recoil(intensity: float = 1.0) -> void:
+	_aim_line_recoil = max(_aim_line_recoil, 9.0 + 5.0 * intensity)
+	_turn_squash = max(_turn_squash, 0.24 + 0.12 * intensity)
 
 func _play_damage_flash() -> void:
 	if _get_flash_target() == null:
