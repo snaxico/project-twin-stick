@@ -23,7 +23,75 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 
+[node name="HomePanel" type="Panel" parent="."]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -280.0
+offset_top = -250.0
+offset_right = 280.0
+offset_bottom = 250.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="MarginContainer" type="MarginContainer" parent="HomePanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 16.0
+offset_top = 16.0
+offset_right = -16.0
+offset_bottom = -16.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 8
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 8
+theme_override_constants/margin_bottom = 8
+
+[node name="HomeLayout" type="VBoxContainer" parent="HomePanel/MarginContainer"]
+layout_mode = 2
+theme_override_constants/separation = 14
+
+[node name="HomeTitle" type="Label" parent="HomePanel/MarginContainer/HomeLayout"]
+layout_mode = 2
+text = "Project Placeholder"
+horizontal_alignment = 1
+
+[node name="HomeSubtitle" type="Label" parent="HomePanel/MarginContainer/HomeLayout"]
+layout_mode = 2
+autowrap_mode = 2
+text = "Local co-op twin-stick run prototype"
+horizontal_alignment = 1
+
+[node name="HomeStatusLabel" type="Label" parent="HomePanel/MarginContainer/HomeLayout"]
+layout_mode = 2
+custom_minimum_size = Vector2(0, 116)
+autowrap_mode = 2
+text = "Status"
+
+[node name="PlayButton" type="Button" parent="HomePanel/MarginContainer/HomeLayout"]
+layout_mode = 2
+text = "Play"
+
+[node name="MetaButton" type="Button" parent="HomePanel/MarginContainer/HomeLayout"]
+layout_mode = 2
+text = "Meta"
+
+[node name="SettingsButton" type="Button" parent="HomePanel/MarginContainer/HomeLayout"]
+layout_mode = 2
+text = "Settings"
+
+[node name="DebugButton" type="Button" parent="HomePanel/MarginContainer/HomeLayout"]
+layout_mode = 2
+text = "Debug"
+
 [node name="MenuPanel" type="Panel" parent="."]
+visible = false
 layout_mode = 1
 anchors_preset = 8
 anchor_left = 0.5
@@ -65,11 +133,12 @@ theme_override_constants/separation = 12
 
 [node name="Title" type="Label" parent="MenuPanel/MarginContainer/MenuScroll/MenuLayout"]
 layout_mode = 2
-text = "Project Placeholder"
+text = "Run Setup"
 horizontal_alignment = 1
 
 [node name="Subtitle" type="Label" parent="MenuPanel/MarginContainer/MenuScroll/MenuLayout"]
 layout_mode = 2
+autowrap_mode = 2
 text = "Choose players, controls, and run mode"
 horizontal_alignment = 1
 
@@ -152,6 +221,7 @@ layout_mode = 2
 size_flags_horizontal = 3
 
 [node name="DebugModeCheck" type="CheckBox" parent="MenuPanel/MarginContainer/MenuScroll/MenuLayout"]
+visible = false
 layout_mode = 2
 text = "Debug Setup"
 
@@ -286,6 +356,10 @@ layout_mode = 2
 custom_minimum_size = Vector2(0, 88)
 autowrap_mode = 2
 text = "Status"
+
+[node name="SetupBackButton" type="Button" parent="MenuPanel/MarginContainer/MenuScroll/MenuLayout"]
+layout_mode = 2
+text = "Back"
 
 [node name="SettingsButton" type="Button" parent="MenuPanel/MarginContainer/MenuScroll/MenuLayout"]
 layout_mode = 2

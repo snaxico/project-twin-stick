@@ -22,6 +22,7 @@ var team: String = ""
 var _velocity: Vector2 = Vector2.ZERO
 var _explode_at := 0.0
 var _tint_color: Color = Color(1.0, 0.72, 0.28, 1.0)
+var _has_exploded := false
 
 func setup(projectile_team: String, projectile_direction: Vector2, projectile_speed: float, projectile_damage: int, projectile_color: Color = Color(1.0, 0.72, 0.28, 1.0)) -> void:
 	team = projectile_team
@@ -56,6 +57,11 @@ func _on_body_entered(body: Node) -> void:
 		_explode()
 
 func _explode() -> void:
+	if _has_exploded:
+		return
+	_has_exploded = true
+	set_physics_process(false)
+	visible = false
 	match kind:
 		"cluster_grenade", "cluster":
 			_explode_cluster_grenade()
@@ -64,7 +70,7 @@ func _explode() -> void:
 		_:
 			_apply_explosion_damage(global_position, explosion_radius, damage)
 			exploded.emit(global_position, _tint_color)
-	queue_free()
+			queue_free()
 
 func _explode_cluster_grenade() -> void:
 	var blast_points: Array = [global_position]
@@ -78,11 +84,13 @@ func _explode_cluster_grenade() -> void:
 	for blast_point in blast_points:
 		_apply_explosion_damage(blast_point, blast_radius, blast_damage)
 		exploded.emit(blast_point, _tint_color)
+	queue_free()
 
 func _explode_siege_grenade() -> void:
 	_apply_explosion_damage(global_position, explosion_radius, damage)
 	exploded.emit(global_position, _tint_color)
 	if pulse_count <= 1:
+		queue_free()
 		return
 
 	for pulse_index in range(1, pulse_count):
@@ -96,6 +104,7 @@ func _explode_siege_grenade() -> void:
 		var pulse_damage: int = max(1, damage - pulse_index)
 		_apply_explosion_damage(global_position, explosion_radius * pulse_scale, pulse_damage)
 		exploded.emit(global_position, _tint_color)
+	queue_free()
 
 func _apply_explosion_damage(origin: Vector2, radius: float, damage_amount: int) -> void:
 	var tree := get_tree()

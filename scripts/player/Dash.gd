@@ -17,7 +17,7 @@ func try_trigger(direction: Vector2, now: float) -> bool:
 		_dash_direction = direction.normalized()
 
 	_active_until = now + dash_duration
-	_cooldown_until = now + cooldown_duration
+	_cooldown_until = now + dash_duration + cooldown_duration
 	return true
 
 func get_velocity(move_input: Vector2, fallback_direction: Vector2, move_speed: float, now: float) -> Vector2:
@@ -35,4 +35,3 @@ func is_ready(now: float) -> bool:
 
 func get_cooldown_remaining(now: float) -> float:
 	return max(_cooldown_until - now, 0.0)
-

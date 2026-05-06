@@ -1,4 +1,4 @@
-[gd_scene load_steps=10 format=3 uid="uid://c6ov0pl7m3y8a"]
+[gd_scene load_steps=11 format=3 uid="uid://c6ov0pl7m3y8a"]
 
 [ext_resource type="Script" path="res://scripts/game/CoopManager.gd" id="1_4o0x5"]
 [ext_resource type="PackedScene" path="res://scenes/player/Player.tscn" id="1_3sby6"]
@@ -16,6 +16,9 @@ size = Vector2(16, 592)
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_right"]
 size = Vector2(16, 592)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_exit"]
+size = Vector2(280, 120)
 
 [node name="GameWorld" type="Node2D"]
 script = ExtResource("1_4o0x5")
@@ -85,6 +88,19 @@ script = ExtResource("4_0rmhf")
 [node name="Pickups" type="Node2D" parent="."]
 
 [node name="Effects" type="Node2D" parent="."]
+
+[node name="ExitZone" type="Area2D" parent="."]
+position = Vector2(960, 910)
+monitoring = false
+monitorable = false
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="ExitZone"]
+shape = SubResource("RectangleShape2D_exit")
+
+[node name="Visual" type="Polygon2D" parent="ExitZone"]
+visible = false
+color = Color(0.2, 0.86, 0.56, 0.28)
+polygon = PackedVector2Array(-140, -60, 140, -60, 140, 60, -140, 60)
 
 [node name="Player1Spawn" type="Marker2D" parent="."]
 position = Vector2(860, 490)

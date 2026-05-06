@@ -1,7 +1,9 @@
 extends Node
 
 const ModifierEngineData = preload("res://scripts/game/ModifierEngine.gd")
-const ITEMS_DATA_PATH = "res://data/items.json"
+const PlayerInventoryData = preload("res://scripts/game/PlayerInventory.gd")
+const PASSIVES_DATA_PATH = "res://data/passives.json"
+const WEAPONS_DATA_PATH = "res://data/weapons.json"
 const RUN_LENGTH_MIN := 5
 const RUN_LENGTH_MAX := 7
 const MAX_CONSECUTIVE_COMBATS := 3
@@ -12,6 +14,8 @@ const GOLD_PER_STEP := 0.5
 const GAUNTLET_ROOM_CHANCE := 0.5
 const MAP_COLUMN_COUNT := 5
 const START_ROW_COLUMNS := [1, 2, 3]
+const GLOBAL_PRIMARY_FIRE_INTERVAL_MULT := 0.8
+const GLOBAL_SECONDARY_COOLDOWN_MULT := 0.8
 
 var player_configs: Array = []
 var player_health_states: Array = []
@@ -23,24 +27,28 @@ var visited_node_ids: Array = []
 var reachable_node_ids: Array = []
 var rooms_completed: int = 0
 var gold: int = 0
-var acquired_item_ids: Array = []
-var build_state: Dictionary = {}
+var player_inventories: Array = []
+var shop_offers_by_player: Dictionary = {}
 var run_outcome: String = "in_progress"
 var run_mode: String = "normal"
 var debug_run_setup: Dictionary = {}
 
 var _modifier_engine = ModifierEngineData.new()
 var _random := RandomNumberGenerator.new()
-var _items: Array = []
-var _items_by_id: Dictionary = {}
+var _passives: Array = []
+var _passives_by_id: Dictionary = {}
+var _weapons: Array = []
+var _weapons_by_id: Dictionary = {}
 var _node_lookup: Dictionary = {}
 var _selected_node_id: String = ""
 
 func _ready() -> void:
-	_load_items()
+	_load_passives()
+	_load_weapons()
 
 func start_new_run(configs: Array, debug_options: Dictionary = {}) -> void:
-	_load_items()
+	_load_passives()
+	_load_weapons()
 	_random.randomize()
 	debug_run_setup = _build_default_debug_run_setup()
 	_apply_debug_start_options(debug_options)
@@ -65,11 +73,11 @@ func start_new_run(configs: Array, debug_options: Dictionary = {}) -> void:
 	visited_node_ids = []
 	reachable_node_ids = _get_starting_reachable_node_ids()
 	rooms_completed = 0
-	gold = 0
 	run_mode = _normalize_run_mode(str(debug_options.get("run_mode", "normal")))
-	acquired_item_ids = []
-	build_state = _build_default_build_state()
+	player_inventories = _build_default_player_inventories(player_configs.size())
+	shop_offers_by_player = {}
 	_apply_debug_loadout_overrides()
+	_sync_aggregate_gold()
 	run_outcome = "in_progress"
 
 func get_current_options() -> Array:
@@ -118,14 +126,8 @@ func resolve_current_noncombat_node() -> Dictionary:
 
 	match room_type:
 		"shop":
-			_apply_post_room_recovery()
-			if not is_debug_single_room_mode():
-				_advance_progress()
-			outcome["summary"] = "Shared Gold: %d\nChoose one shared prototype upgrade or leave the shop." % gold
-			outcome["action"] = "shop"
-			outcome["button_text"] = "Open Shop"
-			outcome["choice_mode"] = "shop"
-			outcome["choices"] = _roll_item_choices("shop", 3)
+			outcome["summary"] = "%s\nShop rooms now run in-world." % room_description
+			outcome["button_text"] = "Enter Shop"
 		_:
 			var result_text := _apply_reward(current_node.get("reward", {}))
 			_apply_post_room_recovery()
@@ -140,7 +142,7 @@ func resolve_current_noncombat_node() -> Dictionary:
 
 	return outcome
 
-func resolve_current_combat_victory(health_states: Array) -> Dictionary:
+func resolve_current_combat_victory(health_states: Array, clear_context: Dictionary = {}) -> Dictionary:
 	if current_node.is_empty():
 		return _build_outcome("No combat node selected.", "No combat node selected.", "next")
 
@@ -148,20 +150,28 @@ func resolve_current_combat_victory(health_states: Array) -> Dictionary:
 	var room_title := str(current_node.get("title", "Room"))
 	var room_type := str(current_node.get("room_type", "combat"))
 	var summary_lines := ["Room cleared."]
+	var outcome := _build_outcome(room_title, "", "next")
 	var gold_gain := int(current_node.get("currency_reward", 0))
+	if room_type == "shop":
+		var shop_summary: String = str(clear_context.get("shop_summary", "")).strip_edges()
+		if shop_summary.is_empty():
+			shop_summary = "The team left the shop."
+		outcome["summary"] = shop_summary
+		_advance_progress()
+		return outcome
 	if gold_gain > 0:
-		gold += gold_gain
-		summary_lines.append("Gained %d Gold. Shared total: %d." % [gold_gain, gold])
+		award_gold_to_all(gold_gain)
+		summary_lines.append("Each player gained %d Gold." % gold_gain)
+		summary_lines.append(get_gold_summary_text())
 	_apply_post_room_recovery()
 
-	var outcome := _build_outcome(room_title, "\n".join(summary_lines), "next")
+	outcome = _build_outcome(room_title, "\n".join(summary_lines), "next")
 	var reward: Dictionary = current_node.get("reward", {}).duplicate(true)
 	if str(reward.get("type", "")) == "loot_choice":
-		outcome["summary"] = "%s\nChoose one shared upgrade." % outcome["summary"]
-		outcome["action"] = "reward"
-		outcome["button_text"] = "Choose Upgrade"
-		outcome["choice_mode"] = "reward"
-		outcome["choices"] = _roll_item_choices("reward", 3)
+		var loot_summary: String = str(clear_context.get("loot_summary", "")).strip_edges()
+		if loot_summary.is_empty():
+			loot_summary = "Loot resolved."
+		outcome["summary"] = "%s\n%s" % [outcome["summary"], loot_summary]
 	else:
 		var result_text := _apply_reward(reward)
 		outcome["summary"] = "%s\n%s" % [outcome["summary"], result_text]
@@ -205,56 +215,247 @@ func is_debug_single_room_mode() -> bool:
 	return bool(debug_run_setup.get("enabled", false)) and str(debug_run_setup.get("launch_mode", "normal_run")) == "single_room"
 
 func get_run_summary_text() -> String:
-	return "Rooms cleared: %d\nShared Gold: %d" % [rooms_completed, gold]
+	var summary_lines: Array = ["Rooms cleared: %d" % rooms_completed, "Gold wallets:"]
+	for inventory_index in range(player_inventories.size()):
+		var inventory: PlayerInventoryData = player_inventories[inventory_index]
+		summary_lines.append("P%d: %d" % [inventory_index + 1, inventory.gold])
+	return "\n".join(summary_lines)
 
 func get_player_runtime_loadout() -> Dictionary:
-	var primary_profile := _get_primary_profile(str(build_state.get("primary_profile", "rifle")))
-	var secondary_profile := _get_secondary_profile(str(build_state.get("secondary_profile", "mine")))
+	return get_player_runtime_loadout_for(0)
+
+func get_player_runtime_loadout_for(player_index: int) -> Dictionary:
+	var inventory: PlayerInventoryData = _get_inventory(player_index)
+	var passive_state: Dictionary = _build_effect_state_from_inventory(inventory)
+	var primary_slots: Array = _build_runtime_slot_array(inventory.primary_slots, passive_state, "rifle")
+	var secondary_slots: Array = _build_runtime_slot_array(inventory.secondary_slots, passive_state, "mine")
+	var selected_primary_index: int = clampi(inventory.selected_primary, 0, max(primary_slots.size() - 1, 0))
+	var selected_secondary_index: int = clampi(inventory.selected_secondary, 0, max(secondary_slots.size() - 1, 0))
+	var selected_primary: Dictionary = primary_slots[selected_primary_index] if selected_primary_index < primary_slots.size() and primary_slots[selected_primary_index] is Dictionary else {}
+	var selected_secondary: Dictionary = secondary_slots[selected_secondary_index] if selected_secondary_index < secondary_slots.size() and secondary_slots[selected_secondary_index] is Dictionary else {}
 	var loadout := {
-		"move_speed": 260.0 * float(build_state.get("move_speed_mult", 1.0)),
-		"primary_profile_name": str(primary_profile.get("label", "Rifle")),
-		"secondary_profile_name": str(secondary_profile.get("label", "Mine")),
-		"primary_projectile_count": int(primary_profile.get("projectile_count", 1)),
-		"primary_spread_radians": float(primary_profile.get("spread_radians", 0.0)),
-		"primary_fire_interval": 0.27 * float(build_state.get("primary_fire_interval_mult", 1.0)) * float(primary_profile.get("fire_interval_mult", 1.0)),
-		"projectile_speed": 540.0 * float(build_state.get("projectile_speed_mult", 1.0)) * float(primary_profile.get("projectile_speed_mult", 1.0)),
-		"projectile_damage": max(1, int(round((1.0 + float(build_state.get("projectile_damage_bonus", 0.0))) * float(primary_profile.get("damage_mult", 1.0))))),
-		"secondary_projectile_count": int(secondary_profile.get("projectile_count", 1)),
-		"secondary_spread_radians": float(secondary_profile.get("spread_radians", 0.0)),
-		"secondary_cooldown": 4.0 * float(build_state.get("secondary_cooldown_mult", 1.0)) * float(secondary_profile.get("cooldown_mult", 1.0)),
-		"secondary_projectile_speed": float(secondary_profile.get("base_projectile_speed", 0.0)) * float(build_state.get("secondary_projectile_speed_mult", 1.0)) * float(secondary_profile.get("projectile_speed_mult", 1.0)),
-		"secondary_damage": max(1, int(round((3.0 + float(build_state.get("secondary_damage_bonus", 0.0))) * float(secondary_profile.get("damage_mult", 1.0))))),
-		"secondary_projectile_kind": str(secondary_profile.get("kind", "mine")),
-		"secondary_explosion_radius": 92.0 * float(build_state.get("secondary_explosion_radius_mult", 1.0)) * float(secondary_profile.get("explosion_radius_mult", 1.0)),
-		"secondary_fuse_time": float(secondary_profile.get("base_fuse_time", 12.0)) * float(secondary_profile.get("fuse_time_mult", 1.0)),
-		"secondary_gravity_force": float(secondary_profile.get("base_gravity_force", 0.0)) * float(secondary_profile.get("gravity_force_mult", 1.0)),
-		"secondary_pulse_count": int(secondary_profile.get("pulse_count", 1)),
-		"secondary_pulse_interval": float(secondary_profile.get("pulse_interval", 0.18)),
-		"secondary_cluster_blast_count": int(secondary_profile.get("cluster_blast_count", 0)),
-		"secondary_cluster_spread_radius": 52.0 * float(secondary_profile.get("cluster_spread_radius_mult", 1.0)),
-		"secondary_proximity_radius": float(secondary_profile.get("base_proximity_radius", 52.0)) * float(secondary_profile.get("proximity_radius_mult", 1.0)),
+		"move_speed": 260.0 * float(passive_state.get("move_speed_mult", 1.0)),
+		"primary_slots": primary_slots,
+		"secondary_slots": secondary_slots,
+		"selected_primary": selected_primary_index,
+		"selected_secondary": selected_secondary_index,
+		"primary_profile_name": str(selected_primary.get("primary_profile_name", selected_primary.get("label", "Rifle"))),
+		"secondary_profile_name": str(selected_secondary.get("secondary_profile_name", selected_secondary.get("label", "Mine"))),
+		"primary_projectile_count": int(selected_primary.get("primary_projectile_count", 1)),
+		"primary_spread_radians": float(selected_primary.get("primary_spread_radians", 0.0)),
+		"primary_fire_interval": float(selected_primary.get("primary_fire_interval", 0.27)),
+		"projectile_speed": float(selected_primary.get("projectile_speed", 540.0)),
+		"projectile_damage": int(selected_primary.get("projectile_damage", 1)),
+		"secondary_projectile_count": int(selected_secondary.get("secondary_projectile_count", 1)),
+		"secondary_spread_radians": float(selected_secondary.get("secondary_spread_radians", 0.0)),
+		"secondary_cooldown": float(selected_secondary.get("secondary_cooldown", 4.0)),
+		"secondary_projectile_speed": float(selected_secondary.get("secondary_projectile_speed", 0.0)),
+		"secondary_damage": int(selected_secondary.get("secondary_damage", 1)),
+		"secondary_projectile_kind": str(selected_secondary.get("secondary_projectile_kind", "mine")),
+		"secondary_explosion_radius": float(selected_secondary.get("secondary_explosion_radius", 92.0)),
+		"secondary_fuse_time": float(selected_secondary.get("secondary_fuse_time", 12.0)),
+		"secondary_gravity_force": float(selected_secondary.get("secondary_gravity_force", 0.0)),
+		"secondary_pulse_count": int(selected_secondary.get("secondary_pulse_count", 1)),
+		"secondary_pulse_interval": float(selected_secondary.get("secondary_pulse_interval", 0.18)),
+		"secondary_cluster_blast_count": int(selected_secondary.get("secondary_cluster_blast_count", 0)),
+		"secondary_cluster_spread_radius": float(selected_secondary.get("secondary_cluster_spread_radius", 52.0)),
+		"secondary_proximity_radius": float(selected_secondary.get("secondary_proximity_radius", 52.0)),
 	}
 	return loadout
 
-func claim_reward_item(item_id: String) -> Dictionary:
-	var item := _get_item(item_id)
+func get_player_passive_display_names(player_index: int) -> Array:
+	var inventory: PlayerInventoryData = _get_inventory(player_index)
+	var passive_names: Array = []
+	if inventory == null:
+		return passive_names
+	for passive_id in inventory.passives:
+		var passive_entry: Dictionary = _get_catalog_entry(str(passive_id))
+		var passive_name: String = str(passive_entry.get("name", str(passive_id))).strip_edges()
+		if passive_name.is_empty():
+			continue
+		passive_names.append(passive_name)
+	return passive_names
+
+func prepare_shop_room_offers() -> void:
+	shop_offers_by_player = {}
+	for player_index in range(player_inventories.size()):
+		shop_offers_by_player[player_index] = _roll_shop_offers_for_player(player_index, 3)
+
+func get_shop_offers_for(player_index: int) -> Array:
+	var clamped_index: int = clampi(player_index, 0, max(player_inventories.size() - 1, 0))
+	if not shop_offers_by_player.has(clamped_index):
+		shop_offers_by_player[clamped_index] = _roll_shop_offers_for_player(clamped_index, 3)
+	return (shop_offers_by_player[clamped_index] as Array).duplicate(true)
+
+func preview_shop_purchase(player_index: int, item_id: String) -> Dictionary:
+	var entry: Dictionary = _get_catalog_entry(item_id)
+	if entry.is_empty():
+		return {"success": false, "summary": "That offer is no longer available."}
+	var inventory: PlayerInventoryData = _get_inventory(player_index)
+	var cost: int = _get_catalog_entry_cost(entry)
+	if inventory.gold < cost:
+		return {"success": false, "summary": "P%d needs %d Gold but only has %d." % [player_index + 1, cost, inventory.gold]}
+	match str(entry.get("type", "")):
+		"passive":
+			if not bool(entry.get("stackable", false)) and inventory.has_passive(str(entry.get("id", ""))):
+				return {"success": false, "summary": "%s is already owned." % str(entry.get("name", "Passive"))}
+		"primary_weapon", "secondary_weapon":
+			var weapon_id: String = str(entry.get("id", ""))
+			var max_level: int = int(entry.get("max_level", 5))
+			if not inventory.can_take_weapon(weapon_id, max_level):
+				return {"success": false, "summary": "%s is already max level." % str(entry.get("name", "Weapon"))}
+			if not inventory.owns_weapon(weapon_id):
+				var slot_type: String = "secondary" if str(entry.get("type", "")) == "secondary_weapon" else "primary"
+				var slot_group: Array = inventory.secondary_slots if slot_type == "secondary" else inventory.primary_slots
+				var has_empty_slot: bool = false
+				for slot_entry in slot_group:
+					if slot_entry == null:
+						has_empty_slot = true
+						break
+				if not has_empty_slot:
+					return {
+						"success": true,
+						"requires_replacement": true,
+						"slot_type": slot_type,
+						"slot_count": slot_group.size(),
+						"entry": entry.duplicate(true),
+					}
+	return {"success": true, "requires_replacement": false, "entry": entry.duplicate(true)}
+
+func complete_shop_purchase(player_index: int, item_id: String, slot_type: String = "", slot_index: int = -1, cancel_purchase: bool = false) -> Dictionary:
+	var entry: Dictionary = _get_catalog_entry(item_id)
+	if entry.is_empty():
+		return {"success": false, "summary": "That offer is no longer available."}
+	if cancel_purchase:
+		return {"success": false, "summary": "Purchase canceled."}
+	var inventory: PlayerInventoryData = _get_inventory(player_index)
+	var cost: int = _get_catalog_entry_cost(entry)
+	if inventory.gold < cost:
+		return {"success": false, "summary": "Not enough Gold."}
+	inventory.gold -= cost
+	var result_summary: String = ""
+	match str(entry.get("type", "")):
+		"passive":
+			var passive_result: Dictionary = _apply_passive_to_player(player_index, entry, player_health_states[player_index] if player_index < player_health_states.size() and player_health_states[player_index] is Dictionary else {})
+			result_summary = str(passive_result.get("summary", "%s purchased." % str(entry.get("name", "Passive"))))
+		"primary_weapon", "secondary_weapon":
+			if slot_index >= 0:
+				var normalized_slot_type: String = "secondary" if slot_type == "secondary" else "primary"
+				inventory.replace_weapon(normalized_slot_type, slot_index, str(entry.get("id", "")))
+				result_summary = "Purchased %s and replaced %s slot %d." % [str(entry.get("name", "Weapon")), normalized_slot_type, slot_index + 1]
+			else:
+				var weapon_result: Dictionary = _apply_weapon_offer_to_player(player_index, entry)
+				result_summary = str(weapon_result.get("summary", "%s purchased." % str(entry.get("name", "Weapon"))))
+	_sync_aggregate_gold()
+	_remove_shop_offer(player_index, item_id)
+	return {
+		"success": true,
+		"summary": "%s\nP%d Gold: %d" % [result_summary, player_index + 1, inventory.gold],
+	}
+
+func roll_loot_drop() -> Dictionary:
+	var choices: Array = _roll_item_choices("reward", 1)
+	if choices.is_empty():
+		return {}
+	return (choices[0] as Dictionary).duplicate(true)
+
+func resolve_loot_vote(votes: Dictionary, item: Dictionary, health_states: Array = []) -> Dictionary:
 	if item.is_empty():
-		return {"success": false, "title": "Upgrade Missing", "summary": "The selected reward item no longer exists."}
-	var summary := _apply_item(item)
-	return {"success": true, "title": "Upgrade Acquired", "summary": summary}
+		return {
+			"winner_index": -1,
+			"results": [],
+			"summary": "The loot drop vanished.",
+			"health_states": health_states.duplicate(true),
+		}
 
-func purchase_shop_item(item_id: String) -> Dictionary:
-	var item := _get_item(item_id)
-	if item.is_empty():
-		return {"success": false, "title": "Shop Error", "summary": "The selected shop item no longer exists."}
+	var resolved_health_states: Array = []
+	for state in health_states:
+		if state is Dictionary:
+			resolved_health_states.append((state as Dictionary).duplicate(true))
 
-	var cost := int(item.get("cost", 0))
-	if cost > gold:
-		return {"success": false, "title": "Not Enough Gold", "summary": "Need %d Gold. Current shared total: %d." % [cost, gold]}
+	var item_id: String = str(item.get("id", ""))
+	var scrap_gold: int = max(1, int(item.get("scrap_gold_value", 1)))
+	var resolved_votes: Dictionary = {}
+	var takers: Array = []
+	var blocked_players: Array = []
 
-	gold -= cost
-	var summary := "%s\nShared Gold left: %d." % [_apply_item(item), gold]
-	return {"success": true, "title": "Purchase Complete", "summary": summary}
+	for player_index in range(player_inventories.size()):
+		var vote_value: String = str(votes.get(player_index, "scrap"))
+		var final_vote: String = "take" if vote_value == "take" else "scrap"
+		if final_vote == "take" and not _can_inventory_take_entry(player_index, item):
+			final_vote = "scrap"
+			blocked_players.append(player_index)
+		resolved_votes[player_index] = final_vote
+		if final_vote == "take":
+			takers.append(player_index)
+
+	var winner_index: int = -1
+	var contested: bool = takers.size() > 1
+	if takers.size() == 1:
+		winner_index = int(takers[0])
+	elif takers.size() > 1:
+		winner_index = _roll_contested_loot_winner(takers)
+
+	var results: Array = []
+	var summary_lines: Array = ["Loot Drop: %s" % str(item.get("name", "Loot"))]
+	var replacement_request: Dictionary = {}
+	if contested:
+		summary_lines.append("Contested roll winner: P%d." % (winner_index + 1))
+	elif winner_index >= 0:
+		summary_lines.append("P%d took the item." % (winner_index + 1))
+	else:
+		summary_lines.append("The item was scrapped.")
+
+	if not blocked_players.is_empty():
+		var blocked_labels: Array = []
+		for player_value in blocked_players:
+			blocked_labels.append("P%d" % (int(player_value) + 1))
+		summary_lines.append("%s could not take this item and were treated as Scrap." % ", ".join(blocked_labels))
+
+	for player_index in range(player_inventories.size()):
+		var inventory: PlayerInventoryData = player_inventories[player_index]
+		if player_index == winner_index:
+			var player_health_state: Dictionary = {}
+			if player_index < resolved_health_states.size() and resolved_health_states[player_index] is Dictionary:
+				player_health_state = (resolved_health_states[player_index] as Dictionary).duplicate(true)
+			var apply_result: Dictionary = _apply_catalog_entry_to_player(player_index, item, player_health_state)
+			if player_index < resolved_health_states.size():
+				resolved_health_states[player_index] = player_health_state
+			results.append({
+				"player_index": player_index,
+				"outcome": str(apply_result.get("outcome", "took_item")),
+				"gold_gained": 0,
+			})
+			if str(apply_result.get("outcome", "")) == "needs_replacement":
+				replacement_request = {
+					"player_index": player_index,
+					"entry": item.duplicate(true),
+					"slot_type": str(apply_result.get("slot_type", "")),
+					"slot_count": int(apply_result.get("slot_count", 2)),
+				}
+			var player_summary: String = str(apply_result.get("summary", "")).strip_edges()
+			if not player_summary.is_empty():
+				summary_lines.append("P%d: %s" % [player_index + 1, player_summary])
+		else:
+			inventory.gold += scrap_gold
+			results.append({
+				"player_index": player_index,
+				"outcome": "got_gold",
+				"gold_gained": scrap_gold,
+			})
+			summary_lines.append("P%d gained %d Gold." % [player_index + 1, scrap_gold])
+
+	_sync_aggregate_gold()
+	if replacement_request.is_empty():
+		summary_lines.append(get_gold_summary_text())
+	return {
+		"winner_index": winner_index,
+		"results": results,
+		"summary": "\n".join(summary_lines),
+		"resolved_votes": resolved_votes,
+		"health_states": resolved_health_states,
+		"replacement_request": replacement_request,
+	}
 
 func _generate_node_map() -> Array:
 	if is_debug_single_room_mode():
@@ -318,7 +519,7 @@ func _build_room_template(room_type: String) -> Dictionary:
 		"combat", "elite":
 			return {
 				"room_type": room_type,
-				"reward": {"type": "loot_choice", "label": "Choose 1 shared upgrade"},
+				"reward": {"type": "loot_choice", "label": "Resolve the loot drop"},
 			}
 		"rest":
 			return {
@@ -328,7 +529,7 @@ func _build_room_template(room_type: String) -> Dictionary:
 		"shop":
 			return {
 				"room_type": "shop",
-				"reward": {"type": "shop", "label": "Spend shared Gold on one upgrade"},
+				"reward": {"type": "shop", "label": "Personal shop offers"},
 			}
 		"boss":
 			return {
@@ -560,7 +761,7 @@ func _build_node(step_index: int, column: int, template: Dictionary) -> Dictiona
 				node["description"] = "Survive the timer and hold the room."
 				node["survival_duration"] = float(template.get("survival_duration", _compute_survival_duration(step_index, false)))
 				node["enemy_spawn_interval"] = float(template.get("enemy_spawn_interval", _compute_spawn_interval(step_index, false)))
-			node["reward_label"] = "+%d Gold + shared upgrade" % node["currency_reward"]
+			node["reward_label"] = "+%d Gold each + loot drop" % node["currency_reward"]
 		"elite":
 			var elite_objective := str(template.get("room_objective", _roll_room_objective(step_index)))
 			node["title"] = "Elite Room"
@@ -577,7 +778,7 @@ func _build_node(step_index: int, column: int, template: Dictionary) -> Dictiona
 				node["description"] = "Survive the elite timer and break through the pressure."
 				node["survival_duration"] = float(template.get("survival_duration", _compute_survival_duration(step_index, is_elite)))
 				node["enemy_spawn_interval"] = float(template.get("enemy_spawn_interval", _compute_spawn_interval(step_index, is_elite)))
-			node["reward_label"] = "+%d Gold + shared upgrade" % node["currency_reward"]
+			node["reward_label"] = "+%d Gold each + loot drop" % node["currency_reward"]
 		"rest":
 			node["title"] = "Rest Room"
 			node["currency_reward"] = 0
@@ -588,8 +789,8 @@ func _build_node(step_index: int, column: int, template: Dictionary) -> Dictiona
 			node["title"] = "Shop Room"
 			node["currency_reward"] = 0
 			node["modifier"] = {}
-			node["description"] = "Spend shared Gold on one prototype upgrade."
-			node["reward_label"] = "Spend shared Gold"
+			node["description"] = "Enter the shop, browse personal offers, and ready up when done."
+			node["reward_label"] = "Personal offers"
 		"boss":
 			node["title"] = "Crimson Gate"
 			node["currency_reward"] = 0
@@ -614,10 +815,8 @@ func _apply_reward(reward: Dictionary) -> String:
 		_:
 			return str(reward.get("label", "No reward"))
 
-func _build_default_build_state() -> Dictionary:
+func _build_default_effect_state() -> Dictionary:
 	return {
-		"primary_profile": "rifle",
-		"secondary_profile": "mine",
 		"move_speed_mult": 1.0,
 		"primary_fire_interval_mult": 1.0,
 		"projectile_speed_mult": 1.0,
@@ -627,6 +826,121 @@ func _build_default_build_state() -> Dictionary:
 		"secondary_damage_bonus": 0.0,
 		"secondary_explosion_radius_mult": 1.0,
 	}
+
+func _build_default_player_inventories(player_count: int) -> Array:
+	var inventories: Array = []
+	for player_index in range(player_count):
+		var inventory := PlayerInventoryData.new()
+		inventory.player_index = player_index
+		inventory.primary_slots[0] = {"weapon_id": "rifle", "level": 1}
+		inventory.secondary_slots[0] = {"weapon_id": "mine", "level": 1}
+		inventories.append(inventory)
+	return inventories
+
+func _get_inventory(player_index: int) -> PlayerInventoryData:
+	if player_inventories.is_empty():
+		var fallback := PlayerInventoryData.new()
+		fallback.primary_slots[0] = {"weapon_id": "rifle", "level": 1}
+		fallback.secondary_slots[0] = {"weapon_id": "mine", "level": 1}
+		return fallback
+	var clamped_index: int = clampi(player_index, 0, player_inventories.size() - 1)
+	return player_inventories[clamped_index] as PlayerInventoryData
+
+func _build_effect_state_from_inventory(inventory: PlayerInventoryData) -> Dictionary:
+	var effect_state: Dictionary = _build_default_effect_state()
+	if inventory == null:
+		return effect_state
+	for passive_id in inventory.passives:
+		var passive := _get_catalog_entry(str(passive_id))
+		if passive.is_empty():
+			continue
+		var passive_effects: Dictionary = passive.get("passive_effects", {})
+		if passive_effects.has("primary_fire_interval_mult"):
+			effect_state["primary_fire_interval_mult"] = float(effect_state.get("primary_fire_interval_mult", 1.0)) * float(passive_effects.get("primary_fire_interval_mult", 1.0))
+		if passive_effects.has("projectile_speed_mult"):
+			effect_state["projectile_speed_mult"] = float(effect_state.get("projectile_speed_mult", 1.0)) * float(passive_effects.get("projectile_speed_mult", 1.0))
+		if passive_effects.has("projectile_damage_bonus"):
+			effect_state["projectile_damage_bonus"] = float(effect_state.get("projectile_damage_bonus", 0.0)) + float(passive_effects.get("projectile_damage_bonus", 0.0))
+		if passive_effects.has("move_speed_mult"):
+			effect_state["move_speed_mult"] = float(effect_state.get("move_speed_mult", 1.0)) * float(passive_effects.get("move_speed_mult", 1.0))
+		if passive_effects.has("secondary_cooldown_mult"):
+			effect_state["secondary_cooldown_mult"] = float(effect_state.get("secondary_cooldown_mult", 1.0)) * float(passive_effects.get("secondary_cooldown_mult", 1.0))
+		if passive_effects.has("secondary_projectile_speed_mult"):
+			effect_state["secondary_projectile_speed_mult"] = float(effect_state.get("secondary_projectile_speed_mult", 1.0)) * float(passive_effects.get("secondary_projectile_speed_mult", 1.0))
+		if passive_effects.has("secondary_damage_bonus"):
+			effect_state["secondary_damage_bonus"] = float(effect_state.get("secondary_damage_bonus", 0.0)) + float(passive_effects.get("secondary_damage_bonus", 0.0))
+		if passive_effects.has("secondary_explosion_radius_mult"):
+			effect_state["secondary_explosion_radius_mult"] = float(effect_state.get("secondary_explosion_radius_mult", 1.0)) * float(passive_effects.get("secondary_explosion_radius_mult", 1.0))
+	return effect_state
+
+func _build_profile_from_inventory_slot(slot_entry: Dictionary, fallback_id: String) -> Dictionary:
+	var weapon_id := str(slot_entry.get("weapon_id", fallback_id))
+	var weapon_level: int = int(slot_entry.get("level", 1))
+	var weapon_type := str((_weapons_by_id.get(weapon_id, {}) as Dictionary).get("type", ""))
+	if weapon_type == "secondary_weapon":
+		return _build_weapon_profile(weapon_id, "mine", weapon_level)
+	return _build_weapon_profile(weapon_id, "rifle", weapon_level)
+
+func _build_runtime_slot_array(slot_entries: Array, passive_state: Dictionary, fallback_id: String) -> Array:
+	var runtime_slots: Array = []
+	for slot_entry in slot_entries:
+		if slot_entry is Dictionary:
+			runtime_slots.append(_compile_slot_loadout(slot_entry as Dictionary, passive_state, fallback_id))
+		else:
+			runtime_slots.append(null)
+	return runtime_slots
+
+func _compile_slot_loadout(slot_entry: Dictionary, passive_state: Dictionary, fallback_id: String) -> Dictionary:
+	var profile: Dictionary = _build_profile_from_inventory_slot(slot_entry, fallback_id)
+	var weapon_level: int = int(slot_entry.get("level", 1))
+	var slot_loadout := {
+		"weapon_id": str(slot_entry.get("weapon_id", fallback_id)),
+		"weapon_level": weapon_level,
+		"weapon_level_description": str(profile.get("level_description", "")),
+		"primary_profile_name": str(profile.get("label", "Rifle")),
+		"secondary_profile_name": str(profile.get("label", "Mine")),
+		"primary_projectile_count": int(profile.get("projectile_count", 1)),
+		"primary_spread_radians": float(profile.get("spread_radians", 0.0)),
+		"primary_fire_interval": 0.27 * GLOBAL_PRIMARY_FIRE_INTERVAL_MULT * float(passive_state.get("primary_fire_interval_mult", 1.0)) * float(profile.get("fire_interval_mult", 1.0)),
+		"projectile_speed": 540.0 * float(passive_state.get("projectile_speed_mult", 1.0)) * float(profile.get("projectile_speed_mult", 1.0)),
+		"projectile_damage": max(1, int(round((1.0 + float(passive_state.get("projectile_damage_bonus", 0.0))) * float(profile.get("damage_mult", 1.0))))),
+		"secondary_projectile_count": int(profile.get("projectile_count", 1)),
+		"secondary_spread_radians": float(profile.get("spread_radians", 0.0)),
+		"secondary_cooldown": 4.0 * GLOBAL_SECONDARY_COOLDOWN_MULT * float(passive_state.get("secondary_cooldown_mult", 1.0)) * float(profile.get("cooldown_mult", 1.0)),
+		"secondary_projectile_speed": float(profile.get("base_projectile_speed", 0.0)) * float(passive_state.get("secondary_projectile_speed_mult", 1.0)) * float(profile.get("projectile_speed_mult", 1.0)),
+		"secondary_damage": max(1, int(round((3.0 + float(passive_state.get("secondary_damage_bonus", 0.0))) * float(profile.get("damage_mult", 1.0))))),
+		"secondary_projectile_kind": str(profile.get("kind", "mine")),
+		"secondary_explosion_radius": 92.0 * float(passive_state.get("secondary_explosion_radius_mult", 1.0)) * float(profile.get("explosion_radius_mult", 1.0)),
+		"secondary_fuse_time": float(profile.get("base_fuse_time", 12.0)) * float(profile.get("fuse_time_mult", 1.0)),
+		"secondary_gravity_force": float(profile.get("base_gravity_force", 0.0)) * float(profile.get("gravity_force_mult", 1.0)),
+		"secondary_pulse_count": int(profile.get("pulse_count", 1)),
+		"secondary_pulse_interval": float(profile.get("pulse_interval", 0.18)),
+		"secondary_cluster_blast_count": int(profile.get("cluster_blast_count", 0)),
+		"secondary_cluster_spread_radius": 52.0 * float(profile.get("cluster_spread_radius_mult", 1.0)),
+		"secondary_proximity_radius": float(profile.get("base_proximity_radius", 52.0)) * float(profile.get("proximity_radius_mult", 1.0)),
+	}
+	return slot_loadout
+
+func get_gold_summary_text(compact: bool = false) -> String:
+	if player_inventories.is_empty():
+		return "No wallets"
+	var parts: Array = []
+	for inventory_index in range(player_inventories.size()):
+		var inventory: PlayerInventoryData = player_inventories[inventory_index]
+		parts.append("P%d: %d" % [inventory_index + 1, inventory.gold])
+	if compact:
+		return " | ".join(parts)
+	return "Gold Wallets\n%s" % "\n".join(parts)
+
+func award_gold_to_all(value: int) -> void:
+	for inventory in player_inventories:
+		(inventory as PlayerInventoryData).gold += value
+	_sync_aggregate_gold()
+
+func _sync_aggregate_gold() -> void:
+	gold = 0
+	for inventory in player_inventories:
+		gold += int((inventory as PlayerInventoryData).gold)
 
 func _apply_debug_start_options(debug_options: Dictionary) -> void:
 	if debug_options.is_empty():
@@ -639,16 +953,28 @@ func _apply_debug_start_options(debug_options: Dictionary) -> void:
 		debug_run_setup[key] = debug_options[key]
 
 func _apply_debug_loadout_overrides() -> void:
+	if player_inventories.is_empty():
+		_sync_aggregate_gold()
+		return
 	if not bool(debug_run_setup.get("enabled", false)):
+		for inventory in player_inventories:
+			(inventory as PlayerInventoryData).gold = 0
+		_sync_aggregate_gold()
 		return
 
 	var primary_profile := str(debug_run_setup.get("primary_profile", ""))
 	var secondary_profile := str(debug_run_setup.get("secondary_profile", ""))
-	if not primary_profile.is_empty():
-		build_state["primary_profile"] = primary_profile
-	if not secondary_profile.is_empty():
-		build_state["secondary_profile"] = secondary_profile
-	gold = int(debug_run_setup.get("starting_gold", 0))
+	var starting_gold: int = int(debug_run_setup.get("starting_gold", 0))
+	for inventory_entry in player_inventories:
+		var inventory: PlayerInventoryData = inventory_entry
+		inventory.gold = starting_gold
+		if not primary_profile.is_empty():
+			inventory.primary_slots[0] = {"weapon_id": _normalize_primary_profile_id(primary_profile), "level": 1}
+			inventory.selected_primary = 0
+		if not secondary_profile.is_empty():
+			inventory.secondary_slots[0] = {"weapon_id": _normalize_secondary_profile_id(secondary_profile), "level": 1}
+			inventory.selected_secondary = 0
+	_sync_aggregate_gold()
 
 func _build_default_debug_run_setup() -> Dictionary:
 	return {
@@ -702,24 +1028,44 @@ func _resolve_debug_modifier() -> Dictionary:
 			return _modifier_engine.get_random_modifier()
 
 func _get_primary_profile(profile_id: String) -> Dictionary:
-	var profiles := {
-		"rifle": {"label": "Rifle", "projectile_count": 1, "spread_radians": 0.0, "fire_interval_mult": 1.0, "projectile_speed_mult": 1.0, "damage_mult": 1.0},
-		"spread": {"label": "Scatter", "projectile_count": 3, "spread_radians": 0.18, "fire_interval_mult": 1.35, "projectile_speed_mult": 0.95, "damage_mult": 0.65},
-		"slug": {"label": "Slug", "projectile_count": 1, "spread_radians": 0.0, "fire_interval_mult": 2.1, "projectile_speed_mult": 1.2, "damage_mult": 2.4},
-	}
-	return profiles.get(profile_id, profiles["rifle"]).duplicate(true)
+	var normalized_profile_id := _normalize_primary_profile_id(profile_id)
+	return _build_weapon_profile(normalized_profile_id, "rifle", 1)
 
 func _get_secondary_profile(profile_id: String) -> Dictionary:
 	var normalized_profile_id := _normalize_secondary_profile_id(profile_id)
-	var profiles := {
-		"grenade": {"label": "Grenade", "kind": "grenade", "projectile_count": 1, "spread_radians": 0.0, "cooldown_mult": 1.0, "base_projectile_speed": 125.0, "projectile_speed_mult": 1.0, "damage_mult": 1.0, "explosion_radius_mult": 1.0, "base_fuse_time": 1.0, "fuse_time_mult": 1.0, "base_gravity_force": 520.0, "gravity_force_mult": 1.0, "pulse_count": 1, "pulse_interval": 0.18, "cluster_blast_count": 0, "cluster_spread_radius_mult": 1.0, "base_proximity_radius": 0.0, "proximity_radius_mult": 1.0},
-		"cluster_grenade": {"label": "Cluster Grenade", "kind": "cluster_grenade", "projectile_count": 1, "spread_radians": 0.0, "cooldown_mult": 0.92, "base_projectile_speed": 125.0, "projectile_speed_mult": 1.0, "damage_mult": 0.8, "explosion_radius_mult": 0.78, "base_fuse_time": 1.0, "fuse_time_mult": 1.0, "base_gravity_force": 520.0, "gravity_force_mult": 1.0, "pulse_count": 1, "pulse_interval": 0.18, "cluster_blast_count": 4, "cluster_spread_radius_mult": 1.0, "base_proximity_radius": 0.0, "proximity_radius_mult": 1.0},
-		"siege_grenade": {"label": "Siege Grenade", "kind": "siege_grenade", "projectile_count": 1, "spread_radians": 0.0, "cooldown_mult": 1.35, "base_projectile_speed": 125.0, "projectile_speed_mult": 1.0, "damage_mult": 1.1, "explosion_radius_mult": 1.35, "base_fuse_time": 1.0, "fuse_time_mult": 1.0, "base_gravity_force": 520.0, "gravity_force_mult": 1.0, "pulse_count": 3, "pulse_interval": 0.18, "cluster_blast_count": 0, "cluster_spread_radius_mult": 1.0, "base_proximity_radius": 0.0, "proximity_radius_mult": 1.0},
-		"mine": {"label": "Mine", "kind": "mine", "projectile_count": 1, "spread_radians": 0.0, "cooldown_mult": 1.0, "base_projectile_speed": 0.0, "projectile_speed_mult": 0.0, "damage_mult": 1.0, "explosion_radius_mult": 1.0, "base_fuse_time": 12.0, "fuse_time_mult": 1.0, "base_gravity_force": 0.0, "gravity_force_mult": 0.0, "pulse_count": 1, "pulse_interval": 0.18, "cluster_blast_count": 0, "cluster_spread_radius_mult": 1.0, "base_proximity_radius": 52.0, "proximity_radius_mult": 1.0},
-		"shrapnel_mine": {"label": "Shrapnel Mine", "kind": "shrapnel_mine", "projectile_count": 1, "spread_radians": 0.0, "cooldown_mult": 0.92, "base_projectile_speed": 0.0, "projectile_speed_mult": 0.0, "damage_mult": 0.82, "explosion_radius_mult": 0.82, "base_fuse_time": 12.0, "fuse_time_mult": 1.0, "base_gravity_force": 0.0, "gravity_force_mult": 0.0, "pulse_count": 1, "pulse_interval": 0.18, "cluster_blast_count": 4, "cluster_spread_radius_mult": 1.0, "base_proximity_radius": 52.0, "proximity_radius_mult": 0.95},
-		"heavy_mine": {"label": "Heavy Mine", "kind": "heavy_mine", "projectile_count": 1, "spread_radians": 0.0, "cooldown_mult": 1.3, "base_projectile_speed": 0.0, "projectile_speed_mult": 0.0, "damage_mult": 1.15, "explosion_radius_mult": 1.35, "base_fuse_time": 12.0, "fuse_time_mult": 1.0, "base_gravity_force": 0.0, "gravity_force_mult": 0.0, "pulse_count": 3, "pulse_interval": 0.18, "cluster_blast_count": 0, "cluster_spread_radius_mult": 1.0, "base_proximity_radius": 52.0, "proximity_radius_mult": 1.2},
-	}
-	return profiles.get(normalized_profile_id, profiles["mine"]).duplicate(true)
+	return _build_weapon_profile(normalized_profile_id, "mine", 1)
+
+func _build_weapon_profile(profile_id: String, fallback_id: String, level: int = 1) -> Dictionary:
+	var resolved_id := profile_id if _weapons_by_id.has(profile_id) else fallback_id
+	if not _weapons_by_id.has(resolved_id):
+		return {}
+	var weapon: Dictionary = (_weapons_by_id[resolved_id] as Dictionary).duplicate(true)
+	var base_stats: Dictionary = weapon.get("base_stats", {}).duplicate(true)
+	base_stats["id"] = str(weapon.get("id", resolved_id))
+	base_stats["label"] = str(weapon.get("name", resolved_id.capitalize()))
+	base_stats["type"] = str(weapon.get("type", "weapon"))
+	var clamped_level: int = clampi(level, 1, int(weapon.get("max_level", 5)))
+	base_stats["level"] = clamped_level
+	var level_effects_variant: Variant = weapon.get("level_effects", {})
+	if level_effects_variant is Dictionary:
+		var level_effects: Dictionary = level_effects_variant as Dictionary
+		if level_effects.has(str(clamped_level)) and level_effects[str(clamped_level)] is Dictionary:
+			var level_effect: Dictionary = (level_effects[str(clamped_level)] as Dictionary).duplicate(true)
+			base_stats["level_description"] = str(level_effect.get("description", ""))
+			for effect_key in level_effect.keys():
+				if str(effect_key) == "description":
+					continue
+				base_stats[str(effect_key)] = level_effect[effect_key]
+	return base_stats
+
+func _normalize_primary_profile_id(profile_id: String) -> String:
+	match profile_id:
+		"":
+			return "rifle"
+		"spread":
+			return "scatter"
+		_:
+			return profile_id
 
 func _normalize_secondary_profile_id(profile_id: String) -> String:
 	match profile_id:
@@ -736,13 +1082,13 @@ func _normalize_secondary_profile_id(profile_id: String) -> String:
 		_:
 			return profile_id
 
-func _load_items() -> void:
-	_items = []
-	_items_by_id = {}
-	if not FileAccess.file_exists(ITEMS_DATA_PATH):
+func _load_passives() -> void:
+	_passives = []
+	_passives_by_id = {}
+	if not FileAccess.file_exists(PASSIVES_DATA_PATH):
 		return
 
-	var file := FileAccess.open(ITEMS_DATA_PATH, FileAccess.READ)
+	var file := FileAccess.open(PASSIVES_DATA_PATH, FileAccess.READ)
 	if file == null:
 		return
 
@@ -750,40 +1096,78 @@ func _load_items() -> void:
 	if not (parsed is Dictionary):
 		return
 
-	var raw_items = parsed.get("items", [])
-	if not (raw_items is Array):
+	var raw_passives = parsed.get("passives", [])
+	if not (raw_passives is Array):
 		return
 
-	for entry in raw_items:
+	for entry in raw_passives:
 		if not (entry is Dictionary):
 			continue
-		var item: Dictionary = entry.duplicate(true)
-		var item_id := str(item.get("id", ""))
-		if item_id.is_empty():
+		var passive: Dictionary = entry.duplicate(true)
+		var passive_id := str(passive.get("id", ""))
+		if passive_id.is_empty():
 			continue
-		_items.append(item)
-		_items_by_id[item_id] = item
+		_passives.append(passive)
+		_passives_by_id[passive_id] = passive
+
+func _load_weapons() -> void:
+	_weapons = []
+	_weapons_by_id = {}
+	if not FileAccess.file_exists(WEAPONS_DATA_PATH):
+		return
+
+	var file := FileAccess.open(WEAPONS_DATA_PATH, FileAccess.READ)
+	if file == null:
+		return
+
+	var parsed = JSON.parse_string(file.get_as_text())
+	if not (parsed is Dictionary):
+		return
+
+	var raw_weapons = parsed.get("weapons", [])
+	if not (raw_weapons is Array):
+		return
+
+	for entry in raw_weapons:
+		if not (entry is Dictionary):
+			continue
+		var weapon: Dictionary = entry.duplicate(true)
+		var weapon_id := str(weapon.get("id", ""))
+		if weapon_id.is_empty():
+			continue
+		_weapons.append(weapon)
+		_weapons_by_id[weapon_id] = weapon
 
 func _roll_item_choices(pool_name: String, count: int) -> Array:
 	var available: Array = []
-	for item in _items:
-		var item_id := str(item.get("id", ""))
-		var item_pools = item.get("pools", [])
-		var repeatable := bool(item.get("repeatable", false))
-		if not (item_pools is Array) or not item_pools.has(pool_name):
+	for passive in _passives:
+		var passive_pools = passive.get("pools", [])
+		if not (passive_pools is Array) or not passive_pools.has(pool_name):
 			continue
-		if not ProfileState.has_item_unlock(item_id):
+		if not _is_catalog_entry_unlocked(passive):
 			continue
-		if not repeatable and acquired_item_ids.has(item_id):
+		if not bool(passive.get("stackable", false)) and _all_inventories_have_passive(str(passive.get("id", ""))):
 			continue
-		available.append(item.duplicate(true))
+		available.append(_decorate_choice_entry(passive))
+	for weapon in _weapons:
+		var weapon_pools = weapon.get("pools", [])
+		if not (weapon_pools is Array) or not weapon_pools.has(pool_name):
+			continue
+		if not _is_catalog_entry_unlocked(weapon):
+			continue
+		if _all_inventories_block_weapon(str(weapon.get("id", "")), int(weapon.get("max_level", 5))):
+			continue
+		available.append(_decorate_choice_entry(weapon))
 		
 	if available.is_empty():
-		for item in _items:
-			var item_id := str(item.get("id", ""))
-			var item_pools = item.get("pools", [])
-			if item_pools is Array and item_pools.has(pool_name) and ProfileState.has_item_unlock(item_id):
-				available.append(item.duplicate(true))
+		for passive in _passives:
+			var passive_pools = passive.get("pools", [])
+			if passive_pools is Array and passive_pools.has(pool_name) and _is_catalog_entry_unlocked(passive):
+				available.append(_decorate_choice_entry(passive))
+		for weapon in _weapons:
+			var weapon_pools = weapon.get("pools", [])
+			if weapon_pools is Array and weapon_pools.has(pool_name) and _is_catalog_entry_unlocked(weapon):
+				available.append(_decorate_choice_entry(weapon))
 
 	var choices: Array = []
 	while choices.size() < count and not available.is_empty():
@@ -792,44 +1176,276 @@ func _roll_item_choices(pool_name: String, count: int) -> Array:
 		available.remove_at(index)
 	return choices
 
-func _get_item(item_id: String) -> Dictionary:
-	if not _items_by_id.has(item_id):
-		return {}
-	return _items_by_id[item_id].duplicate(true)
+func _roll_shop_offers_for_player(player_index: int, count: int) -> Array:
+	var available: Array = []
+	var inventory: PlayerInventoryData = _get_inventory(player_index)
+	for passive in _passives:
+		var passive_pools = passive.get("pools", [])
+		if not (passive_pools is Array) or not passive_pools.has("shop"):
+			continue
+		if not _is_catalog_entry_unlocked(passive):
+			continue
+		if not bool(passive.get("stackable", false)) and inventory.has_passive(str(passive.get("id", ""))):
+			continue
+		available.append(_decorate_choice_entry(passive))
+	for weapon in _weapons:
+		var weapon_pools = weapon.get("pools", [])
+		if not (weapon_pools is Array) or not weapon_pools.has("shop"):
+			continue
+		if not _is_catalog_entry_unlocked(weapon):
+			continue
+		if not inventory.can_take_weapon(str(weapon.get("id", "")), int(weapon.get("max_level", 5))):
+			continue
+		available.append(_decorate_choice_entry(weapon))
+	var offers: Array = []
+	while offers.size() < count and not available.is_empty():
+		var roll_index := _random.randi_range(0, available.size() - 1)
+		offers.append(available[roll_index])
+		available.remove_at(roll_index)
+	return offers
 
-func _apply_item(item: Dictionary) -> String:
-	var item_id := str(item.get("id", ""))
-	if not bool(item.get("repeatable", false)) and not acquired_item_ids.has(item_id):
-		acquired_item_ids.append(item_id)
+func _remove_shop_offer(player_index: int, item_id: String) -> void:
+	if not shop_offers_by_player.has(player_index):
+		return
+	var offers: Array = shop_offers_by_player[player_index]
+	for offer_index in range(offers.size() - 1, -1, -1):
+		var offer_value: Variant = offers[offer_index]
+		if offer_value is Dictionary and str((offer_value as Dictionary).get("id", "")) == item_id:
+			offers.remove_at(offer_index)
+			break
+	shop_offers_by_player[player_index] = offers
 
-	var effects: Dictionary = item.get("effects", {})
-	if effects.has("set_primary_profile"):
-		build_state["primary_profile"] = str(effects.get("set_primary_profile", "rifle"))
-	if effects.has("set_secondary_profile"):
-		build_state["secondary_profile"] = _normalize_secondary_profile_id(str(effects.get("set_secondary_profile", "mine")))
-	if effects.has("primary_fire_interval_mult"):
-		build_state["primary_fire_interval_mult"] = float(build_state.get("primary_fire_interval_mult", 1.0)) * float(effects.get("primary_fire_interval_mult", 1.0))
-	if effects.has("projectile_speed_mult"):
-		build_state["projectile_speed_mult"] = float(build_state.get("projectile_speed_mult", 1.0)) * float(effects.get("projectile_speed_mult", 1.0))
-	if effects.has("projectile_damage_bonus"):
-		build_state["projectile_damage_bonus"] = float(build_state.get("projectile_damage_bonus", 0.0)) + float(effects.get("projectile_damage_bonus", 0.0))
-	if effects.has("move_speed_mult"):
-		build_state["move_speed_mult"] = float(build_state.get("move_speed_mult", 1.0)) * float(effects.get("move_speed_mult", 1.0))
-	if effects.has("secondary_cooldown_mult"):
-		build_state["secondary_cooldown_mult"] = float(build_state.get("secondary_cooldown_mult", 1.0)) * float(effects.get("secondary_cooldown_mult", 1.0))
-	if effects.has("secondary_projectile_speed_mult"):
-		build_state["secondary_projectile_speed_mult"] = float(build_state.get("secondary_projectile_speed_mult", 1.0)) * float(effects.get("secondary_projectile_speed_mult", 1.0))
-	if effects.has("secondary_damage_bonus"):
-		build_state["secondary_damage_bonus"] = float(build_state.get("secondary_damage_bonus", 0.0)) + float(effects.get("secondary_damage_bonus", 0.0))
-	if effects.has("secondary_explosion_radius_mult"):
-		build_state["secondary_explosion_radius_mult"] = float(build_state.get("secondary_explosion_radius_mult", 1.0)) * float(effects.get("secondary_explosion_radius_mult", 1.0))
+func _get_catalog_entry(entry_id: String) -> Dictionary:
+	if _passives_by_id.has(entry_id):
+		return (_passives_by_id[entry_id] as Dictionary).duplicate(true)
+	if _weapons_by_id.has(entry_id):
+		return (_weapons_by_id[entry_id] as Dictionary).duplicate(true)
+	return {}
+
+func _apply_catalog_entry_to_all_players(entry: Dictionary) -> String:
+	match str(entry.get("type", "")):
+		"primary_weapon", "secondary_weapon":
+			return _apply_weapon_offer_to_all_players(entry)
+		_:
+			return _apply_passive_to_all_players(entry)
+
+func _apply_catalog_entry_to_player(player_index: int, entry: Dictionary, health_state: Dictionary = {}) -> Dictionary:
+	match str(entry.get("type", "")):
+		"primary_weapon", "secondary_weapon":
+			return _apply_weapon_offer_to_player(player_index, entry)
+		_:
+			return _apply_passive_to_player(player_index, entry, health_state)
+
+func _apply_passive_to_player(player_index: int, passive: Dictionary, health_state: Dictionary = {}) -> Dictionary:
+	var inventory: PlayerInventoryData = _get_inventory(player_index)
+	var passive_id: String = str(passive.get("id", ""))
+	if not bool(passive.get("stackable", false)) and inventory.has_passive(passive_id):
+		return {
+			"outcome": "already_owned",
+			"summary": "%s was already owned, so the drop was converted to Gold." % str(passive.get("name", "Passive")),
+		}
+	inventory.add_passive(passive_id)
+	var effects: Dictionary = passive.get("passive_effects", {})
+	if effects.has("max_health_bonus") and not health_state.is_empty():
+		var max_health_bonus: int = int(effects.get("max_health_bonus", 0))
+		health_state["max"] = int(health_state.get("max", 5)) + max_health_bonus
+		health_state["current"] = int(health_state.get("current", 5)) + max_health_bonus
+	return {
+		"outcome": "took_item",
+		"summary": "%s added." % str(passive.get("name", "Passive")),
+	}
+
+func _apply_weapon_offer_to_player(player_index: int, weapon: Dictionary) -> Dictionary:
+	var inventory: PlayerInventoryData = _get_inventory(player_index)
+	var weapon_id: String = str(weapon.get("id", ""))
+	var weapon_type: String = str(weapon.get("type", ""))
+	var max_level: int = int(weapon.get("max_level", 5))
+	var result: String = inventory.add_weapon(weapon_id, weapon_type, max_level)
+	if result == "slots_full":
+		return {
+			"outcome": "needs_replacement",
+			"summary": "%s needs a slot replacement choice." % str(weapon.get("name", "Weapon")),
+			"slot_type": "secondary" if weapon_type == "secondary_weapon" else "primary",
+			"slot_count": inventory.secondary_slots.size() if weapon_type == "secondary_weapon" else inventory.primary_slots.size(),
+		}
+	if result == "leveled_up":
+		return {
+			"outcome": "leveled_up",
+			"summary": "%s leveled up." % str(weapon.get("name", "Weapon")),
+		}
+	if result == "max_level":
+		return {
+			"outcome": "max_level",
+			"summary": "%s was already max level." % str(weapon.get("name", "Weapon")),
+		}
+	return {
+		"outcome": "took_item",
+		"summary": "%s equipped." % str(weapon.get("name", "Weapon")),
+	}
+
+func resolve_weapon_replacement_choice(player_index: int, entry: Dictionary, slot_type: String, slot_index: int, cancel_instead: bool = false) -> Dictionary:
+	var inventory: PlayerInventoryData = _get_inventory(player_index)
+	var entry_id: String = str(entry.get("id", ""))
+	if cancel_instead:
+		var scrap_gold: int = max(1, int(entry.get("scrap_gold_value", 1)))
+		inventory.gold += scrap_gold
+		_sync_aggregate_gold()
+		return {
+			"outcome": "scrapped",
+			"summary": "P%d scrapped %s for %d Gold." % [player_index + 1, str(entry.get("name", "Weapon")), scrap_gold],
+			"gold_gained": scrap_gold,
+		}
+	var normalized_slot_type: String = "secondary" if slot_type == "secondary" else "primary"
+	var slot_group: Array = inventory.secondary_slots if normalized_slot_type == "secondary" else inventory.primary_slots
+	var resolved_slot_index: int = clampi(slot_index, 0, max(slot_group.size() - 1, 0))
+	inventory.replace_weapon(normalized_slot_type, resolved_slot_index, entry_id)
+	return {
+		"outcome": "replaced",
+		"summary": "P%d replaced %s slot %d with %s." % [
+			player_index + 1,
+			"secondary" if normalized_slot_type == "secondary" else "primary",
+			resolved_slot_index + 1,
+			str(entry.get("name", "Weapon"))
+		],
+		"gold_gained": 0,
+	}
+
+func get_player_weapon_slot_display(player_index: int, slot_type: String) -> Array:
+	var inventory: PlayerInventoryData = _get_inventory(player_index)
+	var slot_group: Array = inventory.secondary_slots if slot_type == "secondary" else inventory.primary_slots
+	var display_rows: Array = []
+	for slot_entry in slot_group:
+		if slot_entry is Dictionary:
+			var weapon_id: String = str((slot_entry as Dictionary).get("weapon_id", ""))
+			var weapon_level: int = int((slot_entry as Dictionary).get("level", 1))
+			var entry: Dictionary = _get_catalog_entry(weapon_id)
+			display_rows.append({
+				"weapon_id": weapon_id,
+				"name": str(entry.get("name", weapon_id.capitalize())),
+				"level": weapon_level,
+			})
+		else:
+			display_rows.append({
+				"weapon_id": "",
+				"name": "---",
+				"level": 0,
+			})
+	return display_rows
+
+func _apply_passive_to_all_players(passive: Dictionary) -> String:
+	var passive_id := str(passive.get("id", ""))
+	for inventory in player_inventories:
+		var player_inventory: PlayerInventoryData = inventory
+		if bool(passive.get("stackable", false)) or not player_inventory.has_passive(passive_id):
+			player_inventory.add_passive(passive_id)
+	var effects: Dictionary = passive.get("passive_effects", {})
 	if effects.has("max_health_bonus"):
 		var max_health_bonus := int(effects.get("max_health_bonus", 0))
 		for state in player_health_states:
 			state["max"] = int(state.get("max", 5)) + max_health_bonus
 			state["current"] = int(state.get("current", 5)) + max_health_bonus
 
-	return "%s\n%s" % [str(item.get("name", "Upgrade")), str(item.get("description", ""))]
+	return "%s\n%s" % [str(passive.get("name", "Upgrade")), str(passive.get("description", ""))]
+
+func _apply_weapon_offer_to_all_players(weapon: Dictionary) -> String:
+	var weapon_id := str(weapon.get("id", ""))
+	var weapon_type := str(weapon.get("type", ""))
+	var max_level: int = int(weapon.get("max_level", 5))
+	for inventory in player_inventories:
+		var player_inventory: PlayerInventoryData = inventory
+		var result := player_inventory.add_weapon(weapon_id, weapon_type, max_level)
+		if result == "slots_full":
+			if weapon_type == "secondary_weapon":
+				player_inventory.secondary_slots[0] = {"weapon_id": weapon_id, "level": 1}
+				player_inventory.selected_secondary = 0
+			else:
+				player_inventory.primary_slots[0] = {"weapon_id": weapon_id, "level": 1}
+				player_inventory.selected_primary = 0
+	return "%s\n%s" % [str(weapon.get("name", "Weapon")), str(weapon.get("description", ""))]
+
+func _is_catalog_entry_unlocked(entry: Dictionary) -> bool:
+	var unlock_id := str(entry.get("unlock_id", str(entry.get("id", ""))))
+	if unlock_id.is_empty():
+		return true
+	return ProfileState.has_item_unlock(unlock_id)
+
+func _get_catalog_entry_cost(entry: Dictionary) -> int:
+	var entry_type := str(entry.get("type", ""))
+	if entry_type == "passive":
+		return int(entry.get("shop_gold_cost", 0))
+	return int(entry.get("shop_gold_cost", entry.get("cost", 0)))
+
+func _decorate_choice_entry(entry: Dictionary) -> Dictionary:
+	var decorated: Dictionary = entry.duplicate(true)
+	var entry_type := str(decorated.get("type", ""))
+	if not decorated.has("cost"):
+		decorated["cost"] = _get_catalog_entry_cost(decorated)
+	if not decorated.has("category"):
+		match entry_type:
+			"primary_weapon":
+				decorated["category"] = "Primary Weapon"
+			"secondary_weapon":
+				decorated["category"] = "Secondary Weapon"
+			_:
+				decorated["category"] = "Passive"
+	return decorated
+
+func _all_inventories_have_passive(passive_id: String) -> bool:
+	if player_inventories.is_empty():
+		return false
+	for inventory in player_inventories:
+		if not (inventory as PlayerInventoryData).has_passive(passive_id):
+			return false
+	return true
+
+func _all_inventories_block_weapon(weapon_id: String, max_level: int) -> bool:
+	if player_inventories.is_empty():
+		return false
+	for inventory in player_inventories:
+		if (inventory as PlayerInventoryData).can_take_weapon(weapon_id, max_level):
+			return false
+	return true
+
+func _can_inventory_take_entry(player_index: int, entry: Dictionary) -> bool:
+	var inventory: PlayerInventoryData = _get_inventory(player_index)
+	match str(entry.get("type", "")):
+		"primary_weapon", "secondary_weapon":
+			return inventory.can_take_weapon(str(entry.get("id", "")), int(entry.get("max_level", 5)))
+		_:
+			return bool(entry.get("stackable", false)) or not inventory.has_passive(str(entry.get("id", "")))
+
+func _roll_contested_loot_winner(takers: Array) -> int:
+	if takers.is_empty():
+		return -1
+	if takers.size() == 1:
+		return int(takers[0])
+	if takers.size() == 2:
+		var first_index: int = int(takers[0])
+		var second_index: int = int(takers[1])
+		var first_count: int = _get_inventory(first_index).get_total_item_count()
+		var second_count: int = _get_inventory(second_index).get_total_item_count()
+		if first_count == second_count:
+			return first_index if _random.randf() < 0.5 else second_index
+		var advantaged_index: int = first_index if first_count < second_count else second_index
+		var disadvantaged_index: int = second_index if advantaged_index == first_index else first_index
+		var item_gap: int = abs(first_count - second_count)
+		var advantage_chance: float = clamp(0.5 + float(item_gap) * 0.1, 0.6, 0.7)
+		return advantaged_index if _random.randf() < advantage_chance else disadvantaged_index
+
+	var total_weight: float = 0.0
+	var weights: Array = []
+	for taker_value in takers:
+		var taker_index: int = int(taker_value)
+		var item_count: int = _get_inventory(taker_index).get_total_item_count()
+		var weight: float = max(1.0, 6.0 - float(item_count))
+		weights.append(weight)
+		total_weight += weight
+	var roll: float = _random.randf() * total_weight
+	for weight_index in range(weights.size()):
+		roll -= float(weights[weight_index])
+		if roll <= 0.0:
+			return int(takers[weight_index])
+	return int(takers.back())
 
 func _advance_progress() -> void:
 	rooms_completed += 1

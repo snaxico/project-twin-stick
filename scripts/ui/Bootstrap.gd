@@ -5,7 +5,15 @@ const ModifierEngineData = preload("res://scripts/game/ModifierEngine.gd")
 const RUN_FLOW_SCENE = preload("res://scenes/ui/RunFlow.tscn")
 @onready var game_container: Control = $GameContainer
 @onready var sfx_engine = $SfxEngine
+@onready var home_panel: Panel = $HomePanel
+@onready var home_status_label: Label = $HomePanel/MarginContainer/HomeLayout/HomeStatusLabel
+@onready var home_play_button: Button = $HomePanel/MarginContainer/HomeLayout/PlayButton
+@onready var home_meta_button: Button = $HomePanel/MarginContainer/HomeLayout/MetaButton
+@onready var home_settings_button: Button = $HomePanel/MarginContainer/HomeLayout/SettingsButton
+@onready var home_debug_button: Button = $HomePanel/MarginContainer/HomeLayout/DebugButton
 @onready var menu_panel: Panel = $MenuPanel
+@onready var setup_title_label: Label = $MenuPanel/MarginContainer/MenuScroll/MenuLayout/Title
+@onready var setup_subtitle_label: Label = $MenuPanel/MarginContainer/MenuScroll/MenuLayout/Subtitle
 @onready var player_count_option: OptionButton = $MenuPanel/MarginContainer/MenuScroll/MenuLayout/PlayerCountRow/PlayerCountOption
 @onready var run_mode_option: OptionButton = $MenuPanel/MarginContainer/MenuScroll/MenuLayout/RunModeRow/RunModeOption
 @onready var player_1_control_option: OptionButton = $MenuPanel/MarginContainer/MenuScroll/MenuLayout/Player1ControlRow/Player1ControlOption
@@ -31,6 +39,7 @@ const RUN_FLOW_SCENE = preload("res://scenes/ui/RunFlow.tscn")
 @onready var debug_layout_option: OptionButton = $MenuPanel/MarginContainer/MenuScroll/MenuLayout/DebugLayoutRow/DebugLayoutOption
 @onready var debug_step_row: HBoxContainer = $MenuPanel/MarginContainer/MenuScroll/MenuLayout/DebugStepRow
 @onready var debug_step_spinbox: SpinBox = $MenuPanel/MarginContainer/MenuScroll/MenuLayout/DebugStepRow/DebugStepSpinBox
+@onready var setup_back_button: Button = $MenuPanel/MarginContainer/MenuScroll/MenuLayout/SetupBackButton
 @onready var settings_button: Button = $MenuPanel/MarginContainer/MenuScroll/MenuLayout/SettingsButton
 @onready var meta_button: Button = $MenuPanel/MarginContainer/MenuScroll/MenuLayout/MetaButton
 @onready var reset_profile_button: Button = $MenuPanel/MarginContainer/MenuScroll/MenuLayout/ResetProfileButton
@@ -78,6 +87,8 @@ var _settings_rows: Array = []
 var _settings_options: Array = []
 var _modifier_engine = ModifierEngineData.new()
 var _modifier_definitions: Array = []
+var _setup_mode: String = "play"
+var _return_panel: String = "home"
 
 func _ready() -> void:
 	_player_aim_modes[0] = PlayerConfigData.AimMode.HEAVY_AUTO
@@ -94,6 +105,10 @@ func _ready() -> void:
 		settings_player_4_option,
 	]
 	_populate_menu()
+	home_play_button.pressed.connect(_on_home_play_button_pressed)
+	home_meta_button.pressed.connect(_on_home_meta_button_pressed)
+	home_settings_button.pressed.connect(_on_home_settings_button_pressed)
+	home_debug_button.pressed.connect(_on_home_debug_button_pressed)
 	player_count_option.item_selected.connect(_on_player_count_changed)
 	run_mode_option.item_selected.connect(_on_run_mode_changed)
 	debug_mode_check.toggled.connect(_on_debug_mode_toggled)
@@ -106,6 +121,7 @@ func _ready() -> void:
 	debug_layout_option.item_selected.connect(_on_debug_loadout_changed)
 	debug_step_spinbox.value_changed.connect(_on_debug_numeric_value_changed)
 	debug_starting_gold_spinbox.value_changed.connect(_on_debug_numeric_value_changed)
+	setup_back_button.pressed.connect(_on_setup_back_button_pressed)
 	start_button.pressed.connect(_on_start_pressed)
 	settings_button.pressed.connect(_on_settings_button_pressed)
 	meta_button.pressed.connect(_on_meta_button_pressed)
@@ -121,11 +137,14 @@ func _ready() -> void:
 	meta_back_button.pressed.connect(_on_meta_back_button_pressed)
 	_register_button_animations()
 	_configure_menu_focus()
-	menu_panel.visible = true
+	home_panel.visible = true
+	menu_panel.visible = false
 	settings_panel.visible = false
 	meta_panel.visible = false
+	debug_mode_check.visible = false
 	_refresh_menu_state()
-	call_deferred("_focus_menu_panel")
+	_refresh_home_panel()
+	call_deferred("_focus_home_panel")
 
 func _unhandled_input(event: InputEvent) -> void:
 	if not event.is_action_pressed("ui_cancel"):
@@ -136,6 +155,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if meta_panel.visible:
 		_on_meta_back_button_pressed()
+		get_viewport().set_input_as_handled()
+		return
+	if menu_panel.visible:
+		_on_setup_back_button_pressed()
 		get_viewport().set_input_as_handled()
 
 func _populate_menu() -> void:
@@ -306,32 +329,39 @@ func _refresh_menu_state() -> void:
 	debug_modifier_row.visible = debug_enabled and single_room_mode and combat_room
 	debug_layout_row.visible = debug_enabled and single_room_mode and supports_layout
 	debug_step_row.visible = debug_enabled and single_room_mode
+	meta_button.visible = debug_enabled
+	reset_profile_button.visible = debug_enabled
 	_refresh_settings_panel()
-	var debug_text := ""
 	var run_mode_name := run_mode_option.get_item_text(run_mode_option.selected)
+	var summary_lines: Array = []
+	summary_lines.append("Players: %d" % player_count)
+	summary_lines.append("Run Mode: %s" % run_mode_name)
+	summary_lines.append("Screen Effects: %s" % ProfileState.get_screen_effect_level().capitalize())
 	if debug_enabled:
-		debug_text = "\nDebug: %s | %s / %s | Gold %d" % [
-			debug_launch_mode_option.get_item_text(debug_launch_mode_option.selected),
+		summary_lines.append("Start Mode: %s" % debug_launch_mode_option.get_item_text(debug_launch_mode_option.selected))
+		summary_lines.append("Loadout: %s / %s" % [
 			debug_primary_option.get_item_text(debug_primary_option.selected),
 			debug_secondary_option.get_item_text(debug_secondary_option.selected),
-			int(debug_starting_gold_spinbox.value),
-		]
+		])
+		summary_lines.append("Starting Gold: %d" % int(debug_starting_gold_spinbox.value))
 		if single_room_mode:
-			debug_text += "\nRoom: %s" % debug_room_type_option.get_item_text(debug_room_type_option.selected)
+			var room_summary := "Room: %s" % debug_room_type_option.get_item_text(debug_room_type_option.selected)
 			if combat_room:
-				debug_text += " | Objective: %s | Modifier: %s" % [
+				room_summary += " | %s | %s" % [
 					debug_room_objective_option.get_item_text(debug_room_objective_option.selected),
 					debug_modifier_option.get_item_text(debug_modifier_option.selected),
 				]
 			if supports_layout:
-				debug_text += " | Layout: %s" % debug_layout_option.get_item_text(debug_layout_option.selected)
-			debug_text += " | Step %d" % int(debug_step_spinbox.value)
-	status_label.text = "%s\nMode: %s. Normal carries HP between rooms; Easy fully restores HP after each cleared room.\nPatch 9 adds persistent unlocks. Player 3 and Player 4 are still intended for gamepad play in the current prototype.%s" % [
-		ProfileState.get_profile_summary_text(),
-		run_mode_name,
-		debug_text,
-	]
-	start_button.text = "Launch Debug Room" if debug_enabled and single_room_mode else "Start"
+				room_summary += " | %s" % debug_layout_option.get_item_text(debug_layout_option.selected)
+			room_summary += " | Step %d" % int(debug_step_spinbox.value)
+			summary_lines.append(room_summary)
+	else:
+		summary_lines.append("Health carries between rooms in Normal; Easy fully restores the team after every clear.")
+		summary_lines.append("Players 3 and 4 are still best with gamepads in the current prototype.")
+	status_label.text = "\n".join(summary_lines)
+	start_button.text = "Launch Debug Room" if debug_enabled and single_room_mode else ("Start Debug Run" if debug_enabled else "Start Run")
+	_refresh_setup_copy()
+	_refresh_home_panel()
 
 func _refresh_settings_panel() -> void:
 	settings_screen_effect_row.visible = true
@@ -369,9 +399,39 @@ func _on_start_pressed() -> void:
 	var player_configs := _build_player_configs()
 	_launch_game(player_configs)
 
+func _on_home_play_button_pressed() -> void:
+	_play_ui_click()
+	_open_setup_panel("play")
+
+func _on_home_meta_button_pressed() -> void:
+	_play_ui_click()
+	_return_panel = "home"
+	_set_panel_state(home_panel, false)
+	_set_panel_state(menu_panel, false)
+	_set_panel_state(settings_panel, false)
+	_set_panel_state(meta_panel, true)
+	_refresh_meta_panel("")
+	call_deferred("_focus_meta_panel")
+
+func _on_home_settings_button_pressed() -> void:
+	_play_ui_click()
+	_return_panel = "home"
+	_refresh_settings_panel()
+	_set_panel_state(home_panel, false)
+	_set_panel_state(menu_panel, false)
+	_set_panel_state(meta_panel, false)
+	_set_panel_state(settings_panel, true)
+	call_deferred("_focus_settings_panel")
+
+func _on_home_debug_button_pressed() -> void:
+	_play_ui_click()
+	_open_setup_panel("debug")
+
 func _on_settings_button_pressed() -> void:
 	_play_ui_click()
+	_return_panel = "setup"
 	_refresh_settings_panel()
+	_set_panel_state(home_panel, false)
 	_set_panel_state(menu_panel, false)
 	_set_panel_state(meta_panel, false)
 	_set_panel_state(settings_panel, true)
@@ -444,6 +504,7 @@ func _launch_game(player_configs: Array) -> void:
 	_active_game = RUN_FLOW_SCENE.instantiate()
 	_active_game.return_to_menu_requested.connect(_on_return_to_menu_requested)
 	game_container.add_child(_active_game)
+	_set_panel_state(home_panel, false)
 	_set_panel_state(menu_panel, false)
 	_set_panel_state(settings_panel, false)
 	_set_panel_state(meta_panel, false)
@@ -454,19 +515,42 @@ func _on_return_to_menu_requested(open_meta_menu: bool = false) -> void:
 	_active_game = null
 	_refresh_menu_state()
 	if open_meta_menu:
+		_set_panel_state(home_panel, false)
 		_set_panel_state(menu_panel, false)
 		_set_panel_state(settings_panel, false)
 		_set_panel_state(meta_panel, true)
 		_refresh_meta_panel("")
 		call_deferred("_focus_meta_panel")
 		return
-	_set_panel_state(menu_panel, true)
+	_open_home_panel()
+
+func _on_setup_back_button_pressed() -> void:
+	_play_ui_click()
+	_open_home_panel()
+
+func _open_home_panel() -> void:
+	_refresh_menu_state()
+	_refresh_home_panel()
+	_set_panel_state(menu_panel, false)
 	_set_panel_state(settings_panel, false)
 	_set_panel_state(meta_panel, false)
+	_set_panel_state(home_panel, true)
+	call_deferred("_focus_home_panel")
+
+func _open_setup_panel(mode: String) -> void:
+	_setup_mode = mode
+	debug_mode_check.button_pressed = mode == "debug"
+	_refresh_menu_state()
+	_set_panel_state(home_panel, false)
+	_set_panel_state(settings_panel, false)
+	_set_panel_state(meta_panel, false)
+	_set_panel_state(menu_panel, true)
 	call_deferred("_focus_menu_panel")
 
 func _on_meta_button_pressed() -> void:
 	_play_ui_click()
+	_return_panel = "setup"
+	_set_panel_state(home_panel, false)
 	_set_panel_state(menu_panel, false)
 	_set_panel_state(settings_panel, false)
 	_set_panel_state(meta_panel, true)
@@ -503,9 +587,7 @@ func _on_unlock_button_4_pressed() -> void:
 func _on_meta_back_button_pressed() -> void:
 	_play_ui_click()
 	_set_panel_state(meta_panel, false)
-	_set_panel_state(menu_panel, true)
-	_refresh_menu_state()
-	call_deferred("_focus_menu_panel")
+	_restore_return_panel()
 
 func _on_settings_aim_mode_selected(selected_index: int, player_index: int) -> void:
 	if player_index < 0 or player_index >= _player_aim_modes.size() or player_index >= _settings_options.size():
@@ -524,9 +606,34 @@ func _on_settings_screen_effect_selected(selected_index: int) -> void:
 func _on_settings_back_button_pressed() -> void:
 	_play_ui_click()
 	_set_panel_state(settings_panel, false)
-	_set_panel_state(menu_panel, true)
-	_refresh_menu_state()
-	call_deferred("_focus_menu_panel")
+	_restore_return_panel()
+
+func _restore_return_panel() -> void:
+	if _return_panel == "setup":
+		_refresh_menu_state()
+		_set_panel_state(home_panel, false)
+		_set_panel_state(menu_panel, true)
+		call_deferred("_focus_menu_panel")
+		return
+	_open_home_panel()
+
+func _refresh_home_panel() -> void:
+	var available_unlocks: int = ProfileState.get_available_unlocks().size()
+	var run_mode_name := run_mode_option.get_item_text(run_mode_option.selected)
+	home_status_label.text = "%s\nCurrent Run Mode: %s\nScreen Effects: %s\nAvailable Unlocks: %d" % [
+		ProfileState.get_profile_summary_text(),
+		run_mode_name,
+		ProfileState.get_screen_effect_level().capitalize(),
+		available_unlocks,
+	]
+
+func _refresh_setup_copy() -> void:
+	if _setup_mode == "debug":
+		setup_title_label.text = "Debug Setup"
+		setup_subtitle_label.text = "Configure a full run or jump straight into a single room."
+		return
+	setup_title_label.text = "Run Setup"
+	setup_subtitle_label.text = "Choose players, controls, and run mode before the run starts."
 
 func _refresh_meta_panel(extra_text: String) -> void:
 	_meta_unlocks = ProfileState.get_available_unlocks()
@@ -559,6 +666,10 @@ func _play_ui_click() -> void:
 
 func _register_button_animations() -> void:
 	var controls := [
+		home_play_button,
+		home_meta_button,
+		home_settings_button,
+		home_debug_button,
 		player_count_option,
 		run_mode_option,
 		player_1_control_option,
@@ -575,6 +686,7 @@ func _register_button_animations() -> void:
 		debug_modifier_option,
 		debug_layout_option,
 		debug_step_spinbox,
+		setup_back_button,
 		settings_button,
 		meta_button,
 		reset_profile_button,
@@ -596,6 +708,10 @@ func _register_button_animations() -> void:
 
 func _configure_menu_focus() -> void:
 	var controls := [
+		home_play_button,
+		home_meta_button,
+		home_settings_button,
+		home_debug_button,
 		player_count_option,
 		run_mode_option,
 		player_1_control_option,
@@ -612,6 +728,7 @@ func _configure_menu_focus() -> void:
 		debug_modifier_option,
 		debug_layout_option,
 		debug_step_spinbox,
+		setup_back_button,
 		settings_button,
 		meta_button,
 		reset_profile_button,
@@ -638,9 +755,12 @@ func _focus_menu_panel() -> void:
 		debug_room_type_option.grab_focus()
 		return
 	if debug_mode_check.button_pressed:
-		debug_primary_option.grab_focus()
+		debug_launch_mode_option.grab_focus()
 		return
 	run_mode_option.grab_focus()
+
+func _focus_home_panel() -> void:
+	home_play_button.grab_focus()
 
 func _focus_meta_panel() -> void:
 	if unlock_button_1.visible and not unlock_button_1.disabled:

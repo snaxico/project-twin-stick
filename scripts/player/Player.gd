@@ -7,6 +7,8 @@ const PLAYER_P1_STANDING_TEXTURE_PATH := "res://assets/sprites/player/player_p1_
 const PLAYER_P1_RUNNING_TEXTURE_PATH := "res://assets/sprites/player/player_p1_running.png"
 const PLAYER_P1_RUNNING_ALT_TEXTURE_PATH := "res://assets/sprites/player/player_p1_running_alt.png"
 const PLAYER_RIFLE_TEXTURE_PATH := "res://assets/sprites/weapons/player_rifle.png"
+const PLAYER_SCATTERGUN_TEXTURE_PATH := "res://assets/sprites/weapons/player_scattergun.png"
+const PLAYER_SLUG_TEXTURE_PATH := "res://assets/sprites/weapons/player_slug.png"
 const FLASH_SHADER_CODE := """
 shader_type canvas_item;
 
@@ -53,6 +55,7 @@ signal damage_taken(player, amount, current_health)
 @onready var secondary_target_ring: Line2D = $SecondaryPreview/SecondaryTargetRing
 @onready var secondary_target_cross: Line2D = $SecondaryPreview/SecondaryTargetCross
 
+var player_index: int = 0
 var player_config = PlayerConfigData.new()
 var gamepad_device_id: int = -1
 var aim_direction: Vector2 = Vector2.RIGHT
@@ -63,7 +66,8 @@ var _dash = null
 var _dash_pressed_last_frame := false
 var _next_primary_fire_at := 0.0
 var _secondary_pressed_last_frame := false
-var _next_secondary_ready_at := 0.0
+var _switch_primary_pressed_last_frame := false
+var _switch_secondary_pressed_last_frame := false
 var _secondary_hold_active := false
 var _is_downed := false
 var _primary_profile_name := "Rifle"
@@ -83,6 +87,12 @@ var _secondary_projectile_data := {
 	"cluster_spread_radius": 52.0,
 	"proximity_radius": 52.0,
 }
+var _primary_slots: Array = []
+var _secondary_slots: Array = []
+var _selected_primary_index: int = 0
+var _selected_secondary_index: int = 0
+var _secondary_cooldowns: Array = [0.0, 0.0]
+var _input_locked: bool = false
 var _base_collision_layer := 0
 var _base_collision_mask := 0
 var _flash_material: ShaderMaterial = null
@@ -99,6 +109,7 @@ var _standing_sprite_texture: Texture2D = null
 var _running_sprite_texture: Texture2D = null
 var _running_sprite_alt_texture: Texture2D = null
 var _weapon_texture: Texture2D = null
+var _weapon_textures_by_id: Dictionary = {}
 var _base_weapon_scale := Vector2.ONE
 var _turn_squash := 0.0
 var _aim_line_recoil := 0.0
@@ -154,7 +165,9 @@ func get_health_ratio_text() -> String:
 	return "%d/%d" % [current_health, max_health]
 
 func get_secondary_cooldown_remaining() -> float:
-	return max(_next_secondary_ready_at - _current_time_seconds(), 0.0)
+	if _selected_secondary_index < 0 or _selected_secondary_index >= _secondary_cooldowns.size():
+		return 0.0
+	return max(float(_secondary_cooldowns[_selected_secondary_index]) - _current_time_seconds(), 0.0)
 
 func get_health_state() -> Dictionary:
 	return {
@@ -168,31 +181,48 @@ func get_primary_profile_name() -> String:
 func get_secondary_profile_name() -> String:
 	return _secondary_profile_name
 
+func get_primary_slot_hud_data() -> Array:
+	var slot_rows: Array = []
+	for slot_index in range(_primary_slots.size()):
+		slot_rows.append(_build_slot_hud_data(_primary_slots, slot_index, false))
+	return slot_rows
+
+func get_secondary_slot_hud_data() -> Array:
+	var slot_rows: Array = []
+	for slot_index in range(_secondary_slots.size()):
+		slot_rows.append(_build_slot_hud_data(_secondary_slots, slot_index, true))
+	return slot_rows
+
+func get_health_status_text() -> String:
+	return "DOWN" if _is_downed else "%d/%d" % [current_health, max_health]
+
+func set_input_locked(locked: bool) -> void:
+	_input_locked = locked
+	if locked:
+		_secondary_hold_active = false
+		_dash_pressed_last_frame = false
+		_secondary_pressed_last_frame = false
+		_switch_primary_pressed_last_frame = false
+		_switch_secondary_pressed_last_frame = false
+		velocity = Vector2.ZERO
+
 func apply_loadout(loadout: Dictionary) -> void:
-	_primary_profile_name = str(loadout.get("primary_profile_name", "Rifle"))
-	_secondary_profile_name = str(loadout.get("secondary_profile_name", "Mine"))
-	_primary_projectile_count = max(1, int(loadout.get("primary_projectile_count", 1)))
-	_primary_spread_radians = float(loadout.get("primary_spread_radians", 0.0))
-	_secondary_projectile_count = max(1, int(loadout.get("secondary_projectile_count", 1)))
-	_secondary_spread_radians = float(loadout.get("secondary_spread_radians", 0.0))
 	move_speed = float(loadout.get("move_speed", move_speed))
-	primary_fire_interval = float(loadout.get("primary_fire_interval", primary_fire_interval))
-	projectile_speed = float(loadout.get("projectile_speed", projectile_speed))
-	projectile_damage = max(1, int(loadout.get("projectile_damage", projectile_damage)))
-	secondary_cooldown = float(loadout.get("secondary_cooldown", secondary_cooldown))
-	secondary_projectile_speed = float(loadout.get("secondary_projectile_speed", secondary_projectile_speed))
-	secondary_damage = max(1, int(loadout.get("secondary_damage", secondary_damage)))
-	_secondary_projectile_data = {
-		"kind": str(loadout.get("secondary_projectile_kind", "mine")),
-		"explosion_radius": float(loadout.get("secondary_explosion_radius", 92.0)),
-		"fuse_time": float(loadout.get("secondary_fuse_time", 12.0)),
-		"gravity_force": float(loadout.get("secondary_gravity_force", 0.0)),
-		"pulse_count": int(loadout.get("secondary_pulse_count", 1)),
-		"pulse_interval": float(loadout.get("secondary_pulse_interval", 0.18)),
-		"cluster_blast_count": int(loadout.get("secondary_cluster_blast_count", 0)),
-		"cluster_spread_radius": float(loadout.get("secondary_cluster_spread_radius", 52.0)),
-		"proximity_radius": float(loadout.get("secondary_proximity_radius", 52.0)),
-	}
+	_primary_slots = _normalize_slot_loadout_array(loadout.get("primary_slots", []))
+	_secondary_slots = _normalize_slot_loadout_array(loadout.get("secondary_slots", []))
+	if _primary_slots.is_empty():
+		_primary_slots = [null, null]
+	if _secondary_slots.is_empty():
+		_secondary_slots = [null, null]
+	_selected_primary_index = clampi(int(loadout.get("selected_primary", 0)), 0, max(_primary_slots.size() - 1, 0))
+	_selected_secondary_index = clampi(int(loadout.get("selected_secondary", 0)), 0, max(_secondary_slots.size() - 1, 0))
+	_selected_primary_index = _resolve_selected_slot_index(_primary_slots, _selected_primary_index)
+	_selected_secondary_index = _resolve_selected_slot_index(_secondary_slots, _selected_secondary_index)
+	_secondary_cooldowns = []
+	for _index in range(max(_secondary_slots.size(), 2)):
+		_secondary_cooldowns.append(0.0)
+	_sync_inventory_selection()
+	_apply_selected_slot_state()
 
 func set_health_state(state: Dictionary) -> void:
 	var target_max := int(state.get("max", max_health))
@@ -255,7 +285,12 @@ func _ready() -> void:
 	_standing_sprite_texture = _load_sprite_texture(PLAYER_P1_STANDING_TEXTURE_PATH)
 	_running_sprite_texture = _load_sprite_texture(PLAYER_P1_RUNNING_TEXTURE_PATH)
 	_running_sprite_alt_texture = _load_sprite_texture(PLAYER_P1_RUNNING_ALT_TEXTURE_PATH)
-	_weapon_texture = _load_sprite_texture(PLAYER_RIFLE_TEXTURE_PATH)
+	_weapon_textures_by_id = {
+		"rifle": _load_sprite_texture(PLAYER_RIFLE_TEXTURE_PATH),
+		"scatter": _load_sprite_texture(PLAYER_SCATTERGUN_TEXTURE_PATH),
+		"spread": _load_sprite_texture(PLAYER_SCATTERGUN_TEXTURE_PATH),
+		"slug": _load_sprite_texture(PLAYER_SLUG_TEXTURE_PATH),
+	}
 	if visual != null:
 		_base_visual_scale = visual.scale
 	if sprite_visual != null:
@@ -265,10 +300,19 @@ func _ready() -> void:
 	if shadow != null:
 		_base_shadow_scale = shadow.scale
 	current_health = max_health
+	_apply_selected_slot_state()
 	health_changed.emit(current_health, max_health)
 	_apply_visual_state(_current_time_seconds())
 
 func _physics_process(delta: float) -> void:
+	var now := _current_time_seconds()
+	if _input_locked:
+		velocity = Vector2.ZERO
+		move_and_slide()
+		_update_animation_state(Vector2.ZERO, delta)
+		_apply_visual_state(now, delta)
+		return
+
 	var move_input := _get_move_input()
 	var raw_aim_input := _get_aim_input()
 	aim_direction = _aim_assist.resolve_aim_direction(
@@ -279,7 +323,6 @@ func _physics_process(delta: float) -> void:
 		player_config.aim_mode
 	)
 
-	var now := _current_time_seconds()
 	var dash_pressed := _is_dash_pressed()
 	if dash_pressed and not _dash_pressed_last_frame:
 		var dash_direction := move_input if move_input.length() > 0.0 else aim_direction
@@ -287,6 +330,16 @@ func _physics_process(delta: float) -> void:
 		if dash_direction.length() > 0.0:
 			dash_started.emit(global_position)
 	_dash_pressed_last_frame = dash_pressed
+
+	var switch_primary_pressed := _is_switch_primary_pressed()
+	if switch_primary_pressed and not _switch_primary_pressed_last_frame:
+		_cycle_primary_slot()
+	_switch_primary_pressed_last_frame = switch_primary_pressed
+
+	var switch_secondary_pressed := _is_switch_secondary_pressed()
+	if switch_secondary_pressed and not _switch_secondary_pressed_last_frame:
+		_cycle_secondary_slot()
+	_switch_secondary_pressed_last_frame = switch_secondary_pressed
 
 	if _is_fire_pressed() and now >= _next_primary_fire_at and aim_direction.length() > 0.0:
 		_next_primary_fire_at = now + primary_fire_interval
@@ -306,12 +359,12 @@ func _physics_process(delta: float) -> void:
 
 	var secondary_pressed := _is_secondary_pressed()
 	if _uses_hold_to_aim_secondary():
-		if secondary_pressed and not _secondary_pressed_last_frame and _can_activate_secondary(now):
+		if secondary_pressed and not _secondary_pressed_last_frame and _can_activate_secondary():
 			_secondary_hold_active = true
 		elif not secondary_pressed and _secondary_pressed_last_frame and _secondary_hold_active:
 			_fire_secondary()
 			_secondary_hold_active = false
-	elif secondary_pressed and not _secondary_pressed_last_frame and _can_activate_secondary(now):
+	elif secondary_pressed and not _secondary_pressed_last_frame and _can_activate_secondary():
 		_fire_secondary()
 	_secondary_pressed_last_frame = secondary_pressed
 
@@ -428,6 +481,28 @@ func _is_secondary_pressed() -> bool:
 		_:
 			return _is_keyboard_secondary_pressed()
 
+func _is_switch_primary_pressed() -> bool:
+	match player_config.control_source:
+		"keyboard":
+			return _is_keyboard_switch_primary_pressed()
+		"gamepad":
+			return _is_gamepad_switch_primary_pressed()
+		"hybrid":
+			return _is_keyboard_switch_primary_pressed() or _is_gamepad_switch_primary_pressed()
+		_:
+			return _is_keyboard_switch_primary_pressed()
+
+func _is_switch_secondary_pressed() -> bool:
+	match player_config.control_source:
+		"keyboard":
+			return _is_keyboard_switch_secondary_pressed()
+		"gamepad":
+			return _is_gamepad_switch_secondary_pressed()
+		"hybrid":
+			return _is_keyboard_switch_secondary_pressed() or _is_gamepad_switch_secondary_pressed()
+		_:
+			return _is_keyboard_switch_secondary_pressed()
+
 func _is_keyboard_fire_pressed() -> bool:
 	return Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT)
 
@@ -457,15 +532,175 @@ func _is_keyboard_dash_pressed() -> bool:
 		_:
 			return false
 
+func _is_keyboard_switch_primary_pressed() -> bool:
+	match player_id:
+		1:
+			return Input.is_physical_key_pressed(KEY_Q)
+		2:
+			return Input.is_physical_key_pressed(KEY_T)
+		_:
+			return false
+
+func _is_keyboard_switch_secondary_pressed() -> bool:
+	match player_id:
+		1:
+			return Input.is_physical_key_pressed(KEY_E)
+		2:
+			return Input.is_physical_key_pressed(KEY_Y)
+		_:
+			return false
+
 func _is_gamepad_dash_pressed() -> bool:
 	if gamepad_device_id < 0:
 		return false
 	if not Input.get_connected_joypads().has(gamepad_device_id):
 		return false
-	return Input.is_joy_button_pressed(gamepad_device_id, JOY_BUTTON_A)
+	return Input.is_joy_button_pressed(gamepad_device_id, JOY_BUTTON_B)
+
+func _is_gamepad_switch_primary_pressed() -> bool:
+	if gamepad_device_id < 0:
+		return false
+	if not Input.get_connected_joypads().has(gamepad_device_id):
+		return false
+	return Input.is_joy_button_pressed(gamepad_device_id, JOY_BUTTON_RIGHT_SHOULDER)
+
+func _is_gamepad_switch_secondary_pressed() -> bool:
+	if gamepad_device_id < 0:
+		return false
+	if not Input.get_connected_joypads().has(gamepad_device_id):
+		return false
+	return Input.is_joy_button_pressed(gamepad_device_id, JOY_BUTTON_LEFT_SHOULDER)
 
 func _choose_stronger_vector(primary: Vector2, secondary: Vector2) -> Vector2:
 	return secondary if secondary.length() > primary.length() else primary
+
+func _normalize_slot_loadout_array(slot_entries: Variant) -> Array:
+	var normalized: Array = []
+	if not (slot_entries is Array):
+		return normalized
+	for slot_entry in slot_entries:
+		if slot_entry is Dictionary:
+			normalized.append((slot_entry as Dictionary).duplicate(true))
+		else:
+			normalized.append(null)
+	return normalized
+
+func _get_selected_primary_slot() -> Dictionary:
+	return _get_slot_loadout(_primary_slots, _selected_primary_index)
+
+func _get_selected_secondary_slot() -> Dictionary:
+	return _get_slot_loadout(_secondary_slots, _selected_secondary_index)
+
+func _get_slot_loadout(slot_group: Array, slot_index: int) -> Dictionary:
+	if slot_index < 0 or slot_index >= slot_group.size():
+		return {}
+	var slot_entry: Variant = slot_group[slot_index]
+	if not (slot_entry is Dictionary):
+		return {}
+	return (slot_entry as Dictionary).duplicate(true)
+
+func _build_slot_hud_data(slot_group: Array, slot_index: int, is_secondary: bool) -> Dictionary:
+	var slot_loadout: Dictionary = _get_slot_loadout(slot_group, slot_index)
+	if slot_loadout.is_empty():
+		return {
+			"weapon_id": "",
+			"name": "---",
+			"level": 0,
+			"selected": false,
+			"cooldown_remaining": 0.0,
+			"cooldown_duration": 0.0,
+		}
+	var selected_index: int = _selected_secondary_index if is_secondary else _selected_primary_index
+	var cooldown_duration: float = float(slot_loadout.get("secondary_cooldown", 0.0)) if is_secondary else 0.0
+	var cooldown_remaining: float = _get_secondary_cooldown_remaining_for_slot(slot_index) if is_secondary else 0.0
+	return {
+		"weapon_id": str(slot_loadout.get("weapon_id", "")),
+		"name": str(slot_loadout.get("primary_profile_name", slot_loadout.get("secondary_profile_name", "Weapon"))),
+		"level": int(slot_loadout.get("weapon_level", 1)),
+		"selected": slot_index == selected_index,
+		"cooldown_remaining": cooldown_remaining,
+		"cooldown_duration": cooldown_duration,
+	}
+
+func _get_secondary_cooldown_remaining_for_slot(slot_index: int) -> float:
+	if slot_index < 0 or slot_index >= _secondary_cooldowns.size():
+		return 0.0
+	return max(float(_secondary_cooldowns[slot_index]) - _current_time_seconds(), 0.0)
+
+func _resolve_selected_slot_index(slot_group: Array, selected_index: int) -> int:
+	if slot_group.is_empty():
+		return selected_index
+	if selected_index >= 0 and selected_index < slot_group.size() and slot_group[selected_index] is Dictionary:
+		return selected_index
+	for slot_index in range(slot_group.size()):
+		if slot_group[slot_index] is Dictionary:
+			return slot_index
+	return clampi(selected_index, 0, max(slot_group.size() - 1, 0))
+
+func _apply_selected_slot_state() -> void:
+	var primary_slot: Dictionary = _get_selected_primary_slot()
+	var primary_weapon_id: String = str(primary_slot.get("weapon_id", "rifle"))
+	_primary_profile_name = str(primary_slot.get("primary_profile_name", "Rifle"))
+	_primary_projectile_count = max(1, int(primary_slot.get("primary_projectile_count", 1)))
+	_primary_spread_radians = float(primary_slot.get("primary_spread_radians", 0.0))
+	primary_fire_interval = float(primary_slot.get("primary_fire_interval", 0.27))
+	projectile_speed = float(primary_slot.get("projectile_speed", 540.0))
+	projectile_damage = max(1, int(primary_slot.get("projectile_damage", 1)))
+	_weapon_texture = _get_weapon_texture_for_primary_id(primary_weapon_id)
+
+	var secondary_slot: Dictionary = _get_selected_secondary_slot()
+	_secondary_profile_name = str(secondary_slot.get("secondary_profile_name", "Mine"))
+	_secondary_projectile_count = max(1, int(secondary_slot.get("secondary_projectile_count", 1)))
+	_secondary_spread_radians = float(secondary_slot.get("secondary_spread_radians", 0.0))
+	secondary_cooldown = float(secondary_slot.get("secondary_cooldown", 4.0))
+	secondary_projectile_speed = float(secondary_slot.get("secondary_projectile_speed", 0.0))
+	secondary_damage = max(1, int(secondary_slot.get("secondary_damage", 3)))
+	_secondary_projectile_data = {
+		"kind": str(secondary_slot.get("secondary_projectile_kind", "mine")),
+		"explosion_radius": float(secondary_slot.get("secondary_explosion_radius", 92.0)),
+		"fuse_time": float(secondary_slot.get("secondary_fuse_time", 12.0)),
+		"gravity_force": float(secondary_slot.get("secondary_gravity_force", 0.0)),
+		"pulse_count": int(secondary_slot.get("secondary_pulse_count", 1)),
+		"pulse_interval": float(secondary_slot.get("secondary_pulse_interval", 0.18)),
+		"cluster_blast_count": int(secondary_slot.get("secondary_cluster_blast_count", 0)),
+		"cluster_spread_radius": float(secondary_slot.get("secondary_cluster_spread_radius", 52.0)),
+		"proximity_radius": float(secondary_slot.get("secondary_proximity_radius", 52.0)),
+	}
+
+func _cycle_primary_slot() -> void:
+	var next_index := _find_next_filled_slot_index(_primary_slots, _selected_primary_index)
+	if next_index == _selected_primary_index:
+		return
+	_selected_primary_index = next_index
+	_sync_inventory_selection()
+	_apply_selected_slot_state()
+
+func _cycle_secondary_slot() -> void:
+	var next_index := _find_next_filled_slot_index(_secondary_slots, _selected_secondary_index)
+	if next_index == _selected_secondary_index:
+		return
+	_selected_secondary_index = next_index
+	_secondary_hold_active = false
+	_sync_inventory_selection()
+	_apply_selected_slot_state()
+
+func _find_next_filled_slot_index(slot_group: Array, current_index: int) -> int:
+	if slot_group.is_empty():
+		return current_index
+	for offset in range(1, slot_group.size() + 1):
+		var candidate_index: int = (current_index + offset) % slot_group.size()
+		if slot_group[candidate_index] is Dictionary:
+			return candidate_index
+	return current_index
+
+func _sync_inventory_selection() -> void:
+	if player_index < 0 or player_index >= RunState.player_inventories.size():
+		return
+	var inventory = RunState.player_inventories[player_index]
+	if inventory == null:
+		return
+	inventory.selected_primary = _selected_primary_index
+	inventory.selected_secondary = _selected_secondary_index
 
 func _build_spread_directions(base_direction: Vector2, projectile_count: int, spread_radians: float) -> Array:
 	var directions: Array = []
@@ -621,6 +856,14 @@ func _load_sprite_texture(path: String) -> Texture2D:
 		return null
 	return texture
 
+func _get_weapon_texture_for_primary_id(primary_weapon_id: String) -> Texture2D:
+	var normalized_weapon_id: String = primary_weapon_id.strip_edges().to_lower()
+	if _weapon_textures_by_id.has(normalized_weapon_id):
+		return _weapon_textures_by_id[normalized_weapon_id] as Texture2D
+	if _weapon_textures_by_id.has("rifle"):
+		return _weapon_textures_by_id["rifle"] as Texture2D
+	return null
+
 func _update_secondary_preview(now: float) -> void:
 	if secondary_preview == null or secondary_trajectory == null or secondary_target_ring == null or secondary_target_cross == null:
 		return
@@ -681,7 +924,7 @@ func _should_show_secondary_preview(now: float) -> bool:
 		return false
 	if aim_direction.length() <= 0.0:
 		return false
-	if now < _next_secondary_ready_at:
+	if get_secondary_cooldown_remaining() > 0.0:
 		return false
 	if not _supports_secondary_preview():
 		return false
@@ -697,8 +940,8 @@ func _is_proximity_mine_secondary() -> bool:
 	var kind := str(_secondary_projectile_data.get("kind", ""))
 	return kind == "mine" or kind == "shrapnel_mine" or kind == "heavy_mine" or kind == "cluster_mine" or kind == "siege_mine"
 
-func _can_activate_secondary(now: float) -> bool:
-	if now < _next_secondary_ready_at:
+func _can_activate_secondary() -> bool:
+	if get_secondary_cooldown_remaining() > 0.0:
 		return false
 	if _is_proximity_mine_secondary():
 		return true
@@ -706,9 +949,10 @@ func _can_activate_secondary(now: float) -> bool:
 
 func _fire_secondary() -> void:
 	var now := _current_time_seconds()
-	if not _can_activate_secondary(now):
+	if not _can_activate_secondary():
 		return
-	_next_secondary_ready_at = now + secondary_cooldown
+	if _selected_secondary_index >= 0 and _selected_secondary_index < _secondary_cooldowns.size():
+		_secondary_cooldowns[_selected_secondary_index] = now + secondary_cooldown
 	var secondary_color: Color = _get_projectile_tint()
 	var secondary_direction: Vector2 = aim_direction.normalized() if aim_direction.length() > 0.0 else Vector2.RIGHT
 	var spawn_origin: Vector2 = global_position + secondary_direction * 14.0 if _is_proximity_mine_secondary() else global_position

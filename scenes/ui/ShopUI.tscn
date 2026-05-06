@@ -1,0 +1,64 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/ShopUI.gd" id="1_31e8g"]
+
+[node name="ShopUI" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("1_31e8g")
+
+[node name="Panel" type="Panel" parent="."]
+offset_left = 420.0
+offset_top = 140.0
+offset_right = 1500.0
+offset_bottom = 860.0
+
+[node name="MarginContainer" type="MarginContainer" parent="Panel"]
+offset_left = 18.0
+offset_top = 18.0
+offset_right = 1062.0
+offset_bottom = 702.0
+theme_override_constants/margin_left = 12
+theme_override_constants/margin_top = 12
+theme_override_constants/margin_right = 12
+theme_override_constants/margin_bottom = 12
+
+[node name="Layout" type="VBoxContainer" parent="Panel/MarginContainer"]
+offset_right = 1044.0
+offset_bottom = 684.0
+theme_override_constants/separation = 10
+
+[node name="Title" type="Label" parent="Panel/MarginContainer/Layout"]
+text = "Shop"
+
+[node name="Wallet" type="Label" parent="Panel/MarginContainer/Layout"]
+text = "Wallet"
+
+[node name="Status" type="Label" parent="Panel/MarginContainer/Layout"]
+autowrap_mode = 2
+text = ""
+
+[node name="Offer1" type="Label" parent="Panel/MarginContainer/Layout"]
+autowrap_mode = 2
+text = "---"
+
+[node name="Offer2" type="Label" parent="Panel/MarginContainer/Layout"]
+autowrap_mode = 2
+text = "---"
+
+[node name="Offer3" type="Label" parent="Panel/MarginContainer/Layout"]
+autowrap_mode = 2
+text = "---"
+
+[node name="ReadyLabel" type="Label" parent="Panel/MarginContainer/Layout"]
+autowrap_mode = 2
+text = "Ready / Leave Shop"
+
+[node name="Hint" type="Label" parent="Panel/MarginContainer/Layout"]
+autowrap_mode = 2
+text = "Hint"

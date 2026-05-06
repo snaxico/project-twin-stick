@@ -8,7 +8,7 @@ Read this first to restore project context quickly, then read `current-state.md`
 - Current target is still the first-playable bar from Patch 7:
   - one readable, stable `10–15` minute run
   - understandable without explanation
-  - shared co-op decisions and shared failure
+  - co-op route/loot/shop decisions and shared failure
 - The codebase already includes extra Patch 8 and Patch 9 systems:
   - `1–4` players
   - persistent profile/meta unlocks
@@ -19,7 +19,6 @@ Read this first to restore project context quickly, then read `current-state.md`
 
 - Same-screen camera only.
 - Local co-op only.
-- Shared loot and shared economy.
 - No split-screen.
 - No class system.
 - Godot `4.6.2` stable only.
@@ -55,17 +54,19 @@ Read this first to restore project context quickly, then read `current-state.md`
   - gold and food pickups
   - `gauntlet_pockets` layout for the current V1 authored placement
 - Combat HUD is no longer the old debug text layout:
-  - stacked player health bars
+  - per-player inventory panels
   - top-center modifier chip
   - timer bar
   - styled result/pause/modifier panels
+  - passive strip per player
+  - lighter transparency so the arena remains visible under HUD cards
 - Player visuals are now in transition from pure procedural shapes toward real sprites:
   - player 1 uses a sprite-backed body
   - player 1 uses one standing frame and two alternating running frames
-  - player 1 also has a visible rifle sprite attached to the aim pivot
+  - player 1 also has visible rifle / scattergun / slug sprites attached to the aim pivot
   - player projectiles now use a real bullet sprite
   - players 2–4 still use the current procedural polygon body
-  - gameplay hitbox is still circular, but player 1's current footprint was increased to better match the new sprite presentation
+  - gameplay hitbox is still circular, but player 1's current footprint and collision radius were increased to better match the new sprite presentation
 - Settings now live in a shared real UI flow:
   - bootstrap menu `Settings`
   - in-run pause menu `Settings`
@@ -103,11 +104,24 @@ Read this first to restore project context quickly, then read `current-state.md`
 - Run modes currently behave like this:
   - `Normal`: HP carries between cleared rooms
   - `Easy`: all players fully heal after each cleared room
+- Progression flow now behaves like this:
+  - each player has a personal wallet
+  - each player has `2` primary slots and `2` secondary slots
+  - duplicate weapons level up instead of creating more copies
+  - combat and elite rooms drop physical loot after clear
+  - loot resolves through Take / Scrap and contested rolls
+  - full weapon slots open a replacement UI
+  - shop rooms run in-world with personal offers
+  - room exits now open after loot/shop resolution instead of auto-transitioning
+- Current combat-input/runtime follow-up:
+  - gamepad dash is now on `B / O`
+  - visible player and weapon sprites were enlarged again by roughly `33%`
+  - primary fire intervals and secondary cooldowns are both globally reduced by `20%`
 
 ## Current Priorities
 
 - Preserve the approved core loop.
-- Favor tuning and readability over adding new systems.
+- Favor cleanup, readability, and validation over adding new systems.
 - Keep enemy ranged pressure under control.
 - Keep projectile, aim-line, and arena contrast readable.
 - Keep the arena bright and neutral enough that combat reads stay above environment styling.
@@ -118,19 +132,21 @@ Read this first to restore project context quickly, then read `current-state.md`
 - Validate the new aim-settings flow at `1–4` players.
 - Validate `Normal` vs `Easy` room-to-room HP persistence in live play.
 - Validate chaser contact damage and pickup drops in active combat after the recent reliability fixes.
+- Validate loot, replacement, shop, and exit UI flow with gamepad-first input.
 - Validate `3–4` player behavior and full-run pacing later; do not expand scope casually.
 
 ## Important Runtime Ownership
 
-- `RunState.gd`: cross-room run state, loadouts, gold, progression, and run-mode health persistence.
+- `RunState.gd`: cross-room run state, per-player inventories, loadouts, shop offers, progression, and run-mode health persistence.
 - `ProfileState.gd`: persistent profile, meta gold, unlock ownership.
-- `CoopManager.gd`: combat-room orchestration and spawning.
+- `CoopManager.gd`: room orchestration, spawning, loot/shop flow, and exit gating.
 - `RunFlow.gd`: node-map and room transition flow.
 - `Bootstrap.gd`: pre-run player setup, run-mode selection, shared settings, and the debug run launcher UI.
 - `ScreenEffects.gd`: runtime post-process layer, now controlled by the settings menu.
 - `assets/sprites/`: runtime sprite assets used by the game.
 - `sprites/guidelines/`: sprite-generation prompts and rules, kept separate from runtime assets.
-- `data/items.json`: shared reward/shop item definitions.
+- `data/weapons.json`: weapon definitions and level data.
+- `data/passives.json`: passive reward/shop item definitions.
 - `data/modifiers.json`: room modifier tuning.
 - `Enemy.gd`: enemy silhouettes, hitbox sizing, and motion identity.
 - `CoopManager.gd`: now also owns generator-room orchestration, pickup handling, and the deferred pickup attach path.

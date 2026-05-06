@@ -12,6 +12,7 @@ void fragment() {
 }
 """
 const MAP_BUTTON_SIZE := Vector2(96.0, 60.0)
+const MAP_BUTTON_MIN_SIZE := Vector2(72.0, 46.0)
 const MAP_HORIZONTAL_PADDING := 52.0
 const MAP_VERTICAL_PADDING := 34.0
 
@@ -34,25 +35,17 @@ signal return_to_menu_requested(open_meta_menu: bool)
 @onready var run_summary_detail_label: Label = $RunSummaryPanel/MarginContainer/SummaryLayout/SummaryDetail
 @onready var run_summary_unlocks_label: Label = $RunSummaryPanel/MarginContainer/SummaryLayout/SummaryUnlocks
 @onready var run_summary_button: Button = $RunSummaryPanel/MarginContainer/SummaryLayout/SummaryButton
-@onready var choice_panel: Panel = $ChoicePanel
-@onready var choice_title_label: Label = $ChoicePanel/MarginContainer/ChoiceLayout/ChoiceTitle
-@onready var choice_detail_label: Label = $ChoicePanel/MarginContainer/ChoiceLayout/ChoiceDetail
-@onready var choice_button_1: Button = $ChoicePanel/MarginContainer/ChoiceLayout/ChoiceButton1
-@onready var choice_button_2: Button = $ChoicePanel/MarginContainer/ChoiceLayout/ChoiceButton2
-@onready var choice_button_3: Button = $ChoicePanel/MarginContainer/ChoiceLayout/ChoiceButton3
-@onready var choice_continue_button: Button = $ChoicePanel/MarginContainer/ChoiceLayout/ChoiceContinueButton
 @onready var game_container: Control = $GameContainer
 
 var _active_game = null
 var _post_resolution_action: String = "next"
-var _pending_followup: Dictionary = {}
-var _choice_context: Dictionary = {}
 var _open_meta_menu_on_return: bool = false
 var _panel_base_positions: Dictionary = {}
 var _transition_overlay: ColorRect = null
 var _transition_material: ShaderMaterial = null
 var _map_buttons: Dictionary = {}
 var _map_hover_node_id: String = ""
+var _map_button_size: Vector2 = MAP_BUTTON_SIZE
 
 func _get_sfx_engine():
 	return get_tree().get_first_node_in_group("sfx_engine")
@@ -61,14 +54,16 @@ func _ready() -> void:
 	_build_transition_overlay()
 	resolution_button.pressed.connect(_on_resolution_button_pressed)
 	run_summary_button.pressed.connect(_on_run_summary_button_pressed)
-	choice_button_1.pressed.connect(_on_choice_button_1_pressed)
-	choice_button_2.pressed.connect(_on_choice_button_2_pressed)
-	choice_button_3.pressed.connect(_on_choice_button_3_pressed)
-	choice_continue_button.pressed.connect(_on_choice_continue_button_pressed)
 	map_graph_area.resized.connect(_on_map_graph_area_resized)
 	_register_button_animations()
 	_configure_menu_focus()
 	_show_map()
+
+func _unhandled_input(event: InputEvent) -> void:
+	if not map_panel.visible or _active_game != null:
+		return
+	if _handle_map_navigation(event):
+		get_viewport().set_input_as_handled()
 
 func _show_map() -> void:
 	Engine.time_scale = 1.0
@@ -82,20 +77,19 @@ func _show_map() -> void:
 	_set_panel_state(map_panel, true)
 	_set_panel_state(resolution_panel, false)
 	_set_panel_state(run_summary_panel, false)
-	_set_panel_state(choice_panel, false)
 	_clear_active_game()
 
 	var map_rows: Array = RunState.get_map_rows()
 	if RunState.is_debug_single_room_mode():
-		map_title_label.text = "Debug Room Launcher"
-		map_status_label.text = "Shared Gold: %d. Launch the configured room again or change the setup from the main menu." % RunState.gold
+		map_title_label.text = "Debug Room Setup"
+		map_status_label.text = "%s. Launch the configured room again or return to the main menu." % RunState.get_gold_summary_text(true)
 	else:
 		var current_floor: int = min(RunState.current_step_index + 1, max(map_rows.size(), 1))
-		map_title_label.text = "Connected Node Map"
-		map_status_label.text = "Floor %d of %d. Shared Gold: %d. Pick a connected room." % [current_floor, map_rows.size(), RunState.gold]
+		map_title_label.text = "Choose Route"
+		map_status_label.text = "Floor %d of %d. %s." % [current_floor, map_rows.size(), RunState.get_gold_summary_text(true)]
 
-	map_detail_title_label.text = "Route Overview"
-	map_detail_body_label.text = "Hover or focus a node to inspect its room, modifier, reward, and route state."
+	map_detail_title_label.text = "Path Preview"
+	map_detail_body_label.text = "Focus a node to inspect its room, modifier, reward, and route state."
 	call_deferred("_refresh_map_panel")
 
 func _refresh_map_panel() -> void:
@@ -108,6 +102,7 @@ func _rebuild_map_graph() -> void:
 	var map_rows: Array = RunState.get_map_rows()
 	if map_rows.is_empty():
 		return
+	_map_button_size = _get_map_button_size(map_rows.size())
 
 	var node_positions: Dictionary = {}
 	for row in map_rows:
@@ -154,8 +149,8 @@ func _clear_map_graph() -> void:
 		child.queue_free()
 
 func _get_node_graph_position(node: Dictionary, row_count: int) -> Vector2:
-	var width: float = maxf(map_graph_area.size.x, MAP_HORIZONTAL_PADDING * 2.0 + MAP_BUTTON_SIZE.x)
-	var height: float = maxf(map_graph_area.size.y, MAP_VERTICAL_PADDING * 2.0 + MAP_BUTTON_SIZE.y)
+	var width: float = maxf(map_graph_area.size.x, MAP_HORIZONTAL_PADDING * 2.0 + _map_button_size.x)
+	var height: float = maxf(map_graph_area.size.y, MAP_VERTICAL_PADDING * 2.0 + _map_button_size.y)
 	var usable_width: float = maxf(width - MAP_HORIZONTAL_PADDING * 2.0, 1.0)
 	var usable_height: float = maxf(height - MAP_VERTICAL_PADDING * 2.0, 1.0)
 	var row := int(node.get("row", 0))
@@ -163,6 +158,17 @@ func _get_node_graph_position(node: Dictionary, row_count: int) -> Vector2:
 	var x: float = MAP_HORIZONTAL_PADDING if row_count <= 1 else MAP_HORIZONTAL_PADDING + usable_width * float(row) / float(row_count - 1)
 	var y: float = MAP_VERTICAL_PADDING + usable_height * float(column) / float(max(RunState.MAP_COLUMN_COUNT - 1, 1))
 	return Vector2(x, y)
+
+func _get_map_button_size(row_count: int) -> Vector2:
+	var width: float = maxf(map_graph_area.size.x, MAP_HORIZONTAL_PADDING * 2.0 + MAP_BUTTON_MIN_SIZE.x)
+	var height: float = maxf(map_graph_area.size.y, MAP_VERTICAL_PADDING * 2.0 + MAP_BUTTON_MIN_SIZE.y)
+	var usable_width: float = maxf(width - MAP_HORIZONTAL_PADDING * 2.0, 1.0)
+	var usable_height: float = maxf(height - MAP_VERTICAL_PADDING * 2.0, 1.0)
+	var row_spacing: float = usable_width if row_count <= 1 else usable_width / float(max(row_count - 1, 1))
+	var column_spacing: float = usable_height / float(max(RunState.MAP_COLUMN_COUNT - 1, 1))
+	var button_width: float = clampf(row_spacing - 18.0, MAP_BUTTON_MIN_SIZE.x, MAP_BUTTON_SIZE.x)
+	var button_height: float = clampf(column_spacing - 14.0, MAP_BUTTON_MIN_SIZE.y, MAP_BUTTON_SIZE.y)
+	return Vector2(button_width, button_height)
 
 func _add_connection_line(from_position: Vector2, to_position: Vector2, color: Color) -> void:
 	var line := Line2D.new()
@@ -174,9 +180,9 @@ func _add_connection_line(from_position: Vector2, to_position: Vector2, color: C
 
 func _build_map_button(node: Dictionary, button_center: Vector2, is_reachable: bool) -> Button:
 	var button := Button.new()
-	button.custom_minimum_size = MAP_BUTTON_SIZE
-	button.size = MAP_BUTTON_SIZE
-	button.position = button_center - MAP_BUTTON_SIZE * 0.5
+	button.custom_minimum_size = _map_button_size
+	button.size = _map_button_size
+	button.position = button_center - _map_button_size * 0.5
 	button.focus_mode = Control.FOCUS_ALL if is_reachable else Control.FOCUS_NONE
 	button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	button.text = _build_node_button_text(node)
@@ -241,10 +247,74 @@ func _wire_reachable_focus() -> void:
 		var button: Button = reachable_buttons[index]["button"]
 		button.focus_neighbor_top = button.get_path()
 		button.focus_neighbor_bottom = button.get_path()
+		button.focus_neighbor_left = button.get_path()
+		button.focus_neighbor_right = button.get_path()
 		if index > 0:
-			button.focus_neighbor_top = (reachable_buttons[index - 1]["button"] as Button).get_path()
+			var previous_path: NodePath = (reachable_buttons[index - 1]["button"] as Button).get_path()
+			button.focus_neighbor_top = previous_path
+			button.focus_neighbor_left = previous_path
 		if index < reachable_buttons.size() - 1:
-			button.focus_neighbor_bottom = (reachable_buttons[index + 1]["button"] as Button).get_path()
+			var next_path: NodePath = (reachable_buttons[index + 1]["button"] as Button).get_path()
+			button.focus_neighbor_bottom = next_path
+			button.focus_neighbor_right = next_path
+
+func _handle_map_navigation(event: InputEvent) -> bool:
+	if event.is_echo():
+		return false
+	var direction: int = 0
+	if event.is_action_pressed("ui_up") or event.is_action_pressed("ui_left"):
+		direction = -1
+	elif event.is_action_pressed("ui_down") or event.is_action_pressed("ui_right"):
+		direction = 1
+	if direction == 0:
+		return false
+
+	var ordered_ids: Array = _get_reachable_node_ids_in_focus_order()
+	if ordered_ids.is_empty():
+		return false
+
+	var focused_control := get_viewport().gui_get_focus_owner()
+	var focused_button := focused_control as Button
+	if focused_button == null:
+		(_map_buttons[ordered_ids[0]] as Button).grab_focus()
+		_show_node_details(str(ordered_ids[0]))
+		return true
+
+	var current_index: int = -1
+	for index in range(ordered_ids.size()):
+		if _map_buttons.get(ordered_ids[index], null) == focused_button:
+			current_index = index
+			break
+	if current_index == -1:
+		(_map_buttons[ordered_ids[0]] as Button).grab_focus()
+		_show_node_details(str(ordered_ids[0]))
+		return true
+
+	var target_index: int = clampi(current_index + direction, 0, ordered_ids.size() - 1)
+	if target_index == current_index:
+		return true
+	var target_id: String = str(ordered_ids[target_index])
+	(_map_buttons[target_id] as Button).grab_focus()
+	_show_node_details(target_id)
+	return true
+
+func _get_reachable_node_ids_in_focus_order() -> Array:
+	var entries: Array = []
+	for node_id in RunState.get_reachable_node_ids():
+		var node := RunState.get_map_node(str(node_id))
+		if node.is_empty() or not _map_buttons.has(node_id):
+			continue
+		entries.append({
+			"id": str(node_id),
+			"column": int(node.get("column", 0)),
+		})
+	entries.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return int(a.get("column", 0)) < int(b.get("column", 0))
+	)
+	var ordered_ids: Array = []
+	for entry in entries:
+		ordered_ids.append(str(entry.get("id", "")))
+	return ordered_ids
 
 func _show_node_details(node_id: String) -> void:
 	var node := RunState.get_map_node(node_id)
@@ -303,7 +373,7 @@ func _on_map_node_pressed(node_id: String) -> void:
 	_play_ui_click()
 	var node := RunState.get_map_node(node_id)
 	match str(node.get("room_type", "combat")):
-		"combat", "elite", "boss":
+		"combat", "elite", "boss", "shop":
 			_launch_room(node)
 		_:
 			var outcome := RunState.resolve_current_noncombat_node()
@@ -315,7 +385,6 @@ func _launch_room(node: Dictionary) -> void:
 	map_panel.visible = false
 	_set_panel_state(map_panel, false)
 	_set_panel_state(resolution_panel, false)
-	_set_panel_state(choice_panel, false)
 	_clear_active_game()
 
 	_active_game = GAME_WORLD_SCENE.instantiate()
@@ -325,8 +394,8 @@ func _launch_room(node: Dictionary) -> void:
 	_active_game.room_cleared.connect(_on_room_cleared)
 	_active_game.all_players_dead.connect(_on_room_failed)
 
-func _on_room_cleared(health_states: Array) -> void:
-	var outcome := RunState.resolve_current_combat_victory(health_states)
+func _on_room_cleared(health_states: Array, clear_context: Dictionary = {}) -> void:
+	var outcome := RunState.resolve_current_combat_victory(health_states, clear_context)
 	if str(outcome.get("post_action", "")) == "return_to_menu":
 		var meta_reward := ProfileState.award_run_meta_gold(RunState.run_outcome, RunState.rooms_completed)
 		_show_run_summary(outcome, meta_reward, true)
@@ -335,12 +404,10 @@ func _on_room_cleared(health_states: Array) -> void:
 
 func _on_room_failed() -> void:
 	if RunState.is_debug_single_room_mode():
-		_pending_followup = {}
 		_post_resolution_action = "complete"
-		_show_resolution("Debug Room Failed", "The party was defeated.\nShared Gold: %d" % RunState.gold, "Return to Debug Map")
+		_show_resolution("Debug Room Failed", "The party was defeated.\n%s" % RunState.get_gold_summary_text(), "Return to Debug Map")
 		return
 	RunState.run_outcome = "failed"
-	_pending_followup = {}
 	var meta_reward := ProfileState.award_run_meta_gold(RunState.run_outcome, RunState.rooms_completed)
 	var outcome := {
 		"title": "Run Failed",
@@ -355,7 +422,6 @@ func _show_resolution(title: String, detail: String, button_text: String) -> voi
 	_set_panel_state(map_panel, false)
 	_set_panel_state(resolution_panel, true)
 	_set_panel_state(run_summary_panel, false)
-	_set_panel_state(choice_panel, false)
 	_clear_active_game()
 	resolution_title_label.text = title
 	resolution_detail_label.text = detail
@@ -364,21 +430,13 @@ func _show_resolution(title: String, detail: String, button_text: String) -> voi
 
 func _on_resolution_button_pressed() -> void:
 	_play_ui_click()
-	var pending_action := str(_pending_followup.get("action", ""))
-	if pending_action == "reward" or pending_action == "shop":
-		_show_choice_panel(_pending_followup)
-		_pending_followup = {}
-		return
 
 	match _post_resolution_action:
 		"return_to_menu":
-			_pending_followup = {}
 			return_to_menu_requested.emit(_open_meta_menu_on_return)
 		"complete":
-			_pending_followup = {}
 			_show_map()
 		_:
-			_pending_followup = {}
 			_show_map()
 
 func _clear_active_game() -> void:
@@ -388,92 +446,13 @@ func _clear_active_game() -> void:
 	_active_game = null
 
 func _show_outcome(outcome: Dictionary) -> void:
-	_pending_followup = {}
 	_open_meta_menu_on_return = false
 	_post_resolution_action = str(outcome.get("post_action", "next"))
-	var action := str(outcome.get("action", "next"))
-	if action == "reward" or action == "shop":
-		_pending_followup = outcome.duplicate(true)
 	_show_resolution(
 		str(outcome.get("title", "Result")),
 		str(outcome.get("summary", "")),
 		str(outcome.get("button_text", "Continue"))
 	)
-
-func _show_choice_panel(context: Dictionary) -> void:
-	Engine.time_scale = 1.0
-	_play_transition_wipe()
-	_set_panel_state(map_panel, false)
-	_set_panel_state(resolution_panel, false)
-	_set_panel_state(run_summary_panel, false)
-	_set_panel_state(choice_panel, true)
-	_clear_active_game()
-	_choice_context = context.duplicate(true)
-
-	var choice_mode := str(context.get("choice_mode", "reward"))
-	var title := "Choose One Shared Upgrade" if choice_mode == "reward" else "Shop"
-	var detail := "Pick one shared upgrade for the run." if choice_mode == "reward" else "Shared Gold: %d\nBuy one upgrade or leave." % RunState.gold
-	choice_title_label.text = title
-	choice_detail_label.text = detail
-
-	var choices: Array = context.get("choices", [])
-	_configure_choice_button(choice_button_1, choices[0] if choices.size() > 0 else {}, choice_mode)
-	_configure_choice_button(choice_button_2, choices[1] if choices.size() > 1 else {}, choice_mode)
-	_configure_choice_button(choice_button_3, choices[2] if choices.size() > 2 else {}, choice_mode)
-	choice_continue_button.visible = choice_mode == "shop"
-	choice_continue_button.text = "Leave Shop"
-	call_deferred("_focus_choice_panel")
-
-func _configure_choice_button(button: Button, item: Dictionary, choice_mode: String) -> void:
-	if item.is_empty():
-		button.visible = false
-		button.disabled = true
-		return
-
-	button.visible = true
-	button.disabled = false
-	var cost_text := ""
-	if choice_mode == "shop":
-		cost_text = "\nCost: %d Gold" % int(item.get("cost", 0))
-	button.text = "%s\n%s\n%s%s" % [
-		str(item.get("name", "Upgrade")),
-		str(item.get("category", "Shared")),
-		str(item.get("description", "")),
-		cost_text,
-	]
-
-func _on_choice_button_1_pressed() -> void:
-	_play_ui_click()
-	_select_choice(0)
-
-func _on_choice_button_2_pressed() -> void:
-	_play_ui_click()
-	_select_choice(1)
-
-func _on_choice_button_3_pressed() -> void:
-	_play_ui_click()
-	_select_choice(2)
-
-func _select_choice(index: int) -> void:
-	var choices: Array = _choice_context.get("choices", [])
-	if index < 0 or index >= choices.size():
-		return
-
-	var item: Dictionary = choices[index]
-	var choice_mode := str(_choice_context.get("choice_mode", "reward"))
-	var result := RunState.purchase_shop_item(str(item.get("id", ""))) if choice_mode == "shop" else RunState.claim_reward_item(str(item.get("id", "")))
-	if not bool(result.get("success", false)):
-		choice_detail_label.text = str(result.get("summary", "Could not apply that choice."))
-		return
-
-	_show_resolution(str(result.get("title", "Upgrade Applied")), str(result.get("summary", "")), "Continue")
-	_post_resolution_action = "next"
-	_choice_context = {}
-
-func _on_choice_continue_button_pressed() -> void:
-	_play_ui_click()
-	_choice_context = {}
-	_show_map()
 
 func _show_run_summary(outcome: Dictionary, meta_reward: Dictionary, did_win: bool) -> void:
 	Engine.time_scale = 1.0
@@ -481,10 +460,7 @@ func _show_run_summary(outcome: Dictionary, meta_reward: Dictionary, did_win: bo
 	_set_panel_state(map_panel, false)
 	_set_panel_state(resolution_panel, false)
 	_set_panel_state(run_summary_panel, true)
-	_set_panel_state(choice_panel, false)
 	_clear_active_game()
-	_pending_followup = {}
-	_choice_context = {}
 	_post_resolution_action = "return_to_menu"
 	_open_meta_menu_on_return = true
 
@@ -521,10 +497,6 @@ func _register_button_animations() -> void:
 	var controls: Array = [
 		resolution_button,
 		run_summary_button,
-		choice_button_1,
-		choice_button_2,
-		choice_button_3,
-		choice_continue_button,
 	]
 	for control in controls:
 		_register_button_animation(control)
@@ -533,10 +505,6 @@ func _configure_menu_focus() -> void:
 	var controls: Array = [
 		resolution_button,
 		run_summary_button,
-		choice_button_1,
-		choice_button_2,
-		choice_button_3,
-		choice_continue_button,
 	]
 	for control in controls:
 		if control == null:
@@ -552,19 +520,6 @@ func _focus_map_panel() -> void:
 
 func _focus_resolution_panel() -> void:
 	resolution_button.grab_focus()
-
-func _focus_choice_panel() -> void:
-	if choice_button_1.visible and not choice_button_1.disabled:
-		choice_button_1.grab_focus()
-		return
-	if choice_button_2.visible and not choice_button_2.disabled:
-		choice_button_2.grab_focus()
-		return
-	if choice_button_3.visible and not choice_button_3.disabled:
-		choice_button_3.grab_focus()
-		return
-	if choice_continue_button.visible:
-		choice_continue_button.grab_focus()
 
 func _focus_summary_panel() -> void:
 	run_summary_button.grab_focus()

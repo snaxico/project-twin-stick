@@ -2,10 +2,12 @@ extends Node2D
 
 const PlayerConfigData = preload("res://scripts/player/PlayerConfig.gd")
 const ModifierEngineData = preload("res://scripts/game/ModifierEngine.gd")
+const PlayerInventoryData = preload("res://scripts/game/PlayerInventory.gd")
 const ScreenShakeData = preload("res://scripts/juice/ScreenShake.gd")
 const ParticleFactoryData = preload("res://scripts/juice/ParticleFactory.gd")
 const FloatingTextData = preload("res://scripts/juice/FloatingText.gd")
 const HealthBarHUDData = preload("res://scripts/juice/HealthBarHUD.gd")
+const PlayerInventoryHUDData = preload("res://scripts/ui/PlayerInventoryHUD.gd")
 const DARKNESS_OVERLAY_SHADER := """
 shader_type canvas_item;
 
@@ -93,6 +95,11 @@ const LAYOUT_PALETTES := {
 @export var mine_projectile_scene: PackedScene
 @export var generator_scene: PackedScene
 @export var pickup_scene: PackedScene
+@export var loot_drop_scene: PackedScene
+@export var loot_vote_ui_scene: PackedScene
+@export var weapon_replace_ui_scene: PackedScene
+@export var shop_station_scene: PackedScene
+@export var shop_ui_scene: PackedScene
 @export var survival_duration: float = 30.0
 @export var enemy_spawn_interval: float = 4.0
 @export var modifier_intro_duration: float = 1.8
@@ -100,8 +107,10 @@ const LAYOUT_PALETTES := {
 @export var revive_hold_duration: float = 1.4
 @export var revive_health: int = 2
 @export var boss_support_spawn_interval: float = 8.0
+@export var exit_hold_duration: float = 1.0
+@export var exit_auto_transition_delay: float = 15.0
 
-signal room_cleared(health_states)
+signal room_cleared(health_states, clear_context)
 signal all_players_dead
 signal player_downed(player)
 signal player_revived(player)
@@ -112,6 +121,9 @@ signal player_revived(player)
 @onready var generators: Node2D = $Generators
 @onready var pickups: Node2D = $Pickups
 @onready var effects: Node2D = $Effects
+@onready var exit_zone: Area2D = $ExitZone
+@onready var exit_zone_shape: CollisionShape2D = $ExitZone/CollisionShape2D
+@onready var exit_zone_visual: Polygon2D = $ExitZone/Visual
 @onready var floor_visual: Polygon2D = $Floor
 @onready var floor_grid: Node2D = $FloorGrid
 @onready var back_wall_visual: Polygon2D = $BackWall
@@ -196,15 +208,14 @@ var _modifier_engine = null
 var _room_config: Dictionary = {}
 var _boss_node = null
 var _revive_progress_by_player_id: Dictionary = {}
-var _status_labels: Array = []
-var _secondary_labels: Array = []
 var _hitstop_serial: int = 0
 var _sfx_engine = null
 var _hud_root: Control = null
 var _floating_text_layer: Control = null
-var _player_health_bars: Array = []
+var _player_inventory_huds: Array = []
 var _boss_health_bar = null
-var _player_hud_container: VBoxContainer = null
+var _gold_panel: Panel = null
+var _gold_label: Label = null
 var _modifier_chip_panel: Panel = null
 var _modifier_chip_label: Label = null
 var _timer_panel: Panel = null
@@ -227,6 +238,46 @@ var _generator_nodes: Array = []
 var _generator_slot_positions: Array = []
 var _generator_total_count: int = 0
 var _room_random := RandomNumberGenerator.new()
+var _active_loot_drop = null
+var _loot_vote_ui: Control = null
+var _pending_loot_item: Dictionary = {}
+var _loot_vote_active: bool = false
+var _loot_vote_deadline: float = 0.0
+var _loot_vote_duration: float = 10.0
+var _loot_votes: Dictionary = {}
+var _loot_vote_take_pressed: Dictionary = {}
+var _loot_vote_scrap_pressed: Dictionary = {}
+var _loot_interact_pressed: Dictionary = {}
+var _pending_health_states_after_loot: Array = []
+var _weapon_replace_ui: Control = null
+var _weapon_replace_active: bool = false
+var _pending_weapon_replace_request: Dictionary = {}
+var _pending_weapon_replace_result: Dictionary = {}
+var _weapon_replace_selected_slot: int = 0
+var _weapon_replace_left_pressed: bool = false
+var _weapon_replace_right_pressed: bool = false
+var _weapon_replace_confirm_pressed: bool = false
+var _weapon_replace_cancel_pressed: bool = false
+var _shop_station = null
+var _shop_ui: Control = null
+var _shop_room_ready_players: Dictionary = {}
+var _shop_ready_deadline: float = 0.0
+var _shop_active_player_index: int = -1
+var _shop_selection_index: int = 0
+var _shop_nav_left_pressed: bool = false
+var _shop_nav_right_pressed: bool = false
+var _shop_confirm_pressed: bool = false
+var _shop_cancel_pressed: bool = false
+var _shop_interact_pressed: Dictionary = {}
+var _shop_status_message: String = ""
+var _shop_room_log: Array = []
+var _exit_zone_open: bool = false
+var _exit_zone_auto_exit_at: float = 0.0
+var _exit_zone_hold_started_at: float = -1.0
+var _pending_room_clear_health_states: Array = []
+var _pending_room_clear_context: Dictionary = {}
+var _pending_room_clear_title: String = ""
+var _pending_room_clear_detail: String = ""
 
 func _ready() -> void:
 	if player_scene == null:
@@ -243,12 +294,20 @@ func _ready() -> void:
 		generator_scene = load("res://scenes/game/GeneratorObjective.tscn")
 	if pickup_scene == null:
 		pickup_scene = load("res://scenes/game/RoomPickup.tscn")
+	if loot_drop_scene == null:
+		loot_drop_scene = load("res://scenes/game/LootDrop.tscn")
+	if loot_vote_ui_scene == null:
+		loot_vote_ui_scene = load("res://scenes/ui/LootVoteUI.tscn")
+	if weapon_replace_ui_scene == null:
+		weapon_replace_ui_scene = load("res://scenes/ui/WeaponReplaceUI.tscn")
+	if shop_station_scene == null:
+		shop_station_scene = load("res://scenes/game/ShopStation.tscn")
+	if shop_ui_scene == null:
+		shop_ui_scene = load("res://scenes/ui/ShopUI.tscn")
 	_modifier_engine = ModifierEngineData.new()
 	_wave_random.randomize()
 	_room_random.randomize()
 	_sfx_engine = get_tree().get_first_node_in_group("sfx_engine")
-	_status_labels = [p1_status_label, p2_status_label, p3_status_label, p4_status_label]
-	_secondary_labels = [p1_secondary_label, p2_secondary_label, p3_secondary_label, p4_secondary_label]
 	_settings_rows = [
 		settings_player_1_row,
 		settings_player_2_row,
@@ -292,6 +351,8 @@ func _process(delta: float) -> void:
 	_refresh_debug_ui()
 	_update_room_progress(delta)
 	_update_screen_effects()
+	_update_loot_resolution()
+	_update_exit_zone(delta)
 
 func _input(event: InputEvent) -> void:
 	if get_tree().paused and event.is_action_pressed("ui_cancel") and not event.is_echo():
@@ -326,7 +387,8 @@ func _spawn_players() -> void:
 		var player = player_scene.instantiate()
 		player.global_position = spawn_points[index]
 		player.setup(_player_configs[index], assigned_gamepads[index])
-		player.apply_loadout(RunState.get_player_runtime_loadout())
+		player.player_index = index
+		player.apply_loadout(RunState.get_player_runtime_loadout_for(index))
 		player.name = "Player%d" % (index + 1)
 		player.fire_requested.connect(_on_player_fire_requested)
 		player.secondary_requested.connect(_on_player_secondary_requested)
@@ -337,23 +399,14 @@ func _spawn_players() -> void:
 		player.muzzle_flash_requested.connect(_on_player_muzzle_flash_requested)
 		player.dash_trail_requested.connect(_on_player_dash_trail_requested)
 		player.dash_started.connect(_on_player_dash_started)
+		player.set_input_locked(false)
 		players.add_child(player)
 		_play_player_spawn_in(player)
 		_player_nodes.append(player)
-	_refresh_player_health_bars()
+	_refresh_player_inventory_huds()
 	_refresh_pause_settings_panel()
 
 func _refresh_debug_ui() -> void:
-	for index in range(_status_labels.size()):
-		var status_label: Label = _status_labels[index]
-		var secondary_label: Label = _secondary_labels[index]
-		var has_player := index < _player_nodes.size()
-		status_label.visible = false
-		secondary_label.visible = false
-		if has_player:
-			status_label.text = _build_player_status_text(_player_nodes[index])
-			secondary_label.text = _build_secondary_status_text(_player_nodes[index])
-
 	p1_mode_button.visible = false
 	p2_mode_button.visible = false
 
@@ -364,34 +417,16 @@ func _refresh_debug_ui() -> void:
 		connection_status_label.text = "Gamepads: %s" % connected_devices
 	modifier_status_label.text = _build_modifier_status_text()
 	_refresh_modifier_chip()
-	_refresh_player_health_bars()
+	_refresh_gold_panel()
+	_refresh_player_inventory_huds()
 	_refresh_boss_health_bar()
 	_refresh_pause_settings_panel()
-
-func _build_player_status_text(player) -> String:
-	var dash_state := "Downed" if player.is_downed() else ("Dashing" if player.is_dash_active() else "Ready")
-	if not player.is_downed() and not player.is_dash_active():
-		var cooldown: float = player.get_dash_cooldown_remaining()
-		dash_state = "Cooldown %.1fs" % cooldown if cooldown > 0.0 else "Ready"
-
-	return "P%d  Control: %s  Aim: %s  Dash: %s" % [
-		player.player_id,
-		player.player_config.get_control_source_name(),
-		"%s | %s" % [player.get_primary_profile_name(), player.get_aim_mode_name()],
-		dash_state,
-	]
-
-func _build_secondary_status_text(player) -> String:
-	if player.is_downed():
-		return "P%d Secondary: Downed" % player.player_id
-	var remaining: float = player.get_secondary_cooldown_remaining()
-	if remaining > 0.0:
-		return "P%d Secondary: %s | Cooldown %.1fs" % [player.player_id, player.get_secondary_profile_name(), remaining]
-	return "P%d Secondary: Ready (%s)" % [player.player_id, player.get_secondary_profile_name()]
 
 func _build_modifier_status_text() -> String:
 	if _is_boss_room():
 		return "Boss Room: %s" % str(_room_config.get("title", "Boss"))
+	if _is_shop_room():
+		return "Shop Room: Personal offers and ready-up."
 	if _active_modifier.is_empty():
 		return "Modifier: None"
 	return "Modifier: %s | %s" % [
@@ -567,6 +602,13 @@ func _start_room() -> void:
 	_room_is_cleared = false
 	_room_is_failed = false
 	_room_is_in_intro = true
+	_reset_loot_resolution_state()
+	_reset_shop_room_state()
+	_set_exit_zone_visible(false)
+	_pending_room_clear_health_states = []
+	_pending_room_clear_context = {}
+	_pending_room_clear_title = ""
+	_pending_room_clear_detail = ""
 	var now := _current_time_seconds()
 	_room_started_at = now + modifier_intro_duration
 	_room_intro_ends_at = _room_started_at
@@ -603,15 +645,17 @@ func _start_room() -> void:
 	_play_intro_juice()
 	room_status_label.text = "Room status: Incoming encounter"
 	if _is_generator_room():
-		_set_room_progress_ui("Deploying", "Destroy Generators", 1.0, _get_active_hud_accent())
+		_set_room_progress_ui("Deploying", "Break the generators.", 1.0, _get_active_hud_accent())
 	else:
-		_set_room_progress_ui("Deploying", "Incoming encounter", 1.0, _get_active_hud_accent())
+		_set_room_progress_ui("Deploying", "Hold the arena.", 1.0, _get_active_hud_accent())
 
 func _spawn_room_opening_encounter() -> void:
 	if _is_boss_room():
 		_spawn_boss()
 	elif _is_generator_room():
 		_spawn_generators()
+	elif _is_shop_room():
+		_start_shop_room()
 	else:
 		_spawn_survival_wave(_build_survival_wave_plan())
 
@@ -892,7 +936,12 @@ func _on_pickup_collected(pickup, collector, pickup_type: String, value: int) ->
 				if healed_amount > 0:
 					_spawn_world_floating_text("+%d HP" % healed_amount, Color(0.74, 0.96, 0.48, 1.0), collector.global_position + Vector2(0.0, -46.0))
 		_:
-			RunState.gold += value
+			for inventory_index in range(RunState.player_inventories.size()):
+				var inventory = RunState.player_inventories[inventory_index]
+				if inventory_index < _player_nodes.size() and is_instance_valid(_player_nodes[inventory_index]):
+					var player = _player_nodes[inventory_index]
+					_spawn_world_floating_text("+%d Gold" % value, player.player_config.tint, player.global_position + Vector2(0.0, -32.0))
+			RunState.award_gold_to_all(value)
 			_spawn_world_floating_text("+%d Gold" % value, Color(1.0, 0.88, 0.28, 1.0), pickup_position + Vector2(0.0, -24.0))
 
 func _auto_collect_remaining_pickups() -> void:
@@ -1023,7 +1072,7 @@ func _update_room_progress(delta: float) -> void:
 	var now := _current_time_seconds()
 	if _room_is_in_intro:
 		var intro_remaining: float = max(_room_intro_ends_at - now, 0.0)
-		var intro_label := str(_room_config.get("title", "Room")) if _is_boss_room() else ("Destroy Generators" if _is_generator_room() else str(_active_modifier.get("name", "Modifier")))
+		var intro_label := str(_room_config.get("title", "Room")) if _is_boss_room() else ("Destroy Generators" if _is_generator_room() else ("Shop" if _is_shop_room() else str(_active_modifier.get("name", "Modifier"))))
 		room_status_label.text = "Room status: %s in %.1fs" % [intro_label, intro_remaining]
 		_set_room_progress_ui("%.1fs" % intro_remaining, intro_label, clamp(intro_remaining / max(modifier_intro_duration, 0.01), 0.0, 1.0), _get_active_hud_accent())
 		if now >= _room_intro_ends_at:
@@ -1042,6 +1091,10 @@ func _update_room_progress(delta: float) -> void:
 
 	if _is_generator_room():
 		_update_generator_room(now, delta)
+		return
+
+	if _is_shop_room():
+		_update_shop_room(now, delta)
 		return
 
 	var elapsed := now - _room_started_at
@@ -1071,7 +1124,7 @@ func _update_room_progress(delta: float) -> void:
 		_build_revive_status_suffix(),
 	]
 	_set_room_progress_ui(
-		"%.1fs" % remaining,
+		"Hold %.1fs" % remaining,
 		"Enemies %d%s" % [enemies.get_child_count(), _build_revive_status_suffix()],
 		clamp(remaining / max(room_duration, 0.01), 0.0, 1.0),
 		_get_active_hud_accent()
@@ -1103,7 +1156,7 @@ func _update_boss_room(now: float) -> void:
 	]
 	_set_room_progress_ui(
 		"Boss",
-		"Boss HP %s | Adds %d%s" % [_boss_node.get_health_ratio_text(), add_count, _build_revive_status_suffix()],
+		"Bring it down | HP %s | Adds %d%s" % [_boss_node.get_health_ratio_text(), add_count, _build_revive_status_suffix()],
 		_boss_node.get_health_ratio(),
 		_get_active_hud_accent()
 	)
@@ -1119,7 +1172,7 @@ func _update_generator_room(now: float, _delta: float) -> void:
 	var revive_suffix: String = _build_revive_status_suffix()
 	if alive_generators.is_empty():
 		room_status_label.text = "Room status: Sweep the room | Enemies: %d%s" % [enemies.get_child_count(), revive_suffix]
-		_set_room_progress_ui("Sweep", "Clear Remaining Enemies%s" % revive_suffix, 1.0, _get_active_hud_accent())
+		_set_room_progress_ui("Sweep", "Clear the room%s" % revive_suffix, 1.0, _get_active_hud_accent())
 		_reset_room_status_pulse()
 		return
 
@@ -1130,8 +1183,8 @@ func _update_generator_room(now: float, _delta: float) -> void:
 		revive_suffix,
 	]
 	_set_room_progress_ui(
-		"Gens %d/%d" % [destroyed_count, _generator_total_count],
-		"Destroy Generators%s" % revive_suffix,
+		"Cores %d/%d" % [destroyed_count, _generator_total_count],
+		"Break the generators%s" % revive_suffix,
 		clamp(float(destroyed_count) / max(float(_generator_total_count), 1.0), 0.0, 1.0),
 		_get_active_hud_accent()
 	)
@@ -1144,7 +1197,6 @@ func _evaluate_generator_room_clear() -> void:
 		return
 	if enemies.get_child_count() > 0:
 		return
-	_auto_collect_remaining_pickups()
 	_handle_room_clear("Generators Down", "All generators destroyed. Area clear.")
 
 func _update_revive_state(delta: float) -> void:
@@ -1190,10 +1242,11 @@ func _handle_room_clear(title: String, detail: String) -> void:
 	if _room_is_cleared or _room_is_failed:
 		return
 	_room_is_cleared = true
+	_pending_room_clear_title = title
+	_pending_room_clear_detail = detail
 	_clear_container(projectiles)
 	_clear_container(enemies)
 	_clear_container(generators)
-	_clear_container(pickups)
 	_clear_spawn_warning_effects()
 	if _boss_node != null and is_instance_valid(_boss_node):
 		_boss_node = null
@@ -1205,14 +1258,649 @@ func _handle_room_clear(title: String, detail: String) -> void:
 	if gold_gain > 0:
 		_spawn_screen_floating_text("+%d Gold" % gold_gain, Color(1.0, 0.88, 0.28, 1.0), Vector2(860.0, 120.0))
 	_play_clear_juice()
-	_show_result(title, detail)
-	room_cleared.emit(capture_player_health_states())
+	var reward: Dictionary = _room_config.get("reward", {}).duplicate(true)
+	if str(reward.get("type", "")) == "loot_choice":
+		_begin_loot_drop()
+		return
+	_open_exit_zone(capture_player_health_states(), {})
 
 func _show_result(title: String, detail: String) -> void:
 	result_title_label.text = title
 	result_detail_label.text = detail
 	_apply_panel_style(result_panel, _get_active_hud_accent())
 	result_panel.visible = true
+
+func _begin_loot_drop() -> void:
+	_pending_loot_item = RunState.roll_loot_drop()
+	if _pending_loot_item.is_empty() or loot_drop_scene == null:
+		_open_exit_zone(capture_player_health_states(), {
+			"loot_summary": "No loot was available.\n%s" % RunState.get_gold_summary_text(),
+		})
+		return
+	if _active_loot_drop != null and is_instance_valid(_active_loot_drop):
+		_active_loot_drop.queue_free()
+	_active_loot_drop = loot_drop_scene.instantiate()
+	_active_loot_drop.global_position = Vector2(960.0, 540.0)
+	_active_loot_drop.setup(_pending_loot_item)
+	_active_loot_drop.interact_requested.connect(_on_loot_drop_interacted)
+	effects.add_child(_active_loot_drop)
+	room_status_label.text = "Room status: Loot dropped"
+	_set_room_progress_ui("Loot", "Collect pickups, then interact with the drop.", 1.0, _get_active_hud_accent())
+
+func _on_loot_drop_interacted(_player) -> void:
+	if _loot_vote_active or _pending_loot_item.is_empty():
+		return
+	_begin_loot_vote()
+
+func _begin_loot_vote() -> void:
+	if loot_vote_ui_scene == null:
+		var fallback_result: Dictionary = RunState.resolve_loot_vote({}, _pending_loot_item, capture_player_health_states())
+		_complete_loot_resolution(fallback_result)
+		return
+	_loot_vote_active = true
+	_loot_votes = {}
+	_loot_vote_take_pressed = {}
+	_loot_vote_scrap_pressed = {}
+	_loot_vote_deadline = _current_time_seconds() + _loot_vote_duration
+	_pending_health_states_after_loot = capture_player_health_states()
+	for index in range(_player_nodes.size()):
+		var player = _player_nodes[index]
+		if player != null and is_instance_valid(player):
+			_loot_vote_take_pressed[index] = _is_player_take_button_pressed(player)
+			_loot_vote_scrap_pressed[index] = _is_player_scrap_button_pressed(player)
+			player.set_input_locked(true)
+	if _active_loot_drop != null and is_instance_valid(_active_loot_drop):
+		_active_loot_drop.set_interaction_enabled(false)
+	if _loot_vote_ui != null and is_instance_valid(_loot_vote_ui):
+		_loot_vote_ui.queue_free()
+	_loot_vote_ui = loot_vote_ui_scene.instantiate()
+	ui_layer.add_child(_loot_vote_ui)
+	_loot_vote_ui.setup_for_item(_pending_loot_item, _player_nodes.size())
+	_loot_vote_ui.update_vote_state(_loot_votes, _player_nodes.size(), _loot_vote_duration, _loot_vote_duration)
+
+func _update_loot_resolution() -> void:
+	if _weapon_replace_active:
+		_update_weapon_replacement()
+		return
+	if _loot_vote_active:
+		_update_loot_vote()
+		return
+	if _room_is_cleared and not _pending_loot_item.is_empty():
+		_poll_loot_interaction_inputs()
+
+func _poll_loot_interaction_inputs() -> void:
+	if _active_loot_drop == null or not is_instance_valid(_active_loot_drop):
+		return
+	for player_index in range(_player_nodes.size()):
+		var player = _player_nodes[player_index]
+		if player == null or not is_instance_valid(player) or not player.is_alive():
+			continue
+		var pressed: bool = _is_player_take_button_pressed(player)
+		var was_pressed: bool = bool(_loot_interact_pressed.get(player_index, false))
+		if pressed and not was_pressed and _active_loot_drop.is_player_in_range(player):
+			_active_loot_drop.request_interact(player)
+		_loot_interact_pressed[player_index] = pressed
+
+func _update_loot_vote() -> void:
+	var now: float = _current_time_seconds()
+	for player_index in range(_player_nodes.size()):
+		if _loot_votes.has(player_index):
+			continue
+		var player = _player_nodes[player_index]
+		if player == null or not is_instance_valid(player):
+			_loot_votes[player_index] = "scrap"
+			continue
+		var take_pressed: bool = _is_player_take_button_pressed(player)
+		var was_take_pressed: bool = bool(_loot_vote_take_pressed.get(player_index, false))
+		if take_pressed and not was_take_pressed:
+			_loot_votes[player_index] = "take"
+		_loot_vote_take_pressed[player_index] = take_pressed
+		if _loot_votes.has(player_index):
+			continue
+		var scrap_pressed: bool = _is_player_scrap_button_pressed(player)
+		var was_scrap_pressed: bool = bool(_loot_vote_scrap_pressed.get(player_index, false))
+		if scrap_pressed and not was_scrap_pressed:
+			_loot_votes[player_index] = "scrap"
+		_loot_vote_scrap_pressed[player_index] = scrap_pressed
+	var time_remaining: float = max(_loot_vote_deadline - now, 0.0)
+	if _loot_vote_ui != null and is_instance_valid(_loot_vote_ui):
+		_loot_vote_ui.update_vote_state(_loot_votes, _player_nodes.size(), time_remaining, _loot_vote_duration)
+	if _loot_votes.size() >= _player_nodes.size() or now >= _loot_vote_deadline:
+		var result: Dictionary = RunState.resolve_loot_vote(_loot_votes, _pending_loot_item, _pending_health_states_after_loot)
+		if not (result.get("replacement_request", {}) as Dictionary).is_empty():
+			_begin_weapon_replacement(result)
+			return
+		if _loot_vote_ui != null and is_instance_valid(_loot_vote_ui):
+			_loot_vote_ui.show_result(str(result.get("summary", "")))
+		_complete_loot_resolution(result)
+
+func _begin_weapon_replacement(result: Dictionary) -> void:
+	_loot_vote_active = false
+	_pending_weapon_replace_result = result.duplicate(true)
+	_pending_weapon_replace_request = (result.get("replacement_request", {}) as Dictionary).duplicate(true)
+	if not _pending_weapon_replace_request.has("source"):
+		_pending_weapon_replace_request["source"] = "loot"
+	_show_weapon_replacement_ui()
+
+func _begin_shop_weapon_replacement(player_index: int, offer: Dictionary, preview: Dictionary) -> void:
+	_pending_weapon_replace_result = {
+		"source": "shop",
+		"player_index": player_index,
+		"item_id": str(offer.get("id", "")),
+	}
+	_pending_weapon_replace_request = {
+		"source": "shop",
+		"player_index": player_index,
+		"entry": offer.duplicate(true),
+		"item_id": str(offer.get("id", "")),
+		"slot_type": str(preview.get("slot_type", "primary")),
+		"slot_count": int(preview.get("slot_count", 2)),
+	}
+	_show_weapon_replacement_ui()
+
+func _show_weapon_replacement_ui() -> void:
+	_weapon_replace_selected_slot = 0
+	_weapon_replace_left_pressed = false
+	_weapon_replace_right_pressed = false
+	_weapon_replace_confirm_pressed = false
+	_weapon_replace_cancel_pressed = false
+	_weapon_replace_active = true
+	_close_shop_ui(false)
+	if _loot_vote_ui != null and is_instance_valid(_loot_vote_ui):
+		_loot_vote_ui.queue_free()
+	_loot_vote_ui = null
+	if weapon_replace_ui_scene == null:
+		_commit_weapon_replacement(false)
+		return
+	if _weapon_replace_ui != null and is_instance_valid(_weapon_replace_ui):
+		_weapon_replace_ui.queue_free()
+	var player_index: int = int(_pending_weapon_replace_request.get("player_index", 0))
+	var slot_type: String = str(_pending_weapon_replace_request.get("slot_type", "primary"))
+	var slot_rows: Array = RunState.get_player_weapon_slot_display(player_index, slot_type)
+	_weapon_replace_ui = weapon_replace_ui_scene.instantiate()
+	ui_layer.add_child(_weapon_replace_ui)
+	_weapon_replace_ui.setup_for_replacement(player_index, _pending_weapon_replace_request.get("entry", {}), slot_type, slot_rows)
+	_weapon_replace_ui.set_selected_slot(slot_rows, _weapon_replace_selected_slot)
+
+func _update_weapon_replacement() -> void:
+	var player_index: int = int(_pending_weapon_replace_request.get("player_index", -1))
+	if player_index < 0 or player_index >= _player_nodes.size():
+		_commit_weapon_replacement(true)
+		return
+	var player = _player_nodes[player_index]
+	if player == null or not is_instance_valid(player):
+		_commit_weapon_replacement(true)
+		return
+	var slot_count: int = max(1, int(_pending_weapon_replace_request.get("slot_count", 2)))
+	var slot_type: String = str(_pending_weapon_replace_request.get("slot_type", "primary"))
+	var slot_rows: Array = RunState.get_player_weapon_slot_display(player_index, slot_type)
+	var left_pressed: bool = _is_player_nav_left_pressed(player)
+	if left_pressed and not _weapon_replace_left_pressed:
+		_weapon_replace_selected_slot = (_weapon_replace_selected_slot - 1 + slot_count) % slot_count
+		if _weapon_replace_ui != null and is_instance_valid(_weapon_replace_ui):
+			_weapon_replace_ui.set_selected_slot(slot_rows, _weapon_replace_selected_slot)
+	_weapon_replace_left_pressed = left_pressed
+	var right_pressed: bool = _is_player_nav_right_pressed(player)
+	if right_pressed and not _weapon_replace_right_pressed:
+		_weapon_replace_selected_slot = (_weapon_replace_selected_slot + 1) % slot_count
+		if _weapon_replace_ui != null and is_instance_valid(_weapon_replace_ui):
+			_weapon_replace_ui.set_selected_slot(slot_rows, _weapon_replace_selected_slot)
+	_weapon_replace_right_pressed = right_pressed
+	var confirm_pressed: bool = _is_player_take_button_pressed(player)
+	if confirm_pressed and not _weapon_replace_confirm_pressed:
+		_commit_weapon_replacement(false)
+		return
+	_weapon_replace_confirm_pressed = confirm_pressed
+	var cancel_pressed: bool = _is_player_scrap_button_pressed(player)
+	if cancel_pressed and not _weapon_replace_cancel_pressed:
+		_commit_weapon_replacement(true)
+		return
+	_weapon_replace_cancel_pressed = cancel_pressed
+
+func _commit_weapon_replacement(cancel_instead: bool) -> void:
+	var replace_source: String = str(_pending_weapon_replace_request.get("source", "loot"))
+	var player_index: int = int(_pending_weapon_replace_request.get("player_index", 0))
+	var entry: Dictionary = (_pending_weapon_replace_request.get("entry", {}) as Dictionary).duplicate(true)
+	var slot_type: String = str(_pending_weapon_replace_request.get("slot_type", "primary"))
+	if replace_source == "shop":
+		var item_id: String = str(_pending_weapon_replace_request.get("item_id", str(entry.get("id", ""))))
+		var purchase_result: Dictionary = RunState.complete_shop_purchase(player_index, item_id, slot_type, _weapon_replace_selected_slot, cancel_instead)
+		_weapon_replace_active = false
+		_pending_weapon_replace_request = {}
+		_pending_weapon_replace_result = {}
+		if _weapon_replace_ui != null and is_instance_valid(_weapon_replace_ui):
+			_weapon_replace_ui.queue_free()
+		_weapon_replace_ui = null
+		_shop_status_message = str(purchase_result.get("summary", "Purchase resolved."))
+		if bool(purchase_result.get("success", false)):
+			_shop_room_log.append(_shop_status_message)
+		_open_shop_ui(player_index)
+		return
+	var choice_result: Dictionary = RunState.resolve_weapon_replacement_choice(player_index, entry, slot_type, _weapon_replace_selected_slot, cancel_instead)
+	var summary_text: String = str(_pending_weapon_replace_result.get("summary", "")).strip_edges()
+	var choice_summary: String = str(choice_result.get("summary", "")).strip_edges()
+	if not choice_summary.is_empty():
+		summary_text = "%s\n%s" % [summary_text, choice_summary] if not summary_text.is_empty() else choice_summary
+	var result_payload: Dictionary = _pending_weapon_replace_result.duplicate(true)
+	result_payload["summary"] = "%s\n%s" % [summary_text, RunState.get_gold_summary_text()] if not summary_text.is_empty() else RunState.get_gold_summary_text()
+	result_payload["replacement_request"] = {}
+	_weapon_replace_active = false
+	_pending_weapon_replace_request = {}
+	_pending_weapon_replace_result = {}
+	if _weapon_replace_ui != null and is_instance_valid(_weapon_replace_ui):
+		_weapon_replace_ui.queue_free()
+	_weapon_replace_ui = null
+	_complete_loot_resolution(result_payload)
+
+func _complete_loot_resolution(result: Dictionary) -> void:
+	_loot_vote_active = false
+	_weapon_replace_active = false
+	if _active_loot_drop != null and is_instance_valid(_active_loot_drop):
+		_active_loot_drop.queue_free()
+	_active_loot_drop = null
+	if _loot_vote_ui != null and is_instance_valid(_loot_vote_ui):
+		_loot_vote_ui.queue_free()
+	_loot_vote_ui = null
+	if _weapon_replace_ui != null and is_instance_valid(_weapon_replace_ui):
+		_weapon_replace_ui.queue_free()
+	_weapon_replace_ui = null
+	for player in _player_nodes:
+		if player != null and is_instance_valid(player):
+			player.set_input_locked(false)
+	var summary_text: String = str(result.get("summary", "")).strip_edges()
+	if summary_text.is_empty():
+		summary_text = "Loot resolved."
+	var resolved_health_states: Array = result.get("health_states", _pending_health_states_after_loot)
+	_pending_loot_item = {}
+	_pending_health_states_after_loot = []
+	_loot_votes = {}
+	_loot_vote_take_pressed = {}
+	_loot_vote_scrap_pressed = {}
+	_loot_interact_pressed = {}
+	_pending_weapon_replace_request = {}
+	_pending_weapon_replace_result = {}
+	_weapon_replace_left_pressed = false
+	_weapon_replace_right_pressed = false
+	_weapon_replace_confirm_pressed = false
+	_weapon_replace_cancel_pressed = false
+	_open_exit_zone(resolved_health_states, {"loot_summary": summary_text})
+
+func _reset_loot_resolution_state() -> void:
+	_pending_loot_item = {}
+	_pending_health_states_after_loot = []
+	_loot_vote_active = false
+	_weapon_replace_active = false
+	_loot_vote_deadline = 0.0
+	_loot_votes = {}
+	_loot_vote_take_pressed = {}
+	_loot_vote_scrap_pressed = {}
+	_loot_interact_pressed = {}
+	_pending_weapon_replace_request = {}
+	_pending_weapon_replace_result = {}
+	_weapon_replace_left_pressed = false
+	_weapon_replace_right_pressed = false
+	_weapon_replace_confirm_pressed = false
+	_weapon_replace_cancel_pressed = false
+	if _active_loot_drop != null and is_instance_valid(_active_loot_drop):
+		_active_loot_drop.queue_free()
+	_active_loot_drop = null
+	if _loot_vote_ui != null and is_instance_valid(_loot_vote_ui):
+		_loot_vote_ui.queue_free()
+	_loot_vote_ui = null
+	if _weapon_replace_ui != null and is_instance_valid(_weapon_replace_ui):
+		_weapon_replace_ui.queue_free()
+	_weapon_replace_ui = null
+
+func _open_exit_zone(health_states: Array, clear_context: Dictionary) -> void:
+	_pending_room_clear_health_states = []
+	for state in health_states:
+		if state is Dictionary:
+			_pending_room_clear_health_states.append((state as Dictionary).duplicate(true))
+	_pending_room_clear_context = clear_context.duplicate(true)
+	_exit_zone_hold_started_at = -1.0
+	_exit_zone_auto_exit_at = _current_time_seconds() + exit_auto_transition_delay
+	_set_exit_zone_visible(true)
+	room_status_label.text = "Room status: Exit open"
+	_set_room_progress_ui("Exit Open", "All living players must enter the exit.", 1.0, Color(0.24, 0.86, 0.56, 1.0))
+
+func _update_exit_zone(delta: float = 0.0) -> void:
+	if not _exit_zone_open or _room_is_failed:
+		return
+	_update_revive_state(delta)
+	var now: float = _current_time_seconds()
+	var active_players: Array = get_active_players()
+	var everyone_inside: bool = not active_players.is_empty()
+	for player in active_players:
+		if not _is_player_inside_exit_zone(player):
+			everyone_inside = false
+			break
+	var time_remaining: float = max(_exit_zone_auto_exit_at - now, 0.0)
+	if everyone_inside:
+		if _exit_zone_hold_started_at < 0.0:
+			_exit_zone_hold_started_at = now
+		var hold_remaining: float = max(exit_hold_duration - (now - _exit_zone_hold_started_at), 0.0)
+		room_status_label.text = "Room status: Exit in %.1fs" % hold_remaining
+		_set_room_progress_ui(
+			"Exit %.1fs" % hold_remaining,
+			"Everyone is in the zone. Hold steady.",
+			clamp(hold_remaining / max(exit_hold_duration, 0.01), 0.0, 1.0),
+			Color(0.24, 0.86, 0.56, 1.0)
+		)
+		if now - _exit_zone_hold_started_at >= exit_hold_duration:
+			_trigger_room_exit()
+		return
+	_exit_zone_hold_started_at = -1.0
+	room_status_label.text = "Room status: Move to exit %.1fs" % time_remaining
+	_set_room_progress_ui(
+		"Exit %.1fs" % time_remaining,
+		"All living players must enter the zone.",
+		clamp(time_remaining / max(exit_auto_transition_delay, 0.01), 0.0, 1.0),
+		Color(0.24, 0.86, 0.56, 1.0)
+	)
+	if now >= _exit_zone_auto_exit_at:
+		_spawn_screen_floating_text("Auto-exiting...", Color(0.24, 0.86, 0.56, 1.0), Vector2(960.0, 140.0))
+		_trigger_room_exit()
+
+func _trigger_room_exit() -> void:
+	if not _exit_zone_open:
+		return
+	var resolved_health_states: Array = _pending_room_clear_health_states.duplicate(true)
+	var clear_context: Dictionary = _pending_room_clear_context.duplicate(true)
+	_set_exit_zone_visible(false)
+	room_cleared.emit(resolved_health_states, clear_context)
+
+func _set_exit_zone_visible(visible: bool) -> void:
+	_exit_zone_open = visible
+	if exit_zone != null:
+		exit_zone.monitoring = visible
+		exit_zone.monitorable = visible
+	if exit_zone_visual != null:
+		exit_zone_visual.visible = visible
+	if not visible:
+		_exit_zone_auto_exit_at = 0.0
+		_exit_zone_hold_started_at = -1.0
+
+func _start_shop_room() -> void:
+	RunState.prepare_shop_room_offers()
+	_shop_status_message = "Visit the station, buy what you need, then ready up."
+	_shop_room_log = []
+	_shop_room_ready_players = {}
+	_shop_ready_deadline = 0.0
+	if _shop_station != null and is_instance_valid(_shop_station):
+		_shop_station.queue_free()
+	_shop_station = null
+	if shop_station_scene != null:
+		_shop_station = shop_station_scene.instantiate()
+		_shop_station.global_position = Vector2(960.0, 540.0)
+		effects.add_child(_shop_station)
+	room_status_label.text = "Room status: Shop open"
+	_set_room_progress_ui("Shop", "Interact with the station to browse personal offers.", 1.0, Color(0.2, 0.72, 0.96, 1.0))
+
+func _update_shop_room(now: float, delta: float) -> void:
+	if _room_is_failed:
+		return
+	_update_revive_state(delta)
+	if _weapon_replace_active:
+		return
+	if _exit_zone_open:
+		return
+	if _shop_active_player_index >= 0:
+		_update_shop_ui(now)
+		return
+	_poll_shop_station_inputs()
+	if _all_shop_players_ready() or (_shop_ready_deadline > 0.0 and now >= _shop_ready_deadline):
+		_open_exit_zone(capture_player_health_states(), {"shop_summary": _build_shop_summary()})
+		return
+	var ready_count: int = _count_ready_shop_players()
+	var deadline_text: String = _get_shop_ready_deadline_text(now)
+	room_status_label.text = "Room status: Shop %d/%d ready%s" % [ready_count, _player_nodes.size(), "" if deadline_text.is_empty() else " | %s" % deadline_text]
+	_set_room_progress_ui(
+		"Shop %d/%d" % [ready_count, _player_nodes.size()],
+		"Buy what you need, then ready up.%s" % ("" if deadline_text.is_empty() else "  %s" % deadline_text),
+		1.0,
+		Color(0.2, 0.72, 0.96, 1.0)
+	)
+
+func _poll_shop_station_inputs() -> void:
+	if _shop_station == null or not is_instance_valid(_shop_station):
+		return
+	for player_index in range(_player_nodes.size()):
+		var player = _player_nodes[player_index]
+		if player == null or not is_instance_valid(player) or not player.is_alive():
+			continue
+		if bool(_shop_room_ready_players.get(player_index, false)):
+			continue
+		var pressed: bool = _is_player_take_button_pressed(player)
+		var was_pressed: bool = bool(_shop_interact_pressed.get(player_index, false))
+		if pressed and not was_pressed and _shop_station.is_player_in_range(player):
+			_open_shop_ui(player_index)
+		_shop_interact_pressed[player_index] = pressed
+
+func _open_shop_ui(player_index: int) -> void:
+	if shop_ui_scene == null or player_index < 0 or player_index >= _player_nodes.size():
+		return
+	var player = _player_nodes[player_index]
+	if player == null or not is_instance_valid(player):
+		return
+	_shop_active_player_index = player_index
+	_shop_selection_index = 0
+	_shop_nav_left_pressed = false
+	_shop_nav_right_pressed = false
+	_shop_confirm_pressed = false
+	_shop_cancel_pressed = false
+	player.set_input_locked(true)
+	if _shop_ui != null and is_instance_valid(_shop_ui):
+		_shop_ui.queue_free()
+	_shop_ui = shop_ui_scene.instantiate()
+	ui_layer.add_child(_shop_ui)
+	_refresh_shop_ui(_current_time_seconds())
+
+func _close_shop_ui(unlock_player: bool = true) -> void:
+	if unlock_player and _shop_active_player_index >= 0 and _shop_active_player_index < _player_nodes.size():
+		var player = _player_nodes[_shop_active_player_index]
+		if player != null and is_instance_valid(player):
+			player.set_input_locked(false)
+	_shop_active_player_index = -1
+	if _shop_ui != null and is_instance_valid(_shop_ui):
+		_shop_ui.queue_free()
+	_shop_ui = null
+	_shop_nav_left_pressed = false
+	_shop_nav_right_pressed = false
+	_shop_confirm_pressed = false
+	_shop_cancel_pressed = false
+
+func _refresh_shop_ui(now: float) -> void:
+	if _shop_ui == null or not is_instance_valid(_shop_ui) or _shop_active_player_index < 0:
+		return
+	var offers: Array = RunState.get_shop_offers_for(_shop_active_player_index)
+	var inventory: PlayerInventoryData = RunState.player_inventories[_shop_active_player_index] if _shop_active_player_index < RunState.player_inventories.size() else null
+	var gold_value: int = int(inventory.gold) if inventory != null else 0
+	if _shop_selection_index > 3:
+		_shop_selection_index = 3
+	_shop_ui.update_state(_shop_active_player_index, offers, gold_value, _shop_selection_index, _shop_room_ready_players, _get_shop_ready_deadline_text(now), _shop_status_message)
+
+func _update_shop_ui(now: float) -> void:
+	if _shop_active_player_index < 0 or _shop_active_player_index >= _player_nodes.size():
+		_close_shop_ui()
+		return
+	var player = _player_nodes[_shop_active_player_index]
+	if player == null or not is_instance_valid(player):
+		_close_shop_ui()
+		return
+	var offers: Array = RunState.get_shop_offers_for(_shop_active_player_index)
+	var selection_count: int = 4
+	var left_pressed: bool = _is_player_nav_left_pressed(player)
+	if left_pressed and not _shop_nav_left_pressed:
+		_shop_selection_index = (_shop_selection_index - 1 + selection_count) % selection_count
+	_shop_nav_left_pressed = left_pressed
+	var right_pressed: bool = _is_player_nav_right_pressed(player)
+	if right_pressed and not _shop_nav_right_pressed:
+		_shop_selection_index = (_shop_selection_index + 1) % selection_count
+	_shop_nav_right_pressed = right_pressed
+	var confirm_pressed: bool = _is_player_take_button_pressed(player)
+	if confirm_pressed and not _shop_confirm_pressed:
+		if _shop_selection_index >= 3:
+			_mark_shop_player_ready(_shop_active_player_index, now)
+			_close_shop_ui()
+			return
+		if _shop_selection_index < offers.size() and offers[_shop_selection_index] is Dictionary:
+			var offer: Dictionary = offers[_shop_selection_index]
+			var preview: Dictionary = RunState.preview_shop_purchase(_shop_active_player_index, str(offer.get("id", "")))
+			if not bool(preview.get("success", false)):
+				_shop_status_message = str(preview.get("summary", "Purchase failed."))
+			elif bool(preview.get("requires_replacement", false)):
+				_begin_shop_weapon_replacement(_shop_active_player_index, offer, preview)
+				return
+			else:
+				var purchase_result: Dictionary = RunState.complete_shop_purchase(_shop_active_player_index, str(offer.get("id", "")))
+				_shop_status_message = str(purchase_result.get("summary", "Purchase complete."))
+				if bool(purchase_result.get("success", false)):
+					_shop_room_log.append(_shop_status_message)
+	_shop_confirm_pressed = confirm_pressed
+	var cancel_pressed: bool = _is_player_scrap_button_pressed(player)
+	if cancel_pressed and not _shop_cancel_pressed:
+		_close_shop_ui()
+		return
+	_shop_cancel_pressed = cancel_pressed
+	_refresh_shop_ui(now)
+
+func _mark_shop_player_ready(player_index: int, now: float) -> void:
+	_shop_room_ready_players[player_index] = true
+	_shop_room_log.append("P%d finished shopping." % (player_index + 1))
+	if _shop_ready_deadline <= 0.0:
+		_shop_ready_deadline = now + 30.0
+
+func _count_ready_shop_players() -> int:
+	var ready_count: int = 0
+	for ready_value in _shop_room_ready_players.values():
+		if bool(ready_value):
+			ready_count += 1
+	return ready_count
+
+func _all_shop_players_ready() -> bool:
+	if _player_nodes.is_empty():
+		return false
+	for player_index in range(_player_nodes.size()):
+		if not bool(_shop_room_ready_players.get(player_index, false)):
+			return false
+	return true
+
+func _get_shop_ready_deadline_text(now: float) -> String:
+	if _shop_ready_deadline <= 0.0:
+		return ""
+	return "Auto-ready in %.1fs" % max(_shop_ready_deadline - now, 0.0)
+
+func _build_shop_summary() -> String:
+	var lines: Array = ["Shop closed."]
+	for log_entry in _shop_room_log:
+		lines.append(str(log_entry))
+	lines.append(RunState.get_gold_summary_text())
+	return "\n".join(lines)
+
+func _reset_shop_room_state() -> void:
+	_shop_room_ready_players = {}
+	_shop_ready_deadline = 0.0
+	_shop_active_player_index = -1
+	_shop_selection_index = 0
+	_shop_nav_left_pressed = false
+	_shop_nav_right_pressed = false
+	_shop_confirm_pressed = false
+	_shop_cancel_pressed = false
+	_shop_interact_pressed = {}
+	_shop_status_message = ""
+	_shop_room_log = []
+	if _shop_active_player_index >= 0 or (_shop_ui != null and is_instance_valid(_shop_ui)):
+		_close_shop_ui()
+	if _shop_station != null and is_instance_valid(_shop_station):
+		_shop_station.queue_free()
+	_shop_station = null
+
+func _is_player_inside_exit_zone(player) -> bool:
+	if player == null or not is_instance_valid(player) or exit_zone == null or exit_zone_shape == null:
+		return false
+	var shape: Shape2D = exit_zone_shape.shape
+	if not (shape is RectangleShape2D):
+		return false
+	var rect_shape: RectangleShape2D = shape as RectangleShape2D
+	var zone_size: Vector2 = rect_shape.size
+	var zone_rect := Rect2(exit_zone.global_position - zone_size * 0.5, zone_size)
+	return zone_rect.has_point(player.global_position)
+
+func _is_player_take_button_pressed(player) -> bool:
+	return _is_player_keyboard_take_pressed(player) or _is_player_gamepad_take_pressed(player)
+
+func _is_player_scrap_button_pressed(player) -> bool:
+	return _is_player_keyboard_scrap_pressed(player) or _is_player_gamepad_scrap_pressed(player)
+
+func _is_player_keyboard_take_pressed(player) -> bool:
+	match int(player.player_id):
+		1:
+			return Input.is_physical_key_pressed(KEY_R)
+		2:
+			return Input.is_physical_key_pressed(KEY_U)
+		_:
+			return false
+
+func _is_player_keyboard_scrap_pressed(player) -> bool:
+	match int(player.player_id):
+		1:
+			return Input.is_physical_key_pressed(KEY_F)
+		2:
+			return Input.is_physical_key_pressed(KEY_H)
+		_:
+			return false
+
+func _is_player_gamepad_take_pressed(player) -> bool:
+	if int(player.gamepad_device_id) < 0:
+		return false
+	if not Input.get_connected_joypads().has(int(player.gamepad_device_id)):
+		return false
+	return Input.is_joy_button_pressed(int(player.gamepad_device_id), JOY_BUTTON_A)
+
+func _is_player_gamepad_scrap_pressed(player) -> bool:
+	if int(player.gamepad_device_id) < 0:
+		return false
+	if not Input.get_connected_joypads().has(int(player.gamepad_device_id)):
+		return false
+	return Input.is_joy_button_pressed(int(player.gamepad_device_id), JOY_BUTTON_B)
+
+func _is_player_nav_left_pressed(player) -> bool:
+	return _is_player_keyboard_move_left_pressed(player) or _is_player_gamepad_nav_left_pressed(player)
+
+func _is_player_nav_right_pressed(player) -> bool:
+	return _is_player_keyboard_move_right_pressed(player) or _is_player_gamepad_nav_right_pressed(player)
+
+func _is_player_keyboard_move_left_pressed(player) -> bool:
+	match int(player.player_id):
+		1:
+			return Input.is_physical_key_pressed(KEY_A)
+		2:
+			return Input.is_physical_key_pressed(KEY_J)
+		_:
+			return false
+
+func _is_player_keyboard_move_right_pressed(player) -> bool:
+	match int(player.player_id):
+		1:
+			return Input.is_physical_key_pressed(KEY_D)
+		2:
+			return Input.is_physical_key_pressed(KEY_L)
+		_:
+			return false
+
+func _is_player_gamepad_nav_left_pressed(player) -> bool:
+	if int(player.gamepad_device_id) < 0:
+		return false
+	if not Input.get_connected_joypads().has(int(player.gamepad_device_id)):
+		return false
+	return Input.get_joy_axis(int(player.gamepad_device_id), JOY_AXIS_LEFT_X) <= -0.5
+
+func _is_player_gamepad_nav_right_pressed(player) -> bool:
+	if int(player.gamepad_device_id) < 0:
+		return false
+	if not Input.get_connected_joypads().has(int(player.gamepad_device_id)):
+		return false
+	return Input.get_joy_axis(int(player.gamepad_device_id), JOY_AXIS_LEFT_X) >= 0.5
 
 func _show_room_intro() -> void:
 	if _is_boss_room():
@@ -1226,6 +1914,9 @@ func _show_room_intro() -> void:
 		if not _active_modifier.is_empty():
 			detail_lines.append("Modifier: %s" % str(_active_modifier.get("name", "Unknown")))
 		modifier_intro_detail_label.text = "\n".join(detail_lines)
+	elif _is_shop_room():
+		modifier_intro_title_label.text = "Objective: Shop"
+		modifier_intro_detail_label.text = str(_room_config.get("description", "Visit the station, buy what you need, then ready up to leave."))
 	else:
 		modifier_intro_title_label.text = "Incoming Modifier: %s" % str(_active_modifier.get("name", "Unknown"))
 		modifier_intro_detail_label.text = str(_active_modifier.get("description", ""))
@@ -1312,6 +2003,9 @@ func _restore_player_health_states() -> void:
 
 func _is_generator_room() -> bool:
 	return str(_room_config.get("room_objective", "survive")) == "destroy_generators"
+
+func _is_shop_room() -> bool:
+	return str(_room_config.get("room_type", "")) == "shop"
 
 func _is_boss_room() -> bool:
 	return str(_room_config.get("room_type", "")) == "boss"
@@ -1551,9 +2245,12 @@ func _build_hud() -> void:
 
 	_hud_root = Control.new()
 	_hud_root.name = "HUDRoot"
-	_hud_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_hud_root.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
 	_hud_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	ui_layer.add_child(_hud_root)
+	_sync_hud_root_size()
+	if not get_viewport().size_changed.is_connected(_on_viewport_size_changed):
+		get_viewport().size_changed.connect(_on_viewport_size_changed)
 
 	_floating_text_layer = Control.new()
 	_floating_text_layer.name = "FloatingTextLayer"
@@ -1562,28 +2259,34 @@ func _build_hud() -> void:
 	_hud_root.add_child(_floating_text_layer)
 	_hide_legacy_debug_ui()
 
-	_player_hud_container = VBoxContainer.new()
-	_player_hud_container.name = "PlayerHUD"
-	_player_hud_container.anchor_top = 1.0
-	_player_hud_container.anchor_bottom = 1.0
-	_player_hud_container.offset_left = 20.0
-	_player_hud_container.offset_top = -186.0
-	_player_hud_container.offset_right = 332.0
-	_player_hud_container.offset_bottom = -20.0
-	_player_hud_container.add_theme_constant_override("separation", 10)
-	_hud_root.add_child(_player_hud_container)
-
+	_player_inventory_huds.clear()
 	for index in range(4):
-		var bar = HealthBarHUDData.new()
-		bar.custom_minimum_size = Vector2(300.0, 34.0)
-		bar.size = Vector2(300.0, 34.0)
+		var player_hud = PlayerInventoryHUDData.new()
+		player_hud.name = "PlayerInventoryHUD%d" % (index + 1)
 		var fill_color := Color(0.7, 0.7, 0.7, 1.0)
+		var align_right: bool = index % 2 == 1
 		if index < _player_configs.size():
 			fill_color = _player_configs[index].tint
-		bar.configure("P%d" % (index + 1), fill_color)
-		bar.visible = false
-		_player_hud_container.add_child(bar)
-		_player_health_bars.append(bar)
+		player_hud.visible = false
+		player_hud.configure_player("P%d" % (index + 1), fill_color, align_right)
+		_hud_root.add_child(player_hud)
+		_player_inventory_huds.append(player_hud)
+	_layout_player_inventory_huds()
+
+	_gold_panel = Panel.new()
+	_gold_panel.name = "GoldPanel"
+	_gold_panel.anchor_left = 1.0
+	_gold_panel.anchor_right = 1.0
+	_gold_panel.offset_left = -232.0
+	_gold_panel.offset_top = 18.0
+	_gold_panel.offset_right = -20.0
+	_gold_panel.offset_bottom = 58.0
+	_hud_root.add_child(_gold_panel)
+	_gold_label = Label.new()
+	_gold_label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_gold_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_gold_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_gold_panel.add_child(_gold_label)
 
 	_modifier_chip_panel = Panel.new()
 	_modifier_chip_panel.name = "ModifierChip"
@@ -1662,24 +2365,70 @@ func _build_hud() -> void:
 	_apply_panel_style(modifier_intro_panel, Color(0.34, 0.72, 0.98, 1.0))
 	_apply_panel_style(pause_panel, Color(0.34, 0.72, 0.98, 1.0))
 	_apply_panel_style(settings_panel, Color(0.34, 0.72, 0.98, 1.0))
+	_apply_panel_style(_gold_panel, Color(0.98, 0.76, 0.22, 1.0))
 	_apply_panel_style(_modifier_chip_panel, Color(0.34, 0.72, 0.98, 1.0))
 	_apply_panel_style(_timer_panel, Color(0.34, 0.72, 0.98, 1.0))
-	_set_room_progress_ui("Ready", "Awaiting room", 1.0, Color(0.34, 0.72, 0.98, 1.0))
+	_set_room_progress_ui("Ready", "Enter the next room.", 1.0, Color(0.34, 0.72, 0.98, 1.0))
+	_refresh_gold_panel()
+	_refresh_player_inventory_huds()
 
-func _refresh_player_health_bars() -> void:
-	if _player_health_bars.is_empty():
+func _sync_hud_root_size() -> void:
+	if _hud_root == null:
 		return
-	for index in range(_player_health_bars.size()):
-		var bar = _player_health_bars[index]
-		var has_player := index < _player_nodes.size()
-		bar.visible = has_player
+	var viewport_size: Vector2 = get_viewport_rect().size
+	_hud_root.position = Vector2.ZERO
+	_hud_root.size = viewport_size
+
+func _layout_player_inventory_huds() -> void:
+	if _hud_root == null or _player_inventory_huds.is_empty():
+		return
+	for index in range(_player_inventory_huds.size()):
+		var player_hud: Control = _player_inventory_huds[index]
+		var hud_rect: Rect2 = _get_player_inventory_hud_rect(index)
+		player_hud.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
+		player_hud.position = hud_rect.position
+		player_hud.size = hud_rect.size
+
+func _on_viewport_size_changed() -> void:
+	_sync_hud_root_size()
+	_layout_player_inventory_huds()
+
+func _refresh_player_inventory_huds() -> void:
+	if _player_inventory_huds.is_empty():
+		return
+	for index in range(_player_inventory_huds.size()):
+		var hud = _player_inventory_huds[index]
+		var has_player: bool = index < _player_nodes.size()
+		hud.visible = has_player
 		if not has_player:
 			continue
 		var player = _player_nodes[index]
-		bar.configure("P%d  %s" % [player.player_id, player.get_primary_profile_name()], player.player_config.tint)
-		var health_state: Dictionary = player.get_health_state()
-		var status_text := "DOWN" if player.is_downed() else _build_compact_secondary_status(player)
-		bar.set_health(int(health_state.get("current", 0)), int(health_state.get("max", 1)), status_text)
+		var gold_value: int = 0
+		if index < RunState.player_inventories.size():
+			gold_value = int((RunState.player_inventories[index] as PlayerInventoryData).gold)
+		hud.update_hud({
+			"header": "P%d  %s" % [player.player_id, player.get_aim_mode_name()],
+			"gold": gold_value,
+			"health_state": player.get_health_state(),
+			"health_status": player.get_health_status_text(),
+			"primary_slots": player.get_primary_slot_hud_data(),
+			"secondary_slots": player.get_secondary_slot_hud_data(),
+			"passives": RunState.get_player_passive_display_names(index),
+		})
+
+func _get_player_inventory_hud_rect(index: int) -> Rect2:
+	var width: float = 300.0
+	var height: float = 164.0
+	var side_margin: float = 32.0
+	var bottom_margin: float = 180.0
+	var row_spacing: float = 16.0
+	var row_index: int = 0 if index < 2 else 1
+	var column_index: int = index % 2
+	var right_aligned: bool = column_index == 1
+	var viewport_size: Vector2 = _hud_root.size if _hud_root != null else get_viewport_rect().size
+	var x_position: float = viewport_size.x - side_margin - width if right_aligned else side_margin
+	var y_position: float = viewport_size.y - bottom_margin - height - float(row_index) * (height + row_spacing)
+	return Rect2(Vector2(x_position, y_position), Vector2(width, height))
 
 func _refresh_boss_health_bar() -> void:
 	if _boss_health_bar == null:
@@ -1690,6 +2439,11 @@ func _refresh_boss_health_bar() -> void:
 		return
 	_boss_health_bar.configure(str(_room_config.get("title", "Boss")), Color(0.86, 0.18, 0.18, 1.0))
 	_boss_health_bar.set_health(_boss_node.current_health, _boss_node.max_health)
+
+func _refresh_gold_panel() -> void:
+	if _gold_panel == null or _gold_label == null:
+		return
+	_gold_label.text = "Wallets  %s" % RunState.get_gold_summary_text(true)
 
 func _spawn_world_floating_text(content: String, color: Color, world_position: Vector2) -> void:
 	_spawn_screen_floating_text(content, color, _world_to_ui_position(world_position))
@@ -1786,14 +2540,6 @@ func _update_screen_effects() -> void:
 func _apply_screen_effect_setting() -> void:
 	if screen_effects != null and screen_effects.has_method("set_effect_level"):
 		screen_effects.set_effect_level(ProfileState.get_screen_effect_level())
-
-func _build_compact_secondary_status(player) -> String:
-	if player.is_downed():
-		return "Downed"
-	var cooldown: float = player.get_secondary_cooldown_remaining()
-	if cooldown > 0.0:
-		return "%s %.1fs" % [player.get_secondary_profile_name(), cooldown]
-	return "%s Ready" % player.get_secondary_profile_name()
 
 func _hide_legacy_debug_ui() -> void:
 	var legacy_controls: Array = [
@@ -1905,9 +2651,8 @@ func _show_spawn_warning(plan: Array, announcement: String) -> void:
 		_spawn_world_effect(warning, warning_position)
 		_pending_warning_effects.append(warning)
 		var tween := create_tween()
-		tween.set_parallel(true)
 		tween.tween_property(warning, "scale", Vector2(1.7, 1.1), 0.46)
-		tween.tween_property(warning, "color:a", 0.85, 0.12)
+		tween.parallel().tween_property(warning, "color:a", 0.85, 0.12)
 		tween.tween_property(warning, "color:a", 0.0, 0.34)
 	if not announcement.is_empty():
 		_spawn_screen_floating_text(announcement, Color(1.0, 0.72, 0.42, 1.0), Vector2(900.0, 180.0))

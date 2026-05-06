@@ -81,7 +81,7 @@ func setup(type_name: String, combat_owner) -> void:
 			projectile_speed = 340.0
 			projectile_damage = 1
 			preferred_distance = 230.0
-			_projectile_burst_count = 1
+			_projectile_burst_count = 3
 			_projectile_spread_radians = 0.0
 		"charger":
 			enemy_type = EnemyType.CHARGER
@@ -259,7 +259,7 @@ func _update_spitter_behavior(direction: Vector2, distance: float, now: float) -
 			else:
 				_next_projectile_at = now + fire_interval
 		elif _burst_shots_remaining == 0 and now >= _next_projectile_at:
-			_burst_shots_remaining = 3
+			_burst_shots_remaining = _projectile_burst_count
 			_burst_shot_index = 0
 			_next_burst_shot_at = now
 	return base_velocity

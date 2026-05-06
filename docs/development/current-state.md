@@ -6,11 +6,16 @@ Godot `4.6.2` prototype for a same-screen local co-op twin-stick roguelite. The 
 
 ## Current Runtime
 
-- bootstrap setup menu before gameplay
+- player-facing front menu before gameplay:
+  - `Play`
+  - `Meta`
+  - `Settings`
+  - `Debug`
 - `1–4` player pre-run configuration
 - run mode selection before gameplay:
   - `Normal`: HP carries between cleared rooms
   - `Easy`: all players fully heal after each cleared room
+- debug launcher now sits behind its own entry instead of dominating the first screen
 - settings are available before the run and from the in-run pause menu
 - screen effects level is profile-backed and selectable in both menus
 - connected node-map run flow with enforced links between floors
@@ -20,7 +25,21 @@ Godot `4.6.2` prototype for a same-screen local co-op twin-stick roguelite. The 
   - `2–4` nodes on each non-boss row
   - only connected next-row nodes are selectable
   - guaranteed reachable rest/shop presence
-- shared gold, shared upgrades, and shop flow
+- per-player gold wallets and inventories
+- combat and elite rooms now end in:
+  - physical loot drops
+  - Take / Scrap resolution
+  - contested winner rolls when multiple players want the same item
+  - replacement UI when a new weapon collides with full matching slots
+- shop rooms now run in-world:
+  - personal offers per player
+  - personal wallet checks
+  - weapon replacement support on purchase
+  - ready-up before exit opens
+- room clear no longer auto-transitions:
+  - loot or shop resolves first
+  - exit zone opens after resolution
+  - all living players can leave together or wait for auto-exit
 - persistent meta-gold, unlock purchases, and return-to-menu spending loop
 - combat rooms with downed/revive flow
 - combat rooms can now be either:
@@ -42,7 +61,12 @@ Godot `4.6.2` prototype for a same-screen local co-op twin-stick roguelite. The 
 - grenade path and mine path are now separate scene/script runtimes
 - mines place instantly on secondary press and use proximity fuse detonation
 - mine proximity radius was doubled from the initial mine implementation
-- expanded shared item pool now supports `20` items
+- each player now has:
+  - `2` primary weapon slots
+  - `2` secondary weapon slots
+  - independent selected-slot state
+  - passive ownership
+  - `Lv1–Lv5` weapon progression on duplicates
 - modifier pool now includes tactical rules, not just stat pressure
 - wave composition now scales by room depth instead of using one fixed enemy mix
 - boss health now scales modestly with rooms survived before the boss
@@ -51,7 +75,7 @@ Godot `4.6.2` prototype for a same-screen local co-op twin-stick roguelite. The 
   - generator rooms clear only after generators are destroyed and the room is swept
   - enemies can drop gold pickups
   - generators always drop one gold pickup and one food pickup
-  - food heals `1` HP and gold goes straight into shared run gold
+  - food heals `1` HP and gold is awarded into each player wallet
 - enemy roster:
   - `Chaser`: small red dart silhouette
   - `Spitter`: medium magenta hex silhouette
@@ -61,21 +85,30 @@ Godot `4.6.2` prototype for a same-screen local co-op twin-stick roguelite. The 
 ## Active Systems
 
 - `ProfileState` for save data, meta gold, and unlock ownership
-- `RunState` for run progression, loadouts, run-mode health rules, gold, and outcomes
+- `RunState` for run progression, per-player inventories, loadouts, wallet state, shop offers, run-mode health rules, and outcomes
 - `RunFlow` for connected map rendering, node inspection, node selection, and room transitions
-- `CoopManager` for room orchestration, combat spawning, and room-state signaling
+- `CoopManager` for room orchestration, combat spawning, loot/shop resolution, exit flow, and room-state signaling
 - bootstrap debug launcher for:
   - normal run override starts
   - single-room debug launches
   - explicit room/objective/modifier/layout/depth selection
-- JSON-backed items, modifiers, unlocks, enemies, and weapon/loadout tuning
+- JSON-backed passives, weapons, modifiers, unlocks, enemies, and weapon/loadout tuning
 - per-player aim mode selection now lives in the shared settings menu instead of debug-only controls
 - screen effects are user-selectable through the shared settings menu:
   - `Off`
   - `Minimal`
   - `Full`
 - current default profile setting is `Off`
-- styled combat HUD with stacked player bars, modifier chip, timer bar, and polished result/pause/intro panels
+- styled combat HUD with per-player inventory panels, modifier chip, timer bar, and polished result/pause/intro panels
+- each player HUD now exposes:
+  - wallet value
+  - health state
+  - two primary slots
+  - two secondary slots
+  - selected-slot highlight
+  - secondary cooldown bars
+  - passive item strip
+  - lighter transparency so the arena stays readable behind the HUD
 - modifier intro panel plus active room tinting
 - darkness overlay, left-side spawn filtering, and optional friendly fire modifier hooks
 - fixed fullscreen same-screen arena with layout presets: `default`, `crossfire`, `pinch`, `offset`, `boss gate`
@@ -88,10 +121,17 @@ Godot `4.6.2` prototype for a same-screen local co-op twin-stick roguelite. The 
 - player visuals are now partially sprite-backed:
   - player 1 now uses `assets/sprites/player/player_p1_standing.png` while idle
   - player 1 alternates between `assets/sprites/player/player_p1_running.png` and `assets/sprites/player/player_p1_running_alt.png` while moving
-  - player 1 now carries a visible rifle sprite attached to aim direction and mirrored on left aim
+  - player 1 now carries visible primary-weapon sprites attached to aim direction and mirrored on left aim:
+    - `player_rifle.png`
+    - `player_scattergun.png`
+    - `player_slug.png`
   - player projectiles now use `assets/sprites/weapons/player_bullet.png`
   - players 2–4 still use the procedural polygon body
-  - the imported sprite set had its white background removed and the player footprint was enlarged by roughly `33%` to match the current presentation
+  - the imported sprite set had its white background removed and the player/weapon sprite scale was enlarged by roughly `33%`
+  - the player collision radius was also increased to better match the larger presentation
+- player combat pace is currently bumped above the earlier baseline:
+  - primary fire intervals are globally reduced by `20%`
+  - secondary cooldowns are globally reduced by `20%`
 - shared placeholder visual language with player color identity and shooter-tinted projectiles/effects
 - juice stack through `J7`: hit flash, knockback, hitstop, shake, particles, procedural SFX, health bars, floating text, motion polish, screen overlays, and transition polish
 - sprite-generation documentation now lives in-project under `sprites/guidelines/`, separate from runtime assets in `assets/sprites/`
@@ -107,17 +147,20 @@ Godot `4.6.2` prototype for a same-screen local co-op twin-stick roguelite. The 
 - enemy readability now depends on silhouette first, color second
 - layout identity should come from geometry and encounter shape more than full-room palette swaps
 - the combat HUD should read at a glance instead of exposing debug strings
+- the loot, shop, and replacement flows should feel player-facing rather than tool-like
 - grenade and mine roles should stay distinct instead of drifting back into one blended secondary design
 - run structure should vary between attempts through map length, room order, and enemy mix without changing the run-flow contract
 - aim-mode switching should stay in the shared settings UI, not developer-facing controls
 - screen effects should be selectable from the same settings flow and default to clear combat readability
 - sprite generation should follow the in-project guidelines and stay separate from runtime asset storage
+- gamepad dash now lives on `B / O`, not `A / X`
 
 ## Known Gaps
 
 - `3–4` player runtime validation and tuning still need real play coverage
 - full-run pacing and solo-vs-group balance are still not finished
-- bootstrap/front-end productization still has not happened; debug setup still dominates first impression
+- menu cleanup is partially in; there is now a real front door, but setup/debug/meta presentation still needs more polish
+- new loot, shop, and replacement flows still need live UX validation
 - grenade-vs-mine role clarity still needs a live feel pass
 - procedural run pacing and boss scaling still need live validation across several attempts
 - connected-map readability, route feel, and row-to-row pathing still need live validation
@@ -130,24 +173,12 @@ Godot `4.6.2` prototype for a same-screen local co-op twin-stick roguelite. The 
 
 ## Next Step
 
-If work resumes, prefer connected-map validation first, then tuning:
+If work resumes, prefer cleanup and presentation polish over new mechanics:
 
-- verify multiple run seeds for connected-path variety, readability, and route pressure
-- verify reachable/locked/current/visited node states stay clear on the map screen
-- verify rest/shop/boss placement and routing feel understandable without explanation
-- verify multiple run seeds for map variety, pacing, and boss scaling
-- verify generator-room duration, pickup feel, and enemy-cap pressure in `1P` and `2P`
-- verify grenade and mine usefulness, cooldowns, and role separation
-- verify `3–4` player pressure, HUD readability, and revive fairness
-- verify enemy silhouettes and the brighter neutral arena stay readable during heavy combat
-- verify `Darkness`, `One-Way`, and `Friendly Fire` individually in live play
-- verify menu and pause settings for each player-count configuration
-- verify `Off` / `Minimal` / `Full` screen-effect levels behave as expected in live play
-- verify `Normal` and `Easy` run modes both apply the intended HP persistence behavior
-- verify player 1 sprite fit, rifle placement, and motion readability against the enlarged hitbox
-- verify player projectile sprite readability and muzzle alignment during heavy fire
-- verify chaser contact damage now triggers reliably at close range
-- verify debug single-room launches for combat, elite, rest, shop, and boss
-- verify hit feedback and camera feel in live play
-- verify save/load, unlock gating, and relaunch persistence
-- tune full-run duration toward the intended `10–15` minute target
+- simplify the play-setup screen further now that `Play` and `Debug` are separate paths
+- tighten HUD wording and spacing after a few more live readability checks
+- validate the new loot, replacement, and shop UI flow with gamepad-first navigation
+- standardize runtime sprite folder and naming conventions before more art lands
+- update any remaining docs that still describe the old shared-economy progression model
+- keep validating pause/settings/meta routes across different player counts
+- verify debug single-room launches still cover combat, elite, rest, shop, and boss without UI regressions

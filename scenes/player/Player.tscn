@@ -4,7 +4,7 @@
 [ext_resource type="Texture2D" path="res://assets/sprites/player/player_p1_base.png" id="2_a3s1m"]
 
 [sub_resource type="CircleShape2D" id="CircleShape2D_body"]
-radius = 29.3
+radius = 39.0
 
 [node name="Player" type="CharacterBody2D"]
 collision_layer = 1
@@ -51,7 +51,7 @@ scale = Vector2(1.3566, 1.6226)
 
 [node name="SpriteVisual" type="Sprite2D" parent="BodyRoot"]
 visible = false
-scale = Vector2(0.0665, 0.0665)
+scale = Vector2(0.0884, 0.0884)
 texture = ExtResource("2_a3s1m")
 
 [node name="AimPivot" type="Node2D" parent="BodyRoot"]
@@ -59,7 +59,7 @@ texture = ExtResource("2_a3s1m")
 [node name="WeaponSprite" type="Sprite2D" parent="BodyRoot/AimPivot"]
 visible = false
 position = Vector2(8, 4)
-scale = Vector2(0.034, 0.034)
+scale = Vector2(0.0452, 0.0452)
 centered = false
 offset = Vector2(-560, -228)
 

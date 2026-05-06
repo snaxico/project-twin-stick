@@ -1,0 +1,21 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/game/ShopStation.gd" id="1_4ke6n"]
+
+[node name="ShopStation" type="Area2D"]
+script = ExtResource("1_4ke6n")
+monitoring = false
+monitorable = false
+
+[node name="Visual" type="Polygon2D" parent="."]
+color = Color(0.2, 0.72, 0.96, 0.35)
+polygon = PackedVector2Array(-72, -44, 72, -44, 88, 0, 72, 44, -72, 44, -88, 0)
+
+[node name="PromptLabel" type="Label" parent="."]
+offset_left = -160.0
+offset_top = 54.0
+offset_right = 160.0
+offset_bottom = 94.0
+horizontal_alignment = 1
+autowrap_mode = 2
+text = "Interact to shop"
