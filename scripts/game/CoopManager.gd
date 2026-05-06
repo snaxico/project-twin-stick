@@ -874,11 +874,14 @@ func _drop_pickups_for_generator(generator) -> void:
 	_spawn_pickup("food", generator.global_position + Vector2(14.0, -4.0), 1)
 
 func _spawn_pickup(pickup_type: String, origin: Vector2, value: int = 1) -> void:
+	call_deferred("_spawn_pickup_deferred", pickup_type, origin, value)
+
+func _spawn_pickup_deferred(pickup_type: String, origin: Vector2, value: int = 1) -> void:
 	var pickup = pickup_scene.instantiate()
 	pickup.global_position = origin
 	pickup.setup(pickup_type, value)
 	pickup.pickup_collected.connect(_on_pickup_collected)
-	pickups.add_child(pickup)
+	pickups.call_deferred("add_child", pickup)
 
 func _on_pickup_collected(pickup, collector, pickup_type: String, value: int) -> void:
 	var pickup_position: Vector2 = pickup.global_position if pickup != null and is_instance_valid(pickup) else Vector2.ZERO
@@ -1827,7 +1830,7 @@ func _apply_panel_style(panel: Panel, border_color: Color) -> void:
 func _set_room_progress_ui(timer_text: String, encounter_text: String, ratio: float, accent: Color) -> void:
 	if _timer_fill != null and _timer_panel != null:
 		var width: float = max(_timer_panel.size.x - 8.0, 0.0)
-		_timer_fill.size.x = width * clamp(ratio, 0.0, 1.0)
+		_timer_fill.offset_right = 4.0 + width * clamp(ratio, 0.0, 1.0)
 		_timer_fill.color = accent
 	if _timer_label != null:
 		_timer_label.text = timer_text
@@ -1889,7 +1892,7 @@ func _show_spawn_warning(plan: Array, announcement: String) -> void:
 	for entry in plan:
 		if not (entry is Dictionary):
 			continue
-		var position: Vector2 = entry.get("position", Vector2.ZERO)
+		var warning_position: Vector2 = entry.get("position", Vector2.ZERO)
 		var warning := Polygon2D.new()
 		warning.color = Color(1.0, 0.28, 0.22, 0.0)
 		warning.polygon = PackedVector2Array([
@@ -1899,7 +1902,7 @@ func _show_spawn_warning(plan: Array, announcement: String) -> void:
 			Vector2(-18, 10),
 		])
 		warning.scale = Vector2(0.4, 0.4)
-		_spawn_world_effect(warning, position)
+		_spawn_world_effect(warning, warning_position)
 		_pending_warning_effects.append(warning)
 		var tween := create_tween()
 		tween.set_parallel(true)

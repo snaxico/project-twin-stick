@@ -10,23 +10,31 @@ const BASE_GOLD_COMBAT := 2
 const BASE_GOLD_ELITE := 3
 const GOLD_PER_STEP := 0.5
 const GAUNTLET_ROOM_CHANCE := 0.5
+const MAP_COLUMN_COUNT := 5
+const START_ROW_COLUMNS := [1, 2, 3]
 
 var player_configs: Array = []
 var player_health_states: Array = []
 var node_map: Array = []
 var current_step_index: int = 0
 var current_node: Dictionary = {}
+var current_node_id: String = ""
+var visited_node_ids: Array = []
+var reachable_node_ids: Array = []
 var rooms_completed: int = 0
 var gold: int = 0
 var acquired_item_ids: Array = []
 var build_state: Dictionary = {}
 var run_outcome: String = "in_progress"
+var run_mode: String = "normal"
 var debug_run_setup: Dictionary = {}
 
 var _modifier_engine = ModifierEngineData.new()
 var _random := RandomNumberGenerator.new()
 var _items: Array = []
 var _items_by_id: Dictionary = {}
+var _node_lookup: Dictionary = {}
+var _selected_node_id: String = ""
 
 func _ready() -> void:
 	_load_items()
@@ -48,23 +56,56 @@ func start_new_run(configs: Array, debug_options: Dictionary = {}) -> void:
 		})
 
 	node_map = _generate_node_map()
-	print("[RunState] Run seed: %d | Steps: %d" % [_random.seed, node_map.size()])
+	_rebuild_node_lookup()
+	print("[RunState] Run seed: %d | Rows: %d" % [_random.seed, node_map.size()])
 	current_step_index = 0
 	current_node = {}
+	current_node_id = ""
+	_selected_node_id = ""
+	visited_node_ids = []
+	reachable_node_ids = _get_starting_reachable_node_ids()
 	rooms_completed = 0
 	gold = 0
+	run_mode = _normalize_run_mode(str(debug_options.get("run_mode", "normal")))
 	acquired_item_ids = []
 	build_state = _build_default_build_state()
 	_apply_debug_loadout_overrides()
 	run_outcome = "in_progress"
 
 func get_current_options() -> Array:
-	if current_step_index < 0 or current_step_index >= node_map.size():
-		return []
-	return node_map[current_step_index]
+	var options: Array = []
+	for node_id in reachable_node_ids:
+		var node := get_map_node(str(node_id))
+		if not node.is_empty():
+			options.append(node)
+	return options
 
-func set_current_node(node: Dictionary) -> void:
-	current_node = node.duplicate(true)
+func get_map_rows() -> Array:
+	return node_map.duplicate(true)
+
+func get_map_node(node_id: String) -> Dictionary:
+	if not _node_lookup.has(node_id):
+		return {}
+	return (_node_lookup[node_id] as Dictionary).duplicate(true)
+
+func get_reachable_node_ids() -> Array:
+	return reachable_node_ids.duplicate()
+
+func get_visited_node_ids() -> Array:
+	return visited_node_ids.duplicate()
+
+func is_easy_mode() -> bool:
+	return run_mode == "easy"
+
+func select_map_node(node_id: String) -> bool:
+	if not reachable_node_ids.has(node_id):
+		return false
+	var node := get_map_node(node_id)
+	if node.is_empty():
+		return false
+	current_node = node
+	_selected_node_id = node_id
+	return true
 
 func resolve_current_noncombat_node() -> Dictionary:
 	if current_node.is_empty():
@@ -77,6 +118,7 @@ func resolve_current_noncombat_node() -> Dictionary:
 
 	match room_type:
 		"shop":
+			_apply_post_room_recovery()
 			if not is_debug_single_room_mode():
 				_advance_progress()
 			outcome["summary"] = "Shared Gold: %d\nChoose one shared prototype upgrade or leave the shop." % gold
@@ -86,6 +128,7 @@ func resolve_current_noncombat_node() -> Dictionary:
 			outcome["choices"] = _roll_item_choices("shop", 3)
 		_:
 			var result_text := _apply_reward(current_node.get("reward", {}))
+			_apply_post_room_recovery()
 			if not is_debug_single_room_mode():
 				_advance_progress()
 			outcome["summary"] = "%s\n%s" % [room_description, result_text]
@@ -103,11 +146,13 @@ func resolve_current_combat_victory(health_states: Array) -> Dictionary:
 
 	set_player_health_states(health_states)
 	var room_title := str(current_node.get("title", "Room"))
+	var room_type := str(current_node.get("room_type", "combat"))
 	var summary_lines := ["Room cleared."]
 	var gold_gain := int(current_node.get("currency_reward", 0))
 	if gold_gain > 0:
 		gold += gold_gain
 		summary_lines.append("Gained %d Gold. Shared total: %d." % [gold_gain, gold])
+	_apply_post_room_recovery()
 
 	var outcome := _build_outcome(room_title, "\n".join(summary_lines), "next")
 	var reward: Dictionary = current_node.get("reward", {}).duplicate(true)
@@ -128,7 +173,7 @@ func resolve_current_combat_victory(health_states: Array) -> Dictionary:
 		return outcome
 
 	_advance_progress()
-	if str(current_node.get("room_type", "")) == "boss" or is_run_complete():
+	if room_type == "boss" or is_run_complete():
 		run_outcome = "won"
 		outcome["title"] = "Run Victory"
 		outcome["summary"] = "Boss defeated.\n%s" % get_run_summary_text()
@@ -144,8 +189,17 @@ func set_player_health_states(health_states: Array) -> void:
 			"max": int(state.get("max", 5)),
 		})
 
+func _apply_post_room_recovery() -> void:
+	if not is_easy_mode():
+		return
+	for state in player_health_states:
+		state["current"] = int(state.get("max", 5))
+
+func _normalize_run_mode(value: String) -> String:
+	return "easy" if value == "easy" else "normal"
+
 func is_run_complete() -> bool:
-	return current_step_index >= node_map.size()
+	return reachable_node_ids.is_empty() and not current_node_id.is_empty()
 
 func is_debug_single_room_mode() -> bool:
 	return bool(debug_run_setup.get("enabled", false)) and str(debug_run_setup.get("launch_mode", "normal_run")) == "single_room"
@@ -205,83 +259,59 @@ func purchase_shop_item(item_id: String) -> Dictionary:
 func _generate_node_map() -> Array:
 	if is_debug_single_room_mode():
 		return _build_debug_node_map()
-	var run_length := _random.randi_range(RUN_LENGTH_MIN, RUN_LENGTH_MAX)
-	var primary_types: Array = []
-	for _index in range(run_length):
-		primary_types.append("combat")
-
-	var support_slots: Array = []
-	for slot_index in range(1, run_length):
-		support_slots.append(slot_index)
-	if support_slots.size() < 2:
-		print("[RunState] Support slot generation underflow. Falling back to default pattern.")
+	var preboss_row_count := _random.randi_range(RUN_LENGTH_MIN, RUN_LENGTH_MAX)
+	var support_rows: Array = []
+	for row_index in range(1, preboss_row_count):
+		support_rows.append(row_index)
+	if support_rows.size() < 2:
+		print("[RunState] Support row generation underflow. Falling back to default pattern.")
 		return _generate_fallback_node_map()
-	support_slots.shuffle()
-	var rest_slot: int = int(support_slots.pop_back())
-	var shop_slot: int = int(support_slots.pop_back())
+	support_rows.shuffle()
+	var rest_row: int = int(support_rows.pop_back())
+	var shop_row: int = int(support_rows.pop_back())
 
-	for step_index in range(run_length):
-		if step_index == rest_slot:
-			primary_types[step_index] = "rest"
-		elif step_index == shop_slot:
-			primary_types[step_index] = "shop"
-		else:
-			primary_types[step_index] = "elite" if _random.randf() < 0.3 else "combat"
+	var rows: Array = []
+	var previous_columns: Array = START_ROW_COLUMNS.duplicate()
+	rows.append(_build_row_nodes(0, previous_columns, _build_row_room_types(0, previous_columns.size(), -1, -1)))
 
-	_normalize_primary_room_types(primary_types)
+	for row_index in range(1, preboss_row_count):
+		var row_count := _random.randi_range(2, 4)
+		var row_columns := _generate_row_columns(previous_columns, row_count)
+		rows.append(_build_row_nodes(row_index, row_columns, _build_row_room_types(row_index, row_columns.size(), rest_row, shop_row)))
+		previous_columns = row_columns
 
-	var steps: Array = []
-	for step_index in range(run_length):
-		var primary_type: String = str(primary_types[step_index])
-		var alternative_type: String = _pick_alternative_type(primary_type)
-		var options: Array = [
-			_build_node(step_index, 0, _build_room_template(primary_type)),
-			_build_node(step_index, 1, _build_room_template(alternative_type)),
-		]
-		steps.append(options)
-
-	steps.append([
-		_build_node(run_length, 0, _build_room_template("boss")),
+	rows.append([
+		_build_node(preboss_row_count, 2, _build_room_template("boss")),
 	])
+	_link_row_connections(rows)
 
-	if _validate_node_map(steps):
-		return steps
+	if _validate_node_map(rows):
+		return rows
 	print("[RunState] Generated node map failed validation. Falling back to default pattern.")
 	return _generate_fallback_node_map()
 
 func _generate_fallback_node_map() -> Array:
-	var room_patterns := [
-		[
-			_build_room_template("combat"),
-			_build_room_template("rest"),
-		],
-		[
-			_build_room_template("combat"),
-			_build_room_template("shop"),
-		],
-		[
-			_build_room_template("elite"),
-			_build_room_template("combat"),
-		],
-		[
-			_build_room_template("elite"),
-			_build_room_template("rest"),
-		],
-		[
-			_build_room_template("combat"),
-			_build_room_template("elite"),
-		],
-		[
-			_build_room_template("boss"),
-		],
+	var row_columns := [
+		[1, 2, 3],
+		[1, 2, 3],
+		[0, 1, 2],
+		[1, 2],
+		[1, 2, 3],
+		[2],
 	]
-	var steps: Array = []
-	for step_index in range(room_patterns.size()):
-		var options: Array = []
-		for option_index in range(room_patterns[step_index].size()):
-			options.append(_build_node(step_index, option_index, room_patterns[step_index][option_index]))
-		steps.append(options)
-	return steps
+	var row_types := [
+		["combat", "combat", "combat"],
+		["combat", "rest", "combat"],
+		["combat", "shop", "elite"],
+		["elite", "combat"],
+		["combat", "elite", "combat"],
+		["boss"],
+	]
+	var rows: Array = []
+	for row_index in range(row_types.size()):
+		rows.append(_build_row_nodes(row_index, row_columns[row_index], row_types[row_index]))
+	_link_row_connections(rows)
+	return rows
 
 func _build_room_template(room_type: String) -> Dictionary:
 	match room_type:
@@ -353,6 +383,71 @@ func _pick_random_room_type(room_types: Array) -> String:
 		return "combat"
 	return str(room_types[_random.randi_range(0, room_types.size() - 1)])
 
+func _build_row_room_types(row_index: int, row_count: int, rest_row: int, shop_row: int) -> Array:
+	var room_types: Array = []
+	if row_index == 0:
+		for _index in range(row_count):
+			room_types.append("combat")
+		return room_types
+
+	for _index in range(row_count):
+		room_types.append("elite" if _random.randf() < 0.3 else "combat")
+	if row_index == rest_row:
+		room_types[_random.randi_range(0, room_types.size() - 1)] = "rest"
+	elif row_index == shop_row:
+		room_types[_random.randi_range(0, room_types.size() - 1)] = "shop"
+	return room_types
+
+func _generate_row_columns(previous_columns: Array, row_count: int) -> Array:
+	var candidate_starts: Array = []
+	var previous_min := int(previous_columns.front())
+	var previous_max := int(previous_columns.back())
+	for start_column in range(MAP_COLUMN_COUNT - row_count + 1):
+		var end_column := start_column + row_count - 1
+		if start_column < previous_min - 1:
+			continue
+		if end_column > previous_max + 1:
+			continue
+		candidate_starts.append(start_column)
+	if candidate_starts.is_empty():
+		candidate_starts.append(clampi(previous_min, 0, MAP_COLUMN_COUNT - row_count))
+	var chosen_start := int(candidate_starts[_random.randi_range(0, candidate_starts.size() - 1)])
+	var columns: Array = []
+	for offset in range(row_count):
+		columns.append(chosen_start + offset)
+	return columns
+
+func _build_row_nodes(row_index: int, columns: Array, room_types: Array) -> Array:
+	var row_nodes: Array = []
+	for column_index in range(columns.size()):
+		row_nodes.append(_build_node(row_index, int(columns[column_index]), _build_room_template(str(room_types[column_index]))))
+	return row_nodes
+
+func _link_row_connections(rows: Array) -> void:
+	for row_index in range(rows.size() - 1):
+		var current_row: Array = rows[row_index]
+		var next_row: Array = rows[row_index + 1]
+		for node in current_row:
+			if not (node is Dictionary):
+				continue
+			var next_node_ids: Array = []
+			var current_column := int(node.get("column", 0))
+			for next_node in next_row:
+				if not (next_node is Dictionary):
+					continue
+				if abs(current_column - int(next_node.get("column", 0))) <= 1:
+					next_node_ids.append(str(next_node.get("id", "")))
+			node["next_node_ids"] = next_node_ids
+
+func _get_starting_reachable_node_ids() -> Array:
+	if node_map.is_empty():
+		return []
+	var reachable: Array = []
+	for node in node_map[0]:
+		if node is Dictionary:
+			reachable.append(str(node.get("id", "")))
+	return reachable
+
 func _compute_gold_reward(room_type: String, step_index: int) -> int:
 	var step_bonus := int(floor(float(step_index) * GOLD_PER_STEP))
 	match room_type:
@@ -397,42 +492,55 @@ func _validate_node_map(map: Array) -> bool:
 	if not (boss_node is Dictionary) or str(boss_node.get("room_type", "")) != "boss":
 		return false
 
-	var pressure_options := 0
+	var pressure_nodes := 0
 	var has_rest := false
 	var has_shop := false
-	for step_index in range(map.size() - 1):
-		var step_options = map[step_index]
+	var lookup: Dictionary = {}
+	for row_index in range(map.size()):
+		var step_options = map[row_index]
 		if not (step_options is Array) or step_options.is_empty():
 			return false
 		for option in step_options:
 			if not (option is Dictionary):
 				return false
+			var node_id := str(option.get("id", ""))
+			if node_id.is_empty():
+				return false
+			lookup[node_id] = option
 			var room_type := str(option.get("room_type", ""))
 			if _is_pressure_room_type(room_type):
-				pressure_options += 1
+				pressure_nodes += 1
 			elif room_type == "rest":
 				has_rest = true
 			elif room_type == "shop":
 				has_shop = true
+			if row_index < map.size() - 1 and (option.get("next_node_ids", []) as Array).is_empty():
+				return false
 
-	if pressure_options < MIN_COMBAT_ROOMS_BEFORE_BOSS:
+	if pressure_nodes < MIN_COMBAT_ROOMS_BEFORE_BOSS:
 		return false
-	return has_rest and has_shop
+	if not (has_rest and has_shop):
+		return false
+	var reachable_from_start := _collect_reachable_node_ids(map, _extract_row_node_ids(map[0]), lookup)
+	return reachable_from_start.has(str(boss_node.get("id", ""))) and _contains_reachable_room_type(reachable_from_start, lookup, "rest") and _contains_reachable_room_type(reachable_from_start, lookup, "shop")
 
 func _is_pressure_room_type(room_type: String) -> bool:
 	return room_type == "combat" or room_type == "elite"
 
-func _build_node(step_index: int, option_index: int, template: Dictionary) -> Dictionary:
+func _build_node(step_index: int, column: int, template: Dictionary) -> Dictionary:
 	var room_type := str(template.get("room_type", "combat"))
 	var reward: Dictionary = template.get("reward", {}).duplicate(true)
 	var is_elite := room_type == "elite"
 	var node := {
-		"id": "step_%d_option_%d" % [step_index, option_index],
+		"id": "row_%d_col_%d" % [step_index, column],
+		"row": step_index,
+		"column": column,
 		"step_index": step_index,
 		"room_type": room_type,
 		"reward": reward,
 		"reward_label": str(template.get("reward_label", reward.get("label", "No reward"))),
 		"currency_reward": _compute_gold_reward(room_type, step_index),
+		"next_node_ids": [],
 	}
 
 	match room_type:
@@ -581,7 +689,7 @@ func _build_debug_room_node() -> Dictionary:
 	elif room_type == "boss":
 		var boss_layout_id := str(debug_run_setup.get("layout_id", "boss_gate"))
 		template["layout_id"] = "boss_gate" if boss_layout_id == "random" else boss_layout_id
-	return _build_node(step_index, 0, template)
+	return _build_node(step_index, 2, template)
 
 func _resolve_debug_modifier() -> Dictionary:
 	var modifier_mode := str(debug_run_setup.get("modifier_mode", "random"))
@@ -725,7 +833,15 @@ func _apply_item(item: Dictionary) -> String:
 
 func _advance_progress() -> void:
 	rooms_completed += 1
-	current_step_index += 1
+	if not _selected_node_id.is_empty() and not visited_node_ids.has(_selected_node_id):
+		visited_node_ids.append(_selected_node_id)
+	current_node_id = _selected_node_id
+	reachable_node_ids = current_node.get("next_node_ids", []).duplicate()
+	current_step_index = int(current_node.get("row", current_step_index)) + 1
+	_selected_node_id = ""
+	current_node = {}
+	if reachable_node_ids.is_empty():
+		current_step_index = node_map.size()
 
 func _build_outcome(title: String, summary: String, action: String) -> Dictionary:
 	return {
@@ -741,3 +857,42 @@ func _build_outcome(title: String, summary: String, action: String) -> Dictionar
 func _get_random_layout_id() -> String:
 	var layouts := ["default", "crossfire", "pinch", "offset"]
 	return layouts[_random.randi_range(0, layouts.size() - 1)]
+
+func _rebuild_node_lookup() -> void:
+	_node_lookup = {}
+	for row in node_map:
+		if not (row is Array):
+			continue
+		for node in row:
+			if node is Dictionary:
+				_node_lookup[str(node.get("id", ""))] = node
+
+func _extract_row_node_ids(row: Array) -> Array:
+	var node_ids: Array = []
+	for node in row:
+		if node is Dictionary:
+			node_ids.append(str(node.get("id", "")))
+	return node_ids
+
+func _collect_reachable_node_ids(_map: Array, starting_ids: Array, lookup: Dictionary) -> Array:
+	var reachable: Array = []
+	var queue: Array = starting_ids.duplicate()
+	while not queue.is_empty():
+		var node_id := str(queue.pop_front())
+		if reachable.has(node_id) or not lookup.has(node_id):
+			continue
+		reachable.append(node_id)
+		var node: Dictionary = lookup[node_id]
+		for next_node_id in node.get("next_node_ids", []):
+			var next_id := str(next_node_id)
+			if not reachable.has(next_id):
+				queue.append(next_id)
+	return reachable
+
+func _contains_reachable_room_type(reachable_ids: Array, lookup: Dictionary, room_type: String) -> bool:
+	for node_id in reachable_ids:
+		if not lookup.has(node_id):
+			continue
+		if str((lookup[node_id] as Dictionary).get("room_type", "")) == room_type:
+			return true
+	return false

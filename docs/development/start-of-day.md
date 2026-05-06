@@ -61,8 +61,11 @@ Read this first to restore project context quickly, then read `current-state.md`
   - styled result/pause/modifier panels
 - Player visuals are now in transition from pure procedural shapes toward real sprites:
   - player 1 uses a sprite-backed body
+  - player 1 uses one standing frame and two alternating running frames
+  - player 1 also has a visible rifle sprite attached to the aim pivot
+  - player projectiles now use a real bullet sprite
   - players 2–4 still use the current procedural polygon body
-  - gameplay hitbox remains the existing circular collision, with sprite fit adjusted to match it
+  - gameplay hitbox is still circular, but player 1's current footprint was increased to better match the new sprite presentation
 - Settings now live in a shared real UI flow:
   - bootstrap menu `Settings`
   - in-run pause menu `Settings`
@@ -74,11 +77,14 @@ Read this first to restore project context quickly, then read `current-state.md`
 
 - Run map is now procedural, not the old fixed six-step pattern.
 - Each run now generates:
-  - `5–7` pre-boss steps
-  - one guaranteed rest slot
-  - one guaranteed shop slot
+  - `5–7` pre-boss rows plus one boss row
+  - `3` starting nodes
+  - `2–4` nodes on each non-boss row
+  - one guaranteed reachable rest row
+  - one guaranteed reachable shop row
   - mixed combat/elite pressure rooms
-  - a final boss step
+  - linked row-to-row pathing where only connected next nodes are selectable
+  - a final boss row
 - Room rewards and pressure now scale by depth:
   - gold reward
   - survival duration
@@ -90,9 +96,13 @@ Read this first to restore project context quickly, then read `current-state.md`
 - Boss HP now scales slightly with how many rooms were cleared before the boss.
 - Debug setup is now a real launcher, not just starting-gear overrides:
   - `Normal Run` or `Single Room`
+  - run mode: `Normal` or `Easy`
   - explicit room type, objective, modifier, layout, and step selection
   - starting primary, secondary, and gold selection
   - single-room relaunch flow through `RunFlow`
+- Run modes currently behave like this:
+  - `Normal`: HP carries between cleared rooms
+  - `Easy`: all players fully heal after each cleared room
 
 ## Current Priorities
 
@@ -104,25 +114,26 @@ Read this first to restore project context quickly, then read `current-state.md`
 - Keep grenade and mine roles distinct instead of blending them back together.
 - Validate the new HUD and modifier readability in live combat, not just parse/startup.
 - Validate procedural run pacing and variation in live play, not just generation logic.
+- Validate connected-map readability and route feel in live play, not just graph generation.
 - Validate the new aim-settings flow at `1–4` players.
+- Validate `Normal` vs `Easy` room-to-room HP persistence in live play.
+- Validate chaser contact damage and pickup drops in active combat after the recent reliability fixes.
 - Validate `3–4` player behavior and full-run pacing later; do not expand scope casually.
 
 ## Important Runtime Ownership
 
-- `RunState.gd`: cross-room run state, loadouts, gold, progression.
+- `RunState.gd`: cross-room run state, loadouts, gold, progression, and run-mode health persistence.
 - `ProfileState.gd`: persistent profile, meta gold, unlock ownership.
 - `CoopManager.gd`: combat-room orchestration and spawning.
 - `RunFlow.gd`: node-map and room transition flow.
-- `Bootstrap.gd`: pre-run player setup, debug start options, and aim settings menu.
-- `Bootstrap.gd`: pre-run player setup, debug start options, and shared settings menu.
-- `Bootstrap.gd`: also owns the debug run launcher UI.
+- `Bootstrap.gd`: pre-run player setup, run-mode selection, shared settings, and the debug run launcher UI.
 - `ScreenEffects.gd`: runtime post-process layer, now controlled by the settings menu.
 - `assets/sprites/`: runtime sprite assets used by the game.
 - `sprites/guidelines/`: sprite-generation prompts and rules, kept separate from runtime assets.
 - `data/items.json`: shared reward/shop item definitions.
 - `data/modifiers.json`: room modifier tuning.
 - `Enemy.gd`: enemy silhouettes, hitbox sizing, and motion identity.
-- `CoopManager.gd`: now also owns generator-room orchestration and pickup handling.
+- `CoopManager.gd`: now also owns generator-room orchestration, pickup handling, and the deferred pickup attach path.
 
 ## Validation Reminder
 

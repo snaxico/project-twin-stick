@@ -21,7 +21,7 @@
 
 - No autoloads in Patches 0-4.
 - Introduce exactly one autoload in Patch 5: `RunState.gd`.
-- `RunState.gd` owns cross-room run state only: active players, health persistence, node progression, current node selection, acquired upgrades, shared gold, and run outcome.
+- `RunState.gd` owns cross-room run state only: active players, health persistence, run-mode recovery rules, node progression, current node selection, acquired upgrades, shared gold, and run outcome.
 - Patch 9 introduces `ProfileState.gd` for persistent save data, meta currency, and unlock ownership outside individual runs.
 
 ## Input And Bootstrap Note
@@ -30,16 +30,21 @@
 - Aim and some control routing are resolved through a code-side control layer so the prototype can stay clean and playable without premature editor-side input plumbing.
 - Keyboard control currently uses mouse aim, left mouse primary fire, and right mouse secondary fire.
 - Gamepad control currently uses `R2` for primary fire, `L2` for secondary, and a movement-first dash direction with aim fallback.
-- Runtime aim-mode switching still uses a small debug HUD. A proper pause-menu flow remains deferred.
-- Player count and control source selection happen in a bootstrap menu before the run-flow scene starts.
+- Aim mode and screen-effect settings now live in shared bootstrap and pause-menu UI instead of a debug HUD.
+- Player count, control source, and run-mode selection happen in a bootstrap menu before the run-flow scene starts.
 
 ## Run Flow Note
 
 - The bootstrap menu hands off to a run-flow scene instead of opening the room directly.
-- `RunFlow` owns node selection and room transitions.
+- `RunFlow` owns connected-map rendering, node inspection, node selection, and room transitions.
 - `GameWorld` remains the combat-room runtime and receives per-room configuration from the selected node.
-- `RunState` persists health, gold, acquired items, current node, and final run outcome across those transitions.
+- `RunState` persists health, run-mode recovery behavior, gold, acquired items, connected-map progression, reachable node state, and final run outcome across those transitions.
 - `ProfileState` persists unlocks and meta currency across application launches and gates which run upgrades may appear in reward/shop pools.
+- Mainline run flow now uses a row-based connected graph:
+  - start row exposes three nodes
+  - non-boss rows expose `2–4` nodes across fixed columns
+  - edges only connect to the next row and only stay in the same column or move by one column
+  - debug single-room flow remains a separate simplified path
 
 ## Core Data Contracts
 

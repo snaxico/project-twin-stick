@@ -134,10 +134,10 @@ func apply_boss_scale(player_count: int) -> void:
 	if enemy_type != EnemyType.BOSS:
 		return
 
-	var scale: float = 1.0 + float(max(player_count - 1, 0)) * 0.6
-	max_health = int(round(max_health * scale))
+	var health_scale: float = 1.0 + float(maxi(player_count - 1, 0)) * 0.6
+	max_health = int(round(max_health * health_scale))
 	current_health = max_health
-	projectile_damage += max(player_count - 1, 0)
+	projectile_damage += maxi(player_count - 1, 0)
 
 func _ready() -> void:
 	if current_health <= 0:
@@ -219,7 +219,7 @@ func _physics_process(_delta: float) -> void:
 	move_and_slide()
 	_apply_motion_polish(now, _delta)
 
-	var contact_range := _contact_range
+	var contact_range: float = maxf(_contact_range, _get_combined_contact_range(target))
 	if distance <= contact_range and now >= _next_contact_at:
 		_next_contact_at = now + (1.0 if enemy_type == EnemyType.BOSS else 0.75)
 		target.apply_damage(contact_damage)
@@ -427,6 +427,24 @@ func _set_collision_radius(radius: float) -> void:
 	if circle != null:
 		circle.radius = radius
 
+func _get_combined_contact_range(target: Node) -> float:
+	var own_radius: float = _get_collision_radius(self)
+	var target_radius: float = _get_collision_radius(target)
+	if own_radius <= 0.0 or target_radius <= 0.0:
+		return 0.0
+	return own_radius + target_radius
+
+func _get_collision_radius(node: Node) -> float:
+	if node == null:
+		return 0.0
+	var shape_node := node.get_node_or_null("CollisionShape2D") as CollisionShape2D
+	if shape_node == null:
+		return 0.0
+	var circle := shape_node.shape as CircleShape2D
+	if circle == null:
+		return 0.0
+	return circle.radius
+
 func _current_time_seconds() -> float:
 	return Time.get_ticks_msec() / 1000.0
 
@@ -446,13 +464,13 @@ func _play_flash(color: Color, duration: float) -> void:
 	if visual == null:
 		return
 	_outline_pulse = 1.2
-	var material := _get_flash_material()
-	material.set_shader_parameter("flash_color", color)
-	material.set_shader_parameter("flash_intensity", 1.0)
+	var flash_material := _get_flash_material()
+	flash_material.set_shader_parameter("flash_color", color)
+	flash_material.set_shader_parameter("flash_intensity", 1.0)
 	if _flash_tween != null and _flash_tween.is_valid():
 		_flash_tween.kill()
 	_flash_tween = create_tween()
-	_flash_tween.tween_property(material, "shader_parameter/flash_intensity", 0.0, duration)
+	_flash_tween.tween_property(flash_material, "shader_parameter/flash_intensity", 0.0, duration)
 
 func _get_flash_material() -> ShaderMaterial:
 	if _flash_material != null:
@@ -491,18 +509,18 @@ func _apply_motion_polish(now: float, delta: float = 0.0) -> void:
 			bob_amount = 5.8
 			bob_frequency = 1.6
 	var bob := sin(now * bob_frequency + _idle_phase) * bob_amount
-	var scale := Vector2.ONE
+	var squash_scale := Vector2.ONE
 	if enemy_type == EnemyType.CHASER and now < _lunge_windup_ends_at:
-		scale = Vector2(1.1, 0.88)
+		squash_scale = Vector2(1.1, 0.88)
 	elif enemy_type == EnemyType.CHASER and now < _lunge_ends_at:
-		scale = Vector2(0.94, 1.18)
+		squash_scale = Vector2(0.94, 1.18)
 	elif enemy_type == EnemyType.CHARGER and now < _charge_windup_ends_at:
-		scale = Vector2(1.18, 0.82)
+		squash_scale = Vector2(1.18, 0.82)
 	elif enemy_type == EnemyType.CHARGER and now < _charge_dash_ends_at:
-		scale = Vector2(0.92, 1.22)
+		squash_scale = Vector2(0.92, 1.22)
 	body_root.position = _base_body_root_position + Vector2(0.0, bob)
 	body_root.rotation = lerp_angle(body_root.rotation, clamp(velocity.x / max(move_speed, 1.0), -1.0, 1.0) * 0.08, 0.12)
-	body_root.scale = scale
+	body_root.scale = squash_scale
 	if outline != null:
 		outline.scale = visual.scale * 1.28 * _outline_pulse
 	if shadow != null:

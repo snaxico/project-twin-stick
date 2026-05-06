@@ -30,10 +30,10 @@ anchor_left = 0.5
 anchor_top = 0.5
 anchor_right = 0.5
 anchor_bottom = 0.5
-offset_left = -250.0
-offset_top = -220.0
-offset_right = 250.0
-offset_bottom = 220.0
+offset_left = -320.0
+offset_top = -390.0
+offset_right = 320.0
+offset_bottom = 390.0
 grow_horizontal = 2
 grow_vertical = 2
 
@@ -53,233 +53,253 @@ theme_override_constants/margin_top = 8
 theme_override_constants/margin_right = 8
 theme_override_constants/margin_bottom = 8
 
-[node name="MenuLayout" type="VBoxContainer" parent="MenuPanel/MarginContainer"]
+[node name="MenuScroll" type="ScrollContainer" parent="MenuPanel/MarginContainer"]
 layout_mode = 2
+size_flags_vertical = 3
+
+[node name="MenuLayout" type="VBoxContainer" parent="MenuPanel/MarginContainer/MenuScroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
 theme_override_constants/separation = 12
 
-[node name="Title" type="Label" parent="MenuPanel/MarginContainer/MenuLayout"]
+[node name="Title" type="Label" parent="MenuPanel/MarginContainer/MenuScroll/MenuLayout"]
 layout_mode = 2
 text = "Project Placeholder"
 horizontal_alignment = 1
 
-[node name="Subtitle" type="Label" parent="MenuPanel/MarginContainer/MenuLayout"]
+[node name="Subtitle" type="Label" parent="MenuPanel/MarginContainer/MenuScroll/MenuLayout"]
 layout_mode = 2
-text = "Choose players and control sources"
+text = "Choose players, controls, and run mode"
 horizontal_alignment = 1
 
-[node name="PlayerCountRow" type="HBoxContainer" parent="MenuPanel/MarginContainer/MenuLayout"]
+[node name="PlayerCountRow" type="HBoxContainer" parent="MenuPanel/MarginContainer/MenuScroll/MenuLayout"]
 layout_mode = 2
 theme_override_constants/separation = 12
 
-[node name="PlayerCountLabel" type="Label" parent="MenuPanel/MarginContainer/MenuLayout/PlayerCountRow"]
+[node name="PlayerCountLabel" type="Label" parent="MenuPanel/MarginContainer/MenuScroll/MenuLayout/PlayerCountRow"]
 layout_mode = 2
 size_flags_horizontal = 3
 text = "Player Count"
 
-[node name="PlayerCountOption" type="OptionButton" parent="MenuPanel/MarginContainer/MenuLayout/PlayerCountRow"]
+[node name="PlayerCountOption" type="OptionButton" parent="MenuPanel/MarginContainer/MenuScroll/MenuLayout/PlayerCountRow"]
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="Player1ControlRow" type="HBoxContainer" parent="MenuPanel/MarginContainer/MenuLayout"]
+[node name="RunModeRow" type="HBoxContainer" parent="MenuPanel/MarginContainer/MenuScroll/MenuLayout"]
 layout_mode = 2
 theme_override_constants/separation = 12
 
-[node name="Player1ControlLabel" type="Label" parent="MenuPanel/MarginContainer/MenuLayout/Player1ControlRow"]
+[node name="RunModeLabel" type="Label" parent="MenuPanel/MarginContainer/MenuScroll/MenuLayout/RunModeRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Run Mode"
+
+[node name="RunModeOption" type="OptionButton" parent="MenuPanel/MarginContainer/MenuScroll/MenuLayout/RunModeRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="Player1ControlRow" type="HBoxContainer" parent="MenuPanel/MarginContainer/MenuScroll/MenuLayout"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="Player1ControlLabel" type="Label" parent="MenuPanel/MarginContainer/MenuScroll/MenuLayout/Player1ControlRow"]
 layout_mode = 2
 size_flags_horizontal = 3
 text = "Player 1 Control"
 
-[node name="Player1ControlOption" type="OptionButton" parent="MenuPanel/MarginContainer/MenuLayout/Player1ControlRow"]
+[node name="Player1ControlOption" type="OptionButton" parent="MenuPanel/MarginContainer/MenuScroll/MenuLayout/Player1ControlRow"]
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="Player2ControlRow" type="HBoxContainer" parent="MenuPanel/MarginContainer/MenuLayout"]
+[node name="Player2ControlRow" type="HBoxContainer" parent="MenuPanel/MarginContainer/MenuScroll/MenuLayout"]
 layout_mode = 2
 theme_override_constants/separation = 12
 
-[node name="Player2ControlLabel" type="Label" parent="MenuPanel/MarginContainer/MenuLayout/Player2ControlRow"]
+[node name="Player2ControlLabel" type="Label" parent="MenuPanel/MarginContainer/MenuScroll/MenuLayout/Player2ControlRow"]
 layout_mode = 2
 size_flags_horizontal = 3
 text = "Player 2 Control"
 
-[node name="Player2ControlOption" type="OptionButton" parent="MenuPanel/MarginContainer/MenuLayout/Player2ControlRow"]
+[node name="Player2ControlOption" type="OptionButton" parent="MenuPanel/MarginContainer/MenuScroll/MenuLayout/Player2ControlRow"]
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="Player3ControlRow" type="HBoxContainer" parent="MenuPanel/MarginContainer/MenuLayout"]
+[node name="Player3ControlRow" type="HBoxContainer" parent="MenuPanel/MarginContainer/MenuScroll/MenuLayout"]
 layout_mode = 2
 theme_override_constants/separation = 12
 
-[node name="Player3ControlLabel" type="Label" parent="MenuPanel/MarginContainer/MenuLayout/Player3ControlRow"]
+[node name="Player3ControlLabel" type="Label" parent="MenuPanel/MarginContainer/MenuScroll/MenuLayout/Player3ControlRow"]
 layout_mode = 2
 size_flags_horizontal = 3
 text = "Player 3 Control"
 
-[node name="Player3ControlOption" type="OptionButton" parent="MenuPanel/MarginContainer/MenuLayout/Player3ControlRow"]
+[node name="Player3ControlOption" type="OptionButton" parent="MenuPanel/MarginContainer/MenuScroll/MenuLayout/Player3ControlRow"]
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="Player4ControlRow" type="HBoxContainer" parent="MenuPanel/MarginContainer/MenuLayout"]
+[node name="Player4ControlRow" type="HBoxContainer" parent="MenuPanel/MarginContainer/MenuScroll/MenuLayout"]
 layout_mode = 2
 theme_override_constants/separation = 12
 
-[node name="Player4ControlLabel" type="Label" parent="MenuPanel/MarginContainer/MenuLayout/Player4ControlRow"]
+[node name="Player4ControlLabel" type="Label" parent="MenuPanel/MarginContainer/MenuScroll/MenuLayout/Player4ControlRow"]
 layout_mode = 2
 size_flags_horizontal = 3
 text = "Player 4 Control"
 
-[node name="Player4ControlOption" type="OptionButton" parent="MenuPanel/MarginContainer/MenuLayout/Player4ControlRow"]
+[node name="Player4ControlOption" type="OptionButton" parent="MenuPanel/MarginContainer/MenuScroll/MenuLayout/Player4ControlRow"]
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="DebugModeCheck" type="CheckBox" parent="MenuPanel/MarginContainer/MenuLayout"]
+[node name="DebugModeCheck" type="CheckBox" parent="MenuPanel/MarginContainer/MenuScroll/MenuLayout"]
 layout_mode = 2
 text = "Debug Setup"
 
-[node name="DebugLaunchModeRow" type="HBoxContainer" parent="MenuPanel/MarginContainer/MenuLayout"]
+[node name="DebugLaunchModeRow" type="HBoxContainer" parent="MenuPanel/MarginContainer/MenuScroll/MenuLayout"]
 visible = false
 layout_mode = 2
 theme_override_constants/separation = 12
 
-[node name="DebugLaunchModeLabel" type="Label" parent="MenuPanel/MarginContainer/MenuLayout/DebugLaunchModeRow"]
+[node name="DebugLaunchModeLabel" type="Label" parent="MenuPanel/MarginContainer/MenuScroll/MenuLayout/DebugLaunchModeRow"]
 layout_mode = 2
 size_flags_horizontal = 3
 text = "Debug Launch"
 
-[node name="DebugLaunchModeOption" type="OptionButton" parent="MenuPanel/MarginContainer/MenuLayout/DebugLaunchModeRow"]
+[node name="DebugLaunchModeOption" type="OptionButton" parent="MenuPanel/MarginContainer/MenuScroll/MenuLayout/DebugLaunchModeRow"]
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="DebugPrimaryRow" type="HBoxContainer" parent="MenuPanel/MarginContainer/MenuLayout"]
+[node name="DebugPrimaryRow" type="HBoxContainer" parent="MenuPanel/MarginContainer/MenuScroll/MenuLayout"]
 visible = false
 layout_mode = 2
 theme_override_constants/separation = 12
 
-[node name="DebugPrimaryLabel" type="Label" parent="MenuPanel/MarginContainer/MenuLayout/DebugPrimaryRow"]
+[node name="DebugPrimaryLabel" type="Label" parent="MenuPanel/MarginContainer/MenuScroll/MenuLayout/DebugPrimaryRow"]
 layout_mode = 2
 size_flags_horizontal = 3
 text = "Starting Primary"
 
-[node name="DebugPrimaryOption" type="OptionButton" parent="MenuPanel/MarginContainer/MenuLayout/DebugPrimaryRow"]
+[node name="DebugPrimaryOption" type="OptionButton" parent="MenuPanel/MarginContainer/MenuScroll/MenuLayout/DebugPrimaryRow"]
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="DebugSecondaryRow" type="HBoxContainer" parent="MenuPanel/MarginContainer/MenuLayout"]
+[node name="DebugSecondaryRow" type="HBoxContainer" parent="MenuPanel/MarginContainer/MenuScroll/MenuLayout"]
 visible = false
 layout_mode = 2
 theme_override_constants/separation = 12
 
-[node name="DebugSecondaryLabel" type="Label" parent="MenuPanel/MarginContainer/MenuLayout/DebugSecondaryRow"]
+[node name="DebugSecondaryLabel" type="Label" parent="MenuPanel/MarginContainer/MenuScroll/MenuLayout/DebugSecondaryRow"]
 layout_mode = 2
 size_flags_horizontal = 3
 text = "Starting Secondary"
 
-[node name="DebugSecondaryOption" type="OptionButton" parent="MenuPanel/MarginContainer/MenuLayout/DebugSecondaryRow"]
+[node name="DebugSecondaryOption" type="OptionButton" parent="MenuPanel/MarginContainer/MenuScroll/MenuLayout/DebugSecondaryRow"]
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="DebugStartingGoldRow" type="HBoxContainer" parent="MenuPanel/MarginContainer/MenuLayout"]
+[node name="DebugStartingGoldRow" type="HBoxContainer" parent="MenuPanel/MarginContainer/MenuScroll/MenuLayout"]
 visible = false
 layout_mode = 2
 theme_override_constants/separation = 12
 
-[node name="DebugStartingGoldLabel" type="Label" parent="MenuPanel/MarginContainer/MenuLayout/DebugStartingGoldRow"]
+[node name="DebugStartingGoldLabel" type="Label" parent="MenuPanel/MarginContainer/MenuScroll/MenuLayout/DebugStartingGoldRow"]
 layout_mode = 2
 size_flags_horizontal = 3
 text = "Starting Gold"
 
-[node name="DebugStartingGoldSpinBox" type="SpinBox" parent="MenuPanel/MarginContainer/MenuLayout/DebugStartingGoldRow"]
+[node name="DebugStartingGoldSpinBox" type="SpinBox" parent="MenuPanel/MarginContainer/MenuScroll/MenuLayout/DebugStartingGoldRow"]
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="DebugRoomTypeRow" type="HBoxContainer" parent="MenuPanel/MarginContainer/MenuLayout"]
+[node name="DebugRoomTypeRow" type="HBoxContainer" parent="MenuPanel/MarginContainer/MenuScroll/MenuLayout"]
 visible = false
 layout_mode = 2
 theme_override_constants/separation = 12
 
-[node name="DebugRoomTypeLabel" type="Label" parent="MenuPanel/MarginContainer/MenuLayout/DebugRoomTypeRow"]
+[node name="DebugRoomTypeLabel" type="Label" parent="MenuPanel/MarginContainer/MenuScroll/MenuLayout/DebugRoomTypeRow"]
 layout_mode = 2
 size_flags_horizontal = 3
 text = "Room Type"
 
-[node name="DebugRoomTypeOption" type="OptionButton" parent="MenuPanel/MarginContainer/MenuLayout/DebugRoomTypeRow"]
+[node name="DebugRoomTypeOption" type="OptionButton" parent="MenuPanel/MarginContainer/MenuScroll/MenuLayout/DebugRoomTypeRow"]
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="DebugRoomObjectiveRow" type="HBoxContainer" parent="MenuPanel/MarginContainer/MenuLayout"]
+[node name="DebugRoomObjectiveRow" type="HBoxContainer" parent="MenuPanel/MarginContainer/MenuScroll/MenuLayout"]
 visible = false
 layout_mode = 2
 theme_override_constants/separation = 12
 
-[node name="DebugRoomObjectiveLabel" type="Label" parent="MenuPanel/MarginContainer/MenuLayout/DebugRoomObjectiveRow"]
+[node name="DebugRoomObjectiveLabel" type="Label" parent="MenuPanel/MarginContainer/MenuScroll/MenuLayout/DebugRoomObjectiveRow"]
 layout_mode = 2
 size_flags_horizontal = 3
 text = "Objective"
 
-[node name="DebugRoomObjectiveOption" type="OptionButton" parent="MenuPanel/MarginContainer/MenuLayout/DebugRoomObjectiveRow"]
+[node name="DebugRoomObjectiveOption" type="OptionButton" parent="MenuPanel/MarginContainer/MenuScroll/MenuLayout/DebugRoomObjectiveRow"]
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="DebugModifierRow" type="HBoxContainer" parent="MenuPanel/MarginContainer/MenuLayout"]
+[node name="DebugModifierRow" type="HBoxContainer" parent="MenuPanel/MarginContainer/MenuScroll/MenuLayout"]
 visible = false
 layout_mode = 2
 theme_override_constants/separation = 12
 
-[node name="DebugModifierLabel" type="Label" parent="MenuPanel/MarginContainer/MenuLayout/DebugModifierRow"]
+[node name="DebugModifierLabel" type="Label" parent="MenuPanel/MarginContainer/MenuScroll/MenuLayout/DebugModifierRow"]
 layout_mode = 2
 size_flags_horizontal = 3
 text = "Modifier"
 
-[node name="DebugModifierOption" type="OptionButton" parent="MenuPanel/MarginContainer/MenuLayout/DebugModifierRow"]
+[node name="DebugModifierOption" type="OptionButton" parent="MenuPanel/MarginContainer/MenuScroll/MenuLayout/DebugModifierRow"]
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="DebugLayoutRow" type="HBoxContainer" parent="MenuPanel/MarginContainer/MenuLayout"]
+[node name="DebugLayoutRow" type="HBoxContainer" parent="MenuPanel/MarginContainer/MenuScroll/MenuLayout"]
 visible = false
 layout_mode = 2
 theme_override_constants/separation = 12
 
-[node name="DebugLayoutLabel" type="Label" parent="MenuPanel/MarginContainer/MenuLayout/DebugLayoutRow"]
+[node name="DebugLayoutLabel" type="Label" parent="MenuPanel/MarginContainer/MenuScroll/MenuLayout/DebugLayoutRow"]
 layout_mode = 2
 size_flags_horizontal = 3
 text = "Layout"
 
-[node name="DebugLayoutOption" type="OptionButton" parent="MenuPanel/MarginContainer/MenuLayout/DebugLayoutRow"]
+[node name="DebugLayoutOption" type="OptionButton" parent="MenuPanel/MarginContainer/MenuScroll/MenuLayout/DebugLayoutRow"]
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="DebugStepRow" type="HBoxContainer" parent="MenuPanel/MarginContainer/MenuLayout"]
+[node name="DebugStepRow" type="HBoxContainer" parent="MenuPanel/MarginContainer/MenuScroll/MenuLayout"]
 visible = false
 layout_mode = 2
 theme_override_constants/separation = 12
 
-[node name="DebugStepLabel" type="Label" parent="MenuPanel/MarginContainer/MenuLayout/DebugStepRow"]
+[node name="DebugStepLabel" type="Label" parent="MenuPanel/MarginContainer/MenuScroll/MenuLayout/DebugStepRow"]
 layout_mode = 2
 size_flags_horizontal = 3
 text = "Room Step"
 
-[node name="DebugStepSpinBox" type="SpinBox" parent="MenuPanel/MarginContainer/MenuLayout/DebugStepRow"]
+[node name="DebugStepSpinBox" type="SpinBox" parent="MenuPanel/MarginContainer/MenuScroll/MenuLayout/DebugStepRow"]
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="StatusLabel" type="Label" parent="MenuPanel/MarginContainer/MenuLayout"]
+[node name="StatusLabel" type="Label" parent="MenuPanel/MarginContainer/MenuScroll/MenuLayout"]
 layout_mode = 2
+custom_minimum_size = Vector2(0, 88)
 autowrap_mode = 2
 text = "Status"
 
-[node name="SettingsButton" type="Button" parent="MenuPanel/MarginContainer/MenuLayout"]
+[node name="SettingsButton" type="Button" parent="MenuPanel/MarginContainer/MenuScroll/MenuLayout"]
 layout_mode = 2
 text = "Settings"
 
-[node name="MetaButton" type="Button" parent="MenuPanel/MarginContainer/MenuLayout"]
+[node name="MetaButton" type="Button" parent="MenuPanel/MarginContainer/MenuScroll/MenuLayout"]
 layout_mode = 2
 text = "Meta Progression"
 
-[node name="ResetProfileButton" type="Button" parent="MenuPanel/MarginContainer/MenuLayout"]
+[node name="ResetProfileButton" type="Button" parent="MenuPanel/MarginContainer/MenuScroll/MenuLayout"]
 layout_mode = 2
 text = "Reset Meta Profile"
 
-[node name="StartButton" type="Button" parent="MenuPanel/MarginContainer/MenuLayout"]
+[node name="StartButton" type="Button" parent="MenuPanel/MarginContainer/MenuScroll/MenuLayout"]
 layout_mode = 2
 text = "Start"
 

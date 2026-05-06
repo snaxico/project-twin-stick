@@ -3,6 +3,10 @@ extends CharacterBody2D
 const PlayerConfigData = preload("res://scripts/player/PlayerConfig.gd")
 const AimAssistData = preload("res://scripts/player/AimAssist.gd")
 const DashData = preload("res://scripts/player/Dash.gd")
+const PLAYER_P1_STANDING_TEXTURE_PATH := "res://assets/sprites/player/player_p1_standing.png"
+const PLAYER_P1_RUNNING_TEXTURE_PATH := "res://assets/sprites/player/player_p1_running.png"
+const PLAYER_P1_RUNNING_ALT_TEXTURE_PATH := "res://assets/sprites/player/player_p1_running_alt.png"
+const PLAYER_RIFLE_TEXTURE_PATH := "res://assets/sprites/weapons/player_rifle.png"
 const FLASH_SHADER_CODE := """
 shader_type canvas_item;
 
@@ -41,6 +45,7 @@ signal damage_taken(player, amount, current_health)
 @onready var visual: Polygon2D = $BodyRoot/Visual
 @onready var sprite_visual: Sprite2D = $BodyRoot/SpriteVisual
 @onready var aim_pivot: Node2D = $BodyRoot/AimPivot
+@onready var weapon_sprite: Sprite2D = $BodyRoot/AimPivot/WeaponSprite
 @onready var aim_line_backdrop: Line2D = $BodyRoot/AimPivot/AimLineBackdrop
 @onready var aim_line: Line2D = $BodyRoot/AimPivot/AimLine
 @onready var secondary_preview: Node2D = $SecondaryPreview
@@ -89,6 +94,12 @@ var _base_shadow_scale := Vector2.ONE
 var _display_move_input := Vector2.ZERO
 var _previous_move_input := Vector2.ZERO
 var _sprite_facing_left := false
+var _sprite_is_running := false
+var _standing_sprite_texture: Texture2D = null
+var _running_sprite_texture: Texture2D = null
+var _running_sprite_alt_texture: Texture2D = null
+var _weapon_texture: Texture2D = null
+var _base_weapon_scale := Vector2.ONE
 var _turn_squash := 0.0
 var _aim_line_recoil := 0.0
 var _outline_pulse := 1.0
@@ -241,10 +252,16 @@ func _ready() -> void:
 	add_to_group("player_target")
 	_base_collision_layer = collision_layer
 	_base_collision_mask = collision_mask
+	_standing_sprite_texture = _load_sprite_texture(PLAYER_P1_STANDING_TEXTURE_PATH)
+	_running_sprite_texture = _load_sprite_texture(PLAYER_P1_RUNNING_TEXTURE_PATH)
+	_running_sprite_alt_texture = _load_sprite_texture(PLAYER_P1_RUNNING_ALT_TEXTURE_PATH)
+	_weapon_texture = _load_sprite_texture(PLAYER_RIFLE_TEXTURE_PATH)
 	if visual != null:
 		_base_visual_scale = visual.scale
 	if sprite_visual != null:
 		_base_sprite_scale = sprite_visual.scale
+	if weapon_sprite != null:
+		_base_weapon_scale = weapon_sprite.scale
 	if shadow != null:
 		_base_shadow_scale = shadow.scale
 	current_health = max_health
@@ -493,6 +510,7 @@ func _apply_visual_state(now: float, delta: float = 0.0) -> void:
 	if sprite_visual != null:
 		sprite_visual.visible = use_sprite
 		if sprite_visual.visible:
+			sprite_visual.texture = _get_active_sprite_texture(now)
 			var sprite_scale_x := _base_sprite_scale.x * dash_scale * squash_x
 			if _sprite_facing_left:
 				sprite_scale_x *= -1.0
@@ -512,6 +530,14 @@ func _apply_visual_state(now: float, delta: float = 0.0) -> void:
 	body_root.rotation = lerp_angle(body_root.rotation, lean_target, 0.18)
 	aim_pivot.rotation = aim_direction.angle()
 	aim_pivot.position = Vector2(-_aim_line_recoil * 0.2, 0.0)
+	if weapon_sprite != null:
+		weapon_sprite.visible = use_sprite and _weapon_texture != null
+		if weapon_sprite.visible:
+			weapon_sprite.texture = _weapon_texture
+			weapon_sprite.scale = Vector2(
+				_base_weapon_scale.x,
+				-_base_weapon_scale.y if aim_direction.x < 0.0 else _base_weapon_scale.y
+			)
 	aim_line_backdrop.visible = false
 	aim_line.visible = false
 	_update_secondary_preview(now)
@@ -536,6 +562,7 @@ func _update_animation_state(move_input: Vector2, delta: float) -> void:
 		_sprite_facing_left = true
 	elif move_input.x >= 0.1:
 		_sprite_facing_left = false
+	_sprite_is_running = velocity.length() > 20.0 or move_input.length() > 0.2
 	_display_move_input = _display_move_input.lerp(move_input, clamp(delta * 10.0, 0.0, 1.0))
 	_previous_move_input = move_input if move_input.length() > 0.05 else _previous_move_input.move_toward(Vector2.ZERO, delta * 5.0)
 	_turn_squash = move_toward(_turn_squash, 0.0, delta * 3.8)
@@ -549,12 +576,12 @@ func _play_damage_flash() -> void:
 	if _get_flash_target() == null:
 		return
 	_outline_pulse = 1.18
-	var material := _get_flash_material()
-	material.set_shader_parameter("flash_intensity", 1.0)
+	var flash_material := _get_flash_material()
+	flash_material.set_shader_parameter("flash_intensity", 1.0)
 	if _flash_tween != null and _flash_tween.is_valid():
 		_flash_tween.kill()
 	_flash_tween = create_tween()
-	_flash_tween.tween_property(material, "shader_parameter/flash_intensity", 0.0, 0.12)
+	_flash_tween.tween_property(flash_material, "shader_parameter/flash_intensity", 0.0, 0.12)
 
 func _get_flash_material() -> ShaderMaterial:
 	var flash_target := _get_flash_target()
@@ -576,7 +603,23 @@ func _get_flash_target() -> CanvasItem:
 	return visual
 
 func _uses_sprite_visual() -> bool:
-	return player_id == 1 and sprite_visual != null and sprite_visual.texture != null
+	return player_id == 1 and sprite_visual != null and _standing_sprite_texture != null
+
+func _get_active_sprite_texture(now: float) -> Texture2D:
+	if not _sprite_is_running:
+		return _standing_sprite_texture
+	if _running_sprite_texture == null:
+		return _standing_sprite_texture
+	if _running_sprite_alt_texture == null:
+		return _running_sprite_texture
+	return _running_sprite_texture if int(floor(now * 8.0)) % 2 == 0 else _running_sprite_alt_texture
+
+func _load_sprite_texture(path: String) -> Texture2D:
+	var texture: Texture2D = load(path) as Texture2D
+	if texture == null:
+		push_warning("Failed to load sprite texture: %s" % path)
+		return null
+	return texture
 
 func _update_secondary_preview(now: float) -> void:
 	if secondary_preview == null or secondary_trajectory == null or secondary_target_ring == null or secondary_target_cross == null:

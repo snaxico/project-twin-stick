@@ -1,6 +1,7 @@
 extends Area2D
 
 const ParticleFactoryData = preload("res://scripts/juice/ParticleFactory.gd")
+const PLAYER_BULLET_TEXTURE_PATH := "res://assets/sprites/weapons/player_bullet.png"
 
 @export var lifetime: float = 1.8
 
@@ -16,9 +17,11 @@ var _shooter_node: Node = null
 
 @onready var visual: Polygon2D = $Visual
 @onready var outline: Polygon2D = $Outline
+@onready var sprite_visual: Sprite2D = $SpriteVisual
 
 var _expires_at := 0.0
 var _trail_particles: GPUParticles2D = null
+var _player_bullet_texture: Texture2D = null
 
 func setup(projectile_team: String, projectile_direction: Vector2, projectile_speed: float, projectile_damage: int, projectile_color: Color = Color(1.0, 0.96, 0.7, 1.0), projectile_shooter: Node = null) -> void:
 	team = projectile_team
@@ -33,6 +36,7 @@ func _ready() -> void:
 	area_entered.connect(_on_area_entered)
 	_expires_at = _current_time_seconds() + lifetime
 	rotation = direction.angle()
+	_player_bullet_texture = _load_sprite_texture(PLAYER_BULLET_TEXTURE_PATH)
 	_apply_visual_state()
 	_trail_particles = ParticleFactoryData.create_projectile_trail(_get_projectile_color())
 	add_child(_trail_particles)
@@ -80,6 +84,8 @@ func _apply_visual_state() -> void:
 		return
 	var projectile_color := _get_projectile_color()
 	var enemy_shot := team == "enemy"
+	var use_player_sprite: bool = not enemy_shot and sprite_visual != null and _player_bullet_texture != null
+	visual.visible = not use_player_sprite
 	if enemy_shot:
 		visual.color = projectile_color.lightened(0.12)
 		visual.scale = Vector2(1.32, 1.32)
@@ -99,7 +105,7 @@ func _apply_visual_state() -> void:
 			Vector2(-10, 0),
 		])
 	if outline != null:
-		outline.visible = true
+		outline.visible = not use_player_sprite
 		if enemy_shot:
 			outline.color = Color(1.0, 0.92, 0.82, 0.96)
 		else:
@@ -108,6 +114,18 @@ func _apply_visual_state() -> void:
 			outline.color = player_outline_color
 		outline.scale = visual.scale * 1.24
 		outline.polygon = visual.polygon
+	if sprite_visual != null:
+		sprite_visual.visible = use_player_sprite
+		if sprite_visual.visible:
+			sprite_visual.texture = _player_bullet_texture
+			sprite_visual.modulate = Color.WHITE
+
+func _load_sprite_texture(path: String) -> Texture2D:
+	var texture: Texture2D = load(path) as Texture2D
+	if texture == null:
+		push_warning("Failed to load projectile sprite texture: %s" % path)
+		return null
+	return texture
 
 func _get_projectile_color() -> Color:
 	return tint_color

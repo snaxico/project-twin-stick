@@ -26,10 +26,10 @@ anchor_left = 0.5
 anchor_top = 0.5
 anchor_right = 0.5
 anchor_bottom = 0.5
-offset_left = -360.0
-offset_top = -240.0
-offset_right = 360.0
-offset_bottom = 240.0
+offset_left = -620.0
+offset_top = -360.0
+offset_right = 620.0
+offset_bottom = 360.0
 grow_horizontal = 2
 grow_vertical = 2
 
@@ -55,7 +55,7 @@ theme_override_constants/separation = 14
 
 [node name="MapTitle" type="Label" parent="MapPanel/MarginContainer/MapLayout"]
 layout_mode = 2
-text = "Node Map"
+text = "Connected Node Map"
 horizontal_alignment = 1
 
 [node name="MapStatus" type="Label" parent="MapPanel/MarginContainer/MapLayout"]
@@ -64,15 +64,62 @@ autowrap_mode = 2
 text = "Choose the next room."
 horizontal_alignment = 1
 
-[node name="OptionButton1" type="Button" parent="MapPanel/MarginContainer/MapLayout"]
+[node name="MapGraphFrame" type="PanelContainer" parent="MapPanel/MarginContainer/MapLayout"]
+custom_minimum_size = Vector2(0, 420)
 layout_mode = 2
-custom_minimum_size = Vector2(0, 110)
-text = "Option 1"
 
-[node name="OptionButton2" type="Button" parent="MapPanel/MarginContainer/MapLayout"]
+[node name="GraphMargin" type="MarginContainer" parent="MapPanel/MarginContainer/MapLayout/MapGraphFrame"]
 layout_mode = 2
+theme_override_constants/margin_left = 12
+theme_override_constants/margin_top = 12
+theme_override_constants/margin_right = 12
+theme_override_constants/margin_bottom = 12
+
+[node name="MapGraphArea" type="Control" parent="MapPanel/MarginContainer/MapLayout/MapGraphFrame/GraphMargin"]
+custom_minimum_size = Vector2(0, 396)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="MapLineLayer" type="Node2D" parent="MapPanel/MarginContainer/MapLayout/MapGraphFrame/GraphMargin/MapGraphArea"]
+
+[node name="MapButtonLayer" type="Control" parent="MapPanel/MarginContainer/MapLayout/MapGraphFrame/GraphMargin/MapGraphArea"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 1
+
+[node name="MapDetailPanel" type="Panel" parent="MapPanel/MarginContainer/MapLayout"]
 custom_minimum_size = Vector2(0, 110)
-text = "Option 2"
+layout_mode = 2
+
+[node name="MarginContainer" type="MarginContainer" parent="MapPanel/MarginContainer/MapLayout/MapDetailPanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 14.0
+offset_top = 14.0
+offset_right = -14.0
+offset_bottom = -14.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="MapDetailLayout" type="VBoxContainer" parent="MapPanel/MarginContainer/MapLayout/MapDetailPanel/MarginContainer"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="MapDetailTitle" type="Label" parent="MapPanel/MarginContainer/MapLayout/MapDetailPanel/MarginContainer/MapDetailLayout"]
+layout_mode = 2
+text = "Route Overview"
+
+[node name="MapDetailBody" type="Label" parent="MapPanel/MarginContainer/MapLayout/MapDetailPanel/MarginContainer/MapDetailLayout"]
+layout_mode = 2
+autowrap_mode = 2
+text = "Hover or focus a node to inspect it."
 
 [node name="ResolutionPanel" type="Panel" parent="."]
 visible = false

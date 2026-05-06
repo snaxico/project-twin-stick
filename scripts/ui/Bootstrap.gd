@@ -6,38 +6,39 @@ const RUN_FLOW_SCENE = preload("res://scenes/ui/RunFlow.tscn")
 @onready var game_container: Control = $GameContainer
 @onready var sfx_engine = $SfxEngine
 @onready var menu_panel: Panel = $MenuPanel
-@onready var player_count_option: OptionButton = $MenuPanel/MarginContainer/MenuLayout/PlayerCountRow/PlayerCountOption
-@onready var player_1_control_option: OptionButton = $MenuPanel/MarginContainer/MenuLayout/Player1ControlRow/Player1ControlOption
-@onready var player_2_control_option: OptionButton = $MenuPanel/MarginContainer/MenuLayout/Player2ControlRow/Player2ControlOption
-@onready var player_3_control_option: OptionButton = $MenuPanel/MarginContainer/MenuLayout/Player3ControlRow/Player3ControlOption
-@onready var player_4_control_option: OptionButton = $MenuPanel/MarginContainer/MenuLayout/Player4ControlRow/Player4ControlOption
-@onready var debug_mode_check: CheckBox = $MenuPanel/MarginContainer/MenuLayout/DebugModeCheck
-@onready var debug_launch_mode_row: HBoxContainer = $MenuPanel/MarginContainer/MenuLayout/DebugLaunchModeRow
-@onready var debug_launch_mode_option: OptionButton = $MenuPanel/MarginContainer/MenuLayout/DebugLaunchModeRow/DebugLaunchModeOption
-@onready var debug_primary_row: HBoxContainer = $MenuPanel/MarginContainer/MenuLayout/DebugPrimaryRow
-@onready var debug_primary_option: OptionButton = $MenuPanel/MarginContainer/MenuLayout/DebugPrimaryRow/DebugPrimaryOption
-@onready var debug_secondary_row: HBoxContainer = $MenuPanel/MarginContainer/MenuLayout/DebugSecondaryRow
-@onready var debug_secondary_option: OptionButton = $MenuPanel/MarginContainer/MenuLayout/DebugSecondaryRow/DebugSecondaryOption
-@onready var debug_starting_gold_row: HBoxContainer = $MenuPanel/MarginContainer/MenuLayout/DebugStartingGoldRow
-@onready var debug_starting_gold_spinbox: SpinBox = $MenuPanel/MarginContainer/MenuLayout/DebugStartingGoldRow/DebugStartingGoldSpinBox
-@onready var debug_room_type_row: HBoxContainer = $MenuPanel/MarginContainer/MenuLayout/DebugRoomTypeRow
-@onready var debug_room_type_option: OptionButton = $MenuPanel/MarginContainer/MenuLayout/DebugRoomTypeRow/DebugRoomTypeOption
-@onready var debug_room_objective_row: HBoxContainer = $MenuPanel/MarginContainer/MenuLayout/DebugRoomObjectiveRow
-@onready var debug_room_objective_option: OptionButton = $MenuPanel/MarginContainer/MenuLayout/DebugRoomObjectiveRow/DebugRoomObjectiveOption
-@onready var debug_modifier_row: HBoxContainer = $MenuPanel/MarginContainer/MenuLayout/DebugModifierRow
-@onready var debug_modifier_option: OptionButton = $MenuPanel/MarginContainer/MenuLayout/DebugModifierRow/DebugModifierOption
-@onready var debug_layout_row: HBoxContainer = $MenuPanel/MarginContainer/MenuLayout/DebugLayoutRow
-@onready var debug_layout_option: OptionButton = $MenuPanel/MarginContainer/MenuLayout/DebugLayoutRow/DebugLayoutOption
-@onready var debug_step_row: HBoxContainer = $MenuPanel/MarginContainer/MenuLayout/DebugStepRow
-@onready var debug_step_spinbox: SpinBox = $MenuPanel/MarginContainer/MenuLayout/DebugStepRow/DebugStepSpinBox
-@onready var settings_button: Button = $MenuPanel/MarginContainer/MenuLayout/SettingsButton
-@onready var meta_button: Button = $MenuPanel/MarginContainer/MenuLayout/MetaButton
-@onready var reset_profile_button: Button = $MenuPanel/MarginContainer/MenuLayout/ResetProfileButton
-@onready var start_button: Button = $MenuPanel/MarginContainer/MenuLayout/StartButton
-@onready var player_2_control_row: HBoxContainer = $MenuPanel/MarginContainer/MenuLayout/Player2ControlRow
-@onready var player_3_control_row: HBoxContainer = $MenuPanel/MarginContainer/MenuLayout/Player3ControlRow
-@onready var player_4_control_row: HBoxContainer = $MenuPanel/MarginContainer/MenuLayout/Player4ControlRow
-@onready var status_label: Label = $MenuPanel/MarginContainer/MenuLayout/StatusLabel
+@onready var player_count_option: OptionButton = $MenuPanel/MarginContainer/MenuScroll/MenuLayout/PlayerCountRow/PlayerCountOption
+@onready var run_mode_option: OptionButton = $MenuPanel/MarginContainer/MenuScroll/MenuLayout/RunModeRow/RunModeOption
+@onready var player_1_control_option: OptionButton = $MenuPanel/MarginContainer/MenuScroll/MenuLayout/Player1ControlRow/Player1ControlOption
+@onready var player_2_control_option: OptionButton = $MenuPanel/MarginContainer/MenuScroll/MenuLayout/Player2ControlRow/Player2ControlOption
+@onready var player_3_control_option: OptionButton = $MenuPanel/MarginContainer/MenuScroll/MenuLayout/Player3ControlRow/Player3ControlOption
+@onready var player_4_control_option: OptionButton = $MenuPanel/MarginContainer/MenuScroll/MenuLayout/Player4ControlRow/Player4ControlOption
+@onready var debug_mode_check: CheckBox = $MenuPanel/MarginContainer/MenuScroll/MenuLayout/DebugModeCheck
+@onready var debug_launch_mode_row: HBoxContainer = $MenuPanel/MarginContainer/MenuScroll/MenuLayout/DebugLaunchModeRow
+@onready var debug_launch_mode_option: OptionButton = $MenuPanel/MarginContainer/MenuScroll/MenuLayout/DebugLaunchModeRow/DebugLaunchModeOption
+@onready var debug_primary_row: HBoxContainer = $MenuPanel/MarginContainer/MenuScroll/MenuLayout/DebugPrimaryRow
+@onready var debug_primary_option: OptionButton = $MenuPanel/MarginContainer/MenuScroll/MenuLayout/DebugPrimaryRow/DebugPrimaryOption
+@onready var debug_secondary_row: HBoxContainer = $MenuPanel/MarginContainer/MenuScroll/MenuLayout/DebugSecondaryRow
+@onready var debug_secondary_option: OptionButton = $MenuPanel/MarginContainer/MenuScroll/MenuLayout/DebugSecondaryRow/DebugSecondaryOption
+@onready var debug_starting_gold_row: HBoxContainer = $MenuPanel/MarginContainer/MenuScroll/MenuLayout/DebugStartingGoldRow
+@onready var debug_starting_gold_spinbox: SpinBox = $MenuPanel/MarginContainer/MenuScroll/MenuLayout/DebugStartingGoldRow/DebugStartingGoldSpinBox
+@onready var debug_room_type_row: HBoxContainer = $MenuPanel/MarginContainer/MenuScroll/MenuLayout/DebugRoomTypeRow
+@onready var debug_room_type_option: OptionButton = $MenuPanel/MarginContainer/MenuScroll/MenuLayout/DebugRoomTypeRow/DebugRoomTypeOption
+@onready var debug_room_objective_row: HBoxContainer = $MenuPanel/MarginContainer/MenuScroll/MenuLayout/DebugRoomObjectiveRow
+@onready var debug_room_objective_option: OptionButton = $MenuPanel/MarginContainer/MenuScroll/MenuLayout/DebugRoomObjectiveRow/DebugRoomObjectiveOption
+@onready var debug_modifier_row: HBoxContainer = $MenuPanel/MarginContainer/MenuScroll/MenuLayout/DebugModifierRow
+@onready var debug_modifier_option: OptionButton = $MenuPanel/MarginContainer/MenuScroll/MenuLayout/DebugModifierRow/DebugModifierOption
+@onready var debug_layout_row: HBoxContainer = $MenuPanel/MarginContainer/MenuScroll/MenuLayout/DebugLayoutRow
+@onready var debug_layout_option: OptionButton = $MenuPanel/MarginContainer/MenuScroll/MenuLayout/DebugLayoutRow/DebugLayoutOption
+@onready var debug_step_row: HBoxContainer = $MenuPanel/MarginContainer/MenuScroll/MenuLayout/DebugStepRow
+@onready var debug_step_spinbox: SpinBox = $MenuPanel/MarginContainer/MenuScroll/MenuLayout/DebugStepRow/DebugStepSpinBox
+@onready var settings_button: Button = $MenuPanel/MarginContainer/MenuScroll/MenuLayout/SettingsButton
+@onready var meta_button: Button = $MenuPanel/MarginContainer/MenuScroll/MenuLayout/MetaButton
+@onready var reset_profile_button: Button = $MenuPanel/MarginContainer/MenuScroll/MenuLayout/ResetProfileButton
+@onready var start_button: Button = $MenuPanel/MarginContainer/MenuScroll/MenuLayout/StartButton
+@onready var player_2_control_row: HBoxContainer = $MenuPanel/MarginContainer/MenuScroll/MenuLayout/Player2ControlRow
+@onready var player_3_control_row: HBoxContainer = $MenuPanel/MarginContainer/MenuScroll/MenuLayout/Player3ControlRow
+@onready var player_4_control_row: HBoxContainer = $MenuPanel/MarginContainer/MenuScroll/MenuLayout/Player4ControlRow
+@onready var status_label: Label = $MenuPanel/MarginContainer/MenuScroll/MenuLayout/StatusLabel
 @onready var settings_panel: Panel = $SettingsPanel
 @onready var settings_screen_effect_row: HBoxContainer = $SettingsPanel/MarginContainer/SettingsLayout/ScreenEffectsRow
 @onready var settings_screen_effect_option: OptionButton = $SettingsPanel/MarginContainer/SettingsLayout/ScreenEffectsRow/ScreenEffectsOption
@@ -94,6 +95,7 @@ func _ready() -> void:
 	]
 	_populate_menu()
 	player_count_option.item_selected.connect(_on_player_count_changed)
+	run_mode_option.item_selected.connect(_on_run_mode_changed)
 	debug_mode_check.toggled.connect(_on_debug_mode_toggled)
 	debug_launch_mode_option.item_selected.connect(_on_debug_loadout_changed)
 	debug_primary_option.item_selected.connect(_on_debug_loadout_changed)
@@ -143,6 +145,10 @@ func _populate_menu() -> void:
 	player_count_option.add_item("3 Players")
 	player_count_option.add_item("4 Players")
 	player_count_option.select(0)
+	_populate_profile_option(run_mode_option, [
+		{"label": "Normal", "value": "normal"},
+		{"label": "Easy", "value": "easy"},
+	], "normal")
 
 	_populate_control_option(player_1_control_option, "gamepad")
 	_populate_control_option(player_2_control_option, "gamepad")
@@ -302,6 +308,7 @@ func _refresh_menu_state() -> void:
 	debug_step_row.visible = debug_enabled and single_room_mode
 	_refresh_settings_panel()
 	var debug_text := ""
+	var run_mode_name := run_mode_option.get_item_text(run_mode_option.selected)
 	if debug_enabled:
 		debug_text = "\nDebug: %s | %s / %s | Gold %d" % [
 			debug_launch_mode_option.get_item_text(debug_launch_mode_option.selected),
@@ -319,8 +326,9 @@ func _refresh_menu_state() -> void:
 			if supports_layout:
 				debug_text += " | Layout: %s" % debug_layout_option.get_item_text(debug_layout_option.selected)
 			debug_text += " | Step %d" % int(debug_step_spinbox.value)
-	status_label.text = "%s\nPatch 9 adds persistent unlocks. Player 3 and Player 4 are still intended for gamepad play in the current prototype.%s" % [
+	status_label.text = "%s\nMode: %s. Normal carries HP between rooms; Easy fully restores HP after each cleared room.\nPatch 9 adds persistent unlocks. Player 3 and Player 4 are still intended for gamepad play in the current prototype.%s" % [
 		ProfileState.get_profile_summary_text(),
+		run_mode_name,
 		debug_text,
 	]
 	start_button.text = "Launch Debug Room" if debug_enabled and single_room_mode else "Start"
@@ -338,6 +346,10 @@ func get_selected_player_count() -> int:
 	return player_count_option.selected + 1
 
 func _on_player_count_changed(_index: int) -> void:
+	_play_ui_click()
+	_refresh_menu_state()
+
+func _on_run_mode_changed(_index: int) -> void:
 	_play_ui_click()
 	_refresh_menu_state()
 
@@ -390,6 +402,7 @@ func _build_player_configs() -> Array:
 
 func _build_debug_start_options() -> Dictionary:
 	var options := {
+		"run_mode": str(run_mode_option.get_selected_metadata()),
 		"enabled": debug_mode_check.button_pressed,
 		"launch_mode": _get_debug_launch_mode(),
 		"primary_profile": str(debug_primary_option.get_selected_metadata()),
@@ -547,6 +560,7 @@ func _play_ui_click() -> void:
 func _register_button_animations() -> void:
 	var controls := [
 		player_count_option,
+		run_mode_option,
 		player_1_control_option,
 		player_2_control_option,
 		player_3_control_option,
@@ -583,6 +597,7 @@ func _register_button_animations() -> void:
 func _configure_menu_focus() -> void:
 	var controls := [
 		player_count_option,
+		run_mode_option,
 		player_1_control_option,
 		player_2_control_option,
 		player_3_control_option,
@@ -625,7 +640,7 @@ func _focus_menu_panel() -> void:
 	if debug_mode_check.button_pressed:
 		debug_primary_option.grab_focus()
 		return
-	player_count_option.grab_focus()
+	run_mode_option.grab_focus()
 
 func _focus_meta_panel() -> void:
 	if unlock_button_1.visible and not unlock_button_1.disabled:
@@ -673,13 +688,13 @@ func _animate_button_scale(control: Control, target_scale: Vector2, duration: fl
 	var tween := create_tween()
 	tween.tween_property(control, "scale", target_scale, duration)
 
-func _set_panel_state(panel: Control, show: bool) -> void:
+func _set_panel_state(panel: Control, should_show: bool) -> void:
 	if panel == null:
 		return
 	if not _panel_base_positions.has(panel):
 		_panel_base_positions[panel] = panel.position
 	var base_position: Vector2 = _panel_base_positions[panel]
-	if show:
+	if should_show:
 		panel.visible = true
 		panel.position = base_position + Vector2(0.0, 16.0)
 		panel.modulate.a = 0.0

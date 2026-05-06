@@ -24,7 +24,7 @@ func _init(
 	aim_mode = initial_aim_mode
 
 func cycle_aim_mode() -> void:
-	aim_mode = wrapi(aim_mode + 1, AimMode.HEAVY_AUTO, AimMode.MANUAL + 1)
+	aim_mode = wrapi(aim_mode + 1, AimMode.HEAVY_AUTO, AimMode.MANUAL + 1) as AimMode
 
 func get_aim_mode_name() -> String:
 	match aim_mode:

@@ -8,13 +8,18 @@ Godot `4.6.2` prototype for a same-screen local co-op twin-stick roguelite. The 
 
 - bootstrap setup menu before gameplay
 - `1–4` player pre-run configuration
+- run mode selection before gameplay:
+  - `Normal`: HP carries between cleared rooms
+  - `Easy`: all players fully heal after each cleared room
 - settings are available before the run and from the in-run pause menu
 - screen effects level is profile-backed and selectable in both menus
-- node-map run flow with room choices
+- connected node-map run flow with enforced links between floors
 - run map is now procedural instead of fixed:
-  - `5–7` pre-boss steps
-  - guaranteed rest/shop presence
-  - contrasting room options per step
+  - `5–7` pre-boss rows plus one boss row
+  - `3` starting nodes
+  - `2–4` nodes on each non-boss row
+  - only connected next-row nodes are selectable
+  - guaranteed reachable rest/shop presence
 - shared gold, shared upgrades, and shop flow
 - persistent meta-gold, unlock purchases, and return-to-menu spending loop
 - combat rooms with downed/revive flow
@@ -56,8 +61,8 @@ Godot `4.6.2` prototype for a same-screen local co-op twin-stick roguelite. The 
 ## Active Systems
 
 - `ProfileState` for save data, meta gold, and unlock ownership
-- `RunState` for run progression, loadouts, health carry-over, gold, and outcomes
-- `RunFlow` for node selection and room transitions
+- `RunState` for run progression, loadouts, run-mode health rules, gold, and outcomes
+- `RunFlow` for connected map rendering, node inspection, node selection, and room transitions
 - `CoopManager` for room orchestration, combat spawning, and room-state signaling
 - bootstrap debug launcher for:
   - normal run override starts
@@ -81,9 +86,12 @@ Godot `4.6.2` prototype for a same-screen local co-op twin-stick roguelite. The 
   - subtle fullscreen grid lines for room texture
   - only subtle room-to-room line/accent changes remain
 - player visuals are now partially sprite-backed:
-  - player 1 uses `assets/sprites/player/player_p1_base.png`
+  - player 1 now uses `assets/sprites/player/player_p1_standing.png` while idle
+  - player 1 alternates between `assets/sprites/player/player_p1_running.png` and `assets/sprites/player/player_p1_running_alt.png` while moving
+  - player 1 now carries a visible rifle sprite attached to aim direction and mirrored on left aim
+  - player projectiles now use `assets/sprites/weapons/player_bullet.png`
   - players 2–4 still use the procedural polygon body
-  - the sprite was normalized to a transparent `128x128` asset and scaled to match the existing collision radius
+  - the imported sprite set had its white background removed and the player footprint was enlarged by roughly `33%` to match the current presentation
 - shared placeholder visual language with player color identity and shooter-tinted projectiles/effects
 - juice stack through `J7`: hit flash, knockback, hitstop, shake, particles, procedural SFX, health bars, floating text, motion polish, screen overlays, and transition polish
 - sprite-generation documentation now lives in-project under `sprites/guidelines/`, separate from runtime assets in `assets/sprites/`
@@ -94,6 +102,7 @@ Godot `4.6.2` prototype for a same-screen local co-op twin-stick roguelite. The 
 - current work should favor tuning and readability over new systems
 - ranged pressure has been softened to make the game less oppressive
 - aim lines, projectiles, and arena contrast were pushed toward clearer combat reads
+- player-facing weapon and projectile art should stay readable and anchored to gameplay direction, not just cosmetic placement
 - arena color should read as one world first, with only minor room accent variation
 - enemy readability now depends on silhouette first, color second
 - layout identity should come from geometry and encounter shape more than full-room palette swaps
@@ -108,9 +117,12 @@ Godot `4.6.2` prototype for a same-screen local co-op twin-stick roguelite. The 
 
 - `3–4` player runtime validation and tuning still need real play coverage
 - full-run pacing and solo-vs-group balance are still not finished
+- bootstrap/front-end productization still has not happened; debug setup still dominates first impression
 - grenade-vs-mine role clarity still needs a live feel pass
 - procedural run pacing and boss scaling still need live validation across several attempts
+- connected-map readability, route feel, and row-to-row pathing still need live validation
 - generator-room pacing and pickup feel still need live tuning
+- enemy contact damage and pickup drop flow were recently fixed in code but still need live validation under combat load
 - single-room debug launcher still needs interactive coverage across room types and modifiers
 - new tactical modifiers still need live-behavior tuning and edge-case validation
 - `J1` and `J2` feedback layers still need final intensity tuning in active play
@@ -118,8 +130,11 @@ Godot `4.6.2` prototype for a same-screen local co-op twin-stick roguelite. The 
 
 ## Next Step
 
-If work resumes, prefer tuning and validation:
+If work resumes, prefer connected-map validation first, then tuning:
 
+- verify multiple run seeds for connected-path variety, readability, and route pressure
+- verify reachable/locked/current/visited node states stay clear on the map screen
+- verify rest/shop/boss placement and routing feel understandable without explanation
 - verify multiple run seeds for map variety, pacing, and boss scaling
 - verify generator-room duration, pickup feel, and enemy-cap pressure in `1P` and `2P`
 - verify grenade and mine usefulness, cooldowns, and role separation
@@ -128,7 +143,10 @@ If work resumes, prefer tuning and validation:
 - verify `Darkness`, `One-Way`, and `Friendly Fire` individually in live play
 - verify menu and pause settings for each player-count configuration
 - verify `Off` / `Minimal` / `Full` screen-effect levels behave as expected in live play
-- verify player 1 sprite fit, weapon gap, and motion readability against the existing hitbox
+- verify `Normal` and `Easy` run modes both apply the intended HP persistence behavior
+- verify player 1 sprite fit, rifle placement, and motion readability against the enlarged hitbox
+- verify player projectile sprite readability and muzzle alignment during heavy fire
+- verify chaser contact damage now triggers reliably at close range
 - verify debug single-room launches for combat, elite, rest, shop, and boss
 - verify hit feedback and camera feel in live play
 - verify save/load, unlock gating, and relaunch persistence

@@ -4,7 +4,7 @@
 [ext_resource type="Texture2D" path="res://assets/sprites/player/player_p1_base.png" id="2_a3s1m"]
 
 [sub_resource type="CircleShape2D" id="CircleShape2D_body"]
-radius = 22.0
+radius = 29.3
 
 [node name="Player" type="CharacterBody2D"]
 collision_layer = 1
@@ -14,7 +14,7 @@ script = ExtResource("1_n0xfx")
 [node name="Shadow" type="Polygon2D" parent="."]
 color = Color(0, 0, 0, 0.25)
 polygon = PackedVector2Array(-20, 0, -15, -5, 0, -7, 15, -5, 20, 0, 15, 5, 0, 7, -15, 5)
-scale = Vector2(1.18, 0.58)
+scale = Vector2(1.5694, 0.7714)
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="."]
 shape = SubResource("CircleShape2D_body")
@@ -38,7 +38,7 @@ width = 2.5
 default_color = Color(1, 0.9, 0.4, 0.95)
 
 [node name="BodyRoot" type="Node2D" parent="."]
-position = Vector2(0, -20)
+position = Vector2(0, -26.6)
 
 [node name="Outline" type="Polygon2D" parent="BodyRoot"]
 color = Color(0.04, 0.06, 0.08, 0.92)
@@ -47,14 +47,21 @@ scale = Vector2(1.28, 1.28)
 
 [node name="Visual" type="Polygon2D" parent="BodyRoot"]
 polygon = PackedVector2Array(0, -26, 14, -18, 18, -4, 15, 14, 0, 24, -15, 14, -18, -4, -14, -18)
-scale = Vector2(1.02, 1.22)
+scale = Vector2(1.3566, 1.6226)
 
 [node name="SpriteVisual" type="Sprite2D" parent="BodyRoot"]
 visible = false
-scale = Vector2(0.42, 0.42)
+scale = Vector2(0.0665, 0.0665)
 texture = ExtResource("2_a3s1m")
 
 [node name="AimPivot" type="Node2D" parent="BodyRoot"]
+
+[node name="WeaponSprite" type="Sprite2D" parent="BodyRoot/AimPivot"]
+visible = false
+position = Vector2(8, 4)
+scale = Vector2(0.034, 0.034)
+centered = false
+offset = Vector2(-560, -228)
 
 [node name="AimLineBackdrop" type="Line2D" parent="BodyRoot/AimPivot"]
 width = 8.0

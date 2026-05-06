@@ -11,14 +11,20 @@ void fragment() {
 	COLOR = vec4(0.0, 0.0, 0.0, edge);
 }
 """
+const MAP_BUTTON_SIZE := Vector2(96.0, 60.0)
+const MAP_HORIZONTAL_PADDING := 52.0
+const MAP_VERTICAL_PADDING := 34.0
 
 signal return_to_menu_requested(open_meta_menu: bool)
 
 @onready var map_panel: Panel = $MapPanel
 @onready var map_title_label: Label = $MapPanel/MarginContainer/MapLayout/MapTitle
 @onready var map_status_label: Label = $MapPanel/MarginContainer/MapLayout/MapStatus
-@onready var option_button_1: Button = $MapPanel/MarginContainer/MapLayout/OptionButton1
-@onready var option_button_2: Button = $MapPanel/MarginContainer/MapLayout/OptionButton2
+@onready var map_graph_area: Control = $MapPanel/MarginContainer/MapLayout/MapGraphFrame/GraphMargin/MapGraphArea
+@onready var map_line_layer: Node2D = $MapPanel/MarginContainer/MapLayout/MapGraphFrame/GraphMargin/MapGraphArea/MapLineLayer
+@onready var map_button_layer: Control = $MapPanel/MarginContainer/MapLayout/MapGraphFrame/GraphMargin/MapGraphArea/MapButtonLayer
+@onready var map_detail_title_label: Label = $MapPanel/MarginContainer/MapLayout/MapDetailPanel/MarginContainer/MapDetailLayout/MapDetailTitle
+@onready var map_detail_body_label: Label = $MapPanel/MarginContainer/MapLayout/MapDetailPanel/MarginContainer/MapDetailLayout/MapDetailBody
 @onready var resolution_panel: Panel = $ResolutionPanel
 @onready var resolution_title_label: Label = $ResolutionPanel/MarginContainer/ResolutionLayout/ResolutionTitle
 @onready var resolution_detail_label: Label = $ResolutionPanel/MarginContainer/ResolutionLayout/ResolutionDetail
@@ -45,20 +51,21 @@ var _open_meta_menu_on_return: bool = false
 var _panel_base_positions: Dictionary = {}
 var _transition_overlay: ColorRect = null
 var _transition_material: ShaderMaterial = null
+var _map_buttons: Dictionary = {}
+var _map_hover_node_id: String = ""
 
 func _get_sfx_engine():
 	return get_tree().get_first_node_in_group("sfx_engine")
 
 func _ready() -> void:
 	_build_transition_overlay()
-	option_button_1.pressed.connect(_on_option_button_1_pressed)
-	option_button_2.pressed.connect(_on_option_button_2_pressed)
 	resolution_button.pressed.connect(_on_resolution_button_pressed)
 	run_summary_button.pressed.connect(_on_run_summary_button_pressed)
 	choice_button_1.pressed.connect(_on_choice_button_1_pressed)
 	choice_button_2.pressed.connect(_on_choice_button_2_pressed)
 	choice_button_3.pressed.connect(_on_choice_button_3_pressed)
 	choice_continue_button.pressed.connect(_on_choice_continue_button_pressed)
+	map_graph_area.resized.connect(_on_map_graph_area_resized)
 	_register_button_animations()
 	_configure_menu_focus()
 	_show_map()
@@ -78,61 +85,223 @@ func _show_map() -> void:
 	_set_panel_state(choice_panel, false)
 	_clear_active_game()
 
-	var current_options := RunState.get_current_options()
+	var map_rows: Array = RunState.get_map_rows()
 	if RunState.is_debug_single_room_mode():
 		map_title_label.text = "Debug Room Launcher"
 		map_status_label.text = "Shared Gold: %d. Launch the configured room again or change the setup from the main menu." % RunState.gold
 	else:
-		map_title_label.text = "Node Map"
-		map_status_label.text = "Step %d of %d. Shared Gold: %d. Choose the next room." % [RunState.current_step_index + 1, RunState.node_map.size(), RunState.gold]
+		var current_floor: int = min(RunState.current_step_index + 1, max(map_rows.size(), 1))
+		map_title_label.text = "Connected Node Map"
+		map_status_label.text = "Floor %d of %d. Shared Gold: %d. Pick a connected room." % [current_floor, map_rows.size(), RunState.gold]
 
-	_configure_option_button(option_button_1, current_options[0] if current_options.size() > 0 else {})
-	_configure_option_button(option_button_2, current_options[1] if current_options.size() > 1 else {})
-	call_deferred("_focus_map_panel")
+	map_detail_title_label.text = "Route Overview"
+	map_detail_body_label.text = "Hover or focus a node to inspect its room, modifier, reward, and route state."
+	call_deferred("_refresh_map_panel")
 
-func _configure_option_button(button: Button, node: Dictionary) -> void:
-	if node.is_empty():
-		button.visible = false
+func _refresh_map_panel() -> void:
+	_rebuild_map_graph()
+	_focus_map_panel()
+
+func _rebuild_map_graph() -> void:
+	_clear_map_graph()
+	_map_buttons = {}
+	var map_rows: Array = RunState.get_map_rows()
+	if map_rows.is_empty():
 		return
 
-	button.visible = true
-	var modifier_text := "None"
+	var node_positions: Dictionary = {}
+	for row in map_rows:
+		for node in row:
+			if not (node is Dictionary):
+				continue
+			node_positions[str(node.get("id", ""))] = _get_node_graph_position(node, map_rows.size())
+
+	for row in map_rows:
+		for node in row:
+			if not (node is Dictionary):
+				continue
+			var from_id := str(node.get("id", ""))
+			var from_position: Vector2 = node_positions.get(from_id, Vector2.ZERO)
+			for next_node_id in node.get("next_node_ids", []):
+				var to_id := str(next_node_id)
+				if not node_positions.has(to_id):
+					continue
+				_add_connection_line(from_position, node_positions[to_id], _get_connection_color(from_id, to_id))
+
+	var default_focus_id := ""
+	var reachable_ids: Array = RunState.get_reachable_node_ids()
+	for row in map_rows:
+		for node in row:
+			if not (node is Dictionary):
+				continue
+			var node_id := str(node.get("id", ""))
+			var button := _build_map_button(node, node_positions[node_id], reachable_ids.has(node_id))
+			map_button_layer.add_child(button)
+			_map_buttons[node_id] = button
+			if default_focus_id.is_empty() and reachable_ids.has(node_id):
+				default_focus_id = node_id
+
+	_wire_reachable_focus()
+	if not _map_hover_node_id.is_empty() and _map_buttons.has(_map_hover_node_id):
+		_show_node_details(_map_hover_node_id)
+	elif not default_focus_id.is_empty():
+		_show_node_details(default_focus_id)
+
+func _clear_map_graph() -> void:
+	for child in map_line_layer.get_children():
+		child.queue_free()
+	for child in map_button_layer.get_children():
+		child.queue_free()
+
+func _get_node_graph_position(node: Dictionary, row_count: int) -> Vector2:
+	var width: float = maxf(map_graph_area.size.x, MAP_HORIZONTAL_PADDING * 2.0 + MAP_BUTTON_SIZE.x)
+	var height: float = maxf(map_graph_area.size.y, MAP_VERTICAL_PADDING * 2.0 + MAP_BUTTON_SIZE.y)
+	var usable_width: float = maxf(width - MAP_HORIZONTAL_PADDING * 2.0, 1.0)
+	var usable_height: float = maxf(height - MAP_VERTICAL_PADDING * 2.0, 1.0)
+	var row := int(node.get("row", 0))
+	var column := int(node.get("column", 0))
+	var x: float = MAP_HORIZONTAL_PADDING if row_count <= 1 else MAP_HORIZONTAL_PADDING + usable_width * float(row) / float(row_count - 1)
+	var y: float = MAP_VERTICAL_PADDING + usable_height * float(column) / float(max(RunState.MAP_COLUMN_COUNT - 1, 1))
+	return Vector2(x, y)
+
+func _add_connection_line(from_position: Vector2, to_position: Vector2, color: Color) -> void:
+	var line := Line2D.new()
+	line.width = 4.0
+	line.default_color = color
+	line.antialiased = true
+	line.points = PackedVector2Array([from_position, to_position])
+	map_line_layer.add_child(line)
+
+func _build_map_button(node: Dictionary, button_center: Vector2, is_reachable: bool) -> Button:
+	var button := Button.new()
+	button.custom_minimum_size = MAP_BUTTON_SIZE
+	button.size = MAP_BUTTON_SIZE
+	button.position = button_center - MAP_BUTTON_SIZE * 0.5
+	button.focus_mode = Control.FOCUS_ALL if is_reachable else Control.FOCUS_NONE
+	button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	button.text = _build_node_button_text(node)
+	button.modulate = _get_node_color(node, is_reachable)
+	button.mouse_entered.connect(_on_map_node_hovered.bind(str(node.get("id", ""))))
+	button.focus_entered.connect(_on_map_node_hovered.bind(str(node.get("id", ""))))
+	button.pressed.connect(_on_map_node_pressed.bind(str(node.get("id", ""))))
+	_register_button_animation(button)
+	return button
+
+func _build_node_button_text(node: Dictionary) -> String:
+	var room_type := str(node.get("room_type", "combat"))
+	match room_type:
+		"combat":
+			return "Fight\n+%d Gold" % int(node.get("currency_reward", 0))
+		"elite":
+			return "Elite\n+%d Gold" % int(node.get("currency_reward", 0))
+		"rest":
+			return "Rest\nRecover"
+		"shop":
+			return "Shop\nSpend Gold"
+		"boss":
+			return "Boss\nFinish Run"
+		_:
+			return "Room"
+
+func _get_node_color(node: Dictionary, is_reachable: bool) -> Color:
+	var node_id := str(node.get("id", ""))
+	var room_type := str(node.get("room_type", "combat"))
+	if node_id == RunState.current_node_id:
+		return Color(1.0, 0.84, 0.32, 1.0)
+	if room_type == "boss":
+		return Color(0.86, 0.22, 0.26, 1.0) if is_reachable else Color(0.42, 0.16, 0.18, 0.92)
+	if is_reachable:
+		return Color(0.92, 0.94, 1.0, 1.0)
+	if RunState.visited_node_ids.has(node_id):
+		return Color(0.48, 0.58, 0.68, 0.96)
+	return Color(0.22, 0.25, 0.3, 0.94)
+
+func _get_connection_color(from_id: String, to_id: String) -> Color:
+	if RunState.get_reachable_node_ids().has(to_id):
+		return Color(0.95, 0.92, 0.72, 0.8)
+	if RunState.visited_node_ids.has(from_id) or from_id == RunState.current_node_id:
+		return Color(0.62, 0.72, 0.82, 0.6)
+	return Color(0.24, 0.28, 0.34, 0.65)
+
+func _wire_reachable_focus() -> void:
+	var reachable_buttons: Array = []
+	for node_id in RunState.get_reachable_node_ids():
+		if not _map_buttons.has(node_id):
+			continue
+		var button: Button = _map_buttons[node_id]
+		var node := RunState.get_map_node(str(node_id))
+		reachable_buttons.append({
+			"button": button,
+			"column": int(node.get("column", 0)),
+		})
+	reachable_buttons.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return int(a.get("column", 0)) < int(b.get("column", 0))
+	)
+	for index in range(reachable_buttons.size()):
+		var button: Button = reachable_buttons[index]["button"]
+		button.focus_neighbor_top = button.get_path()
+		button.focus_neighbor_bottom = button.get_path()
+		if index > 0:
+			button.focus_neighbor_top = (reachable_buttons[index - 1]["button"] as Button).get_path()
+		if index < reachable_buttons.size() - 1:
+			button.focus_neighbor_bottom = (reachable_buttons[index + 1]["button"] as Button).get_path()
+
+func _show_node_details(node_id: String) -> void:
+	var node := RunState.get_map_node(node_id)
+	if node.is_empty():
+		return
+	_map_hover_node_id = node_id
+	var state_text := "Locked"
+	if RunState.get_reachable_node_ids().has(node_id):
+		state_text = "Reachable"
+	elif node_id == RunState.current_node_id:
+		state_text = "Current Route"
+	elif RunState.visited_node_ids.has(node_id):
+		state_text = "Visited"
+	map_detail_title_label.text = "%s (%s)" % [str(node.get("title", "Room")), state_text]
+	var detail_lines: Array = []
+	detail_lines.append("Type: %s" % _format_room_type(str(node.get("room_type", "combat"))))
+	if node.has("room_objective"):
+		detail_lines.append("Objective: %s" % _format_objective(str(node.get("room_objective", "survive"))))
 	var modifier_data = node.get("modifier", {})
 	if modifier_data is Dictionary and not modifier_data.is_empty():
-		modifier_text = str(modifier_data.get("name", "Unknown"))
+		detail_lines.append("Modifier: %s" % str(modifier_data.get("name", "Unknown")))
+	else:
+		detail_lines.append("Modifier: None")
+	detail_lines.append("Reward: %s" % str(node.get("reward_label", "No reward")))
+	detail_lines.append(str(node.get("description", "")))
+	map_detail_body_label.text = "\n".join(detail_lines)
 
-	var description := str(node.get("description", ""))
-	if description.is_empty():
-		description = str(node.get("reward_label", ""))
-	var objective_text := ""
-	var room_type := str(node.get("room_type", ""))
-	if room_type == "combat" or room_type == "elite":
-		objective_text = "\nObjective: %s" % str(node.get("room_objective", "survive"))
+func _format_room_type(room_type: String) -> String:
+	match room_type:
+		"combat":
+			return "Combat"
+		"elite":
+			return "Elite"
+		"rest":
+			return "Rest"
+		"shop":
+			return "Shop"
+		"boss":
+			return "Boss"
+		_:
+			return room_type.capitalize()
 
-	button.text = "%s%s\nModifier: %s\nReward: %s\n%s" % [
-		str(node.get("title", "Room")),
-		objective_text,
-		modifier_text,
-		str(node.get("reward_label", "No reward")),
-		description,
-	]
+func _format_objective(objective: String) -> String:
+	match objective:
+		"destroy_generators":
+			return "Destroy Generators"
+		_:
+			return "Survive"
 
-func _on_option_button_1_pressed() -> void:
-	_play_ui_click()
-	_select_option(0)
+func _on_map_node_hovered(node_id: String) -> void:
+	_show_node_details(node_id)
 
-func _on_option_button_2_pressed() -> void:
-	_play_ui_click()
-	_select_option(1)
-
-func _select_option(index: int) -> void:
-	var current_options := RunState.get_current_options()
-	if index < 0 or index >= current_options.size():
+func _on_map_node_pressed(node_id: String) -> void:
+	if not RunState.select_map_node(node_id):
 		return
-
-	var node: Dictionary = current_options[index]
-	RunState.set_current_node(node)
-
+	_play_ui_click()
+	var node := RunState.get_map_node(node_id)
 	match str(node.get("room_type", "combat")):
 		"combat", "elite", "boss":
 			_launch_room(node)
@@ -216,7 +385,7 @@ func _clear_active_game() -> void:
 	Engine.time_scale = 1.0
 	if _active_game != null and is_instance_valid(_active_game):
 		_active_game.queue_free()
-		_active_game = null
+	_active_game = null
 
 func _show_outcome(outcome: Dictionary) -> void:
 	_pending_followup = {}
@@ -349,9 +518,7 @@ func _play_ui_click() -> void:
 		sfx_engine.play_ui_click()
 
 func _register_button_animations() -> void:
-	var controls := [
-		option_button_1,
-		option_button_2,
+	var controls: Array = [
 		resolution_button,
 		run_summary_button,
 		choice_button_1,
@@ -363,9 +530,7 @@ func _register_button_animations() -> void:
 		_register_button_animation(control)
 
 func _configure_menu_focus() -> void:
-	var controls := [
-		option_button_1,
-		option_button_2,
+	var controls: Array = [
 		resolution_button,
 		run_summary_button,
 		choice_button_1,
@@ -379,11 +544,11 @@ func _configure_menu_focus() -> void:
 		control.focus_mode = Control.FOCUS_ALL
 
 func _focus_map_panel() -> void:
-	if option_button_1.visible:
-		option_button_1.grab_focus()
-		return
-	if option_button_2.visible:
-		option_button_2.grab_focus()
+	var reachable_ids: Array = RunState.get_reachable_node_ids()
+	for node_id in reachable_ids:
+		if _map_buttons.has(node_id):
+			(_map_buttons[node_id] as Button).grab_focus()
+			return
 
 func _focus_resolution_panel() -> void:
 	resolution_button.grab_focus()
@@ -433,13 +598,13 @@ func _animate_button_scale(control: Control, target_scale: Vector2, duration: fl
 	var tween := create_tween()
 	tween.tween_property(control, "scale", target_scale, duration)
 
-func _set_panel_state(panel: Control, show: bool) -> void:
+func _set_panel_state(panel: Control, should_show: bool) -> void:
 	if panel == null:
 		return
 	if not _panel_base_positions.has(panel):
 		_panel_base_positions[panel] = panel.position
 	var base_position: Vector2 = _panel_base_positions[panel]
-	if show:
+	if should_show:
 		panel.visible = true
 		panel.position = base_position + Vector2(0.0, 16.0)
 		panel.modulate.a = 0.0
@@ -487,3 +652,7 @@ func _play_transition_wipe() -> void:
 	tween.tween_callback(func() -> void:
 		_transition_overlay.visible = false
 	)
+
+func _on_map_graph_area_resized() -> void:
+	if map_panel.visible:
+		call_deferred("_rebuild_map_graph")
