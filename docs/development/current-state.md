@@ -55,9 +55,34 @@ Godot `4.6.2` prototype for a same-screen local co-op twin-stick roguelite. The 
   - `Rifle`
   - `Scatter`
   - `Slug`
+  - `Incinerator`
+  - `Beam Lance`
+  - `Arc Caster`
 - secondary profiles:
   - thrown: `Grenade`, `Cluster Grenade`, `Siege Grenade`
   - proximity: `Mine`, `Shrapnel Mine`, `Heavy Mine`
+- primary runtime is no longer projectile-only:
+  - `Rifle`, `Scatter`, `Slug` use `projectile`
+  - `Incinerator` uses `cone`
+  - `Beam Lance` uses `beam`
+  - `Arc Caster` uses `chain`
+- primary weapons now compile through the new standard stat model:
+  - `damage`
+  - `fire_rate`
+  - `range`
+  - `area`
+  - `amount`
+- projectile primaries now also consume behavior-specific compiled fields:
+  - `projectile_speed`
+  - `spread_radians`
+  - `pierce_count`
+- passive application is now per-slot for weapons instead of one shared inventory-wide combat state
+- passive tag filtering is now live through optional `requires_tags`
+- hook passives are now implemented with centralized runtime dispatch for:
+  - `on_fire`
+  - `on_hit`
+  - `on_kill`
+  - `on_explosion`
 - grenade path and mine path are now separate scene/script runtimes
 - mines place instantly on secondary press and use proximity fuse detonation
 - mine proximity radius was doubled from the initial mine implementation
@@ -85,9 +110,10 @@ Godot `4.6.2` prototype for a same-screen local co-op twin-stick roguelite. The 
 ## Active Systems
 
 - `ProfileState` for save data, meta gold, and unlock ownership
-- `RunState` for run progression, per-player inventories, loadouts, wallet state, shop offers, run-mode health rules, and outcomes
+- `RunState` for run progression, per-player inventories, loadouts, wallet state, shop offers, run-mode health rules, outcomes, primary stat compilation, tag filtering, and trigger-passive compilation
 - `RunFlow` for connected map rendering, node inspection, node selection, and room transitions
-- `CoopManager` for room orchestration, combat spawning, loot/shop resolution, exit flow, and room-state signaling
+- `CoopManager` for room orchestration, combat spawning, loot/shop resolution, exit flow, room-state signaling, primary behavior execution, and trigger-event processing
+- `PassiveTriggerSystem` for hook-passive throttling and trigger action collection
 - bootstrap debug launcher for:
   - normal run override starts
   - single-room debug launches
@@ -157,6 +183,7 @@ Godot `4.6.2` prototype for a same-screen local co-op twin-stick roguelite. The 
 
 - core loop is approved and should not be replaced casually
 - current work should favor tuning and readability over new systems
+- the primary ruleset/compiler migration is now implemented and should be validated before being widened further
 - ranged pressure has been softened to make the game less oppressive
 - aim lines, projectiles, and arena contrast were pushed toward clearer combat reads
 - player-facing weapon and projectile art should stay readable and anchored to gameplay direction, not just cosmetic placement
@@ -175,6 +202,12 @@ Godot `4.6.2` prototype for a same-screen local co-op twin-stick roguelite. The 
 
 ## Known Gaps
 
+- the newly implemented primary-ruleset migration still needs live gameplay validation
+- new primary behaviors still need feel/tuning passes:
+  - `cone`
+  - `beam`
+  - `chain`
+- hook-based passive interactions still need live balance and readability validation
 - `3–4` player runtime validation and tuning still need real play coverage
 - full-run pacing and solo-vs-group balance are still not finished
 - menu cleanup is partially in; there is now a real front door, but setup/debug/meta presentation still needs more polish
@@ -194,6 +227,10 @@ Godot `4.6.2` prototype for a same-screen local co-op twin-stick roguelite. The 
 
 If work resumes, prefer cleanup and presentation polish over new mechanics:
 
+- run a live validation pass across:
+  - `Rifle`, `Scatter`, `Slug`
+  - `Incinerator`, `Beam Lance`, `Arc Caster`
+  - `range`, `area`, `pierce`, and hook-passive behavior
 - simplify the play-setup screen further now that `Play` and `Debug` are separate paths
 - tighten HUD wording and spacing after a few more live readability checks
 - validate the new loot, replacement, and shop UI flow with gamepad-first navigation
