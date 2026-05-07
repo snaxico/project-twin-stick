@@ -24,7 +24,7 @@ void fragment() {
 }
 """
 
-signal fire_requested(origin, direction, speed, damage, team, color, shooter, feedback_profile, impact_weight)
+signal fire_requested(origin, direction, config)
 signal secondary_requested(origin, direction, speed, damage, team, projectile_data, color)
 signal health_changed(current_health, max_health)
 signal downed(player)
@@ -76,12 +76,14 @@ var _switch_secondary_pressed_last_frame := false
 var _secondary_hold_active := false
 var _is_downed := false
 var _primary_profile_name := "Rifle"
+var _primary_amount := 1
 var _primary_projectile_count := 1
 var _primary_spread_radians := 0.0
+var _primary_pierce_count := 0
 var _secondary_profile_name := "Mine"
 var _secondary_projectile_count := 1
 var _secondary_spread_radians := 0.0
-var _secondary_projectile_data := {
+var _secondary_projectile_data: Dictionary = {
 	"kind": "mine",
 	"explosion_radius": 92.0,
 	"fuse_time": 12.0,
@@ -118,6 +120,12 @@ var _running_sprite_alt_texture: Texture2D = null
 var _weapon_texture: Texture2D = null
 var _weapon_textures_by_id: Dictionary = {}
 var _primary_weapon_id: String = "rifle"
+var _primary_behavior: String = "projectile"
+var _primary_weapon_tags: Array = []
+var _primary_trigger_passives: Array = []
+var _global_trigger_passives: Array = []
+var _primary_range: float = 0.0
+var _primary_area: float = 4.0
 var _primary_feedback_profile: String = "rifle"
 var _secondary_feedback_profile: String = "mine"
 var _primary_impact_weight: float = 1.0
@@ -228,6 +236,7 @@ func set_input_locked(locked: bool) -> void:
 
 func apply_loadout(loadout: Dictionary) -> void:
 	move_speed = float(loadout.get("move_speed", move_speed))
+	_global_trigger_passives = (loadout.get("global_trigger_passives", []) as Array).duplicate(true)
 	_primary_slots = _normalize_slot_loadout_array(loadout.get("primary_slots", []))
 	_secondary_slots = _normalize_slot_loadout_array(loadout.get("secondary_slots", []))
 	if _primary_slots.is_empty():
@@ -350,7 +359,8 @@ func _physics_process(delta: float) -> void:
 		raw_aim_input,
 		move_input,
 		aim_direction,
-		player_config.aim_mode
+		player_config.aim_mode,
+		_primary_range
 	)
 
 	var dash_pressed := _is_dash_pressed()
@@ -670,9 +680,16 @@ func _resolve_selected_slot_index(slot_group: Array, selected_index: int) -> int
 func _apply_selected_slot_state() -> void:
 	var primary_slot: Dictionary = _get_selected_primary_slot()
 	_primary_weapon_id = str(primary_slot.get("weapon_id", "rifle"))
+	_primary_behavior = str(primary_slot.get("primary_behavior", "projectile"))
+	_primary_weapon_tags = (primary_slot.get("primary_weapon_tags", []) as Array).duplicate(true)
+	_primary_trigger_passives = (primary_slot.get("primary_trigger_passives", []) as Array).duplicate(true)
 	_primary_profile_name = str(primary_slot.get("primary_profile_name", "Rifle"))
+	_primary_amount = max(1, int(primary_slot.get("primary_amount", 1)))
 	_primary_projectile_count = max(1, int(primary_slot.get("primary_projectile_count", 1)))
 	_primary_spread_radians = float(primary_slot.get("primary_spread_radians", 0.0))
+	_primary_pierce_count = max(0, int(primary_slot.get("primary_pierce_count", 0)))
+	_primary_range = max(0.0, float(primary_slot.get("primary_range", 0.0)))
+	_primary_area = max(0.1, float(primary_slot.get("primary_area", 4.0)))
 	_primary_feedback_profile = str(primary_slot.get("feedback_profile", "rifle"))
 	_primary_impact_weight = float(primary_slot.get("impact_weight", 1.0))
 	primary_fire_interval = float(primary_slot.get("primary_fire_interval", 0.27))
@@ -701,6 +718,9 @@ func _apply_selected_slot_state() -> void:
 		"proximity_radius": float(secondary_slot.get("secondary_proximity_radius", 52.0)),
 		"feedback_profile": _secondary_feedback_profile,
 		"impact_weight": _secondary_impact_weight,
+		"source_type": "secondary",
+		"weapon_id": str(secondary_slot.get("weapon_id", "")),
+		"trigger_passives": _global_trigger_passives.duplicate(true),
 	}
 
 func _cycle_primary_slot() -> void:
@@ -878,18 +898,47 @@ func _fire_primary(now: float, fire_direction: Vector2) -> void:
 		_primary_feedback_profile,
 		_primary_impact_weight
 	)
+	var projectile_config: Dictionary = {
+		"behavior": _primary_behavior,
+		"weapon_id": _primary_weapon_id,
+		"weapon_tags": _primary_weapon_tags,
+		"trigger_passives": _merge_trigger_passive_lists(_global_trigger_passives, _primary_trigger_passives),
+		"source_type": "primary",
+		"speed": projectile_speed,
+		"damage": projectile_damage,
+		"team": get_team(),
+		"color": projectile_color,
+		"shooter": self,
+		"feedback_profile": _primary_feedback_profile,
+		"impact_weight": _primary_impact_weight,
+		"max_distance": _primary_range,
+		"collision_half_width": _primary_area,
+		"amount": _primary_amount,
+		"spread_radians": _primary_spread_radians,
+		"pierce_count": _primary_pierce_count,
+	}
+	match _primary_behavior:
+		"cone":
+			_fire_primary_cone(fire_direction, projectile_config)
+		"beam":
+			_fire_primary_beam(fire_direction, projectile_config)
+		"chain":
+			_fire_primary_chain(fire_direction, projectile_config)
+		_:
+			_fire_primary_projectile(fire_direction, projectile_config)
+
+func _fire_primary_projectile(fire_direction: Vector2, projectile_config: Dictionary) -> void:
 	for projectile_direction in _build_spread_directions(fire_direction, _primary_projectile_count, _primary_spread_radians):
-		fire_requested.emit(
-			global_position + projectile_direction * 26.0,
-			projectile_direction,
-			projectile_speed,
-			projectile_damage,
-			get_team(),
-			projectile_color,
-			self,
-			_primary_feedback_profile,
-			_primary_impact_weight
-		)
+		fire_requested.emit(global_position + projectile_direction * 26.0, projectile_direction, projectile_config)
+
+func _fire_primary_cone(fire_direction: Vector2, projectile_config: Dictionary) -> void:
+	fire_requested.emit(global_position + fire_direction * 20.0, fire_direction, projectile_config)
+
+func _fire_primary_beam(fire_direction: Vector2, projectile_config: Dictionary) -> void:
+	fire_requested.emit(global_position + fire_direction * 20.0, fire_direction, projectile_config)
+
+func _fire_primary_chain(fire_direction: Vector2, projectile_config: Dictionary) -> void:
+	fire_requested.emit(global_position + fire_direction * 20.0, fire_direction, projectile_config)
 
 func _play_fire_recoil(intensity: float = 1.0) -> void:
 	_aim_line_recoil = max(_aim_line_recoil, 9.0 + 5.0 * intensity)
@@ -1045,12 +1094,24 @@ func _fire_secondary() -> void:
 	var secondary_direction: Vector2 = aim_direction.normalized() if aim_direction.length() > 0.0 else Vector2.RIGHT
 	var spawn_origin: Vector2 = global_position + secondary_direction * 14.0 if _is_proximity_mine_secondary() else global_position
 	for projectile_direction in _build_spread_directions(secondary_direction, _secondary_projectile_count, _secondary_spread_radians):
+		var projectile_data: Dictionary = _secondary_projectile_data.duplicate(true)
+		projectile_data["shooter"] = self
+		projectile_data["color"] = secondary_color
 		secondary_requested.emit(
 			spawn_origin if _is_proximity_mine_secondary() else global_position + projectile_direction * 22.0,
 			projectile_direction,
 			secondary_projectile_speed,
 			secondary_damage,
 			get_team(),
-			_secondary_projectile_data.duplicate(true),
+			projectile_data,
 			secondary_color
 		)
+
+func _merge_trigger_passive_lists(global_triggers: Array, slot_triggers: Array) -> Array:
+	if global_triggers.is_empty():
+		return slot_triggers
+	if slot_triggers.is_empty():
+		return global_triggers
+	var merged: Array = global_triggers.duplicate()
+	merged.append_array(slot_triggers)
+	return merged

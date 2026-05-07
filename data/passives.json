@@ -5,11 +5,11 @@
       "name": "Overclocked Receiver",
       "type": "passive",
       "description": "Increase primary fire rate by 12%.",
+      "effects": {
+        "fire_rate_mult": 1.136363636364
+      },
       "scrap_gold_value": 1,
       "shop_gold_cost": 2,
-      "passive_effects": {
-        "primary_fire_interval_mult": 0.88
-      },
       "stackable": false,
       "pools": ["reward", "shop"]
     },
@@ -18,11 +18,11 @@
       "name": "Rapid Loader",
       "type": "passive",
       "description": "Cycle the primary faster for tighter sustained fire.",
+      "effects": {
+        "fire_rate_mult": 1.219512195122
+      },
       "scrap_gold_value": 1,
       "shop_gold_cost": 2,
-      "passive_effects": {
-        "primary_fire_interval_mult": 0.82
-      },
       "stackable": false,
       "pools": ["reward", "shop"]
     },
@@ -31,11 +31,11 @@
       "name": "Tungsten Cores",
       "type": "passive",
       "description": "Add 2 primary damage to every shot.",
+      "effects": {
+        "damage_add": 2
+      },
       "scrap_gold_value": 1,
       "shop_gold_cost": 3,
-      "passive_effects": {
-        "projectile_damage_bonus": 2
-      },
       "stackable": false,
       "pools": ["reward", "shop"]
     },
@@ -44,12 +44,13 @@
       "name": "Velocity Rig",
       "type": "passive",
       "description": "Fire faster projectiles, but cycle the primary a little slower.",
+      "requires_tags": ["projectile"],
+      "effects": {
+        "projectile_speed_mult": 1.35,
+        "fire_rate_mult": 0.869565217391
+      },
       "scrap_gold_value": 1,
       "shop_gold_cost": 2,
-      "passive_effects": {
-        "projectile_speed_mult": 1.35,
-        "primary_fire_interval_mult": 1.15
-      },
       "stackable": false,
       "pools": ["reward", "shop"]
     },
@@ -110,11 +111,13 @@
       "name": "Chain Reaction",
       "type": "passive",
       "description": "Give explosions more reach and add 1 primary damage.",
+      "effects": {
+        "damage_add": 1
+      },
       "scrap_gold_value": 1,
       "shop_gold_cost": 3,
       "passive_effects": {
-        "secondary_explosion_radius_mult": 1.2,
-        "projectile_damage_bonus": 1
+        "secondary_explosion_radius_mult": 1.2
       },
       "stackable": false,
       "pools": ["reward", "shop"]
@@ -124,12 +127,146 @@
       "name": "High Velocity Rounds",
       "type": "passive",
       "description": "Increase projectile speed and add 1 primary damage.",
+      "requires_tags": ["projectile"],
+      "effects": {
+        "projectile_speed_mult": 1.2,
+        "damage_add": 1
+      },
       "scrap_gold_value": 1,
       "shop_gold_cost": 2,
-      "passive_effects": {
-        "projectile_speed_mult": 1.2,
-        "projectile_damage_bonus": 1
+      "stackable": false,
+      "pools": ["reward", "shop"]
+    },
+    {
+      "id": "armor_piercing_rounds",
+      "name": "Armor Piercing Rounds",
+      "type": "passive",
+      "description": "Projectiles pierce through 1 additional target.",
+      "requires_tags": ["projectile"],
+      "effects": {
+        "pierce_count_add": 1
       },
+      "scrap_gold_value": 1,
+      "shop_gold_cost": 3,
+      "stackable": false,
+      "pools": ["reward", "shop"]
+    },
+    {
+      "id": "ember_bloom",
+      "name": "Ember Bloom",
+      "type": "passive",
+      "description": "Every third cone burst fans out a smaller bonus cone.",
+      "requires_tags": ["cone"],
+      "triggers": [
+        {
+          "trigger_id": "ember_bloom_fan",
+          "hook": "on_fire",
+          "internal_cooldown_seconds": 0.0,
+          "trigger_every_n_events": 3,
+          "proc_chance": 1.0,
+          "max_targets": 3,
+          "action": {
+            "type": "spawn_behavior",
+            "behavior": "cone",
+            "damage": 1,
+            "range": 150.0,
+            "area": 0.52,
+            "amount": 1,
+            "impact_weight": 0.9,
+            "feedback_profile": "scatter"
+          }
+        }
+      ],
+      "scrap_gold_value": 1,
+      "shop_gold_cost": 3,
+      "stackable": false,
+      "pools": ["reward", "shop"]
+    },
+    {
+      "id": "feedback_arc",
+      "name": "Feedback Arc",
+      "type": "passive",
+      "description": "Beam hits can kick off a short bonus chain.",
+      "requires_tags": ["beam"],
+      "triggers": [
+        {
+          "trigger_id": "feedback_arc_chain",
+          "hook": "on_hit",
+          "internal_cooldown_seconds": 0.2,
+          "trigger_every_n_events": 2,
+          "proc_chance": 0.5,
+          "max_targets": 2,
+          "action": {
+            "type": "spawn_behavior",
+            "behavior": "chain",
+            "damage": 1,
+            "range": 170.0,
+            "area": 120.0,
+            "amount": 2,
+            "impact_weight": 1.0,
+            "feedback_profile": "slug"
+          }
+        }
+      ],
+      "scrap_gold_value": 1,
+      "shop_gold_cost": 3,
+      "stackable": false,
+      "pools": ["reward", "shop"]
+    },
+    {
+      "id": "culling_burst",
+      "name": "Culling Burst",
+      "type": "passive",
+      "description": "Kills trigger a tight explosion around the target.",
+      "triggers": [
+        {
+          "trigger_id": "culling_burst_explosion",
+          "hook": "on_kill",
+          "internal_cooldown_seconds": 0.2,
+          "trigger_every_n_events": 1,
+          "proc_chance": 1.0,
+          "max_targets": 3,
+          "action": {
+            "type": "explosion",
+            "damage": 1,
+            "radius": 58.0,
+            "impact_weight": 1.05,
+            "feedback_profile": "grenade"
+          }
+        }
+      ],
+      "scrap_gold_value": 1,
+      "shop_gold_cost": 3,
+      "stackable": false,
+      "pools": ["reward", "shop"]
+    },
+    {
+      "id": "detonation_web",
+      "name": "Detonation Web",
+      "type": "passive",
+      "description": "Trigger explosions can fork into a short follow-up chain.",
+      "triggers": [
+        {
+          "trigger_id": "detonation_web_chain",
+          "hook": "on_explosion",
+          "internal_cooldown_seconds": 0.25,
+          "trigger_every_n_events": 1,
+          "proc_chance": 1.0,
+          "max_targets": 2,
+          "action": {
+            "type": "spawn_behavior",
+            "behavior": "chain",
+            "damage": 1,
+            "range": 150.0,
+            "area": 110.0,
+            "amount": 2,
+            "impact_weight": 1.0,
+            "feedback_profile": "slug"
+          }
+        }
+      ],
+      "scrap_gold_value": 1,
+      "shop_gold_cost": 3,
       "stackable": false,
       "pools": ["reward", "shop"]
     },

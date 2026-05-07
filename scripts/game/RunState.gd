@@ -16,6 +16,12 @@ const MAP_COLUMN_COUNT := 5
 const START_ROW_COLUMNS := [1, 2, 3]
 const GLOBAL_PRIMARY_FIRE_INTERVAL_MULT := 0.8
 const GLOBAL_SECONDARY_COOLDOWN_MULT := 0.8
+const VALID_WEAPON_TAGS: Array = [
+	"projectile", "spread", "explosive",
+	"cone", "beam", "chain",
+	"tick_damage", "heat", "knockback", "status"
+]
+const BEHAVIOR_TAGS: Array = ["projectile", "cone", "beam", "chain"]
 
 var player_configs: Array = []
 var player_health_states: Array = []
@@ -34,7 +40,7 @@ var run_mode: String = "normal"
 var debug_run_setup: Dictionary = {}
 
 var _modifier_engine = ModifierEngineData.new()
-var _random := RandomNumberGenerator.new()
+var _random: RandomNumberGenerator = RandomNumberGenerator.new()
 var _passives: Array = []
 var _passives_by_id: Dictionary = {}
 var _weapons: Array = []
@@ -226,26 +232,34 @@ func get_player_runtime_loadout() -> Dictionary:
 
 func get_player_runtime_loadout_for(player_index: int) -> Dictionary:
 	var inventory: PlayerInventoryData = _get_inventory(player_index)
-	var passive_state: Dictionary = _build_effect_state_from_inventory(inventory)
-	var primary_slots: Array = _build_runtime_slot_array(inventory.primary_slots, passive_state, "rifle")
-	var secondary_slots: Array = _build_runtime_slot_array(inventory.secondary_slots, passive_state, "mine")
+	var global_effect_state: Dictionary = _build_global_effect_state(inventory)
+	var global_trigger_passives: Array = _build_global_trigger_passives(inventory)
+	var primary_slots: Array = _build_primary_runtime_slot_array(inventory.primary_slots, inventory, "rifle")
+	var secondary_slots: Array = _build_secondary_runtime_slot_array(inventory.secondary_slots, inventory, "mine")
 	var selected_primary_index: int = clampi(inventory.selected_primary, 0, max(primary_slots.size() - 1, 0))
 	var selected_secondary_index: int = clampi(inventory.selected_secondary, 0, max(secondary_slots.size() - 1, 0))
 	var selected_primary: Dictionary = primary_slots[selected_primary_index] if selected_primary_index < primary_slots.size() and primary_slots[selected_primary_index] is Dictionary else {}
 	var selected_secondary: Dictionary = secondary_slots[selected_secondary_index] if selected_secondary_index < secondary_slots.size() and secondary_slots[selected_secondary_index] is Dictionary else {}
-	var loadout := {
-		"move_speed": 260.0 * float(passive_state.get("move_speed_mult", 1.0)),
+	var loadout: Dictionary = {
+		"move_speed": 260.0 * float(global_effect_state.get("move_speed_mult", 1.0)),
+		"global_trigger_passives": global_trigger_passives.duplicate(true),
 		"primary_slots": primary_slots,
 		"secondary_slots": secondary_slots,
 		"selected_primary": selected_primary_index,
 		"selected_secondary": selected_secondary_index,
 		"primary_profile_name": str(selected_primary.get("primary_profile_name", selected_primary.get("label", "Rifle"))),
 		"secondary_profile_name": str(selected_secondary.get("secondary_profile_name", selected_secondary.get("label", "Mine"))),
+		"primary_behavior": str(selected_primary.get("primary_behavior", "projectile")),
+		"primary_weapon_tags": (selected_primary.get("primary_weapon_tags", []) as Array).duplicate(true),
+		"primary_trigger_passives": (selected_primary.get("primary_trigger_passives", []) as Array).duplicate(true),
+		"primary_amount": int(selected_primary.get("primary_amount", 1)),
 		"primary_projectile_count": int(selected_primary.get("primary_projectile_count", 1)),
 		"primary_spread_radians": float(selected_primary.get("primary_spread_radians", 0.0)),
 		"primary_fire_interval": float(selected_primary.get("primary_fire_interval", 0.27)),
 		"projectile_speed": float(selected_primary.get("projectile_speed", 540.0)),
 		"projectile_damage": int(selected_primary.get("projectile_damage", 1)),
+		"primary_range": float(selected_primary.get("primary_range", 0.0)),
+		"primary_area": float(selected_primary.get("primary_area", 0.0)),
 		"secondary_projectile_count": int(selected_secondary.get("secondary_projectile_count", 1)),
 		"secondary_spread_radians": float(selected_secondary.get("secondary_spread_radians", 0.0)),
 		"secondary_cooldown": float(selected_secondary.get("secondary_cooldown", 4.0)),
@@ -814,12 +828,25 @@ func _apply_reward(reward: Dictionary) -> String:
 		_:
 			return str(reward.get("label", "No reward"))
 
-func _build_default_effect_state() -> Dictionary:
+func _build_default_global_effect_state() -> Dictionary:
 	return {
 		"move_speed_mult": 1.0,
-		"primary_fire_interval_mult": 1.0,
+	}
+
+func _build_default_primary_effect_state() -> Dictionary:
+	return {
+		"fire_rate_mult": 1.0,
 		"projectile_speed_mult": 1.0,
-		"projectile_damage_bonus": 0.0,
+		"damage_mult": 1.0,
+		"damage_add": 0.0,
+		"range_mult": 1.0,
+		"area_mult": 1.0,
+		"amount_add": 0,
+		"pierce_count_add": 0,
+	}
+
+func _build_default_secondary_effect_state() -> Dictionary:
+	return {
 		"secondary_cooldown_mult": 1.0,
 		"secondary_projectile_speed_mult": 1.0,
 		"secondary_damage_bonus": 0.0,
@@ -845,8 +872,8 @@ func _get_inventory(player_index: int) -> PlayerInventoryData:
 	var clamped_index: int = clampi(player_index, 0, player_inventories.size() - 1)
 	return player_inventories[clamped_index] as PlayerInventoryData
 
-func _build_effect_state_from_inventory(inventory: PlayerInventoryData) -> Dictionary:
-	var effect_state: Dictionary = _build_default_effect_state()
+func _build_global_effect_state(inventory: PlayerInventoryData) -> Dictionary:
+	var effect_state: Dictionary = _build_default_global_effect_state()
 	if inventory == null:
 		return effect_state
 	for passive_id in inventory.passives:
@@ -854,14 +881,62 @@ func _build_effect_state_from_inventory(inventory: PlayerInventoryData) -> Dicti
 		if passive.is_empty():
 			continue
 		var passive_effects: Dictionary = passive.get("passive_effects", {})
-		if passive_effects.has("primary_fire_interval_mult"):
-			effect_state["primary_fire_interval_mult"] = float(effect_state.get("primary_fire_interval_mult", 1.0)) * float(passive_effects.get("primary_fire_interval_mult", 1.0))
-		if passive_effects.has("projectile_speed_mult"):
-			effect_state["projectile_speed_mult"] = float(effect_state.get("projectile_speed_mult", 1.0)) * float(passive_effects.get("projectile_speed_mult", 1.0))
-		if passive_effects.has("projectile_damage_bonus"):
-			effect_state["projectile_damage_bonus"] = float(effect_state.get("projectile_damage_bonus", 0.0)) + float(passive_effects.get("projectile_damage_bonus", 0.0))
 		if passive_effects.has("move_speed_mult"):
 			effect_state["move_speed_mult"] = float(effect_state.get("move_speed_mult", 1.0)) * float(passive_effects.get("move_speed_mult", 1.0))
+	return effect_state
+
+func _build_global_trigger_passives(inventory: PlayerInventoryData) -> Array:
+	var trigger_passives: Array = []
+	if inventory == null:
+		return trigger_passives
+	for passive_id in inventory.passives:
+		var passive: Dictionary = _get_catalog_entry(str(passive_id))
+		if passive.is_empty():
+			continue
+		var required_tags: Variant = passive.get("requires_tags", [])
+		if required_tags is Array and not (required_tags as Array).is_empty():
+			continue
+		var trigger_entries: Array = _normalize_trigger_entries(passive.get("triggers", []))
+		for trigger_entry in trigger_entries:
+			if not _is_valid_trigger_entry(trigger_entry, str(passive.get("id", passive_id))):
+				continue
+			var compiled_trigger: Dictionary = trigger_entry.duplicate(true)
+			compiled_trigger["passive_id"] = str(passive.get("id", passive_id))
+			compiled_trigger["passive_name"] = str(passive.get("name", "Passive"))
+			trigger_passives.append(compiled_trigger)
+	return trigger_passives
+
+func _build_primary_effect_state_for_slot(inventory: PlayerInventoryData, slot_entry: Dictionary, fallback_id: String) -> Dictionary:
+	var effect_state: Dictionary = _build_default_primary_effect_state()
+	if inventory == null:
+		return effect_state
+	var weapon_tags: Array = _get_weapon_tags(_get_resolved_slot_weapon_id(slot_entry, fallback_id))
+	for passive_id in inventory.passives:
+		var passive := _get_catalog_entry(str(passive_id))
+		if passive.is_empty():
+			continue
+		var required_tags: Variant = passive.get("requires_tags", [])
+		if required_tags is Array and not _weapon_has_all_tags(weapon_tags, required_tags as Array):
+			continue
+		var effects_variant: Variant = passive.get("effects", {})
+		if effects_variant is Dictionary and not (effects_variant as Dictionary).is_empty():
+			_apply_primary_effects_dict(effect_state, effects_variant as Dictionary)
+			continue
+	return effect_state
+
+func _build_secondary_effect_state_for_slot(inventory: PlayerInventoryData, slot_entry: Dictionary, fallback_id: String) -> Dictionary:
+	var effect_state: Dictionary = _build_default_secondary_effect_state()
+	if inventory == null:
+		return effect_state
+	var weapon_tags: Array = _get_weapon_tags(_get_resolved_slot_weapon_id(slot_entry, fallback_id))
+	for passive_id in inventory.passives:
+		var passive := _get_catalog_entry(str(passive_id))
+		if passive.is_empty():
+			continue
+		var required_tags: Variant = passive.get("requires_tags", [])
+		if required_tags is Array and not _weapon_has_all_tags(weapon_tags, required_tags as Array):
+			continue
+		var passive_effects: Dictionary = passive.get("passive_effects", {})
 		if passive_effects.has("secondary_cooldown_mult"):
 			effect_state["secondary_cooldown_mult"] = float(effect_state.get("secondary_cooldown_mult", 1.0)) * float(passive_effects.get("secondary_cooldown_mult", 1.0))
 		if passive_effects.has("secondary_projectile_speed_mult"):
@@ -880,34 +955,106 @@ func _build_profile_from_inventory_slot(slot_entry: Dictionary, fallback_id: Str
 		return _build_weapon_profile(weapon_id, "mine", weapon_level)
 	return _build_weapon_profile(weapon_id, "rifle", weapon_level)
 
-func _build_runtime_slot_array(slot_entries: Array, passive_state: Dictionary, fallback_id: String) -> Array:
+func _get_resolved_slot_weapon_id(slot_entry: Dictionary, fallback_id: String) -> String:
+	var weapon_id := str(slot_entry.get("weapon_id", fallback_id))
+	if _weapons_by_id.has(weapon_id):
+		return weapon_id
+	return fallback_id
+
+func _weapon_has_all_tags(weapon_tags: Array, required_tags: Array) -> bool:
+	for raw_required_tag in required_tags:
+		var required_tag := str(raw_required_tag)
+		if required_tag.is_empty():
+			continue
+		if not weapon_tags.has(required_tag):
+			return false
+	return true
+
+func _get_weapon_tags(weapon_id: String) -> Array:
+	var weapon: Dictionary = _weapons_by_id.get(weapon_id, {}) as Dictionary
+	var raw_tags: Variant = weapon.get("tags", [])
+	if not (raw_tags is Array):
+		return []
+	var normalized_tags: Array = []
+	for raw_tag in raw_tags:
+		var tag := str(raw_tag)
+		if tag.is_empty():
+			continue
+		normalized_tags.append(tag)
+	return normalized_tags
+
+func _get_weapon_behavior(weapon_id: String) -> String:
+	var weapon: Dictionary = _weapons_by_id.get(weapon_id, {}) as Dictionary
+	if str(weapon.get("type", "")) != "primary_weapon":
+		return ""
+	var behavior := str(weapon.get("primary_behavior", "projectile"))
+	if behavior.is_empty():
+		push_warning("[RunState] Primary weapon '%s' is missing primary_behavior. Falling back to 'projectile'." % weapon_id)
+		return "projectile"
+	if not BEHAVIOR_TAGS.has(behavior):
+		push_warning("[RunState] Primary weapon '%s' has unsupported primary_behavior '%s'. Falling back to 'projectile'." % [weapon_id, behavior])
+		return "projectile"
+	return behavior
+
+func _validate_weapon_tags(weapon: Dictionary) -> void:
+	var weapon_id := str(weapon.get("id", "unknown_weapon"))
+	if str(weapon.get("type", "")) != "primary_weapon":
+		return
+	var raw_tags: Variant = weapon.get("tags", [])
+	var tags: Array = raw_tags if raw_tags is Array else []
+	var behavior_tag_count := 0
+	for raw_tag in tags:
+		var tag := str(raw_tag)
+		if tag.is_empty():
+			continue
+		if not VALID_WEAPON_TAGS.has(tag):
+			push_warning("[RunState] Weapon '%s' has unknown tag '%s'." % [weapon_id, tag])
+		if BEHAVIOR_TAGS.has(tag):
+			behavior_tag_count += 1
+	if behavior_tag_count != 1:
+		push_warning("[RunState] Primary weapon '%s' must declare exactly one behavior tag. Found %d." % [weapon_id, behavior_tag_count])
+	_get_weapon_behavior(weapon_id)
+
+func _build_primary_runtime_slot_array(slot_entries: Array, inventory: PlayerInventoryData, fallback_id: String) -> Array:
 	var runtime_slots: Array = []
 	for slot_entry in slot_entries:
 		if slot_entry is Dictionary:
-			runtime_slots.append(_compile_slot_loadout(slot_entry as Dictionary, passive_state, fallback_id))
+			var passive_state: Dictionary = _build_primary_effect_state_for_slot(inventory, slot_entry as Dictionary, fallback_id)
+			var trigger_passives: Array = _build_primary_trigger_passives_for_slot(inventory, slot_entry as Dictionary, fallback_id)
+			runtime_slots.append(_compile_slot_loadout(slot_entry as Dictionary, passive_state, trigger_passives, fallback_id))
 		else:
 			runtime_slots.append(null)
 	return runtime_slots
 
-func _compile_slot_loadout(slot_entry: Dictionary, passive_state: Dictionary, fallback_id: String) -> Dictionary:
+func _build_secondary_runtime_slot_array(slot_entries: Array, inventory: PlayerInventoryData, fallback_id: String) -> Array:
+	var runtime_slots: Array = []
+	for slot_entry in slot_entries:
+		if slot_entry is Dictionary:
+			var passive_state: Dictionary = _build_secondary_effect_state_for_slot(inventory, slot_entry as Dictionary, fallback_id)
+			runtime_slots.append(_compile_slot_loadout(slot_entry as Dictionary, passive_state, [], fallback_id))
+		else:
+			runtime_slots.append(null)
+	return runtime_slots
+
+func _compile_slot_loadout(slot_entry: Dictionary, passive_state: Dictionary, primary_trigger_passives: Array, fallback_id: String) -> Dictionary:
 	var profile: Dictionary = _build_profile_from_inventory_slot(slot_entry, fallback_id)
 	var weapon_id: String = str(slot_entry.get("weapon_id", fallback_id))
+	var resolved_weapon_id: String = str(profile.get("id", weapon_id))
 	var weapon_level: int = int(slot_entry.get("level", 1))
+	var weapon_type: String = str(profile.get("type", "weapon"))
 	var feedback_profile: String = _get_feedback_profile_for_weapon_id(weapon_id, str(profile.get("kind", "")))
 	var impact_weight: float = _get_impact_weight_for_feedback_profile(feedback_profile)
-	var slot_loadout := {
+	var slot_loadout: Dictionary = {
 		"weapon_id": weapon_id,
 		"weapon_level": weapon_level,
+		"primary_behavior": _get_weapon_behavior(resolved_weapon_id),
+		"primary_weapon_tags": _get_weapon_tags(resolved_weapon_id),
+		"primary_trigger_passives": primary_trigger_passives.duplicate(true),
 		"feedback_profile": feedback_profile,
 		"impact_weight": impact_weight,
 		"weapon_level_description": str(profile.get("level_description", "")),
 		"primary_profile_name": str(profile.get("label", "Rifle")),
 		"secondary_profile_name": str(profile.get("label", "Mine")),
-		"primary_projectile_count": int(profile.get("projectile_count", 1)),
-		"primary_spread_radians": float(profile.get("spread_radians", 0.0)),
-		"primary_fire_interval": 0.27 * GLOBAL_PRIMARY_FIRE_INTERVAL_MULT * float(passive_state.get("primary_fire_interval_mult", 1.0)) * float(profile.get("fire_interval_mult", 1.0)),
-		"projectile_speed": 540.0 * float(passive_state.get("projectile_speed_mult", 1.0)) * float(profile.get("projectile_speed_mult", 1.0)),
-		"projectile_damage": max(1, int(round((1.0 + float(passive_state.get("projectile_damage_bonus", 0.0))) * float(profile.get("damage_mult", 1.0))))),
 		"secondary_projectile_count": int(profile.get("projectile_count", 1)),
 		"secondary_spread_radians": float(profile.get("spread_radians", 0.0)),
 		"secondary_cooldown": 4.0 * GLOBAL_SECONDARY_COOLDOWN_MULT * float(passive_state.get("secondary_cooldown_mult", 1.0)) * float(profile.get("cooldown_mult", 1.0)),
@@ -923,13 +1070,157 @@ func _compile_slot_loadout(slot_entry: Dictionary, passive_state: Dictionary, fa
 		"secondary_cluster_spread_radius": 52.0 * float(profile.get("cluster_spread_radius_mult", 1.0)),
 		"secondary_proximity_radius": float(profile.get("base_proximity_radius", 52.0)) * float(profile.get("proximity_radius_mult", 1.0)),
 	}
+	if weapon_type == "primary_weapon":
+		var primary_runtime: Dictionary = _compile_primary_runtime_from_new_stats(profile, passive_state)
+		for runtime_key in primary_runtime.keys():
+			slot_loadout[str(runtime_key)] = primary_runtime[runtime_key]
 	return slot_loadout
+
+func _compile_primary_runtime_from_new_stats(profile: Dictionary, passive_state: Dictionary) -> Dictionary:
+	var current_fire_rate: float = max(float(profile.get("fire_rate", 1.0)), 0.001)
+	var final_fire_rate: float = max(current_fire_rate * float(passive_state.get("fire_rate_mult", 1.0)), 0.001)
+	var primary_fire_interval: float = 1.0 / final_fire_rate
+
+	var projectile_speed: float = float(profile.get("projectile_speed", 540.0)) * float(passive_state.get("projectile_speed_mult", 1.0))
+	var projectile_damage: int = max(1, int(round(
+		float(profile.get("damage", 1.0))
+		* float(passive_state.get("damage_mult", 1.0))
+		+ float(passive_state.get("damage_add", 0.0))
+	)))
+	var primary_range: float = float(profile.get("range", 0.0)) * float(passive_state.get("range_mult", 1.0))
+	var primary_area: float = float(profile.get("area", 0.0)) * float(passive_state.get("area_mult", 1.0))
+	var primary_amount: int = max(1, int(profile.get("amount", 1)) + int(passive_state.get("amount_add", 0)))
+	var primary_pierce_count: int = max(0, int(passive_state.get("pierce_count_add", 0)))
+
+	return {
+		"primary_amount": primary_amount,
+		"primary_projectile_count": primary_amount,
+		"primary_spread_radians": float(profile.get("spread_radians", 0.0)),
+		"primary_fire_interval": primary_fire_interval,
+		"projectile_speed": projectile_speed,
+		"projectile_damage": projectile_damage,
+		"primary_range": primary_range,
+		"primary_area": primary_area,
+		"primary_pierce_count": primary_pierce_count,
+	}
+
+func _apply_level_overrides_to_profile(profile: Dictionary, overrides: Dictionary) -> void:
+	for override_key in overrides.keys():
+		profile[str(override_key)] = overrides[override_key]
+
+func _build_primary_trigger_passives_for_slot(inventory: PlayerInventoryData, slot_entry: Dictionary, fallback_id: String) -> Array:
+	var trigger_passives: Array = []
+	if inventory == null:
+		return trigger_passives
+	var weapon_id: String = _get_resolved_slot_weapon_id(slot_entry, fallback_id)
+	var weapon_tags: Array = _get_weapon_tags(weapon_id)
+	for passive_id in inventory.passives:
+		var passive: Dictionary = _get_catalog_entry(str(passive_id))
+		if passive.is_empty():
+			continue
+		var required_tags: Variant = passive.get("requires_tags", [])
+		if required_tags is Array and (required_tags as Array).is_empty():
+			continue
+		if required_tags is Array and not _weapon_has_all_tags(weapon_tags, required_tags as Array):
+			continue
+		var trigger_entries: Array = _normalize_trigger_entries(passive.get("triggers", []))
+		for trigger_entry in trigger_entries:
+			if not _is_valid_trigger_entry(trigger_entry, str(passive.get("id", passive_id))):
+				continue
+			var compiled_trigger: Dictionary = trigger_entry.duplicate(true)
+			compiled_trigger["passive_id"] = str(passive.get("id", passive_id))
+			compiled_trigger["passive_name"] = str(passive.get("name", "Passive"))
+			trigger_passives.append(compiled_trigger)
+	return trigger_passives
+
+func _normalize_trigger_entries(triggers_variant: Variant) -> Array:
+	var normalized_entries: Array = []
+	if triggers_variant is Dictionary:
+		normalized_entries.append((triggers_variant as Dictionary).duplicate(true))
+	elif triggers_variant is Array:
+		for trigger_entry in triggers_variant:
+			if trigger_entry is Dictionary:
+				normalized_entries.append((trigger_entry as Dictionary).duplicate(true))
+	return normalized_entries
+
+func _is_valid_trigger_entry(trigger_entry: Dictionary, passive_id: String) -> bool:
+	var hook: String = str(trigger_entry.get("hook", ""))
+	if hook.is_empty():
+		push_warning("[RunState] Passive '%s' trigger is missing hook." % passive_id)
+		return false
+	if not ["on_fire", "on_hit", "on_kill", "on_explosion"].has(hook):
+		push_warning("[RunState] Passive '%s' trigger has unsupported hook '%s'." % [passive_id, hook])
+		return false
+	var action_variant: Variant = trigger_entry.get("action", {})
+	if not (action_variant is Dictionary) or (action_variant as Dictionary).is_empty():
+		push_warning("[RunState] Passive '%s' trigger '%s' is missing action data." % [passive_id, hook])
+		return false
+	return true
+
+func _apply_primary_effects_dict(effect_state: Dictionary, effects: Dictionary) -> void:
+	for raw_effect_key in effects.keys():
+		var effect_key := str(raw_effect_key)
+		var effect_value: Variant = effects[raw_effect_key]
+		match effect_key:
+			"fire_rate_mult":
+				var fire_rate_mult: float = float(effect_value)
+				effect_state["fire_rate_mult"] = float(effect_state.get("fire_rate_mult", 1.0)) * fire_rate_mult
+			"projectile_speed_mult":
+				var projectile_speed_mult: float = float(effect_value)
+				effect_state["projectile_speed_mult"] = float(effect_state.get("projectile_speed_mult", 1.0)) * projectile_speed_mult
+			"damage_mult":
+				effect_state["damage_mult"] = float(effect_state.get("damage_mult", 1.0)) * float(effect_value)
+			"damage_add":
+				effect_state["damage_add"] = float(effect_state.get("damage_add", 0.0)) + float(effect_value)
+			"range_mult":
+				effect_state["range_mult"] = float(effect_state.get("range_mult", 1.0)) * float(effect_value)
+			"area_mult":
+				effect_state["area_mult"] = float(effect_state.get("area_mult", 1.0)) * float(effect_value)
+			"amount_add":
+				effect_state["amount_add"] = int(effect_state.get("amount_add", 0)) + int(effect_value)
+			"pierce_count_add":
+				effect_state["pierce_count_add"] = int(effect_state.get("pierce_count_add", 0)) + int(effect_value)
+			_:
+				push_warning("[RunState] Unsupported primary passive effect key '%s'." % effect_key)
+
+func _apply_level_effects_to_profile(profile: Dictionary, effects: Dictionary) -> void:
+	for raw_effect_key in effects.keys():
+		var effect_key := str(raw_effect_key)
+		var effect_value: Variant = effects[raw_effect_key]
+		match effect_key:
+			"damage_mult":
+				if profile.has("damage"):
+					profile["damage"] = float(profile.get("damage", 1.0)) * float(effect_value)
+			"damage_add":
+				if profile.has("damage"):
+					profile["damage"] = float(profile.get("damage", 1.0)) + float(effect_value)
+			"fire_rate_mult":
+				if profile.has("fire_rate"):
+					profile["fire_rate"] = float(profile.get("fire_rate", 1.0)) * float(effect_value)
+			"range_mult":
+				if profile.has("range"):
+					profile["range"] = float(profile.get("range", 0.0)) * float(effect_value)
+			"area_mult":
+				if profile.has("area"):
+					profile["area"] = float(profile.get("area", 0.0)) * float(effect_value)
+			"amount_add":
+				if profile.has("amount"):
+					profile["amount"] = int(profile.get("amount", 1)) + int(effect_value)
+			"projectile_speed_mult":
+				if profile.has("projectile_speed"):
+					profile["projectile_speed"] = float(profile.get("projectile_speed", 0.0)) * float(effect_value)
+			_:
+				continue
 
 func _get_feedback_profile_for_weapon_id(weapon_id: String, projectile_kind: String = "") -> String:
 	match weapon_id:
 		"scatter", "spread":
 			return "scatter"
 		"slug":
+			return "slug"
+		"incinerator":
+			return "scatter"
+		"beam_lance", "arc_caster":
 			return "slug"
 		"cluster_grenade", "siege_grenade", "grenade":
 			return "grenade"
@@ -1082,11 +1373,27 @@ func _build_weapon_profile(profile_id: String, fallback_id: String, level: int =
 	base_stats["type"] = str(weapon.get("type", "weapon"))
 	var clamped_level: int = clampi(level, 1, int(weapon.get("max_level", 5)))
 	base_stats["level"] = clamped_level
+	var level_key := str(clamped_level)
+	if base_stats["type"] == "primary_weapon":
+		var levels_variant: Variant = weapon.get("levels", {})
+		if levels_variant is Dictionary:
+			var levels: Dictionary = levels_variant as Dictionary
+			if levels.has(level_key) and levels[level_key] is Dictionary:
+				var level_data: Dictionary = (levels[level_key] as Dictionary).duplicate(true)
+				base_stats["level_description"] = str(level_data.get("description", ""))
+				var overrides_variant: Variant = level_data.get("overrides", {})
+				if overrides_variant is Dictionary:
+					_apply_level_overrides_to_profile(base_stats, overrides_variant as Dictionary)
+				var effects_variant: Variant = level_data.get("effects", {})
+				if effects_variant is Dictionary:
+					_apply_level_effects_to_profile(base_stats, (effects_variant as Dictionary).duplicate(true))
+				return base_stats
+		return base_stats
 	var level_effects_variant: Variant = weapon.get("level_effects", {})
 	if level_effects_variant is Dictionary:
 		var level_effects: Dictionary = level_effects_variant as Dictionary
-		if level_effects.has(str(clamped_level)) and level_effects[str(clamped_level)] is Dictionary:
-			var level_effect: Dictionary = (level_effects[str(clamped_level)] as Dictionary).duplicate(true)
+		if level_effects.has(level_key) and level_effects[level_key] is Dictionary:
+			var level_effect: Dictionary = (level_effects[level_key] as Dictionary).duplicate(true)
 			base_stats["level_description"] = str(level_effect.get("description", ""))
 			for effect_key in level_effect.keys():
 				if str(effect_key) == "description":
@@ -1173,6 +1480,7 @@ func _load_weapons() -> void:
 			continue
 		_weapons.append(weapon)
 		_weapons_by_id[weapon_id] = weapon
+		_validate_weapon_tags(weapon)
 
 func _roll_item_choices(pool_name: String, count: int) -> Array:
 	var available: Array = []
