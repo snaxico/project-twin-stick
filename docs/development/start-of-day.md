@@ -32,6 +32,10 @@ Read this first to restore project context quickly, then read `current-state.md`
   - `Rifle`
   - `Scatter`
   - `Slug`
+- New primary behavior families are now implemented in runtime:
+  - `Incinerator` using `cone`
+  - `Beam Lance` using `beam`
+  - `Arc Caster` using `chain`
 - Secondary family is now split cleanly:
   - thrown explosives: `Grenade`, `Cluster Grenade`, `Siege Grenade`
   - proximity explosives: `Mine`, `Shrapnel Mine`, `Heavy Mine`
@@ -49,6 +53,13 @@ Read this first to restore project context quickly, then read `current-state.md`
 - Combat rooms now support two objective styles:
   - `survive`
   - `destroy_generators`
+- Primary weapon/runtime ruleset migration is now implemented:
+  - primary weapons use explicit `tags` and `primary_behavior`
+  - primaries compile from the new standard stat model in `RunState`
+  - passive filtering is per-slot with optional `requires_tags`
+  - projectile primaries now support compiled `range`, `area`, and `pierce`
+  - aim assist now respects compiled primary range
+  - trigger passives now exist for `on_fire`, `on_hit`, `on_kill`, and `on_explosion`
 - Generator rooms use:
   - neutral monster generators
   - gold and food pickups
@@ -128,10 +139,17 @@ Read this first to restore project context quickly, then read `current-state.md`
 
 - Preserve the approved core loop.
 - Favor cleanup, readability, and validation over adding new systems.
+- The newly implemented primary ruleset migration has now passed gameplay validation.
+- Favor follow-up tuning and cleanup over more architecture churn.
 - Keep enemy ranged pressure under control.
 - Keep projectile, aim-line, and arena contrast readable.
 - Keep the arena bright and neutral enough that combat reads stay above environment styling.
 - Keep grenade and mine roles distinct instead of blending them back together.
+- Tune the new primary behavior family in live play:
+  - `cone`
+  - `beam`
+  - `chain`
+- Tune hook-passive proc frequency and trigger chaining in active combat.
 - Validate the new HUD and modifier readability in live combat, not just parse/startup.
 - Validate the new compact icon HUD and passive chips in live play, especially for secondaries that still use placeholder icon badges.
 - Validate procedural run pacing and variation in live play, not just generation logic.
@@ -146,7 +164,7 @@ Read this first to restore project context quickly, then read `current-state.md`
 
 - `RunState.gd`: cross-room run state, per-player inventories, loadouts, shop offers, progression, and run-mode health persistence.
 - `ProfileState.gd`: persistent profile, meta gold, unlock ownership.
-- `CoopManager.gd`: room orchestration, spawning, loot/shop flow, and exit gating.
+- `CoopManager.gd`: room orchestration, spawning, loot/shop flow, exit gating, primary behavior execution, and trigger event processing.
 - `RunFlow.gd`: node-map and room transition flow.
 - `Bootstrap.gd`: pre-run player setup, run-mode selection, shared settings, and the debug run launcher UI.
 - `ScreenEffects.gd`: runtime post-process layer, now controlled by the settings menu.
@@ -156,7 +174,8 @@ Read this first to restore project context quickly, then read `current-state.md`
 - `data/passives.json`: passive reward/shop item definitions.
 - `data/modifiers.json`: room modifier tuning.
 - `Enemy.gd`: enemy silhouettes, hitbox sizing, and motion identity.
-- `CoopManager.gd`: now also owns generator-room orchestration, pickup handling, and the deferred pickup attach path.
+- `PassiveTriggerSystem.gd`: centralized hook-passive throttling and action collection.
+- `CoopManager.gd`: now also owns generator-room orchestration, pickup handling, the deferred pickup attach path, and shared combat-hit routing across primary and secondary sources.
 
 ## Validation Reminder
 

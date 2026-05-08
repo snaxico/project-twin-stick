@@ -3,6 +3,7 @@ extends Node2D
 const PlayerConfigData = preload("res://scripts/player/PlayerConfig.gd")
 const ModifierEngineData = preload("res://scripts/game/ModifierEngine.gd")
 const PlayerInventoryData = preload("res://scripts/game/PlayerInventory.gd")
+const PassiveTriggerSystemData = preload("res://scripts/game/PassiveTriggerSystem.gd")
 const ScreenShakeData = preload("res://scripts/juice/ScreenShake.gd")
 const ParticleFactoryData = preload("res://scripts/juice/ParticleFactory.gd")
 const FloatingTextData = preload("res://scripts/juice/FloatingText.gd")
@@ -205,6 +206,7 @@ var _room_intro_ends_at := 0.0
 var _stationary_damage_next_tick_at := 0.0
 var _active_modifier: Dictionary = {}
 var _modifier_engine = null
+var _passive_trigger_system = null
 var _room_config: Dictionary = {}
 var _boss_node = null
 var _revive_progress_by_player_id: Dictionary = {}
@@ -305,6 +307,7 @@ func _ready() -> void:
 	if shop_ui_scene == null:
 		shop_ui_scene = load("res://scenes/ui/ShopUI.tscn")
 	_modifier_engine = ModifierEngineData.new()
+	_passive_trigger_system = PassiveTriggerSystemData.new()
 	_wave_random.randomize()
 	_room_random.randomize()
 	_sfx_engine = get_tree().get_first_node_in_group("sfx_engine")
@@ -373,6 +376,8 @@ func _input(event: InputEvent) -> void:
 func _spawn_players() -> void:
 	_clear_container(players)
 	_player_nodes.clear()
+	if _passive_trigger_system != null:
+		_passive_trigger_system.clear_state()
 
 	var spawn_points := [
 		player_1_spawn.global_position,
@@ -783,10 +788,11 @@ func _clear_container(container: Node) -> void:
 	for child in container.get_children():
 		child.queue_free()
 
-func _on_player_fire_requested(origin: Vector2, direction: Vector2, speed: float, damage: int, team: String, color: Color, shooter: Node, feedback_profile: String, impact_weight: float) -> void:
+func _on_player_fire_requested(origin: Vector2, direction: Vector2, config: Dictionary) -> void:
 	if _room_is_cleared or _room_is_failed:
 		return
-	_spawn_projectile(origin, direction, speed, damage, team, color, shooter, feedback_profile, impact_weight)
+	_execute_primary_behavior(origin, direction, config)
+	_process_primary_trigger_event("on_fire", _build_primary_combat_context(origin, direction, config))
 
 func _on_player_secondary_requested(origin: Vector2, direction: Vector2, speed: float, damage: int, team: String, projectile_data: Dictionary, color: Color) -> void:
 	if _room_is_cleared or _room_is_failed:
@@ -811,6 +817,176 @@ func _spawn_projectile(origin: Vector2, direction: Vector2, speed: float, damage
 	projectile.impact_requested.connect(_on_projectile_impact_requested)
 	projectiles.add_child(projectile)
 
+func _spawn_projectile_from_config(origin: Vector2, direction: Vector2, config: Dictionary) -> void:
+	var projectile = projectile_scene.instantiate()
+	var projectile_team := str(config.get("team", "player"))
+	projectile.global_position = origin
+	projectile.setup_from_config(projectile_team, direction, config)
+	projectile.allow_friendly_fire = _friendly_fire_enabled and projectile_team == "player"
+	projectile.impact_requested.connect(_on_projectile_impact_requested)
+	projectiles.add_child(projectile)
+
+func _execute_primary_behavior(origin: Vector2, direction: Vector2, config: Dictionary) -> void:
+	match str(config.get("behavior", "projectile")):
+		"cone":
+			_execute_primary_cone(origin, direction, config)
+		"beam":
+			_execute_primary_beam(origin, direction, config)
+		"chain":
+			_execute_primary_chain(origin, direction, config)
+		_:
+			_spawn_projectile_from_config(origin, direction, config)
+
+func _execute_primary_cone(origin: Vector2, direction: Vector2, config: Dictionary) -> void:
+	var max_range: float = max(float(config.get("max_distance", 0.0)), 1.0)
+	var cone_angle: float = max(float(config.get("collision_half_width", 0.0)), 0.08)
+	var half_angle: float = cone_angle * 0.5
+	var max_targets: int = max(int(config.get("max_targets", 0)), 0)
+	var hit_targets: Array = []
+	for target in _get_damageable_targets_for_team(str(config.get("team", "player"))):
+		if not is_instance_valid(target):
+			continue
+		var offset: Vector2 = target.global_position - origin
+		var distance: float = offset.length()
+		if distance <= 0.0 or distance > max_range:
+			continue
+		if abs(direction.angle_to(offset.normalized())) > half_angle:
+			continue
+		hit_targets.append({"target": target, "distance": distance})
+	hit_targets.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return float(a.get("distance", 0.0)) < float(b.get("distance", 0.0)))
+	var limit: int = hit_targets.size() if max_targets <= 0 else mini(hit_targets.size(), max_targets)
+	for hit_index in range(limit):
+		var hit_entry: Dictionary = hit_targets[hit_index] as Dictionary
+		var target = hit_entry.get("target", null)
+		_apply_damage_with_context(target, origin, direction, config)
+
+func _execute_primary_beam(origin: Vector2, direction: Vector2, config: Dictionary) -> void:
+	var max_range: float = max(float(config.get("max_distance", 0.0)), 1.0)
+	var beam_width: float = max(float(config.get("collision_half_width", 0.0)), 4.0)
+	var max_targets: int = max(int(config.get("max_targets", 0)), 0)
+	var beam_targets: Array = []
+	for target in _get_damageable_targets_for_team(str(config.get("team", "player"))):
+		if not is_instance_valid(target):
+			continue
+		var offset: Vector2 = target.global_position - origin
+		var projection: float = offset.dot(direction)
+		if projection <= 0.0 or projection > max_range:
+			continue
+		var perpendicular: float = abs(offset.cross(direction))
+		if perpendicular > beam_width:
+			continue
+		beam_targets.append({"target": target, "projection": projection})
+	beam_targets.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return float(a.get("projection", 0.0)) < float(b.get("projection", 0.0)))
+	var limit: int = beam_targets.size() if max_targets <= 0 else mini(beam_targets.size(), max_targets)
+	for hit_index in range(limit):
+		var hit_entry: Dictionary = beam_targets[hit_index] as Dictionary
+		var target = hit_entry.get("target", null)
+		_apply_damage_with_context(target, origin, direction, config)
+
+func _execute_primary_chain(origin: Vector2, direction: Vector2, config: Dictionary) -> void:
+	var chain_targets: Array = _collect_chain_targets(
+		origin,
+		direction,
+		str(config.get("team", "player")),
+		max(float(config.get("max_distance", 0.0)), 1.0),
+		max(float(config.get("collision_half_width", 0.0)), 24.0),
+		_resolve_chain_target_count(config)
+	)
+	for target in chain_targets:
+		_apply_damage_with_context(target, origin if target == chain_targets[0] else (target as Node2D).global_position, direction, config)
+
+func _collect_chain_targets(origin: Vector2, direction: Vector2, team: String, acquisition_range: float, jump_search_radius: float, max_chain_targets: int) -> Array:
+	var available_targets: Array = _get_damageable_targets_for_team(team)
+	var first_target = _find_chain_first_target(origin, direction, available_targets, acquisition_range)
+	if first_target == null:
+		return []
+	var chain_targets: Array = [first_target]
+	var previous_target: Node2D = first_target
+	while chain_targets.size() < max_chain_targets:
+		var next_target = _find_next_chain_target(previous_target, available_targets, chain_targets, jump_search_radius)
+		if next_target == null:
+			break
+		chain_targets.append(next_target)
+		previous_target = next_target
+	return chain_targets
+
+func _resolve_chain_target_count(config: Dictionary) -> int:
+	var amount: int = max(int(config.get("amount", 1)), 1)
+	var max_targets: int = max(int(config.get("max_targets", 0)), 0)
+	return amount if max_targets <= 0 else mini(amount, max_targets)
+
+func _find_chain_first_target(origin: Vector2, direction: Vector2, available_targets: Array, acquisition_range: float) -> Node2D:
+	var best_target: Node2D = null
+	var best_score := INF
+	for target in available_targets:
+		if not is_instance_valid(target) or not (target is Node2D):
+			continue
+		var node_target: Node2D = target
+		var offset: Vector2 = node_target.global_position - origin
+		var distance: float = offset.length()
+		if distance <= 0.0 or distance > acquisition_range:
+			continue
+		var alignment: float = offset.normalized().dot(direction)
+		if alignment < 0.1:
+			continue
+		var score: float = distance - alignment * 140.0
+		if score < best_score:
+			best_score = score
+			best_target = node_target
+	return best_target
+
+func _find_next_chain_target(previous_target: Node2D, available_targets: Array, excluded_targets: Array, jump_search_radius: float) -> Node2D:
+	var best_target: Node2D = null
+	var best_distance := INF
+	for target in available_targets:
+		if not is_instance_valid(target) or not (target is Node2D):
+			continue
+		if excluded_targets.has(target):
+			continue
+		var node_target: Node2D = target
+		var distance: float = previous_target.global_position.distance_to(node_target.global_position)
+		if distance > jump_search_radius:
+			continue
+		if distance < best_distance:
+			best_distance = distance
+			best_target = node_target
+	return best_target
+
+func _get_damageable_targets_for_team(source_team: String) -> Array:
+	var targets: Array = []
+	if source_team == "player":
+		for enemy in enemies.get_children():
+			if enemy != null and is_instance_valid(enemy) and enemy.has_method("is_alive") and enemy.is_alive():
+				targets.append(enemy)
+		for generator in generators.get_children():
+			if generator != null and is_instance_valid(generator) and generator.has_method("is_alive") and generator.is_alive():
+				targets.append(generator)
+	else:
+		targets.append_array(get_active_players())
+	return targets
+
+func _apply_damage_with_context(target, origin: Vector2, direction: Vector2, config: Dictionary) -> void:
+	if target == null or not is_instance_valid(target):
+		return
+	if not target.has_method("apply_damage"):
+		return
+	if target.has_method("get_team") and str(target.get_team()) == str(config.get("team", "player")):
+		return
+	if target.has_method("apply_knockback"):
+		target.apply_knockback(direction, 180.0 + float(config.get("impact_weight", 1.0)) * 90.0)
+	target.apply_damage(int(config.get("damage", 1)))
+	var impact_origin: Vector2 = target.global_position if target is Node2D else origin
+	_handle_combat_hit(
+		impact_origin,
+		-direction,
+		str(config.get("team", "player")),
+		config.get("color", Color.WHITE),
+		str(config.get("feedback_profile", "rifle")),
+		float(config.get("impact_weight", 1.0)),
+		target,
+		_build_primary_combat_context(origin, direction, config, target)
+	)
+
 func _spawn_grenade(origin: Vector2, direction: Vector2, speed: float, damage: int, team: String, projectile_data: Dictionary, color: Color) -> void:
 	var grenade = grenade_projectile_scene.instantiate()
 	grenade.global_position = origin
@@ -831,7 +1007,15 @@ func _spawn_grenade(origin: Vector2, direction: Vector2, speed: float, damage: i
 	grenade.pulse_interval = float(projectile_data.get("pulse_interval", grenade.pulse_interval))
 	grenade.cluster_blast_count = int(projectile_data.get("cluster_blast_count", grenade.cluster_blast_count))
 	grenade.cluster_spread_radius = float(projectile_data.get("cluster_spread_radius", grenade.cluster_spread_radius))
+	grenade.source_context = {
+		"owner": projectile_data.get("shooter", null),
+		"weapon_id": str(projectile_data.get("weapon_id", "")),
+		"weapon_tags": [],
+		"source_type": str(projectile_data.get("source_type", "secondary")),
+		"trigger_passives": (projectile_data.get("trigger_passives", []) as Array).duplicate(true),
+	}
 	grenade.exploded.connect(_on_explosive_detonated)
+	grenade.damage_applied.connect(_on_secondary_damage_applied)
 	projectiles.add_child(grenade)
 
 func _spawn_mine(origin: Vector2, direction: Vector2, speed: float, damage: int, team: String, projectile_data: Dictionary, color: Color) -> void:
@@ -854,7 +1038,15 @@ func _spawn_mine(origin: Vector2, direction: Vector2, speed: float, damage: int,
 	mine.cluster_blast_count = int(projectile_data.get("cluster_blast_count", mine.cluster_blast_count))
 	mine.cluster_spread_radius = float(projectile_data.get("cluster_spread_radius", mine.cluster_spread_radius))
 	mine.proximity_radius = float(projectile_data.get("proximity_radius", mine.proximity_radius))
+	mine.source_context = {
+		"owner": projectile_data.get("shooter", null),
+		"weapon_id": str(projectile_data.get("weapon_id", "")),
+		"weapon_tags": [],
+		"source_type": str(projectile_data.get("source_type", "secondary")),
+		"trigger_passives": (projectile_data.get("trigger_passives", []) as Array).duplicate(true),
+	}
 	mine.exploded.connect(_on_explosive_detonated)
+	mine.damage_applied.connect(_on_secondary_damage_applied)
 	projectiles.add_child(mine)
 
 func _is_mine_secondary_kind(kind: String) -> bool:
@@ -1053,12 +1245,13 @@ func _on_player_revived(player) -> void:
 	)
 	_refresh_debug_ui()
 
-func _on_explosive_detonated(origin: Vector2, color: Color, feedback_profile: String, impact_weight: float, explosion_radius: float) -> void:
+func _on_explosive_detonated(origin: Vector2, color: Color, feedback_profile: String, impact_weight: float, explosion_radius: float, combat_context: Dictionary) -> void:
 	_play_sfx_explosion(impact_weight, feedback_profile)
 	_spawn_world_effect(ParticleFactoryData.create_explosion_burst(color, impact_weight), origin)
 	_spawn_world_effect(ParticleFactoryData.create_explosion_ring(color.lightened(0.1), max(explosion_radius, 46.0), 3.0 + impact_weight), origin)
 	_add_camera_trauma(0.16 + impact_weight * 0.14)
 	_play_zoom_punch(0.04 + impact_weight * 0.018, 0.04, 0.1 + impact_weight * 0.03)
+	_process_primary_trigger_event("on_explosion", combat_context)
 
 func _on_player_muzzle_flash_requested(origin: Vector2, direction: Vector2, color: Color, feedback_profile: String, impact_weight: float) -> void:
 	_play_sfx_fire(feedback_profile, impact_weight)
@@ -1093,11 +1286,131 @@ func _on_enemy_hit_received(enemy, damage_amount: int, lethal: bool) -> void:
 		var jitter := Vector2(_room_random.randf_range(-10.0, 10.0), _room_random.randf_range(-4.0, 4.0))
 		_spawn_world_floating_text("-%d" % damage_amount, text_color, enemy.global_position + Vector2(0.0, -36.0) + jitter)
 
-func _on_projectile_impact_requested(origin: Vector2, direction: Vector2, _team: String, color: Color, _feedback_profile: String, impact_weight: float, target) -> void:
+func _on_secondary_damage_applied(origin: Vector2, direction: Vector2, team: String, color: Color, feedback_profile: String, impact_weight: float, target, combat_context: Dictionary) -> void:
+	_handle_combat_hit(origin, direction, team, color, feedback_profile, impact_weight, target, combat_context)
+
+func _on_projectile_impact_requested(origin: Vector2, direction: Vector2, team: String, color: Color, feedback_profile: String, impact_weight: float, target, combat_context: Dictionary) -> void:
+	_handle_combat_hit(origin, direction, team, color, feedback_profile, impact_weight, target, combat_context)
+
+func _handle_combat_hit(origin: Vector2, direction: Vector2, _team: String, color: Color, _feedback_profile: String, impact_weight: float, target, combat_context: Dictionary) -> void:
 	_spawn_world_effect(ParticleFactoryData.create_impact_sparks(color, direction, impact_weight), origin)
 	_spawn_world_effect(ParticleFactoryData.create_impact_ring(color.lightened(0.15), 12.0 + impact_weight * 8.0, 2.0 + impact_weight), origin)
 	if target != null and is_instance_valid(target) and target.has_method("get_team") and str(target.get_team()) == "enemy":
 		_add_camera_trauma(0.015 + impact_weight * 0.015)
+	_process_primary_trigger_event("on_hit", combat_context)
+	if target != null and is_instance_valid(target) and target.has_method("is_alive") and not target.is_alive():
+		_process_primary_trigger_event("on_kill", combat_context)
+
+func _build_primary_combat_context(origin: Vector2, direction: Vector2, config: Dictionary, target = null) -> Dictionary:
+	return {
+		"owner": config.get("shooter", null),
+		"weapon_id": str(config.get("weapon_id", "")),
+		"weapon_tags": config.get("weapon_tags", []),
+		"origin": origin,
+		"direction": direction,
+		"target": target,
+		"damage": int(config.get("damage", 1)),
+		"color": config.get("color", Color.WHITE),
+		"feedback_profile": str(config.get("feedback_profile", "rifle")),
+		"impact_weight": float(config.get("impact_weight", 1.0)),
+		"is_tick": str(config.get("behavior", "projectile")) in ["beam", "cone"],
+		"source_type": str(config.get("source_type", "primary")),
+		"trigger_passives": config.get("trigger_passives", []),
+	}
+
+func _process_primary_trigger_event(hook: String, context: Dictionary) -> void:
+	if _passive_trigger_system == null:
+		return
+	var actions: Array = _passive_trigger_system.collect_actions(hook, context)
+	for action in actions:
+		if action is Dictionary:
+			_execute_primary_trigger_action(action as Dictionary, context)
+
+func _execute_primary_trigger_action(action: Dictionary, context: Dictionary) -> void:
+	match str(action.get("type", "")):
+		"explosion":
+			_execute_trigger_explosion(action, context)
+		"spawn_behavior":
+			_execute_trigger_behavior(action, context)
+		_:
+			push_warning("[CoopManager] Unsupported trigger action type '%s'." % str(action.get("type", "")))
+
+func _execute_trigger_explosion(action: Dictionary, context: Dictionary) -> void:
+	var origin: Vector2 = context.get("origin", Vector2.ZERO)
+	var target = context.get("target", null)
+	if target != null and is_instance_valid(target) and target is Node2D:
+		origin = (target as Node2D).global_position
+	var damage: int = max(int(action.get("damage", 1)), 1)
+	var radius: float = max(float(action.get("radius", 48.0)), 12.0)
+	var impact_weight: float = max(float(action.get("impact_weight", context.get("impact_weight", 1.0))), 0.1)
+	var color: Color = action.get("color", context.get("color", Color(1.0, 0.76, 0.42, 1.0)))
+	_play_sfx_explosion(impact_weight, str(action.get("feedback_profile", "grenade")))
+	_spawn_world_effect(ParticleFactoryData.create_explosion_burst(color, impact_weight), origin)
+	_spawn_world_effect(ParticleFactoryData.create_explosion_ring(color.lightened(0.1), max(radius, 46.0), 3.0 + impact_weight), origin)
+	var hits: Array = []
+	for candidate in _get_damageable_targets_for_team("player"):
+		if not is_instance_valid(candidate) or not (candidate is Node2D):
+			continue
+		var node_candidate: Node2D = candidate
+		var distance: float = origin.distance_to(node_candidate.global_position)
+		if distance > radius:
+			continue
+		hits.append({"target": node_candidate, "distance": distance})
+	hits.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return float(a.get("distance", 0.0)) < float(b.get("distance", 0.0)))
+	var max_targets: int = max(int(action.get("max_targets", 1)), 1)
+	for hit_index in range(mini(hits.size(), max_targets)):
+		var target_entry: Dictionary = hits[hit_index] as Dictionary
+		var hit_target = target_entry.get("target", null)
+		var explosion_direction: Vector2 = ((hit_target as Node2D).global_position - origin).normalized() if hit_target != null and is_instance_valid(hit_target) and hit_target is Node2D else Vector2.RIGHT
+		var trigger_config: Dictionary = {
+			"weapon_id": str(context.get("weapon_id", "")),
+			"weapon_tags": (context.get("weapon_tags", []) as Array).duplicate(true),
+			"shooter": context.get("owner", null),
+			"damage": damage,
+			"team": "player",
+			"color": color,
+			"feedback_profile": str(action.get("feedback_profile", "grenade")),
+			"impact_weight": impact_weight,
+			"source_type": "trigger",
+			"trigger_passives": [],
+			"behavior": "explosion",
+		}
+		_apply_damage_with_context(hit_target, origin, explosion_direction, trigger_config)
+	var explosion_context: Dictionary = context.duplicate(true)
+	explosion_context["origin"] = origin
+	explosion_context["damage"] = damage
+	explosion_context["color"] = color
+	explosion_context["source_type"] = "trigger_explosion"
+	explosion_context["trigger_passives"] = []
+	_process_primary_trigger_event("on_explosion", explosion_context)
+
+func _execute_trigger_behavior(action: Dictionary, context: Dictionary) -> void:
+	var origin: Vector2 = context.get("origin", Vector2.ZERO)
+	var direction: Vector2 = context.get("direction", Vector2.RIGHT)
+	var target = context.get("target", null)
+	if target != null and is_instance_valid(target) and target is Node2D:
+		direction = ((target as Node2D).global_position - origin).normalized()
+	var behavior_config: Dictionary = {
+		"behavior": str(action.get("behavior", "projectile")),
+		"weapon_id": str(context.get("weapon_id", "")),
+		"weapon_tags": (context.get("weapon_tags", []) as Array).duplicate(true),
+		"trigger_passives": [],
+		"source_type": "trigger",
+		"speed": float(action.get("speed", 540.0)),
+		"damage": max(int(action.get("damage", 1)), 1),
+		"team": "player",
+		"color": action.get("color", context.get("color", Color.WHITE)),
+		"shooter": context.get("owner", null),
+		"feedback_profile": str(action.get("feedback_profile", context.get("feedback_profile", "rifle"))),
+		"impact_weight": float(action.get("impact_weight", context.get("impact_weight", 1.0))),
+		"max_distance": float(action.get("range", 180.0)),
+		"collision_half_width": float(action.get("area", 24.0)),
+		"amount": max(int(action.get("amount", 1)), 1),
+		"max_targets": max(int(action.get("max_targets", 1)), 1),
+		"spread_radians": float(action.get("spread_radians", 0.0)),
+		"pierce_count": max(int(action.get("pierce_count", 0)), 0),
+	}
+	_execute_primary_behavior(origin, direction, behavior_config)
 
 func _evaluate_room_state() -> void:
 	if _room_is_failed or _room_is_cleared:
