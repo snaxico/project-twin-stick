@@ -96,10 +96,24 @@ Godot `4.6.2` prototype for a same-screen local co-op twin-stick roguelite. The 
 - wave composition now scales by room depth instead of using one fixed enemy mix
 - Patch 11 melee-first rebalance is now in:
   - early rooms are mostly `Chaser`
-  - mid rooms introduce `Charger` heavily
-  - late rooms are `Charger`-heavy with rare `Spitter`
+  - mid rooms introduce `Charger` and `Bruiser`
+  - late rooms are heavy-melee mixes dominated by `Charger` and `Bruiser`
   - elite rooms now bias further toward melee pressure instead of adding ranged load
   - boss support waves are melee-only
+- Patch 13 encounter identity layer is now in:
+  - `Bruiser` adds a slow durable slam enemy role
+  - modifiers are now gated by `min_step` and `pool`
+  - normal runs use only the `core` modifier pool
+  - new core modifiers:
+    - `Swarm`
+    - `Heavy Patrol`
+  - arena obstacle layouts now exist:
+    - `pillars`
+    - `ring`
+    - `pockets`
+  - obstacle visuals now render as high-contrast pillars instead of blending into the arena floor
+  - obstacle spawning now reserves the arena center so loot/drop interaction cannot be softlocked
+  - combat and elite rooms now use recipe-driven layout/modifier/enemy-weight hints
 - boss health now scales modestly with rooms survived before the boss
 - gauntlet V1 layer is in:
   - neutral generators spawn pressure enemies
@@ -111,14 +125,16 @@ Godot `4.6.2` prototype for a same-screen local co-op twin-stick roguelite. The 
   - `Chaser`: small red dart silhouette
   - `Spitter`: medium magenta hex silhouette
   - `Charger`: large brown wedge silhouette
+  - `Bruiser`: large brown hex bruiser silhouette
   - boss: oversized crimson crown silhouette
 
 ## Active Systems
 
 - `ProfileState` for save data, meta gold, and unlock ownership
 - `RunState` for run progression, per-player inventories, loadouts, wallet state, shop offers, run-mode health rules, outcomes, primary stat compilation, tag filtering, and trigger-passive compilation
+- `RecipeEngine` for encounter recipe selection and enemy-weight hint lookup
 - `RunFlow` for connected map rendering, node inspection, node selection, and room transitions
-- `CoopManager` for room orchestration, combat spawning, loot/shop resolution, exit flow, room-state signaling, primary behavior execution, and trigger-event processing
+- `CoopManager` for room orchestration, combat spawning, obstacle layouts, loot/shop resolution, exit flow, room-state signaling, primary behavior execution, and trigger-event processing
 - `PassiveTriggerSystem` for hook-passive throttling and trigger action collection
 - `IconFactory` for cached procedural placeholder icons and real-sprite fallback lookup
 - `docs/design/weapons-passives-balance.xlsx` as the balancing design document for:
@@ -150,7 +166,7 @@ Godot `4.6.2` prototype for a same-screen local co-op twin-stick roguelite. The 
   - lighter transparency so the arena stays readable behind the HUD
 - modifier intro panel plus active room tinting
 - darkness overlay, left-side spawn filtering, and optional friendly fire modifier hooks
-- fixed fullscreen same-screen arena with layout presets: `default`, `crossfire`, `pinch`, `offset`, `boss gate`
+- fixed fullscreen same-screen arena with layout presets: `default`, `crossfire`, `pinch`, `offset`, `pillars`, `ring`, `pockets`, `boss gate`
 - gauntlet layout preset: `gauntlet_pockets`
 - arena presentation is now cartoon-styled:
   - thick player/enemy outlines
@@ -213,6 +229,7 @@ Godot `4.6.2` prototype for a same-screen local co-op twin-stick roguelite. The 
 - Patch 10 should stay a readability-and-feel pass, not a doorway into new content systems
 - Patch 11 should keep combat melee-first and survivable, not drift back into projectile-heavy pressure
 - Patch 12 icon-first UI pass is now implemented and verified; future UI work should preserve fast scan readability instead of growing text blocks again
+- Patch 13 encounter identity pass is now implemented in code and should be validated through live runs before further encounter expansion
 - ranged pressure has been softened to make the game less oppressive
 - aim lines, projectiles, and arena contrast were pushed toward clearer combat reads
 - player-facing weapon and projectile art should stay readable and anchored to gameplay direction, not just cosmetic placement
@@ -247,6 +264,11 @@ Godot `4.6.2` prototype for a same-screen local co-op twin-stick roguelite. The 
   - shop offer scanning speed
   - replacement flow clarity with unfamiliar placeholder icons
   - these checks were exercised enough to accept the patch, but they still need follow-up after future UI or content growth
+- Patch 13 still needs live validation for:
+  - Bruiser readability, slam telegraph, and recovery punish window
+  - modifier tier progression in Normal runs
+  - obstacle collision and anti-stuck behavior on `pillars`, `ring`, and `pockets`
+  - whether recipe-driven rooms actually feel distinct across several runs
 - `3–4` player runtime validation and tuning still need real play coverage
 - full-run pacing and solo-vs-group balance are still not finished
 - menu cleanup is partially in; there is now a real front door, but setup/debug/meta presentation still needs more polish
@@ -269,6 +291,11 @@ If work resumes, prefer cleanup and presentation polish over new mechanics:
 - run a live validation pass across:
   - tune `Incinerator`, `Beam Lance`, and `Arc Caster` feel after the first validated pass
   - tune `range`, `area`, `pierce`, and hook-passive behavior as needed
+- run a focused Patch 13 validation pass:
+  - confirm early rooms stay light and readable
+  - confirm Bruisers appear mid/late and in boss support only
+  - confirm pillar/ring/pocket rooms change movement without trap bugs
+  - confirm recipes create memorable room identities across multiple runs
 - run one Easy and one Normal full-run pass specifically against the Patch 10 number scale, feedback intensity, loot/shop flow, and readability
 - simplify the play-setup screen further now that `Play` and `Debug` are separate paths
 - tighten HUD wording and spacing after a few more live readability checks

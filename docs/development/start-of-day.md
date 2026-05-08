@@ -43,6 +43,7 @@ Read this first to restore project context quickly, then read `current-state.md`
   - `Chaser`: small red dart
   - `Spitter`: medium magenta hex
   - `Charger`: large brown wedge
+  - `Bruiser`: oversized brown hex bruiser
   - `Boss`: oversized crimson crown
 - Grenades use aimed throw behavior.
 - Mines place instantly on secondary press and detonate on proximity fuse.
@@ -106,12 +107,26 @@ Read this first to restore project context quickly, then read `current-state.md`
   - enemy spawn interval
 - Survival waves are depth-aware:
   - early rooms are almost all `Chaser` with rare `Spitter`
-  - mid rooms introduce `Charger` heavily while `Spitter` stays rare
-  - later rooms are `Charger`-heavy with `Chaser` support and minimal `Spitter`
+  - mid rooms introduce `Charger` and `Bruiser` while `Spitter` stays rare
+  - later rooms are heavy-melee rooms dominated by `Charger` and `Bruiser`
 - Boss support waves are now melee-only:
   - `Chaser`
   - `Charger`
+  - `Bruiser`
   - no `Spitter` support add in the boss room
+- Room modifiers are now progression-gated:
+  - early core pool stays readable
+  - advanced modifiers stay out of normal runs
+  - `Swarm` and `Heavy Patrol` are now in the core pool
+- Arena layouts now include obstacle variants:
+  - `pillars`
+  - `ring`
+  - `pockets`
+  - obstacle visuals now use a high-contrast pillar treatment instead of subtle floor tinting
+  - arena center is reserved so obstacle placement cannot block center-spawned loot
+- Combat and elite rooms are now recipe-driven:
+  - layout, modifier, and enemy-weight hints combine into recognizable encounters
+  - example identities now include pillar fights, ring kites, and pocket sieges
 - Boss HP now scales slightly with how many rooms were cleared before the boss.
 - Debug setup is now a real launcher, not just starting-gear overrides:
   - `Normal Run` or `Single Room`
@@ -174,6 +189,11 @@ Read this first to restore project context quickly, then read `current-state.md`
   - shop offers must read faster than the old text blocks
   - replacement choices should read icon-to-icon at a glance
   - Patch 12 has now been accepted, so future UI edits should preserve this scan speed
+- Validate Patch 13 encounter identity in live play:
+  - `Bruiser` must read as a slow durable slam threat, not a worse Charger
+  - early rooms must stay clean of late modifiers and heavies
+  - pillar/ring/pocket rooms must change movement without creating stuck enemies
+  - recipe-driven rooms should feel authored rather than arbitrary
 - Validate loot, replacement, shop, and exit UI flow with gamepad-first input.
 - Validate `3–4` player behavior and full-run pacing later; do not expand scope casually.
 
@@ -190,11 +210,13 @@ Read this first to restore project context quickly, then read `current-state.md`
 - `data/weapons.json`: weapon definitions and level data.
 - `data/passives.json`: passive reward/shop item definitions.
 - `data/modifiers.json`: room modifier tuning.
+- `data/recipes.json`: encounter recipe definitions and enemy weight hints.
 - `scripts/ui/IconFactory.gd`: procedural fallback icon generation and icon cache for weapons, passives, and UI chrome.
+- `RecipeEngine.gd`: room recipe loading and recipe/weight-hint selection.
 - `docs/design/weapons-passives-balance.xlsx`: balancing/design source of truth for primary weapons, secondary weapons, and passive items.
 - `Enemy.gd`: enemy silhouettes, hitbox sizing, and motion identity.
 - `PassiveTriggerSystem.gd`: centralized hook-passive throttling and action collection.
-- `CoopManager.gd`: now also owns generator-room orchestration, pickup handling, the deferred pickup attach path, and shared combat-hit routing across primary and secondary sources.
+- `CoopManager.gd`: now also owns generator-room orchestration, pickup handling, encounter wave composition, obstacle spawning, the deferred pickup attach path, and shared combat-hit routing across primary and secondary sources.
 
 ## Validation Reminder
 

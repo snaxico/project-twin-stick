@@ -4,6 +4,7 @@ const PlayerConfigData = preload("res://scripts/player/PlayerConfig.gd")
 const ModifierEngineData = preload("res://scripts/game/ModifierEngine.gd")
 const PlayerInventoryData = preload("res://scripts/game/PlayerInventory.gd")
 const PassiveTriggerSystemData = preload("res://scripts/game/PassiveTriggerSystem.gd")
+const RecipeEngineData = preload("res://scripts/game/RecipeEngine.gd")
 const ScreenShakeData = preload("res://scripts/juice/ScreenShake.gd")
 const ParticleFactoryData = preload("res://scripts/juice/ParticleFactory.gd")
 const FloatingTextData = preload("res://scripts/juice/FloatingText.gd")
@@ -45,6 +46,8 @@ void fragment() {
 """
 const UNIFORM_ARENA_FLOOR_COLOR := Color(0.28, 0.30, 0.25, 1.0)
 const UNIFORM_ARENA_ACCENT_COLOR := Color(0.44, 0.46, 0.48, 0.16)
+const ARENA_CENTER := Vector2(960.0, 540.0)
+const CENTER_OBSTACLE_EXCLUSION_RADIUS := 140.0
 const LAYOUT_PALETTES := {
 	"default": {
 		"floor_color": UNIFORM_ARENA_FLOOR_COLOR,
@@ -206,6 +209,7 @@ var _room_intro_ends_at := 0.0
 var _stationary_damage_next_tick_at := 0.0
 var _active_modifier: Dictionary = {}
 var _modifier_engine = null
+var _recipe_engine = null
 var _passive_trigger_system = null
 var _room_config: Dictionary = {}
 var _boss_node = null
@@ -239,6 +243,7 @@ var _settings_options: Array = []
 var _generator_nodes: Array = []
 var _generator_slot_positions: Array = []
 var _generator_total_count: int = 0
+var _obstacle_nodes: Array = []
 var _room_random := RandomNumberGenerator.new()
 var _active_loot_drop = null
 var _loot_vote_ui: Control = null
@@ -307,6 +312,7 @@ func _ready() -> void:
 	if shop_ui_scene == null:
 		shop_ui_scene = load("res://scenes/ui/ShopUI.tscn")
 	_modifier_engine = ModifierEngineData.new()
+	_recipe_engine = RecipeEngineData.new()
 	_passive_trigger_system = PassiveTriggerSystemData.new()
 	_wave_random.randomize()
 	_room_random.randomize()
@@ -642,7 +648,8 @@ func _start_room() -> void:
 	_generator_nodes = []
 	_generator_slot_positions = []
 	_generator_total_count = 0
-	_active_modifier = {} if _is_boss_room() else _room_config.get("modifier", _modifier_engine.get_random_modifier()).duplicate(true)
+	_clear_obstacles()
+	_active_modifier = {} if _is_boss_room() else _room_config.get("modifier", _modifier_engine.get_random_modifier(int(_room_config.get("step_index", 0)))).duplicate(true)
 	_friendly_fire_enabled = _modifier_engine.is_friendly_fire(_active_modifier)
 	_vision_radius = _modifier_engine.get_vision_radius(_active_modifier)
 	_clear_container(projectiles)
@@ -681,7 +688,9 @@ func _build_survival_wave_plan() -> Array:
 	var step_index := int(_room_config.get("step_index", 0))
 	var is_elite := str(_room_config.get("room_type", "")) == "elite"
 	var spawn_count := _compute_wave_size(step_index, is_elite, spawn_points.size())
-	var enemy_types := _roll_wave_composition(step_index, is_elite, max(spawn_count, 1))
+	var weight_hint_name: String = str(_room_config.get("enemy_weight_hint", "default"))
+	var weight_override: Array = _recipe_engine.get_weight_hint(weight_hint_name) if _recipe_engine != null else []
+	var enemy_types := _roll_wave_composition(step_index, is_elite, max(spawn_count, 1), weight_override)
 	var plan: Array = []
 
 	for index in range(spawn_count):
@@ -711,16 +720,19 @@ func _spawn_boss() -> void:
 	enemies.add_child(boss)
 	_boss_node = boss
 
-func _roll_wave_composition(step_index: int, is_elite: bool, composition_size: int) -> Array:
-	var weights := [6, 1, 0]
-	if step_index >= 4:
-		weights = [2, 1, 5]
+func _roll_wave_composition(step_index: int, is_elite: bool, composition_size: int, weight_override: Array = []) -> Array:
+	var weights: Array = [6, 1, 0, 0]
+	if not weight_override.is_empty() and weight_override.size() >= 4:
+		weights = weight_override.duplicate()
+	elif step_index >= 4:
+		weights = [1, 1, 3, 3]
 	elif step_index >= 2:
-		weights = [4, 1, 3]
+		weights = [3, 1, 2, 2]
 
 	if is_elite:
 		weights[0] = max(weights[0] - 1, 0)
-		weights[2] += 2
+		weights[2] += 1
+		weights[3] += 1
 
 	var weighted_pool: Array = []
 	for _index in range(weights[0]):
@@ -729,6 +741,8 @@ func _roll_wave_composition(step_index: int, is_elite: bool, composition_size: i
 		weighted_pool.append("spitter")
 	for _index in range(weights[2]):
 		weighted_pool.append("charger")
+	for _index in range(weights[3]):
+		weighted_pool.append("bruiser")
 	if weighted_pool.is_empty():
 		weighted_pool.append("chaser")
 
@@ -745,7 +759,7 @@ func _compute_wave_size(step_index: int, is_elite: bool, max_spawn_points: int) 
 func _build_boss_support_wave_plan() -> Array:
 	var spawn_points := _get_enemy_spawn_positions()
 	var support_count := 2 if _player_nodes.size() <= 2 else 3
-	var support_types := ["chaser", "charger", "chaser"]
+	var support_types := ["chaser", "charger", "bruiser"]
 	var plan: Array = []
 	for index in range(support_count):
 		var enemy_type: String = str(support_types[(_survival_wave_index + index) % support_types.size()])
@@ -2446,6 +2460,8 @@ func _apply_layout_preset(layout_id: String) -> void:
 		Vector2(1380, 380),
 		Vector2(960, 760),
 	]
+	var obstacle_positions: Array = []
+	var obstacle_radii: Array = []
 
 	match layout_id:
 		"crossfire":
@@ -2482,6 +2498,56 @@ func _apply_layout_preset(layout_id: String) -> void:
 				Vector2(960, 40), Vector2(960, 1040),
 			]
 			generator_positions = [Vector2(540, 380), Vector2(1380, 380), Vector2(960, 760)]
+		"pillars":
+			player_positions = [
+				Vector2(860, 490), Vector2(1060, 490),
+				Vector2(860, 590), Vector2(1060, 590),
+			]
+			enemy_positions = [
+				Vector2(60, 60), Vector2(1860, 60),
+				Vector2(60, 1020), Vector2(1860, 1020),
+				Vector2(960, 40), Vector2(960, 1040),
+			]
+			generator_positions = [Vector2(540, 380), Vector2(1380, 380), Vector2(960, 760)]
+			obstacle_positions = [
+				Vector2(420, 340), Vector2(1500, 340),
+				Vector2(420, 740), Vector2(1500, 740),
+			]
+			obstacle_radii = [52.0, 52.0, 52.0, 52.0]
+		"ring":
+			player_positions = [
+				Vector2(910, 520), Vector2(1010, 520),
+				Vector2(910, 580), Vector2(1010, 580),
+			]
+			enemy_positions = [
+				Vector2(60, 60), Vector2(1860, 60),
+				Vector2(60, 1020), Vector2(1860, 1020),
+				Vector2(480, 40), Vector2(1440, 1040),
+			]
+			generator_positions = [Vector2(540, 380), Vector2(1380, 380), Vector2(960, 760)]
+			obstacle_positions = [
+				Vector2(600, 340), Vector2(1320, 340),
+				Vector2(600, 740), Vector2(1320, 740),
+				Vector2(960, 280), Vector2(960, 800),
+			]
+			obstacle_radii = [44.0, 44.0, 44.0, 44.0, 44.0, 44.0]
+		"pockets":
+			player_positions = [
+				Vector2(860, 500), Vector2(1060, 500),
+				Vector2(860, 600), Vector2(1060, 600),
+			]
+			enemy_positions = [
+				Vector2(60, 180), Vector2(1860, 180),
+				Vector2(60, 900), Vector2(1860, 900),
+				Vector2(960, 40), Vector2(960, 1040),
+			]
+			generator_positions = [Vector2(460, 320), Vector2(1460, 320), Vector2(960, 800)]
+			obstacle_positions = [
+				Vector2(340, 320), Vector2(580, 320),
+				Vector2(1340, 320), Vector2(1580, 320),
+				Vector2(840, 800), Vector2(1080, 800),
+			]
+			obstacle_radii = [40.0, 40.0, 40.0, 40.0, 40.0, 40.0]
 		"boss_gate":
 			player_positions = [
 				Vector2(860, 700), Vector2(1060, 700),
@@ -2514,6 +2580,61 @@ func _apply_layout_preset(layout_id: String) -> void:
 	enemy_spawn_5.position = enemy_positions[4]
 	enemy_spawn_6.position = enemy_positions[5]
 	_generator_slot_positions = generator_positions.duplicate()
+	_spawn_obstacles(obstacle_positions, obstacle_radii)
+
+func _spawn_obstacles(positions: Array, radii: Array) -> void:
+	_clear_obstacles()
+	for index in range(positions.size()):
+		var position: Vector2 = positions[index]
+		var radius: float = float(radii[index]) if index < radii.size() else 48.0
+		if position.distance_to(ARENA_CENTER) < CENTER_OBSTACLE_EXCLUSION_RADIUS + radius:
+			continue
+		var obstacle := StaticBody2D.new()
+		obstacle.position = position
+		obstacle.collision_layer = 1
+		obstacle.collision_mask = 0
+		obstacle.z_as_relative = false
+		obstacle.z_index = 5
+
+		var shape := CollisionShape2D.new()
+		var circle := CircleShape2D.new()
+		circle.radius = radius
+		shape.shape = circle
+		obstacle.add_child(shape)
+
+		var pillar_outline := Polygon2D.new()
+		pillar_outline.color = Color(0.08, 0.10, 0.12, 0.96)
+		pillar_outline.polygon = _build_circle_polygon(radius + 3.0, 12)
+		pillar_outline.z_index = 0
+		obstacle.add_child(pillar_outline)
+
+		var pillar_visual := Polygon2D.new()
+		pillar_visual.color = Color(0.62, 0.66, 0.72, 0.98)
+		pillar_visual.polygon = _build_circle_polygon(radius, 12)
+		pillar_visual.z_index = 1
+		obstacle.add_child(pillar_visual)
+
+		var pillar_cap := Polygon2D.new()
+		pillar_cap.color = Color(0.82, 0.86, 0.90, 0.98)
+		pillar_cap.polygon = _build_circle_polygon(radius * 0.58, 12)
+		pillar_cap.z_index = 2
+		obstacle.add_child(pillar_cap)
+
+		add_child(obstacle)
+		_obstacle_nodes.append(obstacle)
+
+func _clear_obstacles() -> void:
+	for obstacle in _obstacle_nodes:
+		if is_instance_valid(obstacle):
+			obstacle.queue_free()
+	_obstacle_nodes.clear()
+
+func _build_circle_polygon(radius: float, segments: int) -> PackedVector2Array:
+	var points := PackedVector2Array()
+	for index in range(segments):
+		var angle: float = float(index) / float(segments) * TAU
+		points.append(Vector2(cos(angle) * radius, sin(angle) * radius))
+	return points
 
 func _play_intro_juice() -> void:
 	if modifier_intro_panel == null or camera == null:

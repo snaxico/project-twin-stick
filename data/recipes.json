@@ -1,0 +1,64 @@
+{
+  "recipes": [
+    {
+      "id": "rush",
+      "name": "Rush Room",
+      "min_step": 0,
+      "max_step": 99,
+      "layout_pool": ["default", "crossfire"],
+      "modifier_pool": ["stampede", "one_way", "swarm"],
+      "enemy_weight_hint": "chaser_heavy"
+    },
+    {
+      "id": "hold_the_line",
+      "name": "Hold the Line",
+      "min_step": 0,
+      "max_step": 99,
+      "layout_pool": ["default", "pinch"],
+      "modifier_pool": ["one_way", "stampede"],
+      "enemy_weight_hint": "default"
+    },
+    {
+      "id": "pillar_fight",
+      "name": "Pillar Fight",
+      "min_step": 2,
+      "max_step": 99,
+      "layout_pool": ["pillars"],
+      "modifier_pool": ["heavy_patrol", "armoured", "frenzy"],
+      "enemy_weight_hint": "bruiser_mix"
+    },
+    {
+      "id": "ring_kite",
+      "name": "Ring Kite",
+      "min_step": 2,
+      "max_step": 99,
+      "layout_pool": ["ring"],
+      "modifier_pool": ["frenzy", "swarm", "stampede"],
+      "enemy_weight_hint": "default"
+    },
+    {
+      "id": "pocket_siege",
+      "name": "Pocket Siege",
+      "min_step": 2,
+      "max_step": 99,
+      "layout_pool": ["pockets"],
+      "modifier_pool": ["heavy_patrol", "inferno"],
+      "enemy_weight_hint": "bruiser_mix",
+      "objective_hint": "destroy_generators"
+    },
+    {
+      "id": "chaos_room",
+      "name": "Chaos Room",
+      "min_step": 4,
+      "max_step": 99,
+      "layout_pool": ["default", "pillars", "ring"],
+      "modifier_pool": ["explosive_death", "frenzy", "inferno"],
+      "enemy_weight_hint": "default"
+    }
+  ],
+  "enemy_weight_hints": {
+    "default": null,
+    "chaser_heavy": [8, 1, 1, 0],
+    "bruiser_mix": [2, 0, 2, 4]
+  }
+}

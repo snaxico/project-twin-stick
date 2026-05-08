@@ -2,6 +2,7 @@ extends Node
 
 const ModifierEngineData = preload("res://scripts/game/ModifierEngine.gd")
 const PlayerInventoryData = preload("res://scripts/game/PlayerInventory.gd")
+const RecipeEngineData = preload("res://scripts/game/RecipeEngine.gd")
 const PASSIVES_DATA_PATH = "res://data/passives.json"
 const WEAPONS_DATA_PATH = "res://data/weapons.json"
 const RUN_LENGTH_MIN := 5
@@ -40,6 +41,7 @@ var run_mode: String = "normal"
 var debug_run_setup: Dictionary = {}
 
 var _modifier_engine = ModifierEngineData.new()
+var _recipe_engine = RecipeEngineData.new()
 var _random: RandomNumberGenerator = RandomNumberGenerator.new()
 var _passives: Array = []
 var _passives_by_id: Dictionary = {}
@@ -762,11 +764,15 @@ func _build_node(step_index: int, column: int, template: Dictionary) -> Dictiona
 
 	match room_type:
 		"combat":
-			var combat_objective := str(template.get("room_objective", _roll_room_objective(step_index)))
+			var recipe: Dictionary = _recipe_engine.get_recipe_for_room(step_index)
+			var combat_objective := str(template.get("room_objective", recipe.get("objective_hint", _roll_room_objective(step_index))))
+			var recipe_layout: String = _recipe_engine.pick_from_pool(recipe.get("layout_pool", []))
+			var recipe_modifier_id: String = _recipe_engine.pick_from_pool(recipe.get("modifier_pool", []))
 			node["title"] = "Combat Room"
 			node["room_objective"] = combat_objective
-			node["modifier"] = template.get("modifier", _modifier_engine.get_random_modifier()).duplicate(true) if template.has("modifier") and template.get("modifier", {}) is Dictionary else _modifier_engine.get_random_modifier()
-			node["layout_id"] = str(template.get("layout_id", "gauntlet_pockets" if combat_objective == "destroy_generators" else _get_random_layout_id()))
+			node["modifier"] = _resolve_recipe_modifier(template, step_index, recipe_modifier_id)
+			node["layout_id"] = _resolve_recipe_layout_id(template, combat_objective, recipe_layout)
+			node["enemy_weight_hint"] = str(recipe.get("enemy_weight_hint", "default"))
 			if combat_objective == "destroy_generators":
 				node["description"] = "Destroy the generators, sweep the room, and collect the drops."
 				node["generator_count"] = int(template.get("generator_count", 2))
@@ -779,11 +785,15 @@ func _build_node(step_index: int, column: int, template: Dictionary) -> Dictiona
 				node["enemy_spawn_interval"] = float(template.get("enemy_spawn_interval", _compute_spawn_interval(step_index, false)))
 			node["reward_label"] = "+%d Gold each + loot drop" % node["currency_reward"]
 		"elite":
-			var elite_objective := str(template.get("room_objective", _roll_room_objective(step_index)))
+			var elite_recipe: Dictionary = _recipe_engine.get_recipe_for_room(step_index)
+			var elite_objective := str(template.get("room_objective", elite_recipe.get("objective_hint", _roll_room_objective(step_index))))
+			var elite_recipe_layout: String = _recipe_engine.pick_from_pool(elite_recipe.get("layout_pool", []))
+			var elite_recipe_modifier_id: String = _recipe_engine.pick_from_pool(elite_recipe.get("modifier_pool", []))
 			node["title"] = "Elite Room"
 			node["room_objective"] = elite_objective
-			node["modifier"] = template.get("modifier", _modifier_engine.get_random_modifier()).duplicate(true) if template.has("modifier") and template.get("modifier", {}) is Dictionary else _modifier_engine.get_random_modifier()
-			node["layout_id"] = str(template.get("layout_id", "gauntlet_pockets" if elite_objective == "destroy_generators" else _get_random_layout_id()))
+			node["modifier"] = _resolve_recipe_modifier(template, step_index, elite_recipe_modifier_id)
+			node["layout_id"] = _resolve_recipe_layout_id(template, elite_objective, elite_recipe_layout)
+			node["enemy_weight_hint"] = str(elite_recipe.get("enemy_weight_hint", "default"))
 			if elite_objective == "destroy_generators":
 				node["description"] = "Break the generators under pressure, then wipe the room."
 				node["generator_count"] = int(template.get("generator_count", 3))
@@ -1349,13 +1359,14 @@ func _build_debug_room_node() -> Dictionary:
 
 func _resolve_debug_modifier() -> Dictionary:
 	var modifier_mode := str(debug_run_setup.get("modifier_mode", "random"))
+	var step_index: int = int(debug_run_setup.get("step_index", 0))
 	match modifier_mode:
 		"none":
 			return {}
 		"specific":
 			return _modifier_engine.get_modifier_by_id(str(debug_run_setup.get("modifier_id", "")))
 		_:
-			return _modifier_engine.get_random_modifier()
+			return _modifier_engine.get_random_modifier(step_index)
 
 func _get_primary_profile(profile_id: String) -> Dictionary:
 	var normalized_profile_id := _normalize_primary_profile_id(profile_id)
@@ -1818,8 +1829,26 @@ func _build_outcome(title: String, summary: String, action: String) -> Dictionar
 	}
 
 func _get_random_layout_id() -> String:
-	var layouts := ["default", "crossfire", "pinch", "offset"]
+	var layouts := ["default", "crossfire", "pinch", "offset", "pillars", "ring", "pockets"]
 	return layouts[_random.randi_range(0, layouts.size() - 1)]
+
+func _resolve_recipe_layout_id(template: Dictionary, room_objective: String, recipe_layout: String) -> String:
+	if template.has("layout_id"):
+		return str(template.get("layout_id", "default"))
+	if not recipe_layout.is_empty():
+		return recipe_layout
+	if room_objective == "destroy_generators":
+		return "gauntlet_pockets"
+	return _get_random_layout_id()
+
+func _resolve_recipe_modifier(template: Dictionary, step_index: int, recipe_modifier_id: String) -> Dictionary:
+	if template.has("modifier") and template.get("modifier", {}) is Dictionary:
+		return template.get("modifier", {}).duplicate(true)
+	if not recipe_modifier_id.is_empty():
+		var recipe_modifier: Dictionary = _modifier_engine.get_modifier_by_id(recipe_modifier_id)
+		if not recipe_modifier.is_empty() and int(recipe_modifier.get("min_step", 0)) <= step_index:
+			return recipe_modifier
+	return _modifier_engine.get_random_modifier(step_index)
 
 func _rebuild_node_lookup() -> void:
 	_node_lookup = {}

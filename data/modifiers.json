@@ -5,6 +5,8 @@
       "name": "Frenzy",
       "description": "Enemies move and attack faster. New waves arrive sooner.",
       "tint": [0.95, 0.84, 0.45, 1.0],
+      "min_step": 2,
+      "pool": "core",
       "enemy_speed_multiplier": 1.35,
       "enemy_fire_interval_multiplier": 0.92,
       "spawn_interval_multiplier": 0.88
@@ -14,6 +16,8 @@
       "name": "Armoured",
       "description": "Enemies take more punishment before they go down.",
       "tint": [0.65, 0.72, 0.86, 1.0],
+      "min_step": 2,
+      "pool": "core",
       "enemy_bonus_health": 20
     },
     {
@@ -21,6 +25,8 @@
       "name": "Inferno",
       "description": "Standing still burns. Keep moving or take damage.",
       "tint": [0.94, 0.45, 0.25, 1.0],
+      "min_step": 3,
+      "pool": "core",
       "stationary_damage_interval": 1.25
     },
     {
@@ -28,6 +34,8 @@
       "name": "Explosive Death",
       "description": "Enemies explode when they die. Stay clear of the blast.",
       "tint": [0.86, 0.42, 0.92, 1.0],
+      "min_step": 4,
+      "pool": "core",
       "death_explosion_radius": 84.0,
       "death_explosion_damage": 10
     },
@@ -36,6 +44,8 @@
       "name": "Stampede",
       "description": "Enemies crash harder on contact and push closer.",
       "tint": [0.92, 0.36, 0.18, 1.0],
+      "min_step": 0,
+      "pool": "core",
       "enemy_speed_multiplier": 1.18,
       "enemy_contact_damage_bonus": 10
     },
@@ -44,6 +54,8 @@
       "name": "Crossfire",
       "description": "Ranged enemies pressure the room with faster volleys.",
       "tint": [0.42, 0.78, 0.94, 1.0],
+      "min_step": 4,
+      "pool": "advanced",
       "enemy_fire_interval_multiplier": 0.82,
       "spawn_interval_multiplier": 0.96
     },
@@ -52,6 +64,8 @@
       "name": "Darkness",
       "description": "Visibility collapses outside the squad. Stay close enough to read the room.",
       "tint": [0.5, 0.44, 0.82, 1.0],
+      "min_step": 4,
+      "pool": "advanced",
       "vision_radius": 280.0
     },
     {
@@ -59,6 +73,8 @@
       "name": "One-Way",
       "description": "Enemies only arrive from the left side. Reposition before the funnel collapses.",
       "tint": [0.78, 0.7, 0.36, 1.0],
+      "min_step": 0,
+      "pool": "core",
       "spawn_side": "left"
     },
     {
@@ -66,7 +82,31 @@
       "name": "Friendly Fire",
       "description": "Your shots can hit allies. Tight formations become a liability.",
       "tint": [0.9, 0.38, 0.66, 1.0],
+      "min_step": 0,
+      "pool": "advanced",
       "friendly_fire": true
+    },
+    {
+      "id": "swarm",
+      "name": "Swarm",
+      "description": "More enemies, but they come slower and weaker. Crowd control wins.",
+      "tint": [0.85, 0.78, 0.35, 1.0],
+      "min_step": 0,
+      "pool": "core",
+      "spawn_interval_multiplier": 0.72,
+      "enemy_speed_multiplier": 0.88,
+      "enemy_bonus_health": -10
+    },
+    {
+      "id": "heavy_patrol",
+      "name": "Heavy Patrol",
+      "description": "Fewer waves, but every enemy is tougher. Pick your fights.",
+      "tint": [0.45, 0.52, 0.62, 1.0],
+      "min_step": 2,
+      "pool": "core",
+      "spawn_interval_multiplier": 1.4,
+      "enemy_bonus_health": 20,
+      "enemy_speed_multiplier": 0.92
     }
   ]
 }

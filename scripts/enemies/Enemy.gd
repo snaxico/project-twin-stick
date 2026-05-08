@@ -20,6 +20,7 @@ enum EnemyType {
 	CHASER,
 	SPITTER,
 	CHARGER,
+	BRUISER,
 	BOSS,
 }
 
@@ -67,6 +68,11 @@ var _charge_direction := Vector2.ZERO
 var _charge_windup_ends_at := 0.0
 var _charge_dash_ends_at := 0.0
 var _next_charge_at := 0.0
+var _slam_direction := Vector2.ZERO
+var _slam_windup_ends_at := 0.0
+var _slam_ends_at := 0.0
+var _slam_recovery_ends_at := 0.0
+var _next_slam_at := 0.0
 var _contact_range := 28.0
 var _outline_pulse := 1.0
 
@@ -92,6 +98,17 @@ func setup(type_name: String, combat_owner) -> void:
 			projectile_damage = 0
 			contact_damage = 15
 			preferred_distance = 200.0
+			_projectile_burst_count = 0
+			_projectile_spread_radians = 0.0
+		"bruiser":
+			enemy_type = EnemyType.BRUISER
+			max_health = 60
+			move_speed = 68.0
+			fire_interval = 0.0
+			projectile_speed = 0.0
+			projectile_damage = 0
+			contact_damage = 20
+			preferred_distance = 60.0
 			_projectile_burst_count = 0
 			_projectile_spread_radians = 0.0
 		"boss":
@@ -122,7 +139,7 @@ func setup(type_name: String, combat_owner) -> void:
 func apply_room_modifier(enemy_bonus_health: int, enemy_speed_multiplier: float, enemy_fire_interval_multiplier: float, death_explosion_radius: float, death_explosion_damage: int, enemy_contact_damage_bonus: int) -> void:
 	if enemy_type == EnemyType.BOSS:
 		return
-	max_health += enemy_bonus_health
+	max_health = max(max_health + enemy_bonus_health, 10)
 	current_health = max_health
 	move_speed *= enemy_speed_multiplier
 	fire_interval *= enemy_fire_interval_multiplier
@@ -174,6 +191,8 @@ func get_feedback_weight() -> float:
 			return 1.0
 		EnemyType.CHARGER:
 			return 1.35
+		EnemyType.BRUISER:
+			return 1.7
 		EnemyType.BOSS:
 			return 1.9
 		_:
@@ -225,6 +244,8 @@ func _physics_process(_delta: float) -> void:
 			base_velocity = _update_spitter_behavior(direction, distance, now)
 		EnemyType.CHARGER:
 			base_velocity = _update_charger_behavior(direction, distance, now)
+		EnemyType.BRUISER:
+			base_velocity = _update_bruiser_behavior(direction, distance, now)
 		EnemyType.BOSS:
 			base_velocity = _update_boss_behavior(direction, distance, now)
 
@@ -292,6 +313,22 @@ func _update_charger_behavior(direction: Vector2, distance: float, now: float) -
 	if distance > preferred_distance:
 		return direction * move_speed * 0.92
 	return Vector2(-direction.y, direction.x) * move_speed * 0.35
+
+func _update_bruiser_behavior(direction: Vector2, distance: float, now: float) -> Vector2:
+	if now < _slam_recovery_ends_at:
+		return direction * move_speed * 0.3
+	if now < _slam_windup_ends_at:
+		return Vector2.ZERO
+	if now < _slam_ends_at:
+		return _slam_direction * move_speed * 2.0
+	if distance > 0.0 and distance < 100.0 and now >= _next_slam_at:
+		_slam_direction = direction
+		_slam_windup_ends_at = now + 0.45
+		_slam_ends_at = _slam_windup_ends_at + 0.15
+		_slam_recovery_ends_at = _slam_ends_at + 1.8
+		_next_slam_at = now + 2.5
+		return Vector2.ZERO
+	return direction * move_speed
 
 func _update_boss_behavior(direction: Vector2, distance: float, now: float) -> Vector2:
 	var base_velocity := Vector2.ZERO
@@ -396,6 +433,19 @@ func _apply_type_visual() -> void:
 			visual.scale = Vector2(1.34, 1.34)
 			_set_collision_radius(28.0)
 			_contact_range = 38.0
+		EnemyType.BRUISER:
+			visual.color = Color(0.55, 0.38, 0.18, 1.0)
+			visual.polygon = PackedVector2Array([
+				Vector2(-22, -22),
+				Vector2(22, -22),
+				Vector2(26, 0),
+				Vector2(22, 26),
+				Vector2(-22, 26),
+				Vector2(-26, 0),
+			])
+			visual.scale = Vector2(1.5, 1.5)
+			_set_collision_radius(32.0)
+			_contact_range = 42.0
 		EnemyType.BOSS:
 			visual.color = Color(0.72, 0.06, 0.06, 1.0)
 			visual.polygon = PackedVector2Array([
@@ -519,6 +569,9 @@ func _apply_motion_polish(now: float, delta: float = 0.0) -> void:
 		EnemyType.CHARGER:
 			bob_amount = 2.2
 			bob_frequency = 1.9
+		EnemyType.BRUISER:
+			bob_amount = 1.8
+			bob_frequency = 1.4
 		EnemyType.BOSS:
 			bob_amount = 5.8
 			bob_frequency = 1.6
@@ -532,6 +585,12 @@ func _apply_motion_polish(now: float, delta: float = 0.0) -> void:
 		squash_scale = Vector2(1.18, 0.82)
 	elif enemy_type == EnemyType.CHARGER and now < _charge_dash_ends_at:
 		squash_scale = Vector2(0.92, 1.22)
+	elif enemy_type == EnemyType.BRUISER and now < _slam_windup_ends_at:
+		squash_scale = Vector2(1.22, 0.78)
+	elif enemy_type == EnemyType.BRUISER and now < _slam_ends_at:
+		squash_scale = Vector2(0.88, 1.28)
+	elif enemy_type == EnemyType.BRUISER and now < _slam_recovery_ends_at:
+		squash_scale = Vector2(1.06, 0.94)
 	body_root.position = _base_body_root_position + Vector2(0.0, bob)
 	body_root.rotation = lerp_angle(body_root.rotation, clamp(velocity.x / max(move_speed, 1.0), -1.0, 1.0) * 0.08, 0.12)
 	body_root.scale = squash_scale
@@ -571,3 +630,8 @@ func _reset_behavior_state() -> void:
 	_charge_windup_ends_at = 0.0
 	_charge_dash_ends_at = 0.0
 	_next_charge_at = 0.0
+	_slam_direction = Vector2.ZERO
+	_slam_windup_ends_at = 0.0
+	_slam_ends_at = 0.0
+	_slam_recovery_ends_at = 0.0
+	_next_slam_at = 0.0

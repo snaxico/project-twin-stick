@@ -8,10 +8,21 @@ func _init(definitions_path: String = "res://data/modifiers.json") -> void:
 	_random.randomize()
 	_load_modifiers(definitions_path)
 
-func get_random_modifier() -> Dictionary:
-	if _modifiers.is_empty():
+func get_random_modifier(step_index: int = 0, pool: String = "core") -> Dictionary:
+	var eligible: Array = []
+	for modifier in _modifiers:
+		if not (modifier is Dictionary):
+			continue
+		var mod_min_step: int = int(modifier.get("min_step", 0))
+		var mod_pool: String = str(modifier.get("pool", "core"))
+		if mod_min_step > step_index:
+			continue
+		if pool == "core" and mod_pool != "core":
+			continue
+		eligible.append(modifier)
+	if eligible.is_empty():
 		return {}
-	return _modifiers[_random.randi_range(0, _modifiers.size() - 1)].duplicate(true)
+	return eligible[_random.randi_range(0, eligible.size() - 1)].duplicate(true)
 
 func get_modifiers() -> Array:
 	var definitions: Array = []
