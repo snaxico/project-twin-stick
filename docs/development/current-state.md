@@ -184,6 +184,7 @@ Godot `4.6.2` prototype for a same-screen local co-op twin-stick roguelite. The 
 - core loop is approved and should not be replaced casually
 - current work should favor tuning and readability over new systems
 - the primary ruleset/compiler migration is now implemented and should be validated before being widened further
+- the primary ruleset/compiler migration is now implemented and has passed gameplay validation
 - ranged pressure has been softened to make the game less oppressive
 - aim lines, projectiles, and arena contrast were pushed toward clearer combat reads
 - player-facing weapon and projectile art should stay readable and anchored to gameplay direction, not just cosmetic placement
@@ -202,12 +203,11 @@ Godot `4.6.2` prototype for a same-screen local co-op twin-stick roguelite. The 
 
 ## Known Gaps
 
-- the newly implemented primary-ruleset migration still needs live gameplay validation
 - new primary behaviors still need feel/tuning passes:
   - `cone`
   - `beam`
   - `chain`
-- hook-based passive interactions still need live balance and readability validation
+- hook-based passive interactions still need live balance and readability tuning
 - `3–4` player runtime validation and tuning still need real play coverage
 - full-run pacing and solo-vs-group balance are still not finished
 - menu cleanup is partially in; there is now a real front door, but setup/debug/meta presentation still needs more polish
@@ -228,9 +228,8 @@ Godot `4.6.2` prototype for a same-screen local co-op twin-stick roguelite. The 
 If work resumes, prefer cleanup and presentation polish over new mechanics:
 
 - run a live validation pass across:
-  - `Rifle`, `Scatter`, `Slug`
-  - `Incinerator`, `Beam Lance`, `Arc Caster`
-  - `range`, `area`, `pierce`, and hook-passive behavior
+  - tune `Incinerator`, `Beam Lance`, and `Arc Caster` feel after the first validated pass
+  - tune `range`, `area`, `pierce`, and hook-passive behavior as needed
 - simplify the play-setup screen further now that `Play` and `Debug` are separate paths
 - tighten HUD wording and spacing after a few more live readability checks
 - validate the new loot, replacement, and shop UI flow with gamepad-first navigation
