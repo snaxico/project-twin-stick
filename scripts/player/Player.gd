@@ -36,13 +36,13 @@ signal damage_taken(player, amount, current_health)
 
 @export_range(1, 4, 1) var player_id: int = 1
 @export var move_speed: float = 260.0
-@export var max_health: int = 5
+@export var max_health: int = 50
 @export var primary_fire_interval: float = 0.24
 @export var projectile_speed: float = 540.0
-@export var projectile_damage: int = 1
+@export var projectile_damage: int = 10
 @export var secondary_cooldown: float = 4.0
 @export var secondary_projectile_speed: float = 125.0
-@export var secondary_damage: int = 3
+@export var secondary_damage: int = 30
 
 @onready var shadow: Polygon2D = $Shadow
 @onready var dash_shield_ring: Line2D = $DashShieldRing
@@ -941,8 +941,8 @@ func _fire_primary_chain(fire_direction: Vector2, projectile_config: Dictionary)
 	fire_requested.emit(global_position + fire_direction * 20.0, fire_direction, projectile_config)
 
 func _play_fire_recoil(intensity: float = 1.0) -> void:
-	_aim_line_recoil = max(_aim_line_recoil, 9.0 + 5.0 * intensity)
-	_turn_squash = max(_turn_squash, 0.24 + 0.12 * intensity)
+	_aim_line_recoil = max(_aim_line_recoil, 14.0 + 8.0 * intensity)
+	_turn_squash = max(_turn_squash, 0.28 + 0.16 * intensity)
 
 func _play_damage_flash() -> void:
 	if _get_flash_target() == null:

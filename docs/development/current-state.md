@@ -94,13 +94,19 @@ Godot `4.6.2` prototype for a same-screen local co-op twin-stick roguelite. The 
   - `Lv1–Lv5` weapon progression on duplicates
 - modifier pool now includes tactical rules, not just stat pressure
 - wave composition now scales by room depth instead of using one fixed enemy mix
+- Patch 11 melee-first rebalance is now in:
+  - early rooms are mostly `Chaser`
+  - mid rooms introduce `Charger` heavily
+  - late rooms are `Charger`-heavy with rare `Spitter`
+  - elite rooms now bias further toward melee pressure instead of adding ranged load
+  - boss support waves are melee-only
 - boss health now scales modestly with rooms survived before the boss
 - gauntlet V1 layer is in:
   - neutral generators spawn pressure enemies
   - generator rooms clear only after generators are destroyed and the room is swept
-  - enemies can drop gold pickups
+  - enemies can drop gold pickups and food pickups
   - generators always drop one gold pickup and one food pickup
-  - food heals `1` HP and gold is awarded into each player wallet
+  - food heals `10` HP and gold is awarded into each player wallet
 - enemy roster:
   - `Chaser`: small red dart silhouette
   - `Spitter`: medium magenta hex silhouette
@@ -114,10 +120,12 @@ Godot `4.6.2` prototype for a same-screen local co-op twin-stick roguelite. The 
 - `RunFlow` for connected map rendering, node inspection, node selection, and room transitions
 - `CoopManager` for room orchestration, combat spawning, loot/shop resolution, exit flow, room-state signaling, primary behavior execution, and trigger-event processing
 - `PassiveTriggerSystem` for hook-passive throttling and trigger action collection
+- `IconFactory` for cached procedural placeholder icons and real-sprite fallback lookup
 - `docs/design/weapons-passives-balance.xlsx` as the balancing design document for:
   - primary weapons
   - secondary weapons
   - passive items
+  - this spreadsheet must be updated whenever any of those balance surfaces change
 - bootstrap debug launcher for:
   - normal run override starts
   - single-room debug launches
@@ -137,7 +145,7 @@ Godot `4.6.2` prototype for a same-screen local co-op twin-stick roguelite. The 
   - two secondary slots
   - selected-slot highlight
   - secondary cooldown bars
-  - passive chips
+  - passive chips as icon-only markers instead of text abbreviations
   - icon-first slot rendering with real primary weapon sprites where available
   - lighter transparency so the arena stays readable behind the HUD
 - modifier intro panel plus active room tinting
@@ -179,6 +187,19 @@ Godot `4.6.2` prototype for a same-screen local co-op twin-stick roguelite. The 
   - primary fire now drives weapon-specific muzzle flash, recoil, camera kick, and procedural SFX variation
   - enemy hits/deaths now use stronger hitstop, burst/ring effects, and heavier camera/audio response
   - grenade and mine detonations now use layered burst plus expanding ring feedback
+- Patch 10 baseline landed on top of that combat layer:
+  - combat values now use a base-10 display scale while preserving relative balance and pace
+  - player baseline HP now presents as `50`
+  - primary and secondary damage now present in `10`-point steps instead of `1`-point steps
+  - generator HP, revive HP, inferno damage, rest healing, and flat passive/modifier combat bonuses were scaled to match
+  - loot drops now pop in with a short scale tween instead of appearing flat
+  - enemy gold pickups now burst slightly off the corpse position instead of stacking on one exact point
+- Patch 12 icon-first UI pass is now in:
+  - `IconFactory` generates procedural placeholder icons for weapons, passives, coin, and heart UI chrome
+  - real weapon sprites still take priority where they already exist
+  - HUD weapon slots now always show icons instead of falling back to text
+  - passive chips now use procedural icons
+  - loot vote, shop, and weapon replacement panels now lead with icon + short label instead of text-heavy blocks
 - shared placeholder visual language with player color identity and shooter-tinted projectiles/effects
 - juice stack through `J7`: hit flash, knockback, hitstop, shake, particles, procedural SFX, health bars, floating text, motion polish, screen overlays, and transition polish
 - sprite-generation documentation now lives in-project under `sprites/guidelines/`, separate from runtime assets in `assets/sprites/`
@@ -189,6 +210,9 @@ Godot `4.6.2` prototype for a same-screen local co-op twin-stick roguelite. The 
 - current work should favor tuning and readability over new systems
 - the primary ruleset/compiler migration is now implemented and should be validated before being widened further
 - the primary ruleset/compiler migration is now implemented and has passed gameplay validation
+- Patch 10 should stay a readability-and-feel pass, not a doorway into new content systems
+- Patch 11 should keep combat melee-first and survivable, not drift back into projectile-heavy pressure
+- Patch 12 icon-first UI pass is now implemented and verified; future UI work should preserve fast scan readability instead of growing text blocks again
 - ranged pressure has been softened to make the game less oppressive
 - aim lines, projectiles, and arena contrast were pushed toward clearer combat reads
 - player-facing weapon and projectile art should stay readable and anchored to gameplay direction, not just cosmetic placement
@@ -198,6 +222,7 @@ Godot `4.6.2` prototype for a same-screen local co-op twin-stick roguelite. The 
 - the combat HUD should read at a glance instead of exposing debug strings
 - the combat HUD should stay compact and icon-first where possible, not drift back toward text-heavy debug cards
 - the loot, shop, and replacement flows should feel player-facing rather than tool-like
+- icon-first UI should stay readable and fast rather than drifting back toward dense text blocks
 - grenade and mine roles should stay distinct instead of drifting back into one blended secondary design
 - run structure should vary between attempts through map length, room order, and enemy mix without changing the run-flow contract
 - aim-mode switching should stay in the shared settings UI, not developer-facing controls
@@ -212,6 +237,16 @@ Godot `4.6.2` prototype for a same-screen local co-op twin-stick roguelite. The 
   - `beam`
   - `chain`
 - hook-based passive interactions still need live balance and readability tuning
+- Patch 10 value scaling is in, but floating-text readability and full-run readability under `2–4` player load still need live observation
+- Patch 11 melee/sustain rebalance still needs live validation for:
+  - full-run `Normal` survivability
+  - food-drop feel under real room clear speeds
+  - whether `Spitter` still reads as distinct while being much rarer
+- Patch 12 icon-first UI still needs live readability checks for:
+  - placeholder icon clarity at gameplay scale
+  - shop offer scanning speed
+  - replacement flow clarity with unfamiliar placeholder icons
+  - these checks were exercised enough to accept the patch, but they still need follow-up after future UI or content growth
 - `3–4` player runtime validation and tuning still need real play coverage
 - full-run pacing and solo-vs-group balance are still not finished
 - menu cleanup is partially in; there is now a real front door, but setup/debug/meta presentation still needs more polish
@@ -224,7 +259,7 @@ Godot `4.6.2` prototype for a same-screen local co-op twin-stick roguelite. The 
 - enemy contact damage and pickup drop flow were recently fixed in code but still need live validation under combat load
 - single-room debug launcher still needs interactive coverage across room types and modifiers
 - new tactical modifiers still need live-behavior tuning and edge-case validation
-- `J1` and `J2` feedback layers still need final intensity tuning in active play
+- combat feel is stronger after Patch 10, but final intensity tuning still needs real play rather than static review
 - no custom art, audio asset pipeline, export flow, or distribution polish yet
 
 ## Next Step
@@ -234,6 +269,7 @@ If work resumes, prefer cleanup and presentation polish over new mechanics:
 - run a live validation pass across:
   - tune `Incinerator`, `Beam Lance`, and `Arc Caster` feel after the first validated pass
   - tune `range`, `area`, `pierce`, and hook-passive behavior as needed
+- run one Easy and one Normal full-run pass specifically against the Patch 10 number scale, feedback intensity, loot/shop flow, and readability
 - simplify the play-setup screen further now that `Play` and `Debug` are separate paths
 - tighten HUD wording and spacing after a few more live readability checks
 - validate the new loot, replacement, and shop UI flow with gamepad-first navigation

@@ -235,7 +235,7 @@ func _wire_reachable_focus() -> void:
 		if not _map_buttons.has(node_id):
 			continue
 		var button: Button = _map_buttons[node_id]
-		var node := RunState.get_map_node(str(node_id))
+		var node: Dictionary = RunState.get_map_node(str(node_id))
 		reachable_buttons.append({
 			"button": button,
 			"column": int(node.get("column", 0)),
@@ -301,7 +301,7 @@ func _handle_map_navigation(event: InputEvent) -> bool:
 func _get_reachable_node_ids_in_focus_order() -> Array:
 	var entries: Array = []
 	for node_id in RunState.get_reachable_node_ids():
-		var node := RunState.get_map_node(str(node_id))
+		var node: Dictionary = RunState.get_map_node(str(node_id))
 		if node.is_empty() or not _map_buttons.has(node_id):
 			continue
 		entries.append({
@@ -317,7 +317,7 @@ func _get_reachable_node_ids_in_focus_order() -> Array:
 	return ordered_ids
 
 func _show_node_details(node_id: String) -> void:
-	var node := RunState.get_map_node(node_id)
+	var node: Dictionary = RunState.get_map_node(node_id)
 	if node.is_empty():
 		return
 	_map_hover_node_id = node_id
@@ -371,12 +371,12 @@ func _on_map_node_pressed(node_id: String) -> void:
 	if not RunState.select_map_node(node_id):
 		return
 	_play_ui_click()
-	var node := RunState.get_map_node(node_id)
+	var node: Dictionary = RunState.get_map_node(node_id)
 	match str(node.get("room_type", "combat")):
 		"combat", "elite", "boss", "shop":
 			_launch_room(node)
 		_:
-			var outcome := RunState.resolve_current_noncombat_node()
+			var outcome: Dictionary = RunState.resolve_current_noncombat_node()
 			_show_outcome(outcome)
 
 func _launch_room(node: Dictionary) -> void:
@@ -395,7 +395,7 @@ func _launch_room(node: Dictionary) -> void:
 	_active_game.all_players_dead.connect(_on_room_failed)
 
 func _on_room_cleared(health_states: Array, clear_context: Dictionary = {}) -> void:
-	var outcome := RunState.resolve_current_combat_victory(health_states, clear_context)
+	var outcome: Dictionary = RunState.resolve_current_combat_victory(health_states, clear_context)
 	if str(outcome.get("post_action", "")) == "return_to_menu":
 		var meta_reward := ProfileState.award_run_meta_gold(RunState.run_outcome, RunState.rooms_completed)
 		_show_run_summary(outcome, meta_reward, true)

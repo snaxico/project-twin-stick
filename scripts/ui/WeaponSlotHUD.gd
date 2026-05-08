@@ -1,14 +1,7 @@
 class_name WeaponSlotHUD
 extends PanelContainer
 
-const ICON_TEXTURE_PATHS := {
-	"rifle": "res://assets/sprites/weapons/player_rifle.png",
-	"scatter": "res://assets/sprites/weapons/player_scattergun.png",
-	"spread": "res://assets/sprites/weapons/player_scattergun.png",
-	"slug": "res://assets/sprites/weapons/player_slug.png",
-}
-
-static var _icon_cache: Dictionary = {}
+const IconFactoryData = preload("res://scripts/ui/IconFactory.gd")
 
 var _icon_rect: TextureRect = null
 var _placeholder_panel: Panel = null
@@ -178,11 +171,4 @@ func _build_placeholder_text(weapon_name: String, weapon_id: String) -> String:
 func _get_icon_texture(weapon_id: String) -> Texture2D:
 	if weapon_id.is_empty():
 		return null
-	if _icon_cache.has(weapon_id):
-		return _icon_cache[weapon_id] as Texture2D
-	if not ICON_TEXTURE_PATHS.has(weapon_id):
-		return null
-	var texture: Texture2D = load(str(ICON_TEXTURE_PATHS[weapon_id])) as Texture2D
-	if texture != null:
-		_icon_cache[weapon_id] = texture
-	return texture
+	return IconFactoryData.get_weapon_icon(weapon_id)

@@ -24,10 +24,10 @@ enum EnemyType {
 }
 
 @export var move_speed: float = 120.0
-@export var max_health: int = 3
-@export var contact_damage: int = 1
+@export var max_health: int = 30
+@export var contact_damage: int = 10
 @export var projectile_speed: float = 340.0
-@export var projectile_damage: int = 1
+@export var projectile_damage: int = 10
 @export var fire_interval: float = 1.3
 @export var preferred_distance: float = 190.0
 
@@ -75,43 +75,43 @@ func setup(type_name: String, combat_owner) -> void:
 	match type_name:
 		"spitter":
 			enemy_type = EnemyType.SPITTER
-			max_health = 2
+			max_health = 20
 			move_speed = 84.0
-			fire_interval = 1.85
-			projectile_speed = 340.0
-			projectile_damage = 1
+			fire_interval = 2.6
+			projectile_speed = 280.0
+			projectile_damage = 10
 			preferred_distance = 230.0
-			_projectile_burst_count = 3
+			_projectile_burst_count = 1
 			_projectile_spread_radians = 0.0
 		"charger":
 			enemy_type = EnemyType.CHARGER
-			max_health = 4
+			max_health = 40
 			move_speed = 88.0
 			fire_interval = 2.0
 			projectile_speed = 0.0
 			projectile_damage = 0
-			contact_damage = 2
+			contact_damage = 15
 			preferred_distance = 200.0
 			_projectile_burst_count = 0
 			_projectile_spread_radians = 0.0
 		"boss":
 			enemy_type = EnemyType.BOSS
-			max_health = 18
+			max_health = 180
 			move_speed = 82.0
 			fire_interval = 1.3
 			projectile_speed = 380.0
-			projectile_damage = 1
-			contact_damage = 1
+			projectile_damage = 10
+			contact_damage = 10
 			preferred_distance = 240.0
 			_projectile_burst_count = 5
 			_projectile_spread_radians = 0.14
 		_:
 			enemy_type = EnemyType.CHASER
-			max_health = 3
+			max_health = 30
 			move_speed = 108.0
 			fire_interval = 1.3
 			projectile_speed = 340.0
-			projectile_damage = 1
+			projectile_damage = 10
 			preferred_distance = 190.0
 			_projectile_burst_count = 1
 			_projectile_spread_radians = 0.0
@@ -137,7 +137,7 @@ func apply_boss_scale(player_count: int) -> void:
 	var health_scale: float = 1.0 + float(maxi(player_count - 1, 0)) * 0.6
 	max_health = int(round(max_health * health_scale))
 	current_health = max_health
-	projectile_damage += maxi(player_count - 1, 0)
+	projectile_damage += maxi(player_count - 1, 0) * 10
 
 func _ready() -> void:
 	if current_health <= 0:

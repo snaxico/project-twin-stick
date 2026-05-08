@@ -14,7 +14,7 @@
       "name": "Armoured",
       "description": "Enemies take more punishment before they go down.",
       "tint": [0.65, 0.72, 0.86, 1.0],
-      "enemy_bonus_health": 2
+      "enemy_bonus_health": 20
     },
     {
       "id": "inferno",
@@ -29,7 +29,7 @@
       "description": "Enemies explode when they die. Stay clear of the blast.",
       "tint": [0.86, 0.42, 0.92, 1.0],
       "death_explosion_radius": 84.0,
-      "death_explosion_damage": 1
+      "death_explosion_damage": 10
     },
     {
       "id": "stampede",
@@ -37,7 +37,7 @@
       "description": "Enemies crash harder on contact and push closer.",
       "tint": [0.92, 0.36, 0.18, 1.0],
       "enemy_speed_multiplier": 1.18,
-      "enemy_contact_damage_bonus": 1
+      "enemy_contact_damage_bonus": 10
     },
     {
       "id": "crossfire",

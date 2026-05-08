@@ -4,12 +4,12 @@ signal generator_destroyed(generator)
 signal hit_received(generator, damage_amount, lethal)
 signal spawn_requested(generator, enemy_type)
 
-@export var normal_max_health: int = 10
-@export var elite_max_health: int = 14
+@export var normal_max_health: int = 100
+@export var elite_max_health: int = 140
 @export var hit_flash_duration: float = 0.12
 
-var max_health: int = 10
-var current_health: int = 10
+var max_health: int = 100
+var current_health: int = 100
 
 var _alive := true
 var _is_elite := false
@@ -80,8 +80,8 @@ func _destroy() -> void:
 	if not _alive:
 		return
 	_alive = false
-	monitoring = false
-	monitorable = false
+	set_deferred("monitoring", false)
+	set_deferred("monitorable", false)
 	generator_destroyed.emit(self)
 	var tween := create_tween()
 	tween.set_parallel(true)

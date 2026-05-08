@@ -41,6 +41,7 @@
 - `GameWorld` remains the room runtime and now covers combat rooms, loot drops, shop rooms, replacement flow, and exit-zone transitions.
 - `RunState` persists health, run-mode recovery behavior, connected-map progression, reachable node state, per-player inventories, personal wallets, and final run outcome across those transitions.
 - `ProfileState` persists unlocks and meta currency across application launches and gates which run upgrades may appear in reward/shop pools.
+- `IconFactory` now owns procedural placeholder icon generation and cached fallback lookup for icon-first HUD, loot, shop, and replacement UI surfaces.
 - Mainline run flow now uses a row-based connected graph:
   - start row exposes three nodes
   - non-boss rows expose `2–4` nodes across fixed columns
@@ -61,6 +62,7 @@
 - `PlayerConfig`: `player_id`, `control_source`, `tint`, `aim_mode`
 - `weapons.json`: weapon definitions, levels, and balance data
 - `passives.json`: passive item definitions and stat multipliers
+- `docs/design/weapons-passives-balance.xlsx`: design/balance source of truth for primary weapons, secondary weapons, and passive items; keep it updated in the same slice as any content or tuning change to those systems
 - `enemies.json`: enemy archetypes and tuning values
 - `modifiers.json`: room modifier definitions
 - `unlocks.json`: persistent unlock definitions and costs

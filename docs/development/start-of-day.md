@@ -70,7 +70,10 @@ Read this first to restore project context quickly, then read `current-state.md`
   - timer bar
   - styled result/pause/modifier panels
   - lighter transparency so the arena remains visible under HUD cards
-  - latest pass makes the player cards smaller and icon-first, with placeholder passive chips
+  - latest pass makes the player cards smaller and icon-first
+  - weapon slots now prefer real sprites and fall back to procedural placeholder icons
+  - passive chips now use procedural icons instead of text abbreviations
+  - gold readouts now use a coin icon plus value
 - Player visuals are now in transition from pure procedural shapes toward real sprites:
   - player 1 uses a sprite-backed body
   - player 1 uses one standing frame and two alternating running frames
@@ -102,9 +105,13 @@ Read this first to restore project context quickly, then read `current-state.md`
   - survival duration
   - enemy spawn interval
 - Survival waves are depth-aware:
-  - early rooms favor `Chaser`
-  - mid rooms balance all three enemy types
-  - later rooms lean harder on `Spitter` and `Charger`
+  - early rooms are almost all `Chaser` with rare `Spitter`
+  - mid rooms introduce `Charger` heavily while `Spitter` stays rare
+  - later rooms are `Charger`-heavy with `Chaser` support and minimal `Spitter`
+- Boss support waves are now melee-only:
+  - `Chaser`
+  - `Charger`
+  - no `Spitter` support add in the boss room
 - Boss HP now scales slightly with how many rooms were cleared before the boss.
 - Debug setup is now a real launcher, not just starting-gear overrides:
   - `Normal Run` or `Single Room`
@@ -134,6 +141,7 @@ Read this first to restore project context quickly, then read `current-state.md`
   - `Rifle` and `Mine` are now valid reward/shop rolls, so the starting weapons can level up
   - replacement UI now seeds its held-button state on open, so it no longer instantly confirms/cancels
   - combat spectacle now uses weapon-weighted muzzle flash, impact, death, dash, and explosion feedback
+  - loot vote, shop, and replacement panels are now icon-first instead of text-heavy
 
 ## Current Priorities
 
@@ -157,6 +165,15 @@ Read this first to restore project context quickly, then read `current-state.md`
 - Validate the new aim-settings flow at `1–4` players.
 - Validate `Normal` vs `Easy` room-to-room HP persistence in live play.
 - Validate chaser contact damage and pickup drops in active combat after the recent reliability fixes.
+- Validate the melee-first enemy rebalance in live play:
+  - early rooms should feel like dodge-the-rush, not dodge-the-bullets
+  - `Spitter` should read as occasional support pressure, not main screen load
+  - combat food sustain should make `Normal` more survivable without collapsing into `Easy`
+- Validate the icon-first UI pass in live play:
+  - placeholder icons must stay readable at gameplay scale
+  - shop offers must read faster than the old text blocks
+  - replacement choices should read icon-to-icon at a glance
+  - Patch 12 has now been accepted, so future UI edits should preserve this scan speed
 - Validate loot, replacement, shop, and exit UI flow with gamepad-first input.
 - Validate `3–4` player behavior and full-run pacing later; do not expand scope casually.
 
@@ -173,6 +190,7 @@ Read this first to restore project context quickly, then read `current-state.md`
 - `data/weapons.json`: weapon definitions and level data.
 - `data/passives.json`: passive reward/shop item definitions.
 - `data/modifiers.json`: room modifier tuning.
+- `scripts/ui/IconFactory.gd`: procedural fallback icon generation and icon cache for weapons, passives, and UI chrome.
 - `docs/design/weapons-passives-balance.xlsx`: balancing/design source of truth for primary weapons, secondary weapons, and passive items.
 - `Enemy.gd`: enemy silhouettes, hitbox sizing, and motion identity.
 - `PassiveTriggerSystem.gd`: centralized hook-passive throttling and action collection.
@@ -207,6 +225,7 @@ Read this first to restore project context quickly, then read `current-state.md`
 - `history/` records what changed, why, and what remains open.
 - `docs/design/weapons-passives-balance.xlsx` is the balancing design document for weapons and passives.
 - `docs/process/` stays the source of truth for scope, roadmap, architecture, and workflow rules.
+- Any change to primary weapons, secondary weapons, or passive items must update `docs/design/weapons-passives-balance.xlsx` in the same slice.
 - Write for continuation, not presentation.
 - Keep entries short, factual, and useful for the next session.
 - If implementation changes scope or architecture, update the relevant process doc in the same slice.

@@ -106,7 +106,7 @@ const LAYOUT_PALETTES := {
 @export var modifier_intro_duration: float = 1.8
 @export var revive_radius: float = 92.0
 @export var revive_hold_duration: float = 1.4
-@export var revive_health: int = 2
+@export var revive_health: int = 20
 @export var boss_support_spawn_interval: float = 8.0
 @export var exit_hold_duration: float = 1.0
 @export var exit_auto_transition_delay: float = 15.0
@@ -703,7 +703,7 @@ func _spawn_boss() -> void:
 	boss.setup("boss", self)
 	boss.apply_boss_scale(_player_nodes.size())
 	var rooms_bonus: int = max(RunState.rooms_completed - 2, 0)
-	boss.max_health += rooms_bonus * 3
+	boss.max_health += rooms_bonus * 30
 	boss.current_health = boss.max_health
 	boss.enemy_died.connect(_on_enemy_died)
 	boss.hit_received.connect(_on_enemy_hit_received)
@@ -712,16 +712,15 @@ func _spawn_boss() -> void:
 	_boss_node = boss
 
 func _roll_wave_composition(step_index: int, is_elite: bool, composition_size: int) -> Array:
-	var weights := [5, 2, 0]
+	var weights := [6, 1, 0]
 	if step_index >= 4:
-		weights = [1, 3, 4]
+		weights = [2, 1, 5]
 	elif step_index >= 2:
-		weights = [3, 3, 2]
+		weights = [4, 1, 3]
 
 	if is_elite:
 		weights[0] = max(weights[0] - 1, 0)
-		weights[1] += 1
-		weights[2] += 1
+		weights[2] += 2
 
 	var weighted_pool: Array = []
 	for _index in range(weights[0]):
@@ -746,7 +745,7 @@ func _compute_wave_size(step_index: int, is_elite: bool, max_spawn_points: int) 
 func _build_boss_support_wave_plan() -> Array:
 	var spawn_points := _get_enemy_spawn_positions()
 	var support_count := 2 if _player_nodes.size() <= 2 else 3
-	var support_types := ["spitter", "charger", "chaser"]
+	var support_types := ["chaser", "charger", "chaser"]
 	var plan: Array = []
 	for index in range(support_count):
 		var enemy_type: String = str(support_types[(_survival_wave_index + index) % support_types.size()])
@@ -1066,7 +1065,7 @@ func _spawn_generators() -> void:
 	var generator_count: int = mini(int(_room_config.get("generator_count", 2)), configured_slots.size())
 	var generator_config := {
 		"is_elite": str(_room_config.get("room_type", "")) == "elite",
-		"max_health": 14 if str(_room_config.get("room_type", "")) == "elite" else 10,
+		"max_health": 140 if str(_room_config.get("room_type", "")) == "elite" else 100,
 		"spawn_interval": float(_room_config.get("generator_spawn_interval", 3.2)),
 		"spitter_chance": float(_room_config.get("generator_spitter_chance", 0.0)),
 	}
@@ -1131,9 +1130,15 @@ func _drop_pickups_for_enemy(enemy) -> void:
 		return
 	if enemy.has_method("is_boss") and enemy.is_boss():
 		return
-	if _room_random.randf() > 0.2:
-		return
-	_spawn_pickup("gold", enemy.global_position, 1)
+	var pickup_offset: Vector2 = Vector2(
+		_room_random.randf_range(-18.0, 18.0),
+		_room_random.randf_range(-18.0, 18.0)
+	)
+	var drop_pos: Vector2 = enemy.global_position + pickup_offset
+	if _room_random.randf() <= 0.2:
+		_spawn_pickup("gold", drop_pos, 1)
+	if _room_random.randf() <= 0.15:
+		_spawn_pickup("food", drop_pos + Vector2(12.0, 0.0), 1)
 
 func _drop_pickups_for_generator(generator) -> void:
 	if generator == null:
@@ -1155,7 +1160,7 @@ func _on_pickup_collected(_pickup, collector, pickup_type: String, value: int) -
 	match pickup_type:
 		"food":
 			if collector != null and is_instance_valid(collector) and collector.has_method("heal"):
-				var healed_amount: int = int(collector.heal(value))
+				var healed_amount: int = int(collector.heal(value * 10))
 				if healed_amount > 0:
 					_spawn_world_floating_text("+%d HP" % healed_amount, Color(0.74, 0.96, 0.48, 1.0), collector.global_position + Vector2(0.0, -46.0))
 		_:
@@ -1202,15 +1207,15 @@ func _find_lowest_health_living_player() -> Node:
 func _on_enemy_died(enemy) -> void:
 	var enemy_weight: float = enemy.get_feedback_weight() if enemy != null and is_instance_valid(enemy) and enemy.has_method("get_feedback_weight") else 1.0
 	var enemy_color: Color = enemy.get_feedback_color() if enemy != null and is_instance_valid(enemy) and enemy.has_method("get_feedback_color") else Color(1.0, 0.28, 0.28, 1.0)
-	_trigger_hitstop(0.03 + enemy_weight * 0.014)
-	_add_camera_trauma(0.18 + enemy_weight * 0.16)
+	_trigger_hitstop(0.05 + enemy_weight * 0.025)
+	_add_camera_trauma(0.25 + enemy_weight * 0.20)
 	_play_sfx_enemy_death(enemy_weight)
 	_spawn_world_effect(
 		ParticleFactoryData.create_death_burst(enemy_color, enemy_weight),
 		enemy.global_position
 	)
 	_spawn_world_effect(
-		ParticleFactoryData.create_explosion_ring(enemy_color.lightened(0.22), 36.0 + enemy_weight * 20.0, 2.5 + enemy_weight),
+		ParticleFactoryData.create_explosion_ring(enemy_color.lightened(0.22), 44.0 + enemy_weight * 28.0, 3.0 + enemy_weight * 1.5),
 		enemy.global_position
 	)
 	if _is_boss_room() and enemy != null and enemy.has_method("is_boss") and enemy.is_boss():
@@ -1257,11 +1262,11 @@ func _on_player_muzzle_flash_requested(origin: Vector2, direction: Vector2, colo
 	_play_sfx_fire(feedback_profile, impact_weight)
 	_spawn_world_effect(ParticleFactoryData.create_muzzle_flash(color, direction, feedback_profile, impact_weight), origin)
 	if feedback_profile == "slug":
-		_add_camera_trauma(0.08)
+		_add_camera_trauma(0.16)
 	elif feedback_profile == "scatter":
-		_add_camera_trauma(0.04)
+		_add_camera_trauma(0.10)
 	else:
-		_add_camera_trauma(0.02)
+		_add_camera_trauma(0.05)
 
 func _on_player_dash_trail_requested(origin: Vector2, color: Color) -> void:
 	_spawn_world_effect(ParticleFactoryData.create_dash_trail(color.darkened(0.15), 1.1), origin)
@@ -1278,7 +1283,7 @@ func _on_enemy_hit_received(enemy, damage_amount: int, lethal: bool) -> void:
 	var enemy_weight: float = enemy.get_feedback_weight() if enemy != null and is_instance_valid(enemy) and enemy.has_method("get_feedback_weight") else 1.0
 	_play_sfx_hit(enemy_weight)
 	if not lethal:
-		_trigger_hitstop(0.01 + enemy_weight * 0.006)
+		_trigger_hitstop(0.018 + enemy_weight * 0.01)
 	if enemy != null and is_instance_valid(enemy):
 		var text_color: Color = Color(1.0, 0.85, 0.7, 1.0)
 		if lethal:
@@ -1984,8 +1989,8 @@ func _trigger_room_exit() -> void:
 func _set_exit_zone_visible(should_show: bool) -> void:
 	_exit_zone_open = should_show
 	if exit_zone != null:
-		exit_zone.monitoring = should_show
-		exit_zone.monitorable = should_show
+		exit_zone.set_deferred("monitoring", should_show)
+		exit_zone.set_deferred("monitorable", should_show)
 	if exit_zone_visual != null:
 		exit_zone_visual.visible = should_show
 	if not should_show:
@@ -2316,7 +2321,7 @@ func _apply_stationary_modifier(now: float) -> void:
 		if not is_instance_valid(player):
 			continue
 		if player.velocity.length() <= 10.0:
-			player.apply_damage(1)
+			player.apply_damage(10)
 
 func handle_enemy_death_explosion(origin: Vector2, radius: float, damage: int) -> void:
 	for player in get_active_players():
@@ -2786,7 +2791,7 @@ func _refresh_player_inventory_huds() -> void:
 			"health_status": player.get_health_status_text(),
 			"primary_slots": player.get_primary_slot_hud_data(),
 			"secondary_slots": player.get_secondary_slot_hud_data(),
-			"passives": RunState.get_player_passive_display_names(index),
+			"passives": RunState.get_player_passive_display_data(index),
 		})
 
 func _get_player_inventory_hud_rect(index: int) -> Rect2:

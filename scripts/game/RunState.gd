@@ -65,8 +65,8 @@ func start_new_run(configs: Array, debug_options: Dictionary = {}) -> void:
 	player_health_states = []
 	for _index in range(player_configs.size()):
 		player_health_states.append({
-			"current": 5,
-			"max": 5,
+			"current": 50,
+			"max": 50,
 		})
 
 	node_map = _generate_node_map()
@@ -202,14 +202,14 @@ func set_player_health_states(health_states: Array) -> void:
 	for state in health_states:
 		player_health_states.append({
 			"current": int(state.get("current", 1)),
-			"max": int(state.get("max", 5)),
+			"max": int(state.get("max", 50)),
 		})
 
 func _apply_post_room_recovery() -> void:
 	if not is_easy_mode():
 		return
 	for state in player_health_states:
-		state["current"] = int(state.get("max", 5))
+		state["current"] = int(state.get("max", 50))
 
 func _normalize_run_mode(value: String) -> String:
 	return "easy" if value == "easy" else "normal"
@@ -277,18 +277,21 @@ func get_player_runtime_loadout_for(player_index: int) -> Dictionary:
 	}
 	return loadout
 
-func get_player_passive_display_names(player_index: int) -> Array:
+func get_player_passive_display_data(player_index: int) -> Array:
 	var inventory: PlayerInventoryData = _get_inventory(player_index)
-	var passive_names: Array = []
+	var passive_entries: Array = []
 	if inventory == null:
-		return passive_names
+		return passive_entries
 	for passive_id in inventory.passives:
 		var passive_entry: Dictionary = _get_catalog_entry(str(passive_id))
 		var passive_name: String = str(passive_entry.get("name", str(passive_id))).strip_edges()
 		if passive_name.is_empty():
 			continue
-		passive_names.append(passive_name)
-	return passive_names
+		passive_entries.append({
+			"id": str(passive_id),
+			"name": passive_name,
+		})
+	return passive_entries
 
 func prepare_shop_room_offers() -> void:
 	shop_offers_by_player = {}
@@ -537,7 +540,7 @@ func _build_room_template(room_type: String) -> Dictionary:
 		"rest":
 			return {
 				"room_type": "rest",
-				"reward": {"type": "heal_all", "amount": 2, "label": "Recover 2 HP"},
+				"reward": {"type": "heal_all", "amount": 20, "label": "Recover 20 HP"},
 			}
 		"shop":
 			return {
@@ -797,7 +800,7 @@ func _build_node(step_index: int, column: int, template: Dictionary) -> Dictiona
 			node["currency_reward"] = 0
 			node["modifier"] = {}
 			node["description"] = "Take a breather and patch everyone up."
-			node["reward_label"] = "Recover 2 HP"
+			node["reward_label"] = "Recover 20 HP"
 		"shop":
 			node["title"] = "Shop Room"
 			node["currency_reward"] = 0
@@ -823,7 +826,7 @@ func _apply_reward(reward: Dictionary) -> String:
 		"heal_all":
 			var amount := int(reward.get("amount", 0))
 			for state in player_health_states:
-				state["current"] = min(int(state.get("current", 0)) + amount, int(state.get("max", 5)))
+				state["current"] = min(int(state.get("current", 0)) + amount, int(state.get("max", 50)))
 			return str(reward.get("label", "Recovered health"))
 		_:
 			return str(reward.get("label", "No reward"))
@@ -1059,7 +1062,7 @@ func _compile_slot_loadout(slot_entry: Dictionary, passive_state: Dictionary, pr
 		"secondary_spread_radians": float(profile.get("spread_radians", 0.0)),
 		"secondary_cooldown": 4.0 * GLOBAL_SECONDARY_COOLDOWN_MULT * float(passive_state.get("secondary_cooldown_mult", 1.0)) * float(profile.get("cooldown_mult", 1.0)),
 		"secondary_projectile_speed": float(profile.get("base_projectile_speed", 0.0)) * float(passive_state.get("secondary_projectile_speed_mult", 1.0)) * float(profile.get("projectile_speed_mult", 1.0)),
-		"secondary_damage": max(1, int(round((3.0 + float(passive_state.get("secondary_damage_bonus", 0.0))) * float(profile.get("damage_mult", 1.0))))),
+			"secondary_damage": max(1, int(round((30.0 + float(passive_state.get("secondary_damage_bonus", 0.0))) * float(profile.get("damage_mult", 1.0))))),
 		"secondary_projectile_kind": str(profile.get("kind", "mine")),
 		"secondary_explosion_radius": 92.0 * float(passive_state.get("secondary_explosion_radius_mult", 1.0)) * float(profile.get("explosion_radius_mult", 1.0)),
 		"secondary_fuse_time": float(profile.get("base_fuse_time", 12.0)) * float(profile.get("fuse_time_mult", 1.0)),
@@ -1592,8 +1595,8 @@ func _apply_passive_to_player(player_index: int, passive: Dictionary, health_sta
 	var effects: Dictionary = passive.get("passive_effects", {})
 	if effects.has("max_health_bonus") and not health_state.is_empty():
 		var max_health_bonus: int = int(effects.get("max_health_bonus", 0))
-		health_state["max"] = int(health_state.get("max", 5)) + max_health_bonus
-		health_state["current"] = int(health_state.get("current", 5)) + max_health_bonus
+		health_state["max"] = int(health_state.get("max", 50)) + max_health_bonus
+		health_state["current"] = int(health_state.get("current", 50)) + max_health_bonus
 	return {
 		"outcome": "took_item",
 		"summary": "%s added." % str(passive.get("name", "Passive")),
@@ -1686,8 +1689,8 @@ func _apply_passive_to_all_players(passive: Dictionary) -> String:
 	if effects.has("max_health_bonus"):
 		var max_health_bonus := int(effects.get("max_health_bonus", 0))
 		for state in player_health_states:
-			state["max"] = int(state.get("max", 5)) + max_health_bonus
-			state["current"] = int(state.get("current", 5)) + max_health_bonus
+			state["max"] = int(state.get("max", 50)) + max_health_bonus
+			state["current"] = int(state.get("current", 50)) + max_health_bonus
 
 	return "%s\n%s" % [str(passive.get("name", "Upgrade")), str(passive.get("description", ""))]
 

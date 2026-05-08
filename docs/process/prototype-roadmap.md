@@ -19,6 +19,9 @@ One patch equals one validated subsystem. Do not start the next patch until the 
 | Patch 7 | Boss, revive flow, full run, first-playable validation | Implemented and interactively validated during development |
 | Patch 8 | Juice, audio, 3-4 player tuning, broader content | Implemented as an early baseline, broader validation and tuning still pending |
 | Patch 9 | Meta-progression and distribution | Meta-progression baseline implemented, export/distribution work still pending |
+| Patch 10 | Number scale, combat feel, loot presentation, and flow validation | Implemented in code; headless validation passes; follow-up remains live tuning and run-level readability checks |
+| Patch 11 | Melee-first enemy balance and survivability | Implemented in code; headless validation passes; follow-up remains live `Normal` run validation and sustain tuning |
+| Patch 12 | Icon-first UI pass | Implemented and interactively validated during development |
 
 ## Validation Gate Per Patch
 
@@ -40,3 +43,6 @@ One patch equals one validated subsystem. Do not start the next patch until the 
   - boss pacing and revive fairness
   - full-run duration tuning toward the intended `10–15` minute target
 - Patch 9 now has a persistence baseline, but export and distribution flow are still not implemented.
+- Patch 10 landed the base-10 combat scale, stronger hit/kill feedback, and loot presentation polish without widening system scope.
+- Patch 11 shifted wave composition and sustain toward melee-first pressure with rarer `Spitter` presence and combat food drops.
+- Patch 12 replaced text-heavy combat/reward UI surfaces with icon-first presentation using procedural placeholder icons plus real-sprite fallback.

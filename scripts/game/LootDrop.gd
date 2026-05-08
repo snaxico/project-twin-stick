@@ -18,9 +18,12 @@ var _interaction_enabled: bool = true
 
 func _ready() -> void:
 	_base_position = global_position
+	scale = Vector2.ZERO
 	if not item_data.is_empty():
 		_apply_item_visuals()
 	set_prompt_visible(true)
+	var pop_tween: Tween = create_tween()
+	pop_tween.tween_property(self, "scale", Vector2.ONE, 0.18).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 
 func _process(delta: float) -> void:
 	_bob_time += delta

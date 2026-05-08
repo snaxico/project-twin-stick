@@ -30,9 +30,9 @@
       "id": "tungsten_cores",
       "name": "Tungsten Cores",
       "type": "passive",
-      "description": "Add 2 primary damage to every shot.",
+      "description": "Add 20 primary damage to every shot.",
       "effects": {
-        "damage_add": 2
+        "damage_add": 20
       },
       "scrap_gold_value": 1,
       "shop_gold_cost": 3,
@@ -71,11 +71,11 @@
       "id": "charged_payload",
       "name": "Charged Payload",
       "type": "passive",
-      "description": "Add 2 damage to every secondary detonation.",
+      "description": "Add 20 damage to every secondary detonation.",
       "scrap_gold_value": 1,
       "shop_gold_cost": 3,
       "passive_effects": {
-        "secondary_damage_bonus": 2
+        "secondary_damage_bonus": 20
       },
       "stackable": false,
       "pools": ["reward", "shop"]
@@ -110,9 +110,9 @@
       "id": "chain_reaction",
       "name": "Chain Reaction",
       "type": "passive",
-      "description": "Give explosions more reach and add 1 primary damage.",
+      "description": "Give explosions more reach and add 10 primary damage.",
       "effects": {
-        "damage_add": 1
+        "damage_add": 10
       },
       "scrap_gold_value": 1,
       "shop_gold_cost": 3,
@@ -126,11 +126,11 @@
       "id": "high_velocity_rounds",
       "name": "High Velocity Rounds",
       "type": "passive",
-      "description": "Increase projectile speed and add 1 primary damage.",
+      "description": "Increase projectile speed and add 10 primary damage.",
       "requires_tags": ["projectile"],
       "effects": {
         "projectile_speed_mult": 1.2,
-        "damage_add": 1
+        "damage_add": 10
       },
       "scrap_gold_value": 1,
       "shop_gold_cost": 2,
@@ -168,7 +168,7 @@
           "action": {
             "type": "spawn_behavior",
             "behavior": "cone",
-            "damage": 1,
+          "damage": 10,
             "range": 150.0,
             "area": 0.52,
             "amount": 1,
@@ -199,7 +199,7 @@
           "action": {
             "type": "spawn_behavior",
             "behavior": "chain",
-            "damage": 1,
+          "damage": 10,
             "range": 170.0,
             "area": 120.0,
             "amount": 2,
@@ -228,7 +228,7 @@
           "max_targets": 3,
           "action": {
             "type": "explosion",
-            "damage": 1,
+          "damage": 10,
             "radius": 58.0,
             "impact_weight": 1.05,
             "feedback_profile": "grenade"
@@ -256,7 +256,7 @@
           "action": {
             "type": "spawn_behavior",
             "behavior": "chain",
-            "damage": 1,
+          "damage": 10,
             "range": 150.0,
             "area": 110.0,
             "amount": 2,
@@ -274,11 +274,11 @@
       "id": "ablative_coating",
       "name": "Ablative Coating",
       "type": "passive",
-      "description": "Give every player +2 max HP and restore that amount immediately.",
+      "description": "Give every player +20 max HP and restore that amount immediately.",
       "scrap_gold_value": 1,
       "shop_gold_cost": 3,
       "passive_effects": {
-        "max_health_bonus": 2
+        "max_health_bonus": 20
       },
       "stackable": false,
       "pools": ["reward", "shop"]
@@ -287,11 +287,11 @@
       "id": "reinforced_plating",
       "name": "Reinforced Plating",
       "type": "passive",
-      "description": "Give every player +1 max HP and heal that amount immediately.",
+      "description": "Give every player +10 max HP and heal that amount immediately.",
       "scrap_gold_value": 1,
       "shop_gold_cost": 2,
       "passive_effects": {
-        "max_health_bonus": 1
+        "max_health_bonus": 10
       },
       "stackable": false,
       "pools": ["reward", "shop"]
