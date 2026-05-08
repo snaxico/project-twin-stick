@@ -22,7 +22,7 @@ One patch equals one validated subsystem. Do not start the next patch until the 
 | Patch 10 | Number scale, combat feel, loot presentation, and flow validation | Implemented in code; headless validation passes; follow-up remains live tuning and run-level readability checks |
 | Patch 11 | Melee-first enemy balance and survivability | Implemented in code; headless validation passes; follow-up remains live `Normal` run validation and sustain tuning |
 | Patch 12 | Icon-first UI pass | Implemented and interactively validated during development |
-| Patch 13 | Encounter identity through Bruiser, modifier tiers, obstacles, and recipes | Implemented in code; headless validation passes; follow-up remains live encounter-variety and anti-stuck validation |
+| Patch 13 | Encounter identity through Bruiser, modifier tiers, obstacles, recipes, and telegraphed hazard rooms | Implemented in code through Patch 13B plus reliability/debug follow-ups; headless validation passes; follow-up remains live encounter-variety, telegraph readability, and anti-stuck validation |
 
 ## Validation Gate Per Patch
 
@@ -47,4 +47,4 @@ One patch equals one validated subsystem. Do not start the next patch until the 
 - Patch 10 landed the base-10 combat scale, stronger hit/kill feedback, and loot presentation polish without widening system scope.
 - Patch 11 shifted wave composition and sustain toward melee-first pressure with rarer `Spitter` presence and combat food drops.
 - Patch 12 replaced text-heavy combat/reward UI surfaces with icon-first presentation using procedural placeholder icons plus real-sprite fallback.
-- Patch 13 adds a new melee tank, progression-gated modifier pools, obstacle layouts, and recipe-driven room generation to make encounters feel more designed.
+- Patch 13 adds a new melee tank, progression-gated modifier pools, obstacle layouts, recipe-driven room generation, telegraphed encounter hazards, stronger Swarm pacing, generator-safe obstacle placement, and broader debug coverage to make rooms feel more designed and testable.

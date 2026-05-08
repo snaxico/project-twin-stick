@@ -75,6 +75,9 @@ var _slam_recovery_ends_at := 0.0
 var _next_slam_at := 0.0
 var _contact_range := 28.0
 var _outline_pulse := 1.0
+var _blocked_time := 0.0
+var _last_position := Vector2.ZERO
+var _detour_sign := 1.0
 
 func setup(type_name: String, combat_owner) -> void:
 	_combat_owner = combat_owner
@@ -165,6 +168,8 @@ func _ready() -> void:
 	if shadow != null:
 		_base_shadow_scale = shadow.scale
 	_idle_phase = float(get_instance_id() % 17) * 0.43
+	_last_position = global_position
+	_detour_sign = -1.0 if int(get_instance_id() % 2) == 0 else 1.0
 	_apply_type_visual()
 	_play_spawn_in_animation()
 
@@ -249,15 +254,36 @@ func _physics_process(_delta: float) -> void:
 		EnemyType.BOSS:
 			base_velocity = _update_boss_behavior(direction, distance, now)
 
+	base_velocity = _apply_obstacle_detour(base_velocity, direction)
 	_knockback_velocity = _knockback_velocity.move_toward(Vector2.ZERO, 900.0 * _delta)
 	velocity = base_velocity + _knockback_velocity
 	move_and_slide()
+	_update_blocked_state(base_velocity, direction, _delta)
 	_apply_motion_polish(now, _delta)
 
 	var contact_range: float = maxf(_contact_range, _get_combined_contact_range(target))
 	if distance <= contact_range and now >= _next_contact_at:
 		_next_contact_at = now + (1.0 if enemy_type == EnemyType.BOSS else 0.75)
 		target.apply_damage(contact_damage)
+
+func _apply_obstacle_detour(base_velocity: Vector2, direction: Vector2) -> Vector2:
+	if _blocked_time < 0.4 or direction.length() <= 0.0 or base_velocity.length() <= 20.0:
+		return base_velocity
+	var tangent: Vector2 = Vector2(-direction.y, direction.x) * _detour_sign
+	var detour_direction: Vector2 = (direction * 0.22 + tangent * 0.78).normalized()
+	return detour_direction * max(base_velocity.length(), move_speed * 0.7)
+
+func _update_blocked_state(base_velocity: Vector2, direction: Vector2, delta: float) -> void:
+	var moved_distance: float = global_position.distance_to(_last_position)
+	var trying_to_move: bool = base_velocity.length() > 20.0 and direction.length() > 0.0
+	if trying_to_move and moved_distance < 1.5:
+		_blocked_time += delta
+		if _blocked_time > 0.9:
+			_detour_sign *= -1.0
+			_blocked_time = 0.45
+	else:
+		_blocked_time = maxf(_blocked_time - delta * 2.0, 0.0)
+	_last_position = global_position
 
 func _update_chaser_behavior(direction: Vector2, distance: float, now: float) -> Vector2:
 	if now < _lunge_windup_ends_at:
@@ -635,3 +661,6 @@ func _reset_behavior_state() -> void:
 	_slam_ends_at = 0.0
 	_slam_recovery_ends_at = 0.0
 	_next_slam_at = 0.0
+	_blocked_time = 0.0
+	_last_position = global_position
+	_detour_sign = -1.0 if int(get_instance_id() % 2) == 0 else 1.0

@@ -117,21 +117,37 @@ Read this first to restore project context quickly, then read `current-state.md`
 - Room modifiers are now progression-gated:
   - early core pool stays readable
   - advanced modifiers stay out of normal runs
-  - `Swarm` and `Heavy Patrol` are now in the core pool
+  - normal recipes now use a reduced identity-first set:
+    - `Swarm`
+    - `Crossfire`
+    - `Hot Floor`
+    - `Death Pop`
+  - generic stat-pressure modifiers are now disabled from normal recipe selection
 - Arena layouts now include obstacle variants:
   - `pillars`
   - `ring`
   - `pockets`
+  - `lane`
   - obstacle visuals now use a high-contrast pillar treatment instead of subtle floor tinting
   - arena center is reserved so obstacle placement cannot block center-spawned loot
+  - generator slots are now sanitized against obstacle geometry before generator-room setup
+  - `ring` is now a tighter eight-pillar loop with cut-through gaps
+  - `pockets` now push objectives into clearer inward-facing pocket clusters
+  - `lane` now creates three broad combat lanes with safe rotation gaps
 - Combat and elite rooms are now recipe-driven:
-  - layout, modifier, and enemy-weight hints combine into recognizable encounters
-  - example identities now include pillar fights, ring kites, and pocket sieges
+  - layout, modifier, enemy-weight hints, and optional pacing overrides combine into recognizable encounters
+  - the recipe picker now avoids repeating the last 2 recipe IDs
+  - example identities now include open swarm rooms, crossfire lanes, pillar skirmishes, ring runs, and pocket breakthroughs
+  - crossfire rooms now bias spitters toward side spawns
+  - `Swarm` now owns a much larger enemy-count push with a 200% spawn-rate increase
+  - hot-floor rooms now use telegraphed floor hazards instead of anti-idle punishment
+  - death-pop rooms now use temporary danger puddles instead of instant death bursts
 - Boss HP now scales slightly with how many rooms were cleared before the boss.
 - Debug setup is now a real launcher, not just starting-gear overrides:
   - `Normal Run` or `Single Room`
   - run mode: `Normal` or `Easy`
   - explicit room type, objective, modifier, layout, and step selection
+  - explicit obstacle-layout testing through `pillars`, `ring`, `pockets`, and `lane`
   - starting primary, secondary, and gold selection
   - single-room relaunch flow through `RunFlow`
 - Run modes currently behave like this:
@@ -191,9 +207,15 @@ Read this first to restore project context quickly, then read `current-state.md`
   - Patch 12 has now been accepted, so future UI edits should preserve this scan speed
 - Validate Patch 13 encounter identity in live play:
   - `Bruiser` must read as a slow durable slam threat, not a worse Charger
-  - early rooms must stay clean of late modifiers and heavies
-  - pillar/ring/pocket rooms must change movement without creating stuck enemies
-  - recipe-driven rooms should feel authored rather than arbitrary
+  - early rooms must stay clean of late modifiers and generic stat-pressure rooms
+  - pillar/ring/pocket/lane rooms must change movement without creating stuck enemies
+  - the lightweight obstacle-detour fallback must hold up under bigger `Swarm` counts
+  - hot-floor telegraphs must read clearly before activation
+  - death-pop puddles must feel avoidable at melee range
+  - crossfire flank spawns must create readable side pressure instead of noise
+  - enemy projectiles must now read cleanly when they persist until wall or obstacle impact
+  - curated recipe-driven rooms should feel authored rather than arbitrary
+  - generator rooms must stay compatible with their selected layout and modifier every time
 - Validate loot, replacement, shop, and exit UI flow with gamepad-first input.
 - Validate `3–4` player behavior and full-run pacing later; do not expand scope casually.
 
@@ -213,6 +235,8 @@ Read this first to restore project context quickly, then read `current-state.md`
 - `data/recipes.json`: encounter recipe definitions and enemy weight hints.
 - `scripts/ui/IconFactory.gd`: procedural fallback icon generation and icon cache for weapons, passives, and UI chrome.
 - `RecipeEngine.gd`: room recipe loading and recipe/weight-hint selection.
+- `HotFloorZone.gd`: telegraphed floor-hazard runtime.
+- `DeathPuddle.gd`: telegraphed corpse-puddle runtime.
 - `docs/design/weapons-passives-balance.xlsx`: balancing/design source of truth for primary weapons, secondary weapons, and passive items.
 - `docs/design/enemies-arenas-modifiers-balance.xlsx`: balancing/design source of truth for enemies, arena layouts, encounter modifiers, and recipes.
 - `Enemy.gd`: enemy silhouettes, hitbox sizing, and motion identity.

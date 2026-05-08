@@ -23,6 +23,7 @@ var source_type: String = "projectile"
 var weapon_id: String = ""
 var weapon_tags: Array = []
 var trigger_passives: Array = []
+var use_lifetime := true
 var _shooter_node: Node = null
 
 @onready var visual: Polygon2D = $Visual
@@ -55,6 +56,7 @@ func setup(projectile_team: String, projectile_direction: Vector2, projectile_sp
 	weapon_id = ""
 	weapon_tags = []
 	trigger_passives = []
+	use_lifetime = projectile_team != "enemy"
 	_hit_targets.clear()
 
 func setup_from_config(projectile_team: String, projectile_direction: Vector2, config: Dictionary) -> void:
@@ -75,6 +77,7 @@ func setup_from_config(projectile_team: String, projectile_direction: Vector2, c
 	weapon_id = str(config.get("weapon_id", weapon_id))
 	weapon_tags = (config.get("weapon_tags", []) as Array).duplicate(true)
 	trigger_passives = (config.get("trigger_passives", []) as Array).duplicate(true)
+	use_lifetime = bool(config.get("use_lifetime", use_lifetime))
 
 func _ready() -> void:
 	body_entered.connect(_on_body_entered)
@@ -100,7 +103,7 @@ func _physics_process(delta: float) -> void:
 	if max_distance > 0.0 and global_position.distance_squared_to(_spawn_position) >= max_distance * max_distance:
 		queue_free()
 		return
-	if _current_time_seconds() >= _expires_at:
+	if use_lifetime and _current_time_seconds() >= _expires_at:
 		queue_free()
 
 func _on_body_entered(body: Node) -> void:

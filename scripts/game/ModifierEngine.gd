@@ -15,6 +15,8 @@ func get_random_modifier(step_index: int = 0, pool: String = "core") -> Dictiona
 			continue
 		var mod_min_step: int = int(modifier.get("min_step", 0))
 		var mod_pool: String = str(modifier.get("pool", "core"))
+		if mod_pool == "disabled":
+			continue
 		if mod_min_step > step_index:
 			continue
 		if pool == "core" and mod_pool != "core":
@@ -52,17 +54,41 @@ func get_enemy_fire_interval_multiplier(modifier: Dictionary) -> float:
 func get_spawn_interval_multiplier(modifier: Dictionary) -> float:
 	return float(modifier.get("spawn_interval_multiplier", 1.0))
 
+func get_wave_size_bonus(modifier: Dictionary) -> int:
+	return int(modifier.get("wave_size_bonus", 0))
+
 func get_enemy_bonus_health(modifier: Dictionary) -> int:
 	return int(modifier.get("enemy_bonus_health", 0))
 
-func get_stationary_damage_interval(modifier: Dictionary) -> float:
-	return float(modifier.get("stationary_damage_interval", 0.0))
+func get_hot_floor_zone_interval(modifier: Dictionary) -> float:
+	return float(modifier.get("hot_floor_zone_interval", 0.0))
 
-func get_death_explosion_radius(modifier: Dictionary) -> float:
-	return float(modifier.get("death_explosion_radius", 0.0))
+func get_hot_floor_zone_radius(modifier: Dictionary) -> float:
+	return float(modifier.get("hot_floor_zone_radius", 0.0))
 
-func get_death_explosion_damage(modifier: Dictionary) -> int:
-	return int(modifier.get("death_explosion_damage", 0))
+func get_hot_floor_zone_damage(modifier: Dictionary) -> int:
+	return int(modifier.get("hot_floor_zone_damage", 0))
+
+func get_hot_floor_warning_duration(modifier: Dictionary) -> float:
+	return float(modifier.get("hot_floor_warning_duration", 0.0))
+
+func get_hot_floor_active_duration(modifier: Dictionary) -> float:
+	return float(modifier.get("hot_floor_active_duration", 0.0))
+
+func get_death_puddle_radius(modifier: Dictionary) -> float:
+	return float(modifier.get("death_puddle_radius", 0.0))
+
+func get_death_puddle_tick_damage(modifier: Dictionary) -> int:
+	return int(modifier.get("death_puddle_tick_damage", 0))
+
+func get_death_puddle_tick_interval(modifier: Dictionary) -> float:
+	return float(modifier.get("death_puddle_tick_interval", 0.0))
+
+func get_death_puddle_warning_duration(modifier: Dictionary) -> float:
+	return float(modifier.get("death_puddle_warning_duration", 0.0))
+
+func get_death_puddle_active_duration(modifier: Dictionary) -> float:
+	return float(modifier.get("death_puddle_active_duration", 0.0))
 
 func get_enemy_contact_damage_bonus(modifier: Dictionary) -> int:
 	return int(modifier.get("enemy_contact_damage_bonus", 0))
@@ -72,6 +98,9 @@ func get_vision_radius(modifier: Dictionary) -> float:
 
 func get_spawn_side(modifier: Dictionary) -> String:
 	return str(modifier.get("spawn_side", ""))
+
+func get_spawn_position_bias(modifier: Dictionary) -> String:
+	return str(modifier.get("spawn_position_bias", ""))
 
 func is_friendly_fire(modifier: Dictionary) -> bool:
 	return bool(modifier.get("friendly_fire", false))

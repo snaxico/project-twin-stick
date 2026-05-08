@@ -213,6 +213,10 @@ func _populate_menu() -> void:
 		{"label": "Crossfire", "value": "crossfire"},
 		{"label": "Pinch", "value": "pinch"},
 		{"label": "Offset", "value": "offset"},
+		{"label": "Pillars", "value": "pillars"},
+		{"label": "Ring", "value": "ring"},
+		{"label": "Pockets", "value": "pockets"},
+		{"label": "Lane", "value": "lane"},
 		{"label": "Gauntlet Pockets", "value": "gauntlet_pockets"},
 		{"label": "Boss Gate", "value": "boss_gate"},
 	], "random")

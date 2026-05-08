@@ -10,6 +10,8 @@ const ParticleFactoryData = preload("res://scripts/juice/ParticleFactory.gd")
 const FloatingTextData = preload("res://scripts/juice/FloatingText.gd")
 const HealthBarHUDData = preload("res://scripts/juice/HealthBarHUD.gd")
 const PlayerInventoryHUDData = preload("res://scripts/ui/PlayerInventoryHUD.gd")
+const HotFloorZoneData = preload("res://scripts/game/HotFloorZone.gd")
+const DeathPuddleData = preload("res://scripts/game/DeathPuddle.gd")
 const DARKNESS_OVERLAY_SHADER := """
 shader_type canvas_item;
 
@@ -48,6 +50,7 @@ const UNIFORM_ARENA_FLOOR_COLOR := Color(0.28, 0.30, 0.25, 1.0)
 const UNIFORM_ARENA_ACCENT_COLOR := Color(0.44, 0.46, 0.48, 0.16)
 const ARENA_CENTER := Vector2(960.0, 540.0)
 const CENTER_OBSTACLE_EXCLUSION_RADIUS := 140.0
+const GENERATOR_CLEARANCE_RADIUS := 74.0
 const LAYOUT_PALETTES := {
 	"default": {
 		"floor_color": UNIFORM_ARENA_FLOOR_COLOR,
@@ -90,6 +93,13 @@ const LAYOUT_PALETTES := {
 		"side_wall_color": UNIFORM_ARENA_FLOOR_COLOR,
 		"grid_color": Color(0.31, 0.28, 0.29, 0.26),
 		"accent_color": UNIFORM_ARENA_ACCENT_COLOR,
+	},
+	"lane": {
+		"floor_color": UNIFORM_ARENA_FLOOR_COLOR,
+		"wall_color": UNIFORM_ARENA_FLOOR_COLOR,
+		"side_wall_color": UNIFORM_ARENA_FLOOR_COLOR,
+		"grid_color": Color(0.25, 0.31, 0.34, 0.28),
+		"accent_color": Color(0.48, 0.62, 0.66, 0.18),
 	},
 }
 @export var player_scene: PackedScene
@@ -244,6 +254,9 @@ var _generator_nodes: Array = []
 var _generator_slot_positions: Array = []
 var _generator_total_count: int = 0
 var _obstacle_nodes: Array = []
+var _hot_floor_zones: Array = []
+var _death_puddles: Array = []
+var _next_hot_floor_batch_at: float = 0.0
 var _room_random := RandomNumberGenerator.new()
 var _active_loot_drop = null
 var _loot_vote_ui: Control = null
@@ -446,15 +459,16 @@ func _refresh_debug_ui() -> void:
 	_refresh_pause_settings_panel()
 
 func _build_modifier_status_text() -> String:
+	var recipe_suffix: String = _get_recipe_debug_suffix()
 	if _is_boss_room():
-		return "Boss Room: %s" % str(_room_config.get("title", "Boss"))
+		return "Boss Room: %s%s" % [str(_room_config.get("title", "Boss")), recipe_suffix]
 	if _is_shop_room():
-		return "Shop Room: Personal offers and ready-up."
+		return "Shop Room: Personal offers and ready-up.%s" % recipe_suffix
 	if _active_modifier.is_empty():
-		return "Modifier: None"
+		return "Modifier: None%s" % recipe_suffix
 	return "Modifier: %s | %s" % [
 		str(_active_modifier.get("name", "Unknown")),
-		str(_active_modifier.get("description", "")),
+		"%s%s" % [str(_active_modifier.get("description", "")), recipe_suffix],
 	]
 
 func configure_players(player_configs: Array) -> void:
@@ -648,10 +662,12 @@ func _start_room() -> void:
 	_generator_nodes = []
 	_generator_slot_positions = []
 	_generator_total_count = 0
+	_clear_modifier_hazards()
 	_clear_obstacles()
 	_active_modifier = {} if _is_boss_room() else _room_config.get("modifier", _modifier_engine.get_random_modifier(int(_room_config.get("step_index", 0)))).duplicate(true)
 	_friendly_fire_enabled = _modifier_engine.is_friendly_fire(_active_modifier)
 	_vision_radius = _modifier_engine.get_vision_radius(_active_modifier)
+	_next_hot_floor_batch_at = _room_started_at + _modifier_engine.get_hot_floor_zone_interval(_active_modifier)
 	_clear_container(projectiles)
 	_clear_container(enemies)
 	_clear_container(generators)
@@ -691,12 +707,12 @@ func _build_survival_wave_plan() -> Array:
 	var weight_hint_name: String = str(_room_config.get("enemy_weight_hint", "default"))
 	var weight_override: Array = _recipe_engine.get_weight_hint(weight_hint_name) if _recipe_engine != null else []
 	var enemy_types := _roll_wave_composition(step_index, is_elite, max(spawn_count, 1), weight_override)
+	var assigned_positions: Array = _build_wave_spawn_positions(spawn_points, spawn_count, enemy_types)
 	var plan: Array = []
 
 	for index in range(spawn_count):
-		var spawn_index := (_survival_wave_index * spawn_count + index) % spawn_points.size()
 		plan.append({
-			"position": spawn_points[spawn_index],
+			"position": assigned_positions[index],
 			"type": enemy_types[index],
 			"apply_modifier": true,
 		})
@@ -753,8 +769,52 @@ func _roll_wave_composition(step_index: int, is_elite: bool, composition_size: i
 	return composition
 
 func _compute_wave_size(step_index: int, is_elite: bool, max_spawn_points: int) -> int:
-	var base_size: int = 4 + max(step_index - 1, 0) + (1 if is_elite else 0) + max(_player_nodes.size() - 1, 0)
-	return clampi(base_size, 4, max_spawn_points)
+	var wave_size_bonus: int = int(_room_config.get("wave_size_bonus", 0)) + _modifier_engine.get_wave_size_bonus(_active_modifier)
+	var base_size: int = 4 + max(step_index - 1, 0) + (1 if is_elite else 0) + max(_player_nodes.size() - 1, 0) + wave_size_bonus
+	var max_wave_size: int = max_spawn_points + max(_modifier_engine.get_wave_size_bonus(_active_modifier), 0)
+	return clampi(base_size, 4, max(max_wave_size, 4))
+
+func _build_wave_spawn_positions(spawn_points: Array, spawn_count: int, enemy_types: Array) -> Array:
+	var ordered_positions: Array = []
+	for index in range(spawn_count):
+		var spawn_index: int = (_survival_wave_index * spawn_count + index) % spawn_points.size()
+		ordered_positions.append(spawn_points[spawn_index])
+	var spawn_position_bias: String = _modifier_engine.get_spawn_position_bias(_active_modifier)
+	if spawn_position_bias != "sides":
+		return ordered_positions
+	var side_priority: Array = ordered_positions.duplicate()
+	side_priority.sort_custom(func(a: Vector2, b: Vector2) -> bool: return abs(a.x - ARENA_CENTER.x) > abs(b.x - ARENA_CENTER.x))
+	var used_positions: Array = []
+	var assigned_positions: Array = []
+	assigned_positions.resize(spawn_count)
+	for index in range(enemy_types.size()):
+		if str(enemy_types[index]) != "spitter":
+			continue
+		var side_position: Vector2 = _take_next_unused_spawn_position(side_priority, used_positions)
+		assigned_positions[index] = side_position
+		used_positions.append(side_position)
+	for index in range(enemy_types.size()):
+		if assigned_positions[index] is Vector2:
+			continue
+		var default_position: Vector2 = _take_next_unused_spawn_position(ordered_positions, used_positions)
+		assigned_positions[index] = default_position
+		used_positions.append(default_position)
+	return assigned_positions
+
+func _take_next_unused_spawn_position(pool: Array, used_positions: Array) -> Vector2:
+	for position_variant in pool:
+		var position: Vector2 = position_variant
+		if not used_positions.has(position):
+			return position
+	return pool[0] if not pool.is_empty() else ARENA_CENTER
+
+func _get_recipe_debug_suffix() -> String:
+	if not bool(RunState.debug_run_setup.get("enabled", false)):
+		return ""
+	var recipe_id: String = str(_room_config.get("recipe_id", "")).strip_edges()
+	if recipe_id.is_empty():
+		return ""
+	return " | Recipe: %s" % recipe_id
 
 func _build_boss_support_wave_plan() -> Array:
 	var spawn_points := _get_enemy_spawn_positions()
@@ -788,8 +848,8 @@ func _spawn_enemy_wave(plan: Array) -> void:
 				_modifier_engine.get_enemy_bonus_health(_active_modifier),
 				_modifier_engine.get_enemy_speed_multiplier(_active_modifier),
 				_modifier_engine.get_enemy_fire_interval_multiplier(_active_modifier),
-				_modifier_engine.get_death_explosion_radius(_active_modifier),
-				_modifier_engine.get_death_explosion_damage(_active_modifier),
+				0.0,
+				0,
 				_modifier_engine.get_enemy_contact_damage_bonus(_active_modifier)
 			)
 		enemy.enemy_died.connect(_on_enemy_died)
@@ -1236,6 +1296,7 @@ func _on_enemy_died(enemy) -> void:
 		_boss_node = null
 		_handle_room_clear("Boss Defeated", "The boss collapsed and the run can continue.")
 		return
+	_spawn_death_puddle(enemy.global_position)
 	_drop_pickups_for_enemy(enemy)
 	call_deferred("_evaluate_room_state")
 	if _is_generator_room():
@@ -1503,7 +1564,7 @@ func _update_room_progress(delta: float) -> void:
 		_survival_spawn_warning_pending = false
 		_next_enemy_spawn_at += _get_spawn_interval()
 
-	_apply_stationary_modifier(now)
+	_update_modifier_hazards(now)
 
 	room_status_label.text = "Room status: Survive %.1fs | Enemies: %d%s" % [
 		remaining,
@@ -1549,7 +1610,7 @@ func _update_boss_room(now: float) -> void:
 	)
 
 func _update_generator_room(now: float, _delta: float) -> void:
-	_apply_stationary_modifier(now)
+	_update_modifier_hazards(now)
 	_evaluate_generator_room_clear()
 	if _room_is_cleared or _room_is_failed:
 		return
@@ -2325,24 +2386,92 @@ func _get_spawn_interval() -> float:
 	var base_interval := float(_room_config.get("enemy_spawn_interval", enemy_spawn_interval))
 	return base_interval * _modifier_engine.get_spawn_interval_multiplier(_active_modifier)
 
-func _apply_stationary_modifier(now: float) -> void:
-	var stationary_interval: float = _modifier_engine.get_stationary_damage_interval(_active_modifier)
-	if stationary_interval <= 0.0 or now < _stationary_damage_next_tick_at:
+func _update_modifier_hazards(now: float) -> void:
+	_update_hot_floor_zones(now)
+	_update_death_puddles()
+
+func _update_hot_floor_zones(now: float) -> void:
+	var batch_interval: float = _modifier_engine.get_hot_floor_zone_interval(_active_modifier)
+	if batch_interval <= 0.0:
 		return
+	if now >= _next_hot_floor_batch_at:
+		_spawn_hot_floor_batch()
+		_next_hot_floor_batch_at = now + _room_random.randf_range(maxf(batch_interval - 1.0, 0.5), batch_interval + 1.0)
+	var active_players: Array = get_active_players()
+	for zone_variant in _hot_floor_zones.duplicate():
+		var zone: HotFloorZoneData = zone_variant as HotFloorZoneData
+		if zone == null or not is_instance_valid(zone):
+			_hot_floor_zones.erase(zone_variant)
+			continue
+		zone.apply_damage_to_targets(active_players)
 
-	_stationary_damage_next_tick_at = now + stationary_interval
+func _spawn_hot_floor_batch() -> void:
+	var zone_interval: float = _modifier_engine.get_hot_floor_zone_interval(_active_modifier)
+	if zone_interval <= 0.0:
+		return
+	var zone_radius: float = _modifier_engine.get_hot_floor_zone_radius(_active_modifier)
+	var zone_damage: int = _modifier_engine.get_hot_floor_zone_damage(_active_modifier)
+	var warning_duration: float = _modifier_engine.get_hot_floor_warning_duration(_active_modifier)
+	var active_duration: float = _modifier_engine.get_hot_floor_active_duration(_active_modifier)
+	var zone_count: int = _room_random.randi_range(2, 3)
+	for _index in range(zone_count):
+		var zone_position: Vector2 = _roll_hot_floor_zone_position(zone_radius)
+		var zone: HotFloorZoneData = HotFloorZoneData.new()
+		zone.configure(zone_radius, zone_damage, warning_duration, active_duration, 1.0)
+		_spawn_world_effect(zone, zone_position)
+		_hot_floor_zones.append(zone)
+
+func _roll_hot_floor_zone_position(zone_radius: float) -> Vector2:
+	var bounds_rect: Rect2 = Rect2(Vector2(120.0 + zone_radius, 120.0 + zone_radius), Vector2(1680.0 - zone_radius * 2.0, 840.0 - zone_radius * 2.0))
+	var fallback_position: Vector2 = ARENA_CENTER + Vector2(_room_random.randf_range(-220.0, 220.0), _room_random.randf_range(-180.0, 180.0))
+	for _attempt in range(10):
+		var position := Vector2(
+			_room_random.randf_range(bounds_rect.position.x, bounds_rect.end.x),
+			_room_random.randf_range(bounds_rect.position.y, bounds_rect.end.y)
+		)
+		if _is_hot_floor_position_clear(position, zone_radius):
+			return position
+	return fallback_position
+
+func _is_hot_floor_position_clear(position: Vector2, zone_radius: float) -> bool:
 	for player in get_active_players():
 		if not is_instance_valid(player):
 			continue
-		if player.velocity.length() <= 10.0:
-			player.apply_damage(10)
+		if player.global_position.distance_to(position) < zone_radius * 1.25:
+			return false
+	return true
 
-func handle_enemy_death_explosion(origin: Vector2, radius: float, damage: int) -> void:
-	for player in get_active_players():
-		if not is_instance_valid(player):
+func _spawn_death_puddle(origin: Vector2) -> void:
+	var puddle_radius: float = _modifier_engine.get_death_puddle_radius(_active_modifier)
+	if puddle_radius <= 0.0:
+		return
+	var puddle_damage: int = _modifier_engine.get_death_puddle_tick_damage(_active_modifier)
+	var puddle_tick_interval: float = _modifier_engine.get_death_puddle_tick_interval(_active_modifier)
+	var warning_duration: float = _modifier_engine.get_death_puddle_warning_duration(_active_modifier)
+	var active_duration: float = _modifier_engine.get_death_puddle_active_duration(_active_modifier)
+	var puddle: DeathPuddleData = DeathPuddleData.new()
+	puddle.configure(puddle_radius, puddle_damage, puddle_tick_interval, warning_duration, active_duration)
+	_spawn_world_effect(puddle, origin)
+	_death_puddles.append(puddle)
+
+func _update_death_puddles() -> void:
+	var active_players: Array = get_active_players()
+	for puddle_variant in _death_puddles.duplicate():
+		var puddle: DeathPuddleData = puddle_variant as DeathPuddleData
+		if puddle == null or not is_instance_valid(puddle):
+			_death_puddles.erase(puddle_variant)
 			continue
-		if player.global_position.distance_to(origin) <= radius:
-			player.apply_damage(damage)
+		puddle.apply_damage_to_targets(active_players)
+
+func _clear_modifier_hazards() -> void:
+	for zone_variant in _hot_floor_zones:
+		if is_instance_valid(zone_variant):
+			zone_variant.queue_free()
+	_hot_floor_zones.clear()
+	for puddle_variant in _death_puddles:
+		if is_instance_valid(puddle_variant):
+			puddle_variant.queue_free()
+	_death_puddles.clear()
 
 func _on_retry_button_pressed() -> void:
 	Engine.time_scale = 1.0
@@ -2462,6 +2591,7 @@ func _apply_layout_preset(layout_id: String) -> void:
 	]
 	var obstacle_positions: Array = []
 	var obstacle_radii: Array = []
+	var obstacle_segments: Array = []
 
 	match layout_id:
 		"crossfire":
@@ -2526,11 +2656,16 @@ func _apply_layout_preset(layout_id: String) -> void:
 			]
 			generator_positions = [Vector2(540, 380), Vector2(1380, 380), Vector2(960, 760)]
 			obstacle_positions = [
-				Vector2(600, 340), Vector2(1320, 340),
-				Vector2(600, 740), Vector2(1320, 740),
-				Vector2(960, 280), Vector2(960, 800),
+				Vector2(960, 250),
+				Vector2(1165, 335),
+				Vector2(1248, 540),
+				Vector2(1165, 745),
+				Vector2(960, 830),
+				Vector2(755, 745),
+				Vector2(672, 540),
+				Vector2(755, 335),
 			]
-			obstacle_radii = [44.0, 44.0, 44.0, 44.0, 44.0, 44.0]
+			obstacle_radii = [48.0, 48.0, 48.0, 48.0, 48.0, 48.0, 48.0, 48.0]
 		"pockets":
 			player_positions = [
 				Vector2(860, 500), Vector2(1060, 500),
@@ -2541,13 +2676,28 @@ func _apply_layout_preset(layout_id: String) -> void:
 				Vector2(60, 900), Vector2(1860, 900),
 				Vector2(960, 40), Vector2(960, 1040),
 			]
-			generator_positions = [Vector2(460, 320), Vector2(1460, 320), Vector2(960, 800)]
+			generator_positions = [Vector2(440, 320), Vector2(1480, 320), Vector2(960, 790)]
 			obstacle_positions = [
-				Vector2(340, 320), Vector2(580, 320),
-				Vector2(1340, 320), Vector2(1580, 320),
-				Vector2(840, 800), Vector2(1080, 800),
+				Vector2(390, 320), Vector2(510, 320),
+				Vector2(1410, 320), Vector2(1530, 320),
+				Vector2(900, 790), Vector2(1020, 790),
 			]
-			obstacle_radii = [40.0, 40.0, 40.0, 40.0, 40.0, 40.0]
+			obstacle_radii = [42.0, 42.0, 42.0, 42.0, 42.0, 42.0]
+		"lane":
+			player_positions = [
+				Vector2(900, 540), Vector2(1020, 540),
+				Vector2(860, 540), Vector2(1060, 540),
+			]
+			enemy_positions = [
+				Vector2(60, 220), Vector2(1860, 220),
+				Vector2(60, 860), Vector2(1860, 860),
+				Vector2(960, 60), Vector2(960, 1020),
+			]
+			generator_positions = [Vector2(620, 210), Vector2(620, 540), Vector2(620, 870)]
+			obstacle_segments = [
+				{"position": Vector2(960, 340), "size": Vector2(1120, 24)},
+				{"position": Vector2(960, 740), "size": Vector2(1120, 24)},
+			]
 		"boss_gate":
 			player_positions = [
 				Vector2(860, 700), Vector2(1060, 700),
@@ -2579,8 +2729,9 @@ func _apply_layout_preset(layout_id: String) -> void:
 	enemy_spawn_4.position = enemy_positions[3]
 	enemy_spawn_5.position = enemy_positions[4]
 	enemy_spawn_6.position = enemy_positions[5]
-	_generator_slot_positions = generator_positions.duplicate()
+	_generator_slot_positions = _sanitize_generator_positions(generator_positions, obstacle_positions, obstacle_radii, obstacle_segments)
 	_spawn_obstacles(obstacle_positions, obstacle_radii)
+	_spawn_obstacle_segments(obstacle_segments)
 
 func _spawn_obstacles(positions: Array, radii: Array) -> void:
 	_clear_obstacles()
@@ -2622,6 +2773,100 @@ func _spawn_obstacles(positions: Array, radii: Array) -> void:
 
 		add_child(obstacle)
 		_obstacle_nodes.append(obstacle)
+
+func _spawn_obstacle_segments(segments: Array) -> void:
+	for segment_variant in segments:
+		if not (segment_variant is Dictionary):
+			continue
+		var segment: Dictionary = segment_variant as Dictionary
+		var position: Vector2 = segment.get("position", ARENA_CENTER)
+		var size: Vector2 = segment.get("size", Vector2(320.0, 24.0))
+		_spawn_rect_obstacle(position, size)
+
+func _spawn_rect_obstacle(position: Vector2, size: Vector2) -> void:
+	var obstacle := StaticBody2D.new()
+	obstacle.position = position
+	obstacle.collision_layer = 1
+	obstacle.collision_mask = 0
+	obstacle.z_as_relative = false
+	obstacle.z_index = 5
+
+	var shape := CollisionShape2D.new()
+	var rectangle := RectangleShape2D.new()
+	rectangle.size = size
+	shape.shape = rectangle
+	obstacle.add_child(shape)
+
+	var outline_visual := Polygon2D.new()
+	outline_visual.color = Color(0.08, 0.10, 0.12, 0.96)
+	outline_visual.polygon = PackedVector2Array([
+		Vector2(-size.x * 0.5 - 4.0, -size.y * 0.5 - 4.0),
+		Vector2(size.x * 0.5 + 4.0, -size.y * 0.5 - 4.0),
+		Vector2(size.x * 0.5 + 4.0, size.y * 0.5 + 4.0),
+		Vector2(-size.x * 0.5 - 4.0, size.y * 0.5 + 4.0),
+	])
+	obstacle.add_child(outline_visual)
+
+	var wall_visual := Polygon2D.new()
+	wall_visual.color = Color(0.62, 0.66, 0.72, 0.98)
+	wall_visual.polygon = PackedVector2Array([
+		Vector2(-size.x * 0.5, -size.y * 0.5),
+		Vector2(size.x * 0.5, -size.y * 0.5),
+		Vector2(size.x * 0.5, size.y * 0.5),
+		Vector2(-size.x * 0.5, size.y * 0.5),
+	])
+	wall_visual.z_index = 1
+	obstacle.add_child(wall_visual)
+
+	add_child(obstacle)
+	_obstacle_nodes.append(obstacle)
+
+func _sanitize_generator_positions(generator_positions: Array, obstacle_positions: Array, obstacle_radii: Array, obstacle_segments: Array) -> Array:
+	var sanitized: Array = []
+	for index in range(generator_positions.size()):
+		var position: Vector2 = generator_positions[index]
+		sanitized.append(_resolve_generator_position(position, obstacle_positions, obstacle_radii, obstacle_segments, sanitized))
+	return sanitized
+
+func _resolve_generator_position(candidate: Vector2, obstacle_positions: Array, obstacle_radii: Array, obstacle_segments: Array, taken_positions: Array) -> Vector2:
+	if _is_generator_position_clear(candidate, obstacle_positions, obstacle_radii, obstacle_segments, taken_positions):
+		return candidate
+	var offsets: Array = [
+		Vector2(0.0, -120.0),
+		Vector2(0.0, 120.0),
+		Vector2(-140.0, 0.0),
+		Vector2(140.0, 0.0),
+		Vector2(-120.0, -120.0),
+		Vector2(120.0, -120.0),
+		Vector2(-120.0, 120.0),
+		Vector2(120.0, 120.0),
+	]
+	for offset_variant in offsets:
+		var adjusted_position: Vector2 = candidate + (offset_variant as Vector2)
+		if _is_generator_position_clear(adjusted_position, obstacle_positions, obstacle_radii, obstacle_segments, taken_positions):
+			return adjusted_position
+	return candidate
+
+func _is_generator_position_clear(position: Vector2, obstacle_positions: Array, obstacle_radii: Array, obstacle_segments: Array, taken_positions: Array) -> bool:
+	if position.x < 120.0 or position.x > 1800.0 or position.y < 120.0 or position.y > 960.0:
+		return false
+	for taken_variant in taken_positions:
+		if position.distance_to(taken_variant as Vector2) < GENERATOR_CLEARANCE_RADIUS * 1.5:
+			return false
+	for index in range(obstacle_positions.size()):
+		var obstacle_position: Vector2 = obstacle_positions[index]
+		var obstacle_radius: float = float(obstacle_radii[index]) if index < obstacle_radii.size() else 48.0
+		if position.distance_to(obstacle_position) < obstacle_radius + GENERATOR_CLEARANCE_RADIUS:
+			return false
+	for segment_variant in obstacle_segments:
+		if not (segment_variant is Dictionary):
+			continue
+		var segment: Dictionary = segment_variant as Dictionary
+		var segment_position: Vector2 = segment.get("position", ARENA_CENTER)
+		var segment_size: Vector2 = segment.get("size", Vector2(320.0, 24.0))
+		if abs(position.x - segment_position.x) < segment_size.x * 0.5 + GENERATOR_CLEARANCE_RADIUS and abs(position.y - segment_position.y) < segment_size.y * 0.5 + GENERATOR_CLEARANCE_RADIUS:
+			return false
+	return true
 
 func _clear_obstacles() -> void:
 	for obstacle in _obstacle_nodes:

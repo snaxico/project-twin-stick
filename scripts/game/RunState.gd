@@ -58,6 +58,7 @@ func start_new_run(configs: Array, debug_options: Dictionary = {}) -> void:
 	_load_passives()
 	_load_weapons()
 	_random.randomize()
+	_recipe_engine.reset_history()
 	debug_run_setup = _build_default_debug_run_setup()
 	_apply_debug_start_options(debug_options)
 	player_configs = []
@@ -764,15 +765,17 @@ func _build_node(step_index: int, column: int, template: Dictionary) -> Dictiona
 
 	match room_type:
 		"combat":
-			var recipe: Dictionary = _recipe_engine.get_recipe_for_room(step_index)
+			var recipe: Dictionary = _recipe_engine.get_recipe_for_room(step_index, _get_forced_recipe_id())
 			var combat_objective := str(template.get("room_objective", recipe.get("objective_hint", _roll_room_objective(step_index))))
 			var recipe_layout: String = _recipe_engine.pick_from_pool(recipe.get("layout_pool", []))
 			var recipe_modifier_id: String = _recipe_engine.pick_from_pool(recipe.get("modifier_pool", []))
 			node["title"] = "Combat Room"
 			node["room_objective"] = combat_objective
-			node["modifier"] = _resolve_recipe_modifier(template, step_index, recipe_modifier_id)
+			node["modifier"] = _resolve_recipe_modifier(template, step_index, recipe_modifier_id, combat_objective)
 			node["layout_id"] = _resolve_recipe_layout_id(template, combat_objective, recipe_layout)
+			node["recipe_id"] = str(recipe.get("id", ""))
 			node["enemy_weight_hint"] = str(recipe.get("enemy_weight_hint", "default"))
+			node["wave_size_bonus"] = int(recipe.get("wave_size_bonus", 0))
 			if combat_objective == "destroy_generators":
 				node["description"] = "Destroy the generators, sweep the room, and collect the drops."
 				node["generator_count"] = int(template.get("generator_count", 2))
@@ -781,19 +784,23 @@ func _build_node(step_index: int, column: int, template: Dictionary) -> Dictiona
 				node["generator_spitter_chance"] = float(template.get("generator_spitter_chance", _compute_generator_spitter_chance(step_index, false)))
 			else:
 				node["description"] = "Survive the timer and hold the room."
-				node["survival_duration"] = float(template.get("survival_duration", _compute_survival_duration(step_index, false)))
-				node["enemy_spawn_interval"] = float(template.get("enemy_spawn_interval", _compute_spawn_interval(step_index, false)))
+				var base_survival_duration: float = _compute_survival_duration(step_index, false) + float(recipe.get("survival_duration_bonus", 0.0))
+				var base_spawn_interval: float = float(recipe.get("spawn_interval_override", _compute_spawn_interval(step_index, false)))
+				node["survival_duration"] = float(template.get("survival_duration", base_survival_duration))
+				node["enemy_spawn_interval"] = float(template.get("enemy_spawn_interval", base_spawn_interval))
 			node["reward_label"] = "+%d Gold each + loot drop" % node["currency_reward"]
 		"elite":
-			var elite_recipe: Dictionary = _recipe_engine.get_recipe_for_room(step_index)
+			var elite_recipe: Dictionary = _recipe_engine.get_recipe_for_room(step_index, _get_forced_recipe_id())
 			var elite_objective := str(template.get("room_objective", elite_recipe.get("objective_hint", _roll_room_objective(step_index))))
 			var elite_recipe_layout: String = _recipe_engine.pick_from_pool(elite_recipe.get("layout_pool", []))
 			var elite_recipe_modifier_id: String = _recipe_engine.pick_from_pool(elite_recipe.get("modifier_pool", []))
 			node["title"] = "Elite Room"
 			node["room_objective"] = elite_objective
-			node["modifier"] = _resolve_recipe_modifier(template, step_index, elite_recipe_modifier_id)
+			node["modifier"] = _resolve_recipe_modifier(template, step_index, elite_recipe_modifier_id, elite_objective)
 			node["layout_id"] = _resolve_recipe_layout_id(template, elite_objective, elite_recipe_layout)
+			node["recipe_id"] = str(elite_recipe.get("id", ""))
 			node["enemy_weight_hint"] = str(elite_recipe.get("enemy_weight_hint", "default"))
+			node["wave_size_bonus"] = int(elite_recipe.get("wave_size_bonus", 0))
 			if elite_objective == "destroy_generators":
 				node["description"] = "Break the generators under pressure, then wipe the room."
 				node["generator_count"] = int(template.get("generator_count", 3))
@@ -802,8 +809,10 @@ func _build_node(step_index: int, column: int, template: Dictionary) -> Dictiona
 				node["generator_spitter_chance"] = float(template.get("generator_spitter_chance", _compute_generator_spitter_chance(step_index, true)))
 			else:
 				node["description"] = "Survive the elite timer and break through the pressure."
-				node["survival_duration"] = float(template.get("survival_duration", _compute_survival_duration(step_index, is_elite)))
-				node["enemy_spawn_interval"] = float(template.get("enemy_spawn_interval", _compute_spawn_interval(step_index, is_elite)))
+				var elite_survival_duration: float = _compute_survival_duration(step_index, is_elite) + float(elite_recipe.get("survival_duration_bonus", 0.0))
+				var elite_spawn_interval: float = float(elite_recipe.get("spawn_interval_override", _compute_spawn_interval(step_index, is_elite)))
+				node["survival_duration"] = float(template.get("survival_duration", elite_survival_duration))
+				node["enemy_spawn_interval"] = float(template.get("enemy_spawn_interval", elite_spawn_interval))
 			node["reward_label"] = "+%d Gold each + loot drop" % node["currency_reward"]
 		"rest":
 			node["title"] = "Rest Room"
@@ -1329,6 +1338,7 @@ func _build_default_debug_run_setup() -> Dictionary:
 		"modifier_mode": "random",
 		"modifier_id": "random",
 		"layout_id": "random",
+		"test_recipe_id": "",
 	}
 
 func _build_debug_node_map() -> Array:
@@ -1337,19 +1347,24 @@ func _build_debug_node_map() -> Array:
 func _build_debug_room_node() -> Dictionary:
 	var step_index: int = int(debug_run_setup.get("step_index", 0))
 	var room_type := str(debug_run_setup.get("room_type", "combat"))
+	var forced_recipe_id: String = _get_forced_recipe_id()
 	var template := _build_room_template(room_type)
 	if room_type == "combat" or room_type == "elite":
-		template["room_objective"] = str(debug_run_setup.get("room_objective", "survive"))
-		template["modifier"] = _resolve_debug_modifier()
+		if forced_recipe_id.is_empty():
+			template["room_objective"] = str(debug_run_setup.get("room_objective", "survive"))
+		var room_objective: String = str(template.get("room_objective", "survive"))
+		var debug_modifier: Dictionary = _resolve_debug_modifier(room_objective)
+		if not debug_modifier.is_empty() or str(debug_run_setup.get("modifier_mode", "random")) == "none":
+			template["modifier"] = debug_modifier
 		var layout_id := str(debug_run_setup.get("layout_id", "random"))
 		if layout_id != "random":
 			template["layout_id"] = layout_id
-		if str(template.get("room_objective", "survive")) == "destroy_generators":
+		if room_objective == "destroy_generators":
 			template["generator_count"] = 3 if room_type == "elite" else 2
 			template["generator_spawn_interval"] = 2.6 if room_type == "elite" else 3.2
 			template["generator_enemy_cap"] = 8 if room_type == "elite" else 6
 			template["generator_spitter_chance"] = _compute_generator_spitter_chance(step_index, room_type == "elite")
-		else:
+		elif forced_recipe_id.is_empty():
 			template["survival_duration"] = _compute_survival_duration(step_index, room_type == "elite")
 			template["enemy_spawn_interval"] = _compute_spawn_interval(step_index, room_type == "elite")
 	elif room_type == "boss":
@@ -1357,16 +1372,18 @@ func _build_debug_room_node() -> Dictionary:
 		template["layout_id"] = "boss_gate" if boss_layout_id == "random" else boss_layout_id
 	return _build_node(step_index, 2, template)
 
-func _resolve_debug_modifier() -> Dictionary:
+func _resolve_debug_modifier(room_objective: String = "survive") -> Dictionary:
 	var modifier_mode := str(debug_run_setup.get("modifier_mode", "random"))
 	var step_index: int = int(debug_run_setup.get("step_index", 0))
 	match modifier_mode:
 		"none":
 			return {}
 		"specific":
-			return _modifier_engine.get_modifier_by_id(str(debug_run_setup.get("modifier_id", "")))
+			var specific_modifier: Dictionary = _modifier_engine.get_modifier_by_id(str(debug_run_setup.get("modifier_id", "")))
+			return specific_modifier if _is_modifier_allowed_for_objective(specific_modifier, room_objective) else {}
 		_:
-			return _modifier_engine.get_random_modifier(step_index)
+			var random_modifier: Dictionary = _modifier_engine.get_random_modifier(step_index)
+			return random_modifier if _is_modifier_allowed_for_objective(random_modifier, room_objective) else {}
 
 func _get_primary_profile(profile_id: String) -> Dictionary:
 	var normalized_profile_id := _normalize_primary_profile_id(profile_id)
@@ -1841,14 +1858,27 @@ func _resolve_recipe_layout_id(template: Dictionary, room_objective: String, rec
 		return "gauntlet_pockets"
 	return _get_random_layout_id()
 
-func _resolve_recipe_modifier(template: Dictionary, step_index: int, recipe_modifier_id: String) -> Dictionary:
+func _resolve_recipe_modifier(template: Dictionary, step_index: int, recipe_modifier_id: String, room_objective: String) -> Dictionary:
 	if template.has("modifier") and template.get("modifier", {}) is Dictionary:
-		return template.get("modifier", {}).duplicate(true)
+		var template_modifier: Dictionary = template.get("modifier", {}).duplicate(true)
+		return template_modifier if _is_modifier_allowed_for_objective(template_modifier, room_objective) else {}
 	if not recipe_modifier_id.is_empty():
 		var recipe_modifier: Dictionary = _modifier_engine.get_modifier_by_id(recipe_modifier_id)
-		if not recipe_modifier.is_empty() and int(recipe_modifier.get("min_step", 0)) <= step_index:
+		if not recipe_modifier.is_empty() and int(recipe_modifier.get("min_step", 0)) <= step_index and _is_modifier_allowed_for_objective(recipe_modifier, room_objective):
 			return recipe_modifier
-	return _modifier_engine.get_random_modifier(step_index)
+	return {}
+
+func _is_modifier_allowed_for_objective(modifier: Dictionary, room_objective: String) -> bool:
+	if modifier.is_empty():
+		return true
+	if room_objective == "destroy_generators" and not str(modifier.get("spawn_side", "")).strip_edges().is_empty():
+		return false
+	return true
+
+func _get_forced_recipe_id() -> String:
+	if not bool(debug_run_setup.get("enabled", false)):
+		return ""
+	return str(debug_run_setup.get("test_recipe_id", "")).strip_edges()
 
 func _rebuild_node_lookup() -> void:
 	_node_lookup = {}

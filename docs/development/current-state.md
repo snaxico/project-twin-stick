@@ -103,17 +103,40 @@ Godot `4.6.2` prototype for a same-screen local co-op twin-stick roguelite. The 
 - Patch 13 encounter identity layer is now in:
   - `Bruiser` adds a slow durable slam enemy role
   - modifiers are now gated by `min_step` and `pool`
-  - normal runs use only the `core` modifier pool
-  - new core modifiers:
+  - normal runs now use a reduced identity-first core modifier pool:
     - `Swarm`
+    - `Crossfire`
+    - `Hot Floor`
+    - `Death Pop`
+  - generic modifiers were removed from normal recipe use:
+    - `Armoured`
     - `Heavy Patrol`
+    - `Frenzy`
+    - `Stampede`
+    - `Friendly Fire`
+    - `Darkness`
   - arena obstacle layouts now exist:
     - `pillars`
     - `ring`
     - `pockets`
+    - `lane`
   - obstacle visuals now render as high-contrast pillars instead of blending into the arena floor
   - obstacle spawning now reserves the arena center so loot/drop interaction cannot be softlocked
-  - combat and elite rooms now use recipe-driven layout/modifier/enemy-weight hints
+  - generator slots are now sanitized against obstacle geometry so objective targets do not spawn inside blocker layouts
+  - `ring` is now a tighter eight-pillar loop
+  - `pockets` now read as clearer inward-facing objective pockets
+  - `lane` now uses broad divider walls to create three readable combat lanes without trapping revives
+  - combat and elite rooms now use curated recipe-driven layout/modifier/enemy-weight hints
+  - recipes now carry optional pacing overrides and anti-repeat selection
+  - crossfire encounters now bias spitters to side spawns instead of only changing fire rate numbers
+  - `Swarm` now pushes much harder with a 200% spawn-rate increase plus extra wave size
+  - `Hot Floor` now uses telegraphed floor hazards instead of stationary-damage punishment
+  - `Death Pop` now uses brief death puddles instead of instant corpse explosions
+  - debug single-room launches can now test the full obstacle-layout set directly:
+    - `pillars`
+    - `ring`
+    - `pockets`
+    - `lane`
 - boss health now scales modestly with rooms survived before the boss
 - gauntlet V1 layer is in:
   - neutral generators spawn pressure enemies
@@ -135,6 +158,8 @@ Godot `4.6.2` prototype for a same-screen local co-op twin-stick roguelite. The 
 - `RecipeEngine` for encounter recipe selection and enemy-weight hint lookup
 - `RunFlow` for connected map rendering, node inspection, node selection, and room transitions
 - `CoopManager` for room orchestration, combat spawning, obstacle layouts, loot/shop resolution, exit flow, room-state signaling, primary behavior execution, and trigger-event processing
+- `HotFloorZone` for telegraphed floor hazard timing and overlap damage
+- `DeathPuddle` for telegraphed death-zone puddle timing and overlap damage
 - `PassiveTriggerSystem` for hook-passive throttling and trigger action collection
 - `IconFactory` for cached procedural placeholder icons and real-sprite fallback lookup
 - `docs/design/weapons-passives-balance.xlsx` as the balancing design document for:
@@ -170,8 +195,8 @@ Godot `4.6.2` prototype for a same-screen local co-op twin-stick roguelite. The 
   - icon-first slot rendering with real primary weapon sprites where available
   - lighter transparency so the arena stays readable behind the HUD
 - modifier intro panel plus active room tinting
-- darkness overlay, left-side spawn filtering, and optional friendly fire modifier hooks
-- fixed fullscreen same-screen arena with layout presets: `default`, `crossfire`, `pinch`, `offset`, `pillars`, `ring`, `pockets`, `boss gate`
+- darkness overlay, left-side spawn filtering, side-biased ranged spawn hooks, and optional friendly fire modifier hooks
+- fixed fullscreen same-screen arena with layout presets: `default`, `crossfire`, `pinch`, `offset`, `pillars`, `ring`, `pockets`, `lane`, `boss gate`
 - gauntlet layout preset: `gauntlet_pockets`
 - arena presentation is now cartoon-styled:
   - thick player/enemy outlines
@@ -212,7 +237,7 @@ Godot `4.6.2` prototype for a same-screen local co-op twin-stick roguelite. The 
   - combat values now use a base-10 display scale while preserving relative balance and pace
   - player baseline HP now presents as `50`
   - primary and secondary damage now present in `10`-point steps instead of `1`-point steps
-  - generator HP, revive HP, inferno damage, rest healing, and flat passive/modifier combat bonuses were scaled to match
+  - generator HP, revive HP, hazard damage, rest healing, and flat passive/modifier combat bonuses were scaled to match
   - loot drops now pop in with a short scale tween instead of appearing flat
   - enemy gold pickups now burst slightly off the corpse position instead of stacking on one exact point
 - Patch 12 icon-first UI pass is now in:
@@ -234,7 +259,7 @@ Godot `4.6.2` prototype for a same-screen local co-op twin-stick roguelite. The 
 - Patch 10 should stay a readability-and-feel pass, not a doorway into new content systems
 - Patch 11 should keep combat melee-first and survivable, not drift back into projectile-heavy pressure
 - Patch 12 icon-first UI pass is now implemented and verified; future UI work should preserve fast scan readability instead of growing text blocks again
-- Patch 13 encounter identity pass is now implemented in code and should be validated through live runs before further encounter expansion
+- Patch 13 encounter identity pass is now implemented in code, including the hazard/layout rework pass, and should be validated through live runs before further encounter expansion
 - ranged pressure has been softened to make the game less oppressive
 - aim lines, projectiles, and arena contrast were pushed toward clearer combat reads
 - player-facing weapon and projectile art should stay readable and anchored to gameplay direction, not just cosmetic placement
@@ -271,9 +296,15 @@ Godot `4.6.2` prototype for a same-screen local co-op twin-stick roguelite. The 
   - these checks were exercised enough to accept the patch, but they still need follow-up after future UI or content growth
 - Patch 13 still needs live validation for:
   - Bruiser readability, slam telegraph, and recovery punish window
-  - modifier tier progression in Normal runs
-  - obstacle collision and anti-stuck behavior on `pillars`, `ring`, and `pockets`
-  - whether recipe-driven rooms actually feel distinct across several runs
+  - the reduced core modifier pool in Normal runs
+  - obstacle collision and anti-stuck behavior on `pillars`, `ring`, `pockets`, and `lane`
+  - whether the lightweight enemy detour logic is enough once Swarm pressure rises in blocked layouts
+  - `Hot Floor` telegraph readability and damage fairness
+  - `Death Pop` puddle readability and melee fairness
+  - crossfire flank pressure after side-biased spitter spawning
+  - whether persistent enemy projectiles stay readable once they travel until wall or obstacle impact
+  - whether the curated recipes actually feel distinct across several runs
+  - whether stronger `Swarm` pressure stays readable without overwhelming revive flow
 - `3–4` player runtime validation and tuning still need real play coverage
 - full-run pacing and solo-vs-group balance are still not finished
 - menu cleanup is partially in; there is now a real front door, but setup/debug/meta presentation still needs more polish
@@ -309,3 +340,4 @@ If work resumes, prefer cleanup and presentation polish over new mechanics:
 - update any remaining docs that still describe the old shared-economy progression model
 - keep validating pause/settings/meta routes across different player counts
 - verify debug single-room launches still cover combat, elite, rest, shop, and boss without UI regressions
+- force-test generator rooms against all non-directional layouts/modifiers after the new generator-safe obstacle placement pass

@@ -1,64 +1,108 @@
 {
   "recipes": [
     {
-      "id": "rush",
-      "name": "Rush Room",
+      "id": "open_swarm",
+      "name": "Open Swarm",
       "min_step": 0,
-      "max_step": 99,
-      "layout_pool": ["default", "crossfire"],
-      "modifier_pool": ["stampede", "one_way", "swarm"],
-      "enemy_weight_hint": "chaser_heavy"
+      "max_step": 3,
+      "layout_pool": ["default", "offset"],
+      "modifier_pool": ["swarm", ""],
+      "enemy_weight_hint": "chaser_heavy",
+      "objective_hint": "survive",
+      "wave_size_bonus": 2,
+      "feel": "Readable horde room. Mow down many weak enemies."
     },
     {
       "id": "hold_the_line",
       "name": "Hold the Line",
       "min_step": 0,
-      "max_step": 99,
-      "layout_pool": ["default", "pinch"],
-      "modifier_pool": ["one_way", "stampede"],
-      "enemy_weight_hint": "default"
+      "max_step": 5,
+      "layout_pool": ["lane", "pinch"],
+      "modifier_pool": [""],
+      "enemy_weight_hint": "chaser_charger",
+      "objective_hint": "survive",
+      "feel": "Defend against a directional push."
     },
     {
-      "id": "pillar_fight",
-      "name": "Pillar Fight",
+      "id": "crossfire_lanes",
+      "name": "Crossfire Lanes",
+      "min_step": 1,
+      "max_step": 99,
+      "layout_pool": ["lane", "crossfire"],
+      "modifier_pool": ["crossfire"],
+      "enemy_weight_hint": "spitter_chaser",
+      "objective_hint": "survive",
+      "feel": "Dodge ranged side pressure while clearing spitters."
+    },
+    {
+      "id": "pillar_skirmish",
+      "name": "Pillar Skirmish",
       "min_step": 2,
       "max_step": 99,
       "layout_pool": ["pillars"],
-      "modifier_pool": ["heavy_patrol", "armoured", "frenzy"],
-      "enemy_weight_hint": "bruiser_mix"
+      "modifier_pool": ["crossfire", "death_pop"],
+      "enemy_weight_hint": "spitter_bruiser",
+      "objective_hint": "survive",
+      "feel": "Use cover, clear ranged threats, manage blockers."
     },
     {
-      "id": "ring_kite",
-      "name": "Ring Kite",
+      "id": "ring_run",
+      "name": "Ring Run",
       "min_step": 2,
       "max_step": 99,
       "layout_pool": ["ring"],
-      "modifier_pool": ["frenzy", "swarm", "stampede"],
-      "enemy_weight_hint": "default"
+      "modifier_pool": ["hot_floor", "swarm"],
+      "enemy_weight_hint": "chaser_charger",
+      "objective_hint": "survive",
+      "spawn_interval_override": 2.2,
+      "feel": "Continuous looping movement."
     },
     {
-      "id": "pocket_siege",
-      "name": "Pocket Siege",
-      "min_step": 2,
+      "id": "dead_zone_ring",
+      "name": "Dead Zone Ring",
+      "min_step": 3,
+      "max_step": 99,
+      "layout_pool": ["ring", "pillars"],
+      "modifier_pool": ["death_pop"],
+      "enemy_weight_hint": "bruiser_mix",
+      "objective_hint": "survive",
+      "feel": "Kill enemies in safe places, avoid death zones."
+    },
+    {
+      "id": "pocket_breakthrough",
+      "name": "Pocket Breakthrough",
+      "min_step": 3,
       "max_step": 99,
       "layout_pool": ["pockets"],
-      "modifier_pool": ["heavy_patrol", "inferno"],
-      "enemy_weight_hint": "bruiser_mix",
-      "objective_hint": "destroy_generators"
+      "modifier_pool": [""],
+      "enemy_weight_hint": "bruiser_spitter_chaser",
+      "objective_hint": "destroy_generators",
+      "feel": "Push into defended pockets and destroy objectives."
     },
     {
       "id": "chaos_room",
       "name": "Chaos Room",
       "min_step": 4,
       "max_step": 99,
-      "layout_pool": ["default", "pillars", "ring"],
-      "modifier_pool": ["explosive_death", "frenzy", "inferno"],
-      "enemy_weight_hint": "default"
+      "layout_pool": ["default", "ring"],
+      "modifier_pool": ["hot_floor", "death_pop"],
+      "enemy_weight_hint": "mixed",
+      "objective_hint": "survive",
+      "spawn_interval_override": 1.8,
+      "wave_size_bonus": 3,
+      "survival_duration_bonus": 4.0,
+      "feel": "Late-run spectacle."
     }
   ],
   "enemy_weight_hints": {
     "default": null,
-    "chaser_heavy": [8, 1, 1, 0],
-    "bruiser_mix": [2, 0, 2, 4]
+    "chaser_heavy": [8, 0, 1, 0],
+    "chaser_charger": [5, 0, 3, 0],
+    "spitter_chaser": [4, 3, 0, 0],
+    "spitter_bruiser": [2, 3, 0, 3],
+    "chaser_charger_bruiser": [3, 0, 3, 2],
+    "bruiser_spitter_chaser": [3, 2, 1, 3],
+    "bruiser_mix": [2, 0, 2, 4],
+    "mixed": [3, 2, 2, 2]
   }
 }
