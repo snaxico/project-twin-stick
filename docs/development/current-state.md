@@ -114,6 +114,10 @@ Godot `4.6.2` prototype for a same-screen local co-op twin-stick roguelite. The 
 - `RunFlow` for connected map rendering, node inspection, node selection, and room transitions
 - `CoopManager` for room orchestration, combat spawning, loot/shop resolution, exit flow, room-state signaling, primary behavior execution, and trigger-event processing
 - `PassiveTriggerSystem` for hook-passive throttling and trigger action collection
+- `docs/design/weapons-passives-balance.xlsx` as the balancing design document for:
+  - primary weapons
+  - secondary weapons
+  - passive items
 - bootstrap debug launcher for:
   - normal run override starts
   - single-room debug launches

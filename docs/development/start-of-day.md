@@ -173,6 +173,7 @@ Read this first to restore project context quickly, then read `current-state.md`
 - `data/weapons.json`: weapon definitions and level data.
 - `data/passives.json`: passive reward/shop item definitions.
 - `data/modifiers.json`: room modifier tuning.
+- `docs/design/weapons-passives-balance.xlsx`: balancing/design source of truth for primary weapons, secondary weapons, and passive items.
 - `Enemy.gd`: enemy silhouettes, hitbox sizing, and motion identity.
 - `PassiveTriggerSystem.gd`: centralized hook-passive throttling and action collection.
 - `CoopManager.gd`: now also owns generator-room orchestration, pickup handling, the deferred pickup attach path, and shared combat-hit routing across primary and secondary sources.
@@ -204,6 +205,7 @@ Read this first to restore project context quickly, then read `current-state.md`
 - `start-of-day.md` is the fast refresher.
 - `current-state.md` is the compact source of truth for active runtime state.
 - `history/` records what changed, why, and what remains open.
+- `docs/design/weapons-passives-balance.xlsx` is the balancing design document for weapons and passives.
 - `docs/process/` stays the source of truth for scope, roadmap, architecture, and workflow rules.
 - Write for continuation, not presentation.
 - Keep entries short, factual, and useful for the next session.
