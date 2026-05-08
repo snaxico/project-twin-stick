@@ -214,6 +214,7 @@ Read this first to restore project context quickly, then read `current-state.md`
 - `scripts/ui/IconFactory.gd`: procedural fallback icon generation and icon cache for weapons, passives, and UI chrome.
 - `RecipeEngine.gd`: room recipe loading and recipe/weight-hint selection.
 - `docs/design/weapons-passives-balance.xlsx`: balancing/design source of truth for primary weapons, secondary weapons, and passive items.
+- `docs/design/enemies-arenas-modifiers-balance.xlsx`: balancing/design source of truth for enemies, arena layouts, encounter modifiers, and recipes.
 - `Enemy.gd`: enemy silhouettes, hitbox sizing, and motion identity.
 - `PassiveTriggerSystem.gd`: centralized hook-passive throttling and action collection.
 - `CoopManager.gd`: now also owns generator-room orchestration, pickup handling, encounter wave composition, obstacle spawning, the deferred pickup attach path, and shared combat-hit routing across primary and secondary sources.
@@ -246,6 +247,7 @@ Read this first to restore project context quickly, then read `current-state.md`
 - `current-state.md` is the compact source of truth for active runtime state.
 - `history/` records what changed, why, and what remains open.
 - `docs/design/weapons-passives-balance.xlsx` is the balancing design document for weapons and passives.
+- `docs/design/enemies-arenas-modifiers-balance.xlsx` is the balancing design document for enemies, arenas, modifiers, and encounter recipes.
 - `docs/process/` stays the source of truth for scope, roadmap, architecture, and workflow rules.
 - Any change to primary weapons, secondary weapons, or passive items must update `docs/design/weapons-passives-balance.xlsx` in the same slice.
 - Write for continuation, not presentation.

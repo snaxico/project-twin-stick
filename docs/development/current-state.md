@@ -142,6 +142,11 @@ Godot `4.6.2` prototype for a same-screen local co-op twin-stick roguelite. The 
   - secondary weapons
   - passive items
   - this spreadsheet must be updated whenever any of those balance surfaces change
+- `docs/design/enemies-arenas-modifiers-balance.xlsx` as the balancing design document for:
+  - enemies
+  - arena layouts
+  - encounter modifiers
+  - encounter recipes
 - bootstrap debug launcher for:
   - normal run override starts
   - single-room debug launches
