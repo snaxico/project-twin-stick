@@ -189,10 +189,10 @@ signal player_revived(player)
 
 var _player_nodes: Array = []
 var _player_configs: Array = [
-	PlayerConfigData.new(1, "hybrid", Color(0.15, 0.92, 0.25, 1.0), PlayerConfigData.AimMode.HEAVY_AUTO),
-	PlayerConfigData.new(2, "hybrid", Color(0.18, 0.42, 1.0, 1.0), PlayerConfigData.AimMode.FULL_AUTO),
-	PlayerConfigData.new(3, "gamepad", Color(1.0, 0.88, 0.12, 1.0), PlayerConfigData.AimMode.FULL_AUTO),
-	PlayerConfigData.new(4, "gamepad", Color(1.0, 0.5, 0.12, 1.0), PlayerConfigData.AimMode.FULL_AUTO),
+	PlayerConfigData.new(1, "gamepad", Color(0.15, 0.92, 0.25, 1.0), PlayerConfigData.AimMode.HEAVY_AUTO),
+	PlayerConfigData.new(2, "keyboard", Color(0.18, 0.42, 1.0, 1.0), PlayerConfigData.AimMode.FULL_AUTO),
+	PlayerConfigData.new(3, "keyboard", Color(1.0, 0.88, 0.12, 1.0), PlayerConfigData.AimMode.FULL_AUTO),
+	PlayerConfigData.new(4, "keyboard", Color(1.0, 0.5, 0.12, 1.0), PlayerConfigData.AimMode.FULL_AUTO),
 ]
 var _is_initialized := false
 var _room_is_cleared := false

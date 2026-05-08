@@ -174,9 +174,9 @@ func _populate_menu() -> void:
 	], "normal")
 
 	_populate_control_option(player_1_control_option, "gamepad")
-	_populate_control_option(player_2_control_option, "gamepad")
-	_populate_control_option(player_3_control_option, "gamepad")
-	_populate_control_option(player_4_control_option, "gamepad")
+	_populate_control_option(player_2_control_option, "keyboard")
+	_populate_control_option(player_3_control_option, "keyboard")
+	_populate_control_option(player_4_control_option, "keyboard")
 	_populate_profile_option(debug_primary_option, [
 		{"label": "Rifle", "value": "rifle"},
 		{"label": "Scatter", "value": "spread"},
@@ -248,8 +248,6 @@ func _populate_control_option(option_button: OptionButton, default_value: String
 	option_button.set_item_metadata(0, "keyboard")
 	option_button.add_item("Gamepad")
 	option_button.set_item_metadata(1, "gamepad")
-	option_button.add_item("Hybrid")
-	option_button.set_item_metadata(2, "hybrid")
 
 	for index in range(option_button.item_count):
 		if option_button.get_item_metadata(index) == default_value:
@@ -450,10 +448,17 @@ func _build_player_configs() -> Array:
 		player_count,
 		mini(control_options.size(), mini(_player_aim_modes.size(), _player_tints.size()))
 	)
+	var connected_gamepads: Array = Input.get_connected_joypads()
+	var remaining_gamepad_slots: int = connected_gamepads.size()
 
 	for index in range(available_player_slots):
 		var option_button: OptionButton = control_options[index]
 		var control_source := str(option_button.get_selected_metadata())
+		if control_source == "gamepad":
+			if remaining_gamepad_slots > 0:
+				remaining_gamepad_slots -= 1
+			else:
+				control_source = "keyboard"
 		var aim_mode: int = int(_player_aim_modes[index])
 		var tint: Color = _player_tints[index]
 		configs.append(PlayerConfigData.new(index + 1, control_source, tint, aim_mode))
