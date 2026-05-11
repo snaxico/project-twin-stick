@@ -203,7 +203,7 @@ Godot `4.6.2` prototype for a same-screen local co-op twin-stick roguelite. The 
   - normal run override starts
   - encounter-builder single-room launches
   - explicit room/objective/modifier/layout/depth selection
-  - builder objective focus now stays on `survive` and `capture_the_hill`
+  - builder exposes all three objectives: `survive`, `capture_the_hill`, and `destroy_generators`
   - auto-launch into the configured room instead of stopping on a one-node debug map
   - return-to-builder after the encounter ends
   - single-room clears/fails now stay in the builder loop instead of falling through to full-run summary behavior

@@ -250,11 +250,8 @@ func _refresh_debug_room_objective_options() -> void:
 	var entries: Array = [
 		{"label": "Survive", "value": "survive"},
 		{"label": "Capture The Hill", "value": "capture_the_hill"},
+		{"label": "Destroy Generators", "value": "destroy_generators"},
 	]
-	if _setup_mode != "encounter_builder":
-		entries.append({"label": "Destroy Generators", "value": "destroy_generators"})
-	if selected_value == "destroy_generators" and _setup_mode == "encounter_builder":
-		selected_value = "survive"
 	_populate_profile_option(debug_room_objective_option, entries, selected_value)
 
 func _populate_control_option(option_button: OptionButton, default_value: String) -> void:
