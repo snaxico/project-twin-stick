@@ -26,8 +26,8 @@ static func create_muzzle_flash(color: Color, direction: Vector2, profile: Strin
 
 static func create_impact_sparks(color: Color, direction: Vector2, weight: float = 1.0) -> GPUParticles2D:
 	var particles := _create_particles()
-	particles.amount = 12 + int(round(weight * 8.0))
-	particles.lifetime = 0.12 + weight * 0.05
+	particles.amount = 12 + int(round(weight * 11.0))
+	particles.lifetime = 0.12 + weight * 0.05 + (0.03 if weight >= 1.35 else 0.0)
 	particles.one_shot = true
 	particles.explosiveness = 1.0
 	particles.modulate = color
@@ -37,8 +37,9 @@ static func create_impact_sparks(color: Color, direction: Vector2, weight: float
 	material.spread = 64.0 + weight * 16.0
 	material.initial_velocity_min = 110.0 + weight * 26.0
 	material.initial_velocity_max = 220.0 + weight * 54.0
-	material.scale_min = 0.4 + weight * 0.08
-	material.scale_max = 0.75 + weight * 0.18
+	var heavy_scale_boost: float = 1.25 if weight >= 1.35 else 1.0
+	material.scale_min = (0.4 + weight * 0.08) * heavy_scale_boost
+	material.scale_max = (0.75 + weight * 0.18) * heavy_scale_boost
 	material.damping_min = 8.0
 	material.damping_max = 14.0
 	particles.process_material = material
@@ -47,8 +48,8 @@ static func create_impact_sparks(color: Color, direction: Vector2, weight: float
 
 static func create_explosion_burst(color: Color, weight: float = 1.0) -> GPUParticles2D:
 	var particles := _create_particles()
-	particles.amount = 24 + int(round(weight * 12.0))
-	particles.lifetime = 0.22 + weight * 0.08
+	particles.amount = 24 + int(round(weight * 16.0))
+	particles.lifetime = 0.22 + weight * 0.08 + (0.05 if weight >= 1.35 else 0.0)
 	particles.one_shot = true
 	particles.explosiveness = 1.0
 	particles.modulate = color
@@ -58,8 +59,9 @@ static func create_explosion_burst(color: Color, weight: float = 1.0) -> GPUPart
 	material.spread = 180.0
 	material.initial_velocity_min = 90.0 + weight * 36.0
 	material.initial_velocity_max = 210.0 + weight * 72.0
-	material.scale_min = 0.5 + weight * 0.1
-	material.scale_max = 1.1 + weight * 0.22
+	var heavy_scale_boost: float = 1.25 if weight >= 1.35 else 1.0
+	material.scale_min = (0.5 + weight * 0.1) * heavy_scale_boost
+	material.scale_max = (1.1 + weight * 0.22) * heavy_scale_boost
 	material.damping_min = 7.0
 	material.damping_max = 13.0
 	particles.process_material = material
@@ -68,8 +70,8 @@ static func create_explosion_burst(color: Color, weight: float = 1.0) -> GPUPart
 
 static func create_death_burst(color: Color, weight: float = 1.0) -> GPUParticles2D:
 	var particles := _create_particles()
-	particles.amount = 16 + int(round(weight * 10.0))
-	particles.lifetime = 0.18 + weight * 0.06
+	particles.amount = 16 + int(round(weight * 14.0))
+	particles.lifetime = 0.18 + weight * 0.06 + (0.04 if weight >= 1.35 else 0.0)
 	particles.one_shot = true
 	particles.explosiveness = 1.0
 	particles.modulate = color
@@ -79,8 +81,9 @@ static func create_death_burst(color: Color, weight: float = 1.0) -> GPUParticle
 	material.spread = 180.0
 	material.initial_velocity_min = 80.0 + weight * 24.0
 	material.initial_velocity_max = 180.0 + weight * 46.0
-	material.scale_min = 0.4 + weight * 0.08
-	material.scale_max = 0.9 + weight * 0.16
+	var heavy_scale_boost: float = 1.25 if weight >= 1.35 else 1.0
+	material.scale_min = (0.4 + weight * 0.08) * heavy_scale_boost
+	material.scale_max = (0.9 + weight * 0.16) * heavy_scale_boost
 	material.damping_min = 8.0
 	material.damping_max = 14.0
 	particles.process_material = material
@@ -129,11 +132,32 @@ static func create_dash_burst(color: Color, direction: Vector2, weight: float = 
 	_configure_one_shot(particles)
 	return particles
 
+static func create_attack_trail(color: Color, direction: Vector2, weight: float = 1.0) -> GPUParticles2D:
+	var particles := _create_particles()
+	particles.amount = 6 + int(round(weight * 3.0))
+	particles.lifetime = 0.10 + min(weight, 2.0) * 0.02
+	particles.one_shot = true
+	particles.explosiveness = 1.0
+	particles.modulate = color
+
+	var material := ParticleProcessMaterial.new()
+	material.direction = Vector3(-direction.x, -direction.y, 0.0)
+	material.spread = 34.0 + weight * 12.0
+	material.initial_velocity_min = 48.0 + weight * 18.0
+	material.initial_velocity_max = 84.0 + weight * 28.0
+	material.scale_min = 0.45 + weight * 0.06
+	material.scale_max = 0.9 + weight * 0.1
+	material.damping_min = 6.0
+	material.damping_max = 10.0
+	particles.process_material = material
+	_configure_one_shot(particles)
+	return particles
+
 static func create_impact_ring(color: Color, radius: float = 18.0, thickness: float = 3.0) -> Node2D:
-	return _create_ring_effect(color, radius, radius * 1.7, 0.14, thickness)
+	return _create_ring_effect(color, radius, radius * 1.85, 0.13, thickness)
 
 static func create_explosion_ring(color: Color, radius: float = 88.0, thickness: float = 4.0) -> Node2D:
-	return _create_ring_effect(color, radius * 0.24, radius, 0.28, thickness)
+	return _create_ring_effect(color, radius * 0.22, radius * 1.05, 0.26, thickness)
 
 static func create_projectile_trail(color: Color) -> GPUParticles2D:
 	var particles := _create_particles()

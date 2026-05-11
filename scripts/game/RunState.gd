@@ -694,7 +694,7 @@ func _roll_room_objective(step_index: int) -> String:
 	if step_index < 2:
 		return "survive"
 	if _random.randf() < GAUNTLET_ROOM_CHANCE:
-		return "destroy_generators"
+		return "capture_the_hill"
 	return "survive"
 
 func _compute_generator_spitter_chance(step_index: int, is_elite: bool) -> float:
@@ -782,6 +782,12 @@ func _build_node(step_index: int, column: int, template: Dictionary) -> Dictiona
 				node["generator_spawn_interval"] = float(template.get("generator_spawn_interval", 3.2))
 				node["generator_enemy_cap"] = int(template.get("generator_enemy_cap", 6))
 				node["generator_spitter_chance"] = float(template.get("generator_spitter_chance", _compute_generator_spitter_chance(step_index, false)))
+			elif combat_objective == "capture_the_hill":
+				node["description"] = "Hold the capture zone under pressure until the meter fills."
+				node["hill_capture_required"] = float(template.get("hill_capture_required", 8.0))
+				node["hill_radius"] = float(template.get("hill_radius", 132.0))
+				var hill_spawn_interval: float = float(recipe.get("spawn_interval_override", _compute_spawn_interval(step_index, false)))
+				node["enemy_spawn_interval"] = float(template.get("enemy_spawn_interval", hill_spawn_interval))
 			else:
 				node["description"] = "Survive the timer and hold the room."
 				var base_survival_duration: float = _compute_survival_duration(step_index, false) + float(recipe.get("survival_duration_bonus", 0.0))
@@ -807,6 +813,12 @@ func _build_node(step_index: int, column: int, template: Dictionary) -> Dictiona
 				node["generator_spawn_interval"] = float(template.get("generator_spawn_interval", 2.6))
 				node["generator_enemy_cap"] = int(template.get("generator_enemy_cap", 8))
 				node["generator_spitter_chance"] = float(template.get("generator_spitter_chance", _compute_generator_spitter_chance(step_index, true)))
+			elif elite_objective == "capture_the_hill":
+				node["description"] = "Capture the zone while elite pressure keeps closing in."
+				node["hill_capture_required"] = float(template.get("hill_capture_required", 10.0))
+				node["hill_radius"] = float(template.get("hill_radius", 140.0))
+				var elite_hill_spawn_interval: float = float(elite_recipe.get("spawn_interval_override", _compute_spawn_interval(step_index, is_elite)))
+				node["enemy_spawn_interval"] = float(template.get("enemy_spawn_interval", elite_hill_spawn_interval))
 			else:
 				node["description"] = "Survive the elite timer and break through the pressure."
 				var elite_survival_duration: float = _compute_survival_duration(step_index, is_elite) + float(elite_recipe.get("survival_duration_bonus", 0.0))
@@ -1364,6 +1376,10 @@ func _build_debug_room_node() -> Dictionary:
 			template["generator_spawn_interval"] = 2.6 if room_type == "elite" else 3.2
 			template["generator_enemy_cap"] = 8 if room_type == "elite" else 6
 			template["generator_spitter_chance"] = _compute_generator_spitter_chance(step_index, room_type == "elite")
+		elif room_objective == "capture_the_hill":
+			template["hill_capture_required"] = 10.0 if room_type == "elite" else 8.0
+			template["hill_radius"] = 140.0 if room_type == "elite" else 132.0
+			template["enemy_spawn_interval"] = _compute_spawn_interval(step_index, room_type == "elite")
 		elif forced_recipe_id.is_empty():
 			template["survival_duration"] = _compute_survival_duration(step_index, room_type == "elite")
 			template["enemy_spawn_interval"] = _compute_spawn_interval(step_index, room_type == "elite")
@@ -1856,6 +1872,8 @@ func _resolve_recipe_layout_id(template: Dictionary, room_objective: String, rec
 		return recipe_layout
 	if room_objective == "destroy_generators":
 		return "gauntlet_pockets"
+	if room_objective == "capture_the_hill":
+		return "ring"
 	return _get_random_layout_id()
 
 func _resolve_recipe_modifier(template: Dictionary, step_index: int, recipe_modifier_id: String, room_objective: String) -> Dictionary:

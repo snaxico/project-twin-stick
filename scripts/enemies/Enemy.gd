@@ -38,6 +38,12 @@ enum EnemyType {
 @onready var outline: Polygon2D = $BodyRoot/Outline
 @onready var visual: Polygon2D = $BodyRoot/Visual
 
+const FEELER_LENGTH: float = 48.0
+const FEELER_SPREAD: float = 0.52
+const SEPARATION_RADIUS: float = 22.0
+const SEPARATION_STRENGTH: float = 60.0
+const SEPARATION_FALLOFF_POWER: float = 2.0
+
 var enemy_type: EnemyType = EnemyType.CHASER
 var current_health: int = 0
 
@@ -78,6 +84,7 @@ var _outline_pulse := 1.0
 var _blocked_time := 0.0
 var _last_position := Vector2.ZERO
 var _detour_sign := 1.0
+var _next_attack_trail_at := 0.0
 
 func setup(type_name: String, combat_owner) -> void:
 	_combat_owner = combat_owner
@@ -85,7 +92,7 @@ func setup(type_name: String, combat_owner) -> void:
 		"spitter":
 			enemy_type = EnemyType.SPITTER
 			max_health = 20
-			move_speed = 84.0
+			move_speed = 110.0
 			fire_interval = 2.6
 			projectile_speed = 280.0
 			projectile_damage = 10
@@ -95,7 +102,7 @@ func setup(type_name: String, combat_owner) -> void:
 		"charger":
 			enemy_type = EnemyType.CHARGER
 			max_health = 40
-			move_speed = 88.0
+			move_speed = 125.0
 			fire_interval = 2.0
 			projectile_speed = 0.0
 			projectile_damage = 0
@@ -106,7 +113,7 @@ func setup(type_name: String, combat_owner) -> void:
 		"bruiser":
 			enemy_type = EnemyType.BRUISER
 			max_health = 60
-			move_speed = 68.0
+			move_speed = 92.0
 			fire_interval = 0.0
 			projectile_speed = 0.0
 			projectile_damage = 0
@@ -117,7 +124,7 @@ func setup(type_name: String, combat_owner) -> void:
 		"boss":
 			enemy_type = EnemyType.BOSS
 			max_health = 180
-			move_speed = 82.0
+			move_speed = 105.0
 			fire_interval = 1.3
 			projectile_speed = 380.0
 			projectile_damage = 10
@@ -128,7 +135,7 @@ func setup(type_name: String, combat_owner) -> void:
 		_:
 			enemy_type = EnemyType.CHASER
 			max_health = 30
-			move_speed = 108.0
+			move_speed = 145.0
 			fire_interval = 1.3
 			projectile_speed = 340.0
 			projectile_damage = 10
@@ -254,11 +261,13 @@ func _physics_process(_delta: float) -> void:
 		EnemyType.BOSS:
 			base_velocity = _update_boss_behavior(direction, distance, now)
 
+	base_velocity += _compute_separation_force()
 	base_velocity = _apply_obstacle_detour(base_velocity, direction)
 	_knockback_velocity = _knockback_velocity.move_toward(Vector2.ZERO, 900.0 * _delta)
 	velocity = base_velocity + _knockback_velocity
 	move_and_slide()
 	_update_blocked_state(base_velocity, direction, _delta)
+	_maybe_emit_attack_trail(now)
 	_apply_motion_polish(now, _delta)
 
 	var contact_range: float = maxf(_contact_range, _get_combined_contact_range(target))
@@ -267,11 +276,31 @@ func _physics_process(_delta: float) -> void:
 		target.apply_damage(contact_damage)
 
 func _apply_obstacle_detour(base_velocity: Vector2, direction: Vector2) -> Vector2:
-	if _blocked_time < 0.4 or direction.length() <= 0.0 or base_velocity.length() <= 20.0:
+	if direction.length() <= 0.0 or base_velocity.length() <= 20.0:
 		return base_velocity
-	var tangent: Vector2 = Vector2(-direction.y, direction.x) * _detour_sign
-	var detour_direction: Vector2 = (direction * 0.22 + tangent * 0.78).normalized()
-	return detour_direction * max(base_velocity.length(), move_speed * 0.7)
+	var move_direction: Vector2 = base_velocity.normalized()
+	var left_direction := move_direction.rotated(-FEELER_SPREAD)
+	var right_direction := move_direction.rotated(FEELER_SPREAD)
+	var left_penalty: float = _sample_feeler_penalty(left_direction)
+	var right_penalty: float = _sample_feeler_penalty(right_direction)
+	if left_penalty <= 0.0 and right_penalty <= 0.0:
+		if _blocked_time < 0.4:
+			return base_velocity
+		var tangent: Vector2 = Vector2(-direction.y, direction.x) * _detour_sign
+		var detour_direction: Vector2 = (direction * 0.22 + tangent * 0.78).normalized()
+		return detour_direction * max(base_velocity.length(), move_speed * 0.7)
+	var left_normal := move_direction.rotated(-PI * 0.5)
+	var right_normal := move_direction.rotated(PI * 0.5)
+	var avoidance := Vector2.ZERO
+	if left_penalty > 0.0 and right_penalty > 0.0 and absf(left_penalty - right_penalty) < 0.08:
+		avoidance = right_normal if _detour_sign > 0.0 else left_normal
+	elif left_penalty > right_penalty:
+		avoidance = right_normal
+	else:
+		avoidance = left_normal
+	var steer_strength: float = clamp(maxf(left_penalty, right_penalty) * 0.6, 0.0, 0.6)
+	var steer_direction := (move_direction * (1.0 - steer_strength) + avoidance.normalized() * steer_strength).normalized()
+	return steer_direction * base_velocity.length()
 
 func _update_blocked_state(base_velocity: Vector2, direction: Vector2, delta: float) -> void:
 	var moved_distance: float = global_position.distance_to(_last_position)
@@ -285,6 +314,65 @@ func _update_blocked_state(base_velocity: Vector2, direction: Vector2, delta: fl
 		_blocked_time = maxf(_blocked_time - delta * 2.0, 0.0)
 	_last_position = global_position
 
+func _sample_feeler_penalty(feeler_direction: Vector2) -> float:
+	var query := PhysicsRayQueryParameters2D.create(global_position, global_position + feeler_direction * FEELER_LENGTH)
+	query.collide_with_areas = false
+	query.collide_with_bodies = true
+	query.collision_mask = 1
+	query.exclude = _build_feeler_excludes()
+	var hit: Dictionary = get_world_2d().direct_space_state.intersect_ray(query)
+	if hit.is_empty():
+		return 0.0
+	var distance: float = global_position.distance_to(hit.get("position", global_position + feeler_direction * FEELER_LENGTH))
+	return clamp(1.0 - distance / FEELER_LENGTH, 0.0, 1.0)
+
+func _build_feeler_excludes() -> Array:
+	var excludes: Array = [get_rid()]
+	for candidate in get_tree().get_nodes_in_group("aim_target"):
+		if candidate == self or not is_instance_valid(candidate) or not (candidate is CollisionObject2D):
+			continue
+		excludes.append((candidate as CollisionObject2D).get_rid())
+	for player in get_tree().get_nodes_in_group("player_target"):
+		if not is_instance_valid(player) or not (player is CollisionObject2D):
+			continue
+		excludes.append((player as CollisionObject2D).get_rid())
+	return excludes
+
+func _compute_separation_force() -> Vector2:
+	var separation := Vector2.ZERO
+	for candidate in get_tree().get_nodes_in_group("aim_target"):
+		if candidate == self or not is_instance_valid(candidate) or not (candidate is CharacterBody2D):
+			continue
+		if candidate.has_method("is_alive") and not candidate.is_alive():
+			continue
+		var offset: Vector2 = global_position - (candidate as CharacterBody2D).global_position
+		var distance: float = offset.length()
+		if distance <= 0.0 or distance >= SEPARATION_RADIUS:
+			continue
+		var strength: float = pow(1.0 - distance / SEPARATION_RADIUS, SEPARATION_FALLOFF_POWER) * SEPARATION_STRENGTH
+		separation += offset.normalized() * strength
+	var max_separation: float = move_speed * 0.35
+	if separation.length() > max_separation:
+		separation = separation.normalized() * max_separation
+	return separation
+
+func _maybe_emit_attack_trail(now: float) -> void:
+	if _combat_owner == null or now < _next_attack_trail_at or velocity.length() < 40.0:
+		return
+	var weight: float = 0.0
+	if enemy_type == EnemyType.CHASER and now < _lunge_ends_at:
+		weight = 0.95
+	elif enemy_type == EnemyType.CHARGER and now < _charge_dash_ends_at:
+		weight = 1.25
+	elif enemy_type == EnemyType.BRUISER and now < _slam_ends_at:
+		weight = 1.45
+	elif enemy_type == EnemyType.BOSS and now < _next_projectile_at and velocity.length() > move_speed * 0.8:
+		weight = 1.2
+	if weight <= 0.0 or not _combat_owner.has_method("spawn_enemy_attack_trail"):
+		return
+	_combat_owner.spawn_enemy_attack_trail(global_position, velocity.normalized(), get_feedback_color(), weight)
+	_next_attack_trail_at = now + 0.045
+
 func _update_chaser_behavior(direction: Vector2, distance: float, now: float) -> Vector2:
 	if now < _lunge_windup_ends_at:
 		return Vector2.ZERO
@@ -292,9 +380,9 @@ func _update_chaser_behavior(direction: Vector2, distance: float, now: float) ->
 		return _lunge_direction * move_speed * 2.35
 	if distance > 0.0 and distance < 250.0 and now >= _next_lunge_at:
 		_lunge_direction = direction
-		_lunge_windup_ends_at = now + 0.16
+		_lunge_windup_ends_at = now + 0.10
 		_lunge_ends_at = _lunge_windup_ends_at + 0.22
-		_next_lunge_at = now + 1.25
+		_next_lunge_at = now + 1.0
 		return Vector2.ZERO
 	return direction * move_speed * 0.86
 
@@ -332,9 +420,9 @@ func _update_charger_behavior(direction: Vector2, distance: float, now: float) -
 		return _charge_direction * move_speed * 3.4
 	if distance > 115.0 and distance < 360.0 and now >= _next_charge_at:
 		_charge_direction = direction
-		_charge_windup_ends_at = now + 0.34
+		_charge_windup_ends_at = now + 0.20
 		_charge_dash_ends_at = _charge_windup_ends_at + 0.24
-		_next_charge_at = now + 2.3
+		_next_charge_at = now + 1.8
 		return Vector2.ZERO
 	if distance > preferred_distance:
 		return direction * move_speed * 0.92
@@ -349,10 +437,10 @@ func _update_bruiser_behavior(direction: Vector2, distance: float, now: float) -
 		return _slam_direction * move_speed * 2.0
 	if distance > 0.0 and distance < 100.0 and now >= _next_slam_at:
 		_slam_direction = direction
-		_slam_windup_ends_at = now + 0.45
+		_slam_windup_ends_at = now + 0.30
 		_slam_ends_at = _slam_windup_ends_at + 0.15
-		_slam_recovery_ends_at = _slam_ends_at + 1.8
-		_next_slam_at = now + 2.5
+		_slam_recovery_ends_at = _slam_ends_at + 1.4
+		_next_slam_at = now + 1.9
 		return Vector2.ZERO
 	return direction * move_speed
 
@@ -604,19 +692,19 @@ func _apply_motion_polish(now: float, delta: float = 0.0) -> void:
 	var bob := sin(now * bob_frequency + _idle_phase) * bob_amount
 	var squash_scale := Vector2.ONE
 	if enemy_type == EnemyType.CHASER and now < _lunge_windup_ends_at:
-		squash_scale = Vector2(1.1, 0.88)
-	elif enemy_type == EnemyType.CHASER and now < _lunge_ends_at:
-		squash_scale = Vector2(0.94, 1.18)
-	elif enemy_type == EnemyType.CHARGER and now < _charge_windup_ends_at:
 		squash_scale = Vector2(1.18, 0.82)
+	elif enemy_type == EnemyType.CHASER and now < _lunge_ends_at:
+		squash_scale = Vector2(0.88, 1.24)
+	elif enemy_type == EnemyType.CHARGER and now < _charge_windup_ends_at:
+		squash_scale = Vector2(1.26, 0.76)
 	elif enemy_type == EnemyType.CHARGER and now < _charge_dash_ends_at:
-		squash_scale = Vector2(0.92, 1.22)
+		squash_scale = Vector2(0.84, 1.30)
 	elif enemy_type == EnemyType.BRUISER and now < _slam_windup_ends_at:
-		squash_scale = Vector2(1.22, 0.78)
+		squash_scale = Vector2(1.30, 0.72)
 	elif enemy_type == EnemyType.BRUISER and now < _slam_ends_at:
-		squash_scale = Vector2(0.88, 1.28)
+		squash_scale = Vector2(0.80, 1.38)
 	elif enemy_type == EnemyType.BRUISER and now < _slam_recovery_ends_at:
-		squash_scale = Vector2(1.06, 0.94)
+		squash_scale = Vector2(1.10, 0.90)
 	body_root.position = _base_body_root_position + Vector2(0.0, bob)
 	body_root.rotation = lerp_angle(body_root.rotation, clamp(velocity.x / max(move_speed, 1.0), -1.0, 1.0) * 0.08, 0.12)
 	body_root.scale = squash_scale
@@ -664,3 +752,4 @@ func _reset_behavior_state() -> void:
 	_blocked_time = 0.0
 	_last_position = global_position
 	_detour_sign = -1.0 if int(get_instance_id() % 2) == 0 else 1.0
+	_next_attack_trail_at = 0.0

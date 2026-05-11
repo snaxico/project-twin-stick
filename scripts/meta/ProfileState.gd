@@ -5,7 +5,7 @@ const UNLOCKS_DATA_PATH := "res://data/unlocks.json"
 
 var meta_gold: int = 0
 var unlocked_item_ids: Array = []
-var screen_effect_level: String = "off"
+var screen_effect_level: String = "full"
 
 var _unlock_definitions: Array = []
 var _unlock_map: Dictionary = {}
@@ -33,7 +33,7 @@ func load_profile() -> void:
 		return
 
 	meta_gold = max(0, int(parsed.get("meta_gold", 0)))
-	screen_effect_level = _sanitize_screen_effect_level(str(parsed.get("screen_effect_level", "off")))
+	screen_effect_level = _sanitize_screen_effect_level(str(parsed.get("screen_effect_level", "full")))
 	unlocked_item_ids = []
 	var raw_unlocks = parsed.get("unlocked_item_ids", [])
 	if raw_unlocks is Array:
@@ -194,7 +194,7 @@ func _load_unlock_definitions() -> void:
 
 func _reset_to_defaults(save_after_reset: bool) -> void:
 	meta_gold = 0
-	screen_effect_level = "off"
+	screen_effect_level = "full"
 	unlocked_item_ids = []
 	for item_id in _starting_unlocked_item_ids:
 		if not unlocked_item_ids.has(item_id):

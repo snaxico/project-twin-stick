@@ -44,6 +44,7 @@ Godot `4.6.2` prototype for a same-screen local co-op twin-stick roguelite. The 
 - combat rooms with downed/revive flow
 - combat rooms can now be either:
   - timer-based `survive`
+  - control-based `capture_the_hill`
   - objective-based `destroy_generators`
 - boss endpoint and run-end summary handoff
 - headless Godot validation passes with `Godot_v4.6.2-stable_win64_console.exe`
@@ -137,6 +138,19 @@ Godot `4.6.2` prototype for a same-screen local co-op twin-stick roguelite. The 
     - `ring`
     - `pockets`
     - `lane`
+- enemy steering/tempo follow-up is now in:
+  - obstacle avoidance now uses forward feelers instead of waiting for a long blocked-time delay
+  - enemy packs now apply a capped local separation force so Swarm rooms spread instead of pixel-stacking
+  - the old blocked-time detour flip remains only as a fallback recovery path
+  - base move speed was raised across `Chaser`, `Spitter`, `Charger`, `Bruiser`, and `Boss`
+  - `Chaser`, `Charger`, and `Bruiser` attack windups/cooldowns were tightened
+  - survival/support waves no longer rely on six fixed layout spawn markers
+  - wave spawns now sample valid arena positions across the room while respecting obstacle geometry and a minimum player distance
+- combat objective follow-up is now in:
+  - `capture_the_hill` is now a live combat objective path
+  - hill rooms reuse combat-wave pressure instead of generator-owned spawning
+  - hill progress fills while players control the zone and drains under enemy control
+  - pocket breakthrough rooms now target hill control instead of generators
 - boss health now scales modestly with rooms survived before the boss
 - gauntlet V1 layer is in:
   - neutral generators spawn pressure enemies
@@ -182,7 +196,7 @@ Godot `4.6.2` prototype for a same-screen local co-op twin-stick roguelite. The 
   - `Off`
   - `Minimal`
   - `Full`
-- current default profile setting is `Off`
+- current default profile setting is `Full`
 - styled combat HUD with per-player inventory panels, modifier chip, timer bar, and polished result/pause/intro panels
 - each player HUD now exposes:
   - compact wallet value
@@ -233,6 +247,11 @@ Godot `4.6.2` prototype for a same-screen local co-op twin-stick roguelite. The 
   - primary fire now drives weapon-specific muzzle flash, recoil, camera kick, and procedural SFX variation
   - enemy hits/deaths now use stronger hitstop, burst/ring effects, and heavier camera/audio response
   - grenade and mine detonations now use layered burst plus expanding ring feedback
+- enemy feedback follow-up is now in:
+  - heavy enemy attacks now emit short motion trails during active lunge / charge / slam windows
+  - heavier enemies now drive larger burst/spark payloads and stronger kill feedback
+  - camera shake ceiling and decay were both raised so impact spikes hit harder without lingering into mush
+  - enemy-hit, enemy-death, and explosion trauma/hitstop values were all pushed upward
 - Patch 10 baseline landed on top of that combat layer:
   - combat values now use a base-10 display scale while preserving relative balance and pace
   - player baseline HP now presents as `50`
@@ -297,8 +316,8 @@ Godot `4.6.2` prototype for a same-screen local co-op twin-stick roguelite. The 
 - Patch 13 still needs live validation for:
   - Bruiser readability, slam telegraph, and recovery punish window
   - the reduced core modifier pool in Normal runs
-  - obstacle collision and anti-stuck behavior on `pillars`, `ring`, `pockets`, and `lane`
-  - whether the lightweight enemy detour logic is enough once Swarm pressure rises in blocked layouts
+  - obstacle collision and anti-stuck behavior on `pillars`, `ring`, `pockets`, and `lane` after the new feeler steering pass
+  - whether arena-wide valid spawn sampling plus feeler steering stays stable once Swarm pressure rises in blocked layouts
   - `Hot Floor` telegraph readability and damage fairness
   - `Death Pop` puddle readability and melee fairness
   - crossfire flank pressure after side-biased spitter spawning
@@ -313,7 +332,8 @@ Godot `4.6.2` prototype for a same-screen local co-op twin-stick roguelite. The 
 - grenade-vs-mine role clarity still needs a live feel pass
 - procedural run pacing and boss scaling still need live validation across several attempts
 - connected-map readability, route feel, and row-to-row pathing still need live validation
-- generator-room pacing and pickup feel still need live tuning
+- capture-the-hill pacing, hill placement, and control-rate tuning still need live validation
+- generator rooms are still in code but are no longer the preferred near-term validation target
 - enemy contact damage and pickup drop flow were recently fixed in code but still need live validation under combat load
 - single-room debug launcher still needs interactive coverage across room types and modifiers
 - new tactical modifiers still need live-behavior tuning and edge-case validation
@@ -330,7 +350,7 @@ If work resumes, prefer cleanup and presentation polish over new mechanics:
 - run a focused Patch 13 validation pass:
   - confirm early rooms stay light and readable
   - confirm Bruisers appear mid/late and in boss support only
-  - confirm pillar/ring/pocket rooms change movement without trap bugs
+  - confirm pillar/ring/pocket/lane rooms change movement without trap bugs under the new feeler steering pass
   - confirm recipes create memorable room identities across multiple runs
 - run one Easy and one Normal full-run pass specifically against the Patch 10 number scale, feedback intensity, loot/shop flow, and readability
 - simplify the play-setup screen further now that `Play` and `Debug` are separate paths

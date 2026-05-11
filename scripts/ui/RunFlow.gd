@@ -359,6 +359,8 @@ func _format_room_type(room_type: String) -> String:
 
 func _format_objective(objective: String) -> String:
 	match objective:
+		"capture_the_hill":
+			return "Capture The Hill"
 		"destroy_generators":
 			return "Destroy Generators"
 		_:

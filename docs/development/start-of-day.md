@@ -53,6 +53,7 @@ Read this first to restore project context quickly, then read `current-state.md`
 - Floor grid lines are back as subtle fullscreen room texture.
 - Combat rooms now support two objective styles:
   - `survive`
+  - `capture_the_hill`
   - `destroy_generators`
 - Primary weapon/runtime ruleset migration is now implemented:
   - primary weapons use explicit `tags` and `primary_behavior`
@@ -87,7 +88,7 @@ Read this first to restore project context quickly, then read `current-state.md`
   - in-run pause menu `Settings`
   - per-player aim modes: `Heavy Auto`, `Full Auto`, `Manual`
   - screen effects level: `Off`, `Minimal`, `Full`
-  - default profile setting is currently `Off`
+  - default profile setting is currently `Full`
 
 ## Current Run Structure
 
@@ -173,6 +174,13 @@ Read this first to restore project context quickly, then read `current-state.md`
   - replacement UI now seeds its held-button state on open, so it no longer instantly confirms/cancels
   - combat spectacle now uses weapon-weighted muzzle flash, impact, death, dash, and explosion feedback
   - loot vote, shop, and replacement panels are now icon-first instead of text-heavy
+  - enemies now steer around walls/obstacles with forward feelers instead of waiting for a long blocked-time delay
+  - enemy packs now apply capped local separation so Swarm pressure spreads through obstacle rooms better
+  - enemy base move speed was raised across the roster, while `Chaser`, `Charger`, and `Bruiser` also got tighter attack timings
+  - enemy lunge / charge / slam attacks now emit short trail effects and heavier hit/kill feedback
+  - survival/support waves now sample valid spawn positions across the arena instead of only using six fixed layout markers
+  - sampled wave spawns must stay away from players and invalid geometry instead of appearing directly on top of active fights
+  - `capture_the_hill` is now a live alternative objective that reuses standard combat-wave pressure instead of generator-owned spawns
 
 ## Current Priorities
 
@@ -208,8 +216,9 @@ Read this first to restore project context quickly, then read `current-state.md`
 - Validate Patch 13 encounter identity in live play:
   - `Bruiser` must read as a slow durable slam threat, not a worse Charger
   - early rooms must stay clean of late modifiers and generic stat-pressure rooms
-  - pillar/ring/pocket/lane rooms must change movement without creating stuck enemies
-  - the lightweight obstacle-detour fallback must hold up under bigger `Swarm` counts
+  - pillar/ring/pocket/lane rooms must change movement without creating stuck enemies under the new feeler steering pass
+  - the new feeler steering plus arena-wide valid spawn sampling must hold up under bigger `Swarm` counts
+  - capture-the-hill rooms must read clearly and feel better than generator rooms before more objective expansion
   - hot-floor telegraphs must read clearly before activation
   - death-pop puddles must feel avoidable at melee range
   - crossfire flank spawns must create readable side pressure instead of noise

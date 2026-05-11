@@ -1,7 +1,7 @@
 extends Node
 
-@export var max_shake: float = 22.0
-@export var trauma_decay: float = 2.8
+@export var max_shake: float = 34.0
+@export var trauma_decay: float = 3.4
 
 var _trauma: float = 0.0
 var _random := RandomNumberGenerator.new()

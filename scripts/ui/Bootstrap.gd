@@ -203,6 +203,7 @@ func _populate_menu() -> void:
 	], "combat")
 	_populate_profile_option(debug_room_objective_option, [
 		{"label": "Survive", "value": "survive"},
+		{"label": "Capture The Hill", "value": "capture_the_hill"},
 		{"label": "Destroy Generators", "value": "destroy_generators"},
 	], "survive")
 	_modifier_definitions = _modifier_engine.get_modifiers()

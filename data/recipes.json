@@ -76,8 +76,8 @@
       "layout_pool": ["pockets"],
       "modifier_pool": [""],
       "enemy_weight_hint": "bruiser_spitter_chaser",
-      "objective_hint": "destroy_generators",
-      "feel": "Push into defended pockets and destroy objectives."
+      "objective_hint": "capture_the_hill",
+      "feel": "Push into defended pockets and hold the contested objective."
     },
     {
       "id": "chaos_room",
