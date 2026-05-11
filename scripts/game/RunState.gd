@@ -145,9 +145,9 @@ func resolve_current_noncombat_node() -> Dictionary:
 			outcome["summary"] = "%s\n%s" % [room_description, result_text]
 
 	if is_debug_single_room_mode():
-		outcome["title"] = "Debug Room Ready"
-		outcome["post_action"] = "complete"
-		outcome["button_text"] = "Return to Debug Map"
+		outcome["title"] = "Encounter Complete"
+		outcome["post_action"] = "return_to_menu"
+		outcome["button_text"] = "Return to Encounter Builder"
 
 	return outcome
 
@@ -186,9 +186,9 @@ func resolve_current_combat_victory(health_states: Array, clear_context: Diction
 		outcome["summary"] = "%s\n%s" % [outcome["summary"], result_text]
 
 	if is_debug_single_room_mode():
-		outcome["title"] = "Debug Room Cleared"
-		outcome["post_action"] = "complete"
-		outcome["button_text"] = "Return to Debug Map"
+		outcome["title"] = "Encounter Cleared"
+		outcome["post_action"] = "return_to_menu"
+		outcome["button_text"] = "Return to Encounter Builder"
 		return outcome
 
 	_advance_progress()

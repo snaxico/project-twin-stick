@@ -113,13 +113,13 @@ func _ensure_runtime_layout() -> void:
 		_slot_level_labels.append(level_label)
 
 func _set_slot_panel(slot_rows: Array, slot_index: int, selected: bool) -> void:
-	var panel: PanelContainer = _slot_panels[slot_index] as PanelContainer
+	var slot_panel: PanelContainer = _slot_panels[slot_index] as PanelContainer
 	var icon_rect: TextureRect = _slot_icon_rects[slot_index] as TextureRect
 	var name_label: Label = _slot_name_labels[slot_index] as Label
 	var level_label: Label = _slot_level_labels[slot_index] as Label
 	var row: Dictionary = slot_rows[slot_index] if slot_index < slot_rows.size() and slot_rows[slot_index] is Dictionary else {}
 	var accent: Color = Color(0.96, 0.82, 0.28, 1.0)
-	panel.add_theme_stylebox_override("panel", _build_slot_style(selected, accent))
+	slot_panel.add_theme_stylebox_override("panel", _build_slot_style(selected, accent))
 	var name_text: String = str(row.get("name", "---"))
 	var level_value: int = int(row.get("level", 0))
 	icon_rect.texture = IconFactoryData.get_weapon_icon(str(row.get("weapon_id", "")))

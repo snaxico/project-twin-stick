@@ -57,6 +57,9 @@ func _ready() -> void:
 	map_graph_area.resized.connect(_on_map_graph_area_resized)
 	_register_button_animations()
 	_configure_menu_focus()
+	if RunState.is_debug_single_room_mode():
+		call_deferred("_launch_single_debug_room")
+		return
 	_show_map()
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -68,6 +71,13 @@ func _unhandled_input(event: InputEvent) -> void:
 func _show_map() -> void:
 	Engine.time_scale = 1.0
 	_play_transition_wipe()
+	if RunState.is_debug_single_room_mode():
+		map_panel.visible = false
+		_set_panel_state(map_panel, false)
+		_set_panel_state(resolution_panel, false)
+		_set_panel_state(run_summary_panel, false)
+		_clear_active_game()
+		return
 	if RunState.is_run_complete():
 		_show_resolution("Run Victory", RunState.get_run_summary_text(), "Return to Menu")
 		_post_resolution_action = "return_to_menu"
@@ -80,10 +90,7 @@ func _show_map() -> void:
 	_clear_active_game()
 
 	var map_rows: Array = RunState.get_map_rows()
-	if RunState.is_debug_single_room_mode():
-		map_title_label.text = "Debug Room Setup"
-		map_status_label.text = "%s. Launch the configured room again or return to the main menu." % RunState.get_gold_summary_text(true)
-	else:
+	if not RunState.is_debug_single_room_mode():
 		var current_floor: int = min(RunState.current_step_index + 1, max(map_rows.size(), 1))
 		map_title_label.text = "Choose Route"
 		map_status_label.text = "Floor %d of %d. %s." % [current_floor, map_rows.size(), RunState.get_gold_summary_text(true)]
@@ -398,6 +405,9 @@ func _launch_room(node: Dictionary) -> void:
 
 func _on_room_cleared(health_states: Array, clear_context: Dictionary = {}) -> void:
 	var outcome: Dictionary = RunState.resolve_current_combat_victory(health_states, clear_context)
+	if RunState.is_debug_single_room_mode():
+		_show_outcome(outcome)
+		return
 	if str(outcome.get("post_action", "")) == "return_to_menu":
 		var meta_reward := ProfileState.award_run_meta_gold(RunState.run_outcome, RunState.rooms_completed)
 		_show_run_summary(outcome, meta_reward, true)
@@ -406,8 +416,8 @@ func _on_room_cleared(health_states: Array, clear_context: Dictionary = {}) -> v
 
 func _on_room_failed() -> void:
 	if RunState.is_debug_single_room_mode():
-		_post_resolution_action = "complete"
-		_show_resolution("Debug Room Failed", "The party was defeated.\n%s" % RunState.get_gold_summary_text(), "Return to Debug Map")
+		_post_resolution_action = "return_to_menu"
+		_show_resolution("Encounter Failed", "The party was defeated.\n%s" % RunState.get_gold_summary_text(), "Return to Encounter Builder")
 		return
 	RunState.run_outcome = "failed"
 	var meta_reward := ProfileState.award_run_meta_gold(RunState.run_outcome, RunState.rooms_completed)
@@ -440,6 +450,19 @@ func _on_resolution_button_pressed() -> void:
 			_show_map()
 		_:
 			_show_map()
+
+func _launch_single_debug_room() -> void:
+	var options: Array = RunState.get_current_options()
+	if options.is_empty():
+		_show_resolution("Encounter Missing", "No single-room encounter was configured.", "Return to Encounter Builder")
+		_post_resolution_action = "return_to_menu"
+		return
+	var node: Dictionary = options[0]
+	if not RunState.select_map_node(str(node.get("id", ""))):
+		_show_resolution("Encounter Missing", "The configured encounter could not be selected.", "Return to Encounter Builder")
+		_post_resolution_action = "return_to_menu"
+		return
+	_launch_room(node)
 
 func _clear_active_game() -> void:
 	Engine.time_scale = 1.0

@@ -151,6 +151,12 @@ Read this first to restore project context quickly, then read `current-state.md`
   - explicit obstacle-layout testing through `pillars`, `ring`, `pockets`, and `lane`
   - starting primary, secondary, and gold selection
   - single-room relaunch flow through `RunFlow`
+- Home menu `Debug` is now being repurposed into an `Encounter Builder` flow:
+  - one configured room per launch
+  - auto-launches directly into the room instead of stopping on a one-node debug map
+  - returns to the builder when the encounter ends
+  - current builder objective focus is `survive` and `capture_the_hill`, not generators
+  - primary use is testing layout/modifier/objective combinations, not simulating a full run
 - Run modes currently behave like this:
   - `Normal`: HP carries between cleared rooms
   - `Easy`: all players fully heal after each cleared room
@@ -181,6 +187,7 @@ Read this first to restore project context quickly, then read `current-state.md`
   - survival/support waves now sample valid spawn positions across the arena instead of only using six fixed layout markers
   - sampled wave spawns must stay away from players and invalid geometry instead of appearing directly on top of active fights
   - `capture_the_hill` is now a live alternative objective that reuses standard combat-wave pressure instead of generator-owned spawns
+  - recent runtime cleanup throttled repeated HUD/debug refresh work and removed the latest parser shadowing warnings from encounter/runtime UI code
 
 ## Current Priorities
 

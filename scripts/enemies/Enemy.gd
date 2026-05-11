@@ -328,19 +328,23 @@ func _sample_feeler_penalty(feeler_direction: Vector2) -> float:
 
 func _build_feeler_excludes() -> Array:
 	var excludes: Array = [get_rid()]
-	for candidate in get_tree().get_nodes_in_group("aim_target"):
-		if candidate == self or not is_instance_valid(candidate) or not (candidate is CollisionObject2D):
-			continue
-		excludes.append((candidate as CollisionObject2D).get_rid())
-	for player in get_tree().get_nodes_in_group("player_target"):
-		if not is_instance_valid(player) or not (player is CollisionObject2D):
-			continue
-		excludes.append((player as CollisionObject2D).get_rid())
+	if _combat_owner != null and _combat_owner.has_method("get_enemy_target_nodes"):
+		for candidate in _combat_owner.get_enemy_target_nodes():
+			if candidate == self or not is_instance_valid(candidate) or not (candidate is CollisionObject2D):
+				continue
+			excludes.append((candidate as CollisionObject2D).get_rid())
+	if _combat_owner != null and _combat_owner.has_method("get_player_target_nodes"):
+		for player in _combat_owner.get_player_target_nodes():
+			if not is_instance_valid(player) or not (player is CollisionObject2D):
+				continue
+			excludes.append((player as CollisionObject2D).get_rid())
 	return excludes
 
 func _compute_separation_force() -> Vector2:
 	var separation := Vector2.ZERO
-	for candidate in get_tree().get_nodes_in_group("aim_target"):
+	if _combat_owner == null or not _combat_owner.has_method("get_enemy_target_nodes"):
+		return separation
+	for candidate in _combat_owner.get_enemy_target_nodes():
 		if candidate == self or not is_instance_valid(candidate) or not (candidate is CharacterBody2D):
 			continue
 		if candidate.has_method("is_alive") and not candidate.is_alive():

@@ -10,7 +10,7 @@ Godot `4.6.2` prototype for a same-screen local co-op twin-stick roguelite. The 
   - `Play`
   - `Meta`
   - `Settings`
-  - `Debug`
+  - `Encounter Builder`
 - `1–4` player pre-run configuration
 - run mode selection before gameplay:
   - `Normal`: HP carries between cleared rooms
@@ -188,8 +188,12 @@ Godot `4.6.2` prototype for a same-screen local co-op twin-stick roguelite. The 
   - encounter recipes
 - bootstrap debug launcher for:
   - normal run override starts
-  - single-room debug launches
+  - encounter-builder single-room launches
   - explicit room/objective/modifier/layout/depth selection
+  - builder objective focus now stays on `survive` and `capture_the_hill`
+  - auto-launch into the configured room instead of stopping on a one-node debug map
+  - return-to-builder after the encounter ends
+  - single-room clears/fails now stay in the builder loop instead of falling through to full-run summary behavior
 - JSON-backed passives, weapons, modifiers, unlocks, enemies, and weapon/loadout tuning
 - per-player aim mode selection now lives in the shared settings menu instead of debug-only controls
 - screen effects are user-selectable through the shared settings menu:
@@ -252,6 +256,11 @@ Godot `4.6.2` prototype for a same-screen local co-op twin-stick roguelite. The 
   - heavier enemies now drive larger burst/spark payloads and stronger kill feedback
   - camera shake ceiling and decay were both raised so impact spikes hit harder without lingering into mush
   - enemy-hit, enemy-death, and explosion trauma/hitstop values were all pushed upward
+- runtime review/perf cleanup follow-up is now in:
+  - in-room HUD/debug refresh work is throttled instead of rebuilding every frame
+  - pause-settings option syncing no longer runs on every gameplay frame
+  - enemy steering/separation now queries combat-owner target lists instead of repeated scene-tree group scans
+  - recent shadowed-variable parser warnings were cleared from runtime/UI scripts
 - Patch 10 baseline landed on top of that combat layer:
   - combat values now use a base-10 display scale while preserving relative balance and pace
   - player baseline HP now presents as `50`

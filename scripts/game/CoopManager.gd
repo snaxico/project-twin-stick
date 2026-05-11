@@ -52,6 +52,7 @@ const UNIFORM_ARENA_ACCENT_COLOR := Color(0.44, 0.46, 0.48, 0.16)
 const ARENA_CENTER := Vector2(960.0, 540.0)
 const CENTER_OBSTACLE_EXCLUSION_RADIUS := 140.0
 const GENERATOR_CLEARANCE_RADIUS := 74.0
+const DEBUG_UI_REFRESH_INTERVAL := 0.12
 const ENEMY_SPAWN_EDGE_MARGIN := 88.0
 const ENEMY_SPAWN_PLAYER_MIN_DISTANCE := 280.0
 const ENEMY_SPAWN_USED_MIN_DISTANCE := 84.0
@@ -311,6 +312,7 @@ var _pending_room_clear_health_states: Array = []
 var _pending_room_clear_context: Dictionary = {}
 var _pending_room_clear_title: String = ""
 var _pending_room_clear_detail: String = ""
+var _debug_ui_refresh_elapsed: float = DEBUG_UI_REFRESH_INTERVAL
 
 func _ready() -> void:
 	if player_scene == null:
@@ -383,7 +385,10 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	if get_tree().paused:
 		return
-	_refresh_debug_ui()
+	_debug_ui_refresh_elapsed += delta
+	if _debug_ui_refresh_elapsed >= DEBUG_UI_REFRESH_INTERVAL:
+		_debug_ui_refresh_elapsed = 0.0
+		_refresh_debug_ui()
 	_update_room_progress(delta)
 	_update_screen_effects()
 	_update_loot_resolution()
@@ -469,7 +474,6 @@ func _refresh_debug_ui() -> void:
 	_refresh_gold_panel()
 	_refresh_player_inventory_huds()
 	_refresh_boss_health_bar()
-	_refresh_pause_settings_panel()
 
 func _build_modifier_status_text() -> String:
 	var recipe_suffix: String = _get_recipe_debug_suffix()
@@ -630,6 +634,20 @@ func get_active_players() -> Array:
 		if is_instance_valid(player) and player.is_alive():
 			active_players.append(player)
 	return active_players
+
+func get_player_target_nodes() -> Array:
+	var target_nodes: Array = []
+	for player in _player_nodes:
+		if player != null and is_instance_valid(player):
+			target_nodes.append(player)
+	return target_nodes
+
+func get_enemy_target_nodes() -> Array:
+	var target_nodes: Array = []
+	for enemy in enemies.get_children():
+		if enemy != null and is_instance_valid(enemy):
+			target_nodes.append(enemy)
+	return target_nodes
 
 func get_downed_players() -> Array:
 	var downed_players: Array = []
@@ -825,9 +843,9 @@ func _build_wave_spawn_positions(spawn_points: Array, spawn_count: int, enemy_ty
 
 func _take_next_unused_spawn_position(pool: Array, used_positions: Array) -> Vector2:
 	for position_variant in pool:
-		var position: Vector2 = position_variant
-		if not used_positions.has(position):
-			return position
+		var spawn_position: Vector2 = position_variant
+		if not used_positions.has(spawn_position):
+			return spawn_position
 	return pool[0] if not pool.is_empty() else ARENA_CENTER
 
 func _get_recipe_debug_suffix() -> String:
@@ -2510,19 +2528,19 @@ func _roll_hot_floor_zone_position(zone_radius: float) -> Vector2:
 	var bounds_rect: Rect2 = Rect2(Vector2(120.0 + zone_radius, 120.0 + zone_radius), Vector2(1680.0 - zone_radius * 2.0, 840.0 - zone_radius * 2.0))
 	var fallback_position: Vector2 = ARENA_CENTER + Vector2(_room_random.randf_range(-220.0, 220.0), _room_random.randf_range(-180.0, 180.0))
 	for _attempt in range(10):
-		var position := Vector2(
+		var zone_position := Vector2(
 			_room_random.randf_range(bounds_rect.position.x, bounds_rect.end.x),
 			_room_random.randf_range(bounds_rect.position.y, bounds_rect.end.y)
 		)
-		if _is_hot_floor_position_clear(position, zone_radius):
-			return position
+		if _is_hot_floor_position_clear(zone_position, zone_radius):
+			return zone_position
 	return fallback_position
 
-func _is_hot_floor_position_clear(position: Vector2, zone_radius: float) -> bool:
+func _is_hot_floor_position_clear(zone_position: Vector2, zone_radius: float) -> bool:
 	for player in get_active_players():
 		if not is_instance_valid(player):
 			continue
-		if player.global_position.distance_to(position) < zone_radius * 1.25:
+		if player.global_position.distance_to(zone_position) < zone_radius * 1.25:
 			return false
 	return true
 
@@ -2541,22 +2559,22 @@ func _roll_capture_hill_position(hill_radius: float) -> Vector2:
 		Vector2(1600.0 - hill_radius * 2.0, 760.0 - hill_radius * 2.0)
 	)
 	for _attempt in range(80):
-		var position := Vector2(
+		var hill_zone_position := Vector2(
 			_room_random.randf_range(bounds_rect.position.x, bounds_rect.end.x),
 			_room_random.randf_range(bounds_rect.position.y, bounds_rect.end.y)
 		)
-		if _is_capture_hill_position_clear(position, hill_radius):
-			return position
+		if _is_capture_hill_position_clear(hill_zone_position, hill_radius):
+			return hill_zone_position
 	return ARENA_CENTER
 
-func _is_capture_hill_position_clear(position: Vector2, hill_radius: float) -> bool:
+func _is_capture_hill_position_clear(hill_zone_position: Vector2, hill_radius: float) -> bool:
 	for player in _player_nodes:
-		if player != null and is_instance_valid(player) and player.global_position.distance_to(position) < hill_radius + 120.0:
+		if player != null and is_instance_valid(player) and player.global_position.distance_to(hill_zone_position) < hill_radius + 120.0:
 			return false
 	for obstacle_index in range(_obstacle_circle_positions.size()):
 		var obstacle_position: Vector2 = _obstacle_circle_positions[obstacle_index]
 		var obstacle_radius: float = float(_obstacle_circle_radii[obstacle_index]) if obstacle_index < _obstacle_circle_radii.size() else 48.0
-		if position.distance_to(obstacle_position) < hill_radius + obstacle_radius + 36.0:
+		if hill_zone_position.distance_to(obstacle_position) < hill_radius + obstacle_radius + 36.0:
 			return false
 	for segment_variant in _obstacle_segment_defs:
 		if not (segment_variant is Dictionary):
@@ -2564,7 +2582,7 @@ func _is_capture_hill_position_clear(position: Vector2, hill_radius: float) -> b
 		var segment: Dictionary = segment_variant as Dictionary
 		var segment_position: Vector2 = segment.get("position", ARENA_CENTER)
 		var segment_size: Vector2 = segment.get("size", Vector2(320.0, 24.0))
-		if abs(position.x - segment_position.x) < hill_radius + segment_size.x * 0.5 + 24.0 and abs(position.y - segment_position.y) < hill_radius + segment_size.y * 0.5 + 24.0:
+		if abs(hill_zone_position.x - segment_position.x) < hill_radius + segment_size.x * 0.5 + 24.0 and abs(hill_zone_position.y - segment_position.y) < hill_radius + segment_size.y * 0.5 + 24.0:
 			return false
 	return true
 
@@ -2694,21 +2712,21 @@ func _find_enemy_spawn_position(player_positions: Array, used_positions: Array, 
 	var fallback := _get_fallback_enemy_spawn_position(player_positions, used_positions, spawn_side)
 	return fallback
 
-func _is_enemy_spawn_position_valid(position: Vector2, player_positions: Array, used_positions: Array) -> bool:
-	if position.x < ENEMY_SPAWN_EDGE_MARGIN or position.x > 1920.0 - ENEMY_SPAWN_EDGE_MARGIN:
+func _is_enemy_spawn_position_valid(spawn_position: Vector2, player_positions: Array, used_positions: Array) -> bool:
+	if spawn_position.x < ENEMY_SPAWN_EDGE_MARGIN or spawn_position.x > 1920.0 - ENEMY_SPAWN_EDGE_MARGIN:
 		return false
-	if position.y < ENEMY_SPAWN_EDGE_MARGIN or position.y > 1080.0 - ENEMY_SPAWN_EDGE_MARGIN:
+	if spawn_position.y < ENEMY_SPAWN_EDGE_MARGIN or spawn_position.y > 1080.0 - ENEMY_SPAWN_EDGE_MARGIN:
 		return false
 	for player_position_variant in player_positions:
-		if position.distance_to(player_position_variant as Vector2) < ENEMY_SPAWN_PLAYER_MIN_DISTANCE:
+		if spawn_position.distance_to(player_position_variant as Vector2) < ENEMY_SPAWN_PLAYER_MIN_DISTANCE:
 			return false
 	for used_position_variant in used_positions:
-		if position.distance_to(used_position_variant as Vector2) < ENEMY_SPAWN_USED_MIN_DISTANCE:
+		if spawn_position.distance_to(used_position_variant as Vector2) < ENEMY_SPAWN_USED_MIN_DISTANCE:
 			return false
 	for obstacle_index in range(_obstacle_circle_positions.size()):
 		var obstacle_position: Vector2 = _obstacle_circle_positions[obstacle_index]
 		var obstacle_radius: float = float(_obstacle_circle_radii[obstacle_index]) if obstacle_index < _obstacle_circle_radii.size() else 48.0
-		if position.distance_to(obstacle_position) < obstacle_radius + ENEMY_SPAWN_CHECK_RADIUS:
+		if spawn_position.distance_to(obstacle_position) < obstacle_radius + ENEMY_SPAWN_CHECK_RADIUS:
 			return false
 	for segment_variant in _obstacle_segment_defs:
 		if not (segment_variant is Dictionary):
@@ -2716,28 +2734,28 @@ func _is_enemy_spawn_position_valid(position: Vector2, player_positions: Array, 
 		var segment: Dictionary = segment_variant as Dictionary
 		var segment_position: Vector2 = segment.get("position", ARENA_CENTER)
 		var segment_size: Vector2 = segment.get("size", Vector2(320.0, 24.0))
-		if abs(position.x - segment_position.x) < segment_size.x * 0.5 + ENEMY_SPAWN_CHECK_RADIUS and abs(position.y - segment_position.y) < segment_size.y * 0.5 + ENEMY_SPAWN_CHECK_RADIUS:
+		if abs(spawn_position.x - segment_position.x) < segment_size.x * 0.5 + ENEMY_SPAWN_CHECK_RADIUS and abs(spawn_position.y - segment_position.y) < segment_size.y * 0.5 + ENEMY_SPAWN_CHECK_RADIUS:
 			return false
 	for generator_position_variant in _generator_slot_positions:
-		if position.distance_to(generator_position_variant as Vector2) < GENERATOR_CLEARANCE_RADIUS:
+		if spawn_position.distance_to(generator_position_variant as Vector2) < GENERATOR_CLEARANCE_RADIUS:
 			return false
 	for pickup in pickups.get_children():
-		if pickup != null and is_instance_valid(pickup) and position.distance_to(pickup.global_position) < ENEMY_SPAWN_OBJECT_MIN_DISTANCE:
+		if pickup != null and is_instance_valid(pickup) and spawn_position.distance_to(pickup.global_position) < ENEMY_SPAWN_OBJECT_MIN_DISTANCE:
 			return false
-	if _active_loot_drop != null and is_instance_valid(_active_loot_drop) and position.distance_to(_active_loot_drop.global_position) < ENEMY_SPAWN_OBJECT_MIN_DISTANCE:
+	if _active_loot_drop != null and is_instance_valid(_active_loot_drop) and spawn_position.distance_to(_active_loot_drop.global_position) < ENEMY_SPAWN_OBJECT_MIN_DISTANCE:
 		return false
-	if _shop_station != null and is_instance_valid(_shop_station) and position.distance_to(_shop_station.global_position) < ENEMY_SPAWN_OBJECT_MIN_DISTANCE:
+	if _shop_station != null and is_instance_valid(_shop_station) and spawn_position.distance_to(_shop_station.global_position) < ENEMY_SPAWN_OBJECT_MIN_DISTANCE:
 		return false
-	if exit_zone != null and exit_zone.visible and position.distance_to(exit_zone.global_position) < ENEMY_SPAWN_OBJECT_MIN_DISTANCE:
+	if exit_zone != null and exit_zone.visible and spawn_position.distance_to(exit_zone.global_position) < ENEMY_SPAWN_OBJECT_MIN_DISTANCE:
 		return false
-	return _is_enemy_spawn_circle_clear(position)
+	return _is_enemy_spawn_circle_clear(spawn_position)
 
-func _is_enemy_spawn_circle_clear(position: Vector2) -> bool:
+func _is_enemy_spawn_circle_clear(spawn_position: Vector2) -> bool:
 	var query_shape := CircleShape2D.new()
 	query_shape.radius = ENEMY_SPAWN_CHECK_RADIUS
 	var query := PhysicsShapeQueryParameters2D.new()
 	query.shape = query_shape
-	query.transform = Transform2D(0.0, position)
+	query.transform = Transform2D(0.0, spawn_position)
 	query.collide_with_areas = false
 	query.collide_with_bodies = true
 	query.collision_mask = 1
@@ -2773,13 +2791,13 @@ func _get_fallback_enemy_spawn_position(player_positions: Array, used_positions:
 			return candidate
 	return Vector2(ENEMY_SPAWN_EDGE_MARGIN, ENEMY_SPAWN_EDGE_MARGIN)
 
-func _compute_spawn_candidate_score(position: Vector2, player_positions: Array, used_positions: Array) -> float:
+func _compute_spawn_candidate_score(candidate_position: Vector2, player_positions: Array, used_positions: Array) -> float:
 	var min_player_distance := INF
 	for player_position_variant in player_positions:
-		min_player_distance = min(min_player_distance, position.distance_to(player_position_variant as Vector2))
+		min_player_distance = min(min_player_distance, candidate_position.distance_to(player_position_variant as Vector2))
 	var min_used_distance := INF
 	for used_position_variant in used_positions:
-		min_used_distance = min(min_used_distance, position.distance_to(used_position_variant as Vector2))
+		min_used_distance = min(min_used_distance, candidate_position.distance_to(used_position_variant as Vector2))
 	if min_used_distance == INF:
 		min_used_distance = 0.0
 	return min_player_distance + min_used_distance * 0.4
@@ -2960,12 +2978,12 @@ func _apply_layout_preset(layout_id: String) -> void:
 func _spawn_obstacles(positions: Array, radii: Array) -> void:
 	_clear_obstacles()
 	for index in range(positions.size()):
-		var position: Vector2 = positions[index]
+		var obstacle_origin: Vector2 = positions[index]
 		var radius: float = float(radii[index]) if index < radii.size() else 48.0
-		if position.distance_to(ARENA_CENTER) < CENTER_OBSTACLE_EXCLUSION_RADIUS + radius:
+		if obstacle_origin.distance_to(ARENA_CENTER) < CENTER_OBSTACLE_EXCLUSION_RADIUS + radius:
 			continue
 		var obstacle := StaticBody2D.new()
-		obstacle.position = position
+		obstacle.position = obstacle_origin
 		obstacle.collision_layer = 1
 		obstacle.collision_mask = 0
 		obstacle.z_as_relative = false
@@ -3003,13 +3021,13 @@ func _spawn_obstacle_segments(segments: Array) -> void:
 		if not (segment_variant is Dictionary):
 			continue
 		var segment: Dictionary = segment_variant as Dictionary
-		var position: Vector2 = segment.get("position", ARENA_CENTER)
+		var segment_origin: Vector2 = segment.get("position", ARENA_CENTER)
 		var size: Vector2 = segment.get("size", Vector2(320.0, 24.0))
-		_spawn_rect_obstacle(position, size)
+		_spawn_rect_obstacle(segment_origin, size)
 
-func _spawn_rect_obstacle(position: Vector2, size: Vector2) -> void:
+func _spawn_rect_obstacle(segment_origin: Vector2, size: Vector2) -> void:
 	var obstacle := StaticBody2D.new()
-	obstacle.position = position
+	obstacle.position = segment_origin
 	obstacle.collision_layer = 1
 	obstacle.collision_mask = 0
 	obstacle.z_as_relative = false
@@ -3048,8 +3066,8 @@ func _spawn_rect_obstacle(position: Vector2, size: Vector2) -> void:
 func _sanitize_generator_positions(generator_positions: Array, obstacle_positions: Array, obstacle_radii: Array, obstacle_segments: Array) -> Array:
 	var sanitized: Array = []
 	for index in range(generator_positions.size()):
-		var position: Vector2 = generator_positions[index]
-		sanitized.append(_resolve_generator_position(position, obstacle_positions, obstacle_radii, obstacle_segments, sanitized))
+		var generator_origin: Vector2 = generator_positions[index]
+		sanitized.append(_resolve_generator_position(generator_origin, obstacle_positions, obstacle_radii, obstacle_segments, sanitized))
 	return sanitized
 
 func _resolve_generator_position(candidate: Vector2, obstacle_positions: Array, obstacle_radii: Array, obstacle_segments: Array, taken_positions: Array) -> Vector2:
@@ -3071,16 +3089,16 @@ func _resolve_generator_position(candidate: Vector2, obstacle_positions: Array, 
 			return adjusted_position
 	return candidate
 
-func _is_generator_position_clear(position: Vector2, obstacle_positions: Array, obstacle_radii: Array, obstacle_segments: Array, taken_positions: Array) -> bool:
-	if position.x < 120.0 or position.x > 1800.0 or position.y < 120.0 or position.y > 960.0:
+func _is_generator_position_clear(generator_origin: Vector2, obstacle_positions: Array, obstacle_radii: Array, obstacle_segments: Array, taken_positions: Array) -> bool:
+	if generator_origin.x < 120.0 or generator_origin.x > 1800.0 or generator_origin.y < 120.0 or generator_origin.y > 960.0:
 		return false
 	for taken_variant in taken_positions:
-		if position.distance_to(taken_variant as Vector2) < GENERATOR_CLEARANCE_RADIUS * 1.5:
+		if generator_origin.distance_to(taken_variant as Vector2) < GENERATOR_CLEARANCE_RADIUS * 1.5:
 			return false
 	for index in range(obstacle_positions.size()):
 		var obstacle_position: Vector2 = obstacle_positions[index]
 		var obstacle_radius: float = float(obstacle_radii[index]) if index < obstacle_radii.size() else 48.0
-		if position.distance_to(obstacle_position) < obstacle_radius + GENERATOR_CLEARANCE_RADIUS:
+		if generator_origin.distance_to(obstacle_position) < obstacle_radius + GENERATOR_CLEARANCE_RADIUS:
 			return false
 	for segment_variant in obstacle_segments:
 		if not (segment_variant is Dictionary):
@@ -3088,7 +3106,7 @@ func _is_generator_position_clear(position: Vector2, obstacle_positions: Array, 
 		var segment: Dictionary = segment_variant as Dictionary
 		var segment_position: Vector2 = segment.get("position", ARENA_CENTER)
 		var segment_size: Vector2 = segment.get("size", Vector2(320.0, 24.0))
-		if abs(position.x - segment_position.x) < segment_size.x * 0.5 + GENERATOR_CLEARANCE_RADIUS and abs(position.y - segment_position.y) < segment_size.y * 0.5 + GENERATOR_CLEARANCE_RADIUS:
+		if abs(generator_origin.x - segment_position.x) < segment_size.x * 0.5 + GENERATOR_CLEARANCE_RADIUS and abs(generator_origin.y - segment_position.y) < segment_size.y * 0.5 + GENERATOR_CLEARANCE_RADIUS:
 			return false
 	return true
 
