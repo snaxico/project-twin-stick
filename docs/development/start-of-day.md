@@ -51,7 +51,7 @@ Read this first to restore project context quickly, then read `current-state.md`
 - Layout presets now share one uniform olive-neutral floor treatment.
 - Room-to-room identity should come mostly from geometry/objective shape, not full palette swaps.
 - Floor grid lines are back as subtle fullscreen room texture.
-- Combat rooms now support two objective styles:
+- Combat rooms now support three objective styles:
   - `survive`
   - `capture_the_hill`
   - `destroy_generators`
@@ -118,17 +118,23 @@ Read this first to restore project context quickly, then read `current-state.md`
 - Room modifiers are now progression-gated:
   - early core pool stays readable
   - advanced modifiers stay out of normal runs
-  - normal recipes now use a reduced identity-first set:
+  - encounter data now only keeps a reduced identity-first set:
     - `Swarm`
     - `Crossfire`
     - `Hot Floor`
     - `Death Pop`
-  - generic stat-pressure modifiers are now disabled from normal recipe selection
-- Arena layouts now include obstacle variants:
+  - old disabled modifier entries were removed from encounter data instead of just being hidden in selection
+- Arena layouts now center on five live identities:
+  - `default`
+  - `lane`
   - `pillars`
   - `ring`
   - `pockets`
-  - `lane`
+  - legacy layouts still exist for builder/debug-only coverage:
+    - `crossfire`
+    - `pinch`
+    - `offset`
+    - `gauntlet_pockets`
   - obstacle visuals now use a high-contrast pillar treatment instead of subtle floor tinting
   - arena center is reserved so obstacle placement cannot block center-spawned loot
   - generator slots are now sanitized against obstacle geometry before generator-room setup
@@ -138,7 +144,13 @@ Read this first to restore project context quickly, then read `current-state.md`
 - Combat and elite rooms are now recipe-driven:
   - layout, modifier, enemy-weight hints, and optional pacing overrides combine into recognizable encounters
   - the recipe picker now avoids repeating the last 2 recipe IDs
-  - example identities now include open swarm rooms, crossfire lanes, pillar skirmishes, ring runs, and pocket breakthroughs
+  - the current curated set is:
+    - `Open Swarm`
+    - `Hold Lanes`
+    - `Cover Fight`
+    - `Ring Run`
+    - `Dead Zone`
+    - `Pocket Breakthrough`
   - crossfire rooms now bias spitters toward side spawns
   - `Swarm` now owns a much larger enemy-count push with a 200% spawn-rate increase
   - hot-floor rooms now use telegraphed floor hazards instead of anti-idle punishment
@@ -157,6 +169,7 @@ Read this first to restore project context quickly, then read `current-state.md`
   - returns to the builder when the encounter ends
   - current builder objective focus is `survive` and `capture_the_hill`, not generators
   - primary use is testing layout/modifier/objective combinations, not simulating a full run
+  - legacy layouts are still exposed there for targeted regression testing even though they are no longer in normal recipe pools
 - Run modes currently behave like this:
   - `Normal`: HP carries between cleared rooms
   - `Easy`: all players fully heal after each cleared room
@@ -222,7 +235,7 @@ Read this first to restore project context quickly, then read `current-state.md`
   - Patch 12 has now been accepted, so future UI edits should preserve this scan speed
 - Validate Patch 13 encounter identity in live play:
   - `Bruiser` must read as a slow durable slam threat, not a worse Charger
-  - early rooms must stay clean of late modifiers and generic stat-pressure rooms
+  - early rooms must stay clean of late modifiers and old generic stat-pressure rooms
   - pillar/ring/pocket/lane rooms must change movement without creating stuck enemies under the new feeler steering pass
   - the new feeler steering plus arena-wide valid spawn sampling must hold up under bigger `Swarm` counts
   - capture-the-hill rooms must read clearly and feel better than generator rooms before more objective expansion
@@ -230,7 +243,7 @@ Read this first to restore project context quickly, then read `current-state.md`
   - death-pop puddles must feel avoidable at melee range
   - crossfire flank spawns must create readable side pressure instead of noise
   - enemy projectiles must now read cleanly when they persist until wall or obstacle impact
-  - curated recipe-driven rooms should feel authored rather than arbitrary
+  - the five active layout families and six curated recipes should feel authored rather than arbitrary
   - generator rooms must stay compatible with their selected layout and modifier every time
 - Validate loot, replacement, shop, and exit UI flow with gamepad-first input.
 - Validate `3–4` player behavior and full-run pacing later; do not expand scope casually.

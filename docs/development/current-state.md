@@ -104,30 +104,43 @@ Godot `4.6.2` prototype for a same-screen local co-op twin-stick roguelite. The 
 - Patch 13 encounter identity layer is now in:
   - `Bruiser` adds a slow durable slam enemy role
   - modifiers are now gated by `min_step` and `pool`
-  - normal runs now use a reduced identity-first core modifier pool:
+  - encounter data now only keeps the four live core modifiers:
     - `Swarm`
     - `Crossfire`
     - `Hot Floor`
     - `Death Pop`
-  - generic modifiers were removed from normal recipe use:
+  - previously disabled recipe modifiers were removed from encounter data entirely:
     - `Armoured`
     - `Heavy Patrol`
     - `Frenzy`
     - `Stampede`
     - `Friendly Fire`
     - `Darkness`
-  - arena obstacle layouts now exist:
+    - `One-Way`
+  - normal combat layout families are now reduced to five identities:
+    - `default`
+    - `lane`
     - `pillars`
     - `ring`
     - `pockets`
-    - `lane`
+  - legacy layouts are kept only for builder/debug coverage:
+    - `crossfire`
+    - `pinch`
+    - `offset`
+    - `gauntlet_pockets`
   - obstacle visuals now render as high-contrast pillars instead of blending into the arena floor
   - obstacle spawning now reserves the arena center so loot/drop interaction cannot be softlocked
   - generator slots are now sanitized against obstacle geometry so objective targets do not spawn inside blocker layouts
   - `ring` is now a tighter eight-pillar loop
   - `pockets` now read as clearer inward-facing objective pockets
   - `lane` now uses broad divider walls to create three readable combat lanes without trapping revives
-  - combat and elite rooms now use curated recipe-driven layout/modifier/enemy-weight hints
+  - combat and elite rooms now use six curated one-layout-per-recipe identities:
+    - `Open Swarm`
+    - `Hold Lanes`
+    - `Cover Fight`
+    - `Ring Run`
+    - `Dead Zone`
+    - `Pocket Breakthrough`
   - recipes now carry optional pacing overrides and anti-repeat selection
   - crossfire encounters now bias spitters to side spawns instead of only changing fire rate numbers
   - `Swarm` now pushes much harder with a 200% spawn-rate increase plus extra wave size
@@ -150,7 +163,7 @@ Godot `4.6.2` prototype for a same-screen local co-op twin-stick roguelite. The 
   - `capture_the_hill` is now a live combat objective path
   - hill rooms reuse combat-wave pressure instead of generator-owned spawning
   - hill progress fills while players control the zone and drains under enemy control
-  - pocket breakthrough rooms now target hill control instead of generators
+  - `Pocket Breakthrough` now uses hill control so the pockets layout plays as a push-and-hold room instead of falling back to generators
 - boss health now scales modestly with rooms survived before the boss
 - gauntlet V1 layer is in:
   - neutral generators spawn pressure enemies
@@ -214,8 +227,8 @@ Godot `4.6.2` prototype for a same-screen local co-op twin-stick roguelite. The 
   - lighter transparency so the arena stays readable behind the HUD
 - modifier intro panel plus active room tinting
 - darkness overlay, left-side spawn filtering, side-biased ranged spawn hooks, and optional friendly fire modifier hooks
-- fixed fullscreen same-screen arena with layout presets: `default`, `crossfire`, `pinch`, `offset`, `pillars`, `ring`, `pockets`, `lane`, `boss gate`
-- gauntlet layout preset: `gauntlet_pockets`
+- fixed fullscreen same-screen arena with active layout presets: `default`, `lane`, `pillars`, `ring`, `pockets`, `boss gate`
+- legacy builder/debug-only layout presets: `crossfire`, `pinch`, `offset`, `gauntlet_pockets`
 - arena presentation is now cartoon-styled:
   - thick player/enemy outlines
   - one shared olive-neutral floor across all rooms
@@ -288,6 +301,10 @@ Godot `4.6.2` prototype for a same-screen local co-op twin-stick roguelite. The 
 - Patch 11 should keep combat melee-first and survivable, not drift back into projectile-heavy pressure
 - Patch 12 icon-first UI pass is now implemented and verified; future UI work should preserve fast scan readability instead of growing text blocks again
 - Patch 13 encounter identity pass is now implemented in code, including the hazard/layout rework pass, and should be validated through live runs before further encounter expansion
+- Patch 14 layout identity cleanup is now in data/docs:
+  - weak open-room variants were removed from normal recipe pools
+  - each live recipe now maps to one primary layout identity
+  - legacy layouts remain available only for debug/builder validation
 - ranged pressure has been softened to make the game less oppressive
 - aim lines, projectiles, and arena contrast were pushed toward clearer combat reads
 - player-facing weapon and projectile art should stay readable and anchored to gameplay direction, not just cosmetic placement
@@ -324,14 +341,14 @@ Godot `4.6.2` prototype for a same-screen local co-op twin-stick roguelite. The 
   - these checks were exercised enough to accept the patch, but they still need follow-up after future UI or content growth
 - Patch 13 still needs live validation for:
   - Bruiser readability, slam telegraph, and recovery punish window
-  - the reduced core modifier pool in Normal runs
+  - the reduced four-modifier encounter pool in Normal runs
   - obstacle collision and anti-stuck behavior on `pillars`, `ring`, `pockets`, and `lane` after the new feeler steering pass
   - whether arena-wide valid spawn sampling plus feeler steering stays stable once Swarm pressure rises in blocked layouts
   - `Hot Floor` telegraph readability and damage fairness
   - `Death Pop` puddle readability and melee fairness
   - crossfire flank pressure after side-biased spitter spawning
   - whether persistent enemy projectiles stay readable once they travel until wall or obstacle impact
-  - whether the curated recipes actually feel distinct across several runs
+  - whether the six curated layout identities actually feel distinct across several runs
   - whether stronger `Swarm` pressure stays readable without overwhelming revive flow
 - `3–4` player runtime validation and tuning still need real play coverage
 - full-run pacing and solo-vs-group balance are still not finished
@@ -360,7 +377,7 @@ If work resumes, prefer cleanup and presentation polish over new mechanics:
   - confirm early rooms stay light and readable
   - confirm Bruisers appear mid/late and in boss support only
   - confirm pillar/ring/pocket/lane rooms change movement without trap bugs under the new feeler steering pass
-  - confirm recipes create memorable room identities across multiple runs
+  - confirm the five active layouts and six curated recipes create memorable room identities across multiple runs
 - run one Easy and one Normal full-run pass specifically against the Patch 10 number scale, feedback intensity, loot/shop flow, and readability
 - simplify the play-setup screen further now that `Play` and `Debug` are separate paths
 - tighten HUD wording and spacing after a few more live readability checks

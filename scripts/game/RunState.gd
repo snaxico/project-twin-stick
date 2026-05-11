@@ -1862,7 +1862,7 @@ func _build_outcome(title: String, summary: String, action: String) -> Dictionar
 	}
 
 func _get_random_layout_id() -> String:
-	var layouts := ["default", "crossfire", "pinch", "offset", "pillars", "ring", "pockets"]
+	var layouts := ["default", "lane", "pillars", "ring", "pockets"]
 	return layouts[_random.randi_range(0, layouts.size() - 1)]
 
 func _resolve_recipe_layout_id(template: Dictionary, room_objective: String, recipe_layout: String) -> String:

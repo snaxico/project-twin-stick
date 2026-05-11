@@ -207,14 +207,14 @@ func _populate_menu() -> void:
 	_populate_profile_option(debug_layout_option, [
 		{"label": "Random", "value": "random"},
 		{"label": "Default", "value": "default"},
-		{"label": "Crossfire", "value": "crossfire"},
-		{"label": "Pinch", "value": "pinch"},
-		{"label": "Offset", "value": "offset"},
+		{"label": "Lane", "value": "lane"},
 		{"label": "Pillars", "value": "pillars"},
 		{"label": "Ring", "value": "ring"},
 		{"label": "Pockets", "value": "pockets"},
-		{"label": "Lane", "value": "lane"},
-		{"label": "Gauntlet Pockets", "value": "gauntlet_pockets"},
+		{"label": "Crossfire (Legacy)", "value": "crossfire"},
+		{"label": "Pinch (Legacy)", "value": "pinch"},
+		{"label": "Offset (Legacy)", "value": "offset"},
+		{"label": "Gauntlet Pockets (Legacy)", "value": "gauntlet_pockets"},
 		{"label": "Boss Gate", "value": "boss_gate"},
 	], "random")
 	debug_step_spinbox.min_value = 0

@@ -1,26 +1,6 @@
 {
   "modifiers": [
     {
-      "id": "frenzy",
-      "name": "Frenzy",
-      "description": "Enemies move and attack faster. New waves arrive sooner.",
-      "tint": [0.95, 0.84, 0.45, 1.0],
-      "min_step": 2,
-      "pool": "disabled",
-      "enemy_speed_multiplier": 1.35,
-      "enemy_fire_interval_multiplier": 0.92,
-      "spawn_interval_multiplier": 0.88
-    },
-    {
-      "id": "armoured",
-      "name": "Armoured",
-      "description": "Enemies take more punishment before they go down.",
-      "tint": [0.65, 0.72, 0.86, 1.0],
-      "min_step": 2,
-      "pool": "disabled",
-      "enemy_bonus_health": 20
-    },
-    {
       "id": "hot_floor",
       "name": "Hot Floor",
       "description": "Telegraphed floor zones ignite in bursts. Move before they flare up.",
@@ -47,16 +27,6 @@
       "death_puddle_active_duration": 2.0
     },
     {
-      "id": "stampede",
-      "name": "Stampede",
-      "description": "Enemies crash harder on contact and push closer.",
-      "tint": [0.92, 0.36, 0.18, 1.0],
-      "min_step": 0,
-      "pool": "disabled",
-      "enemy_speed_multiplier": 1.18,
-      "enemy_contact_damage_bonus": 10
-    },
-    {
       "id": "crossfire",
       "name": "Crossfire",
       "description": "Ranged enemies pressure the flanks with faster volleys.",
@@ -66,33 +36,6 @@
       "enemy_fire_interval_multiplier": 0.82,
       "spawn_interval_multiplier": 0.96,
       "spawn_position_bias": "sides"
-    },
-    {
-      "id": "darkness",
-      "name": "Darkness",
-      "description": "Visibility collapses outside the squad. Stay close enough to read the room.",
-      "tint": [0.5, 0.44, 0.82, 1.0],
-      "min_step": 4,
-      "pool": "disabled",
-      "vision_radius": 280.0
-    },
-    {
-      "id": "one_way",
-      "name": "One-Way",
-      "description": "Enemies only arrive from the left side. Reposition before the funnel collapses.",
-      "tint": [0.78, 0.7, 0.36, 1.0],
-      "min_step": 0,
-      "pool": "disabled",
-      "spawn_side": "left"
-    },
-    {
-      "id": "friendly_fire",
-      "name": "Friendly Fire",
-      "description": "Your shots can hit allies. Tight formations become a liability.",
-      "tint": [0.9, 0.38, 0.66, 1.0],
-      "min_step": 0,
-      "pool": "disabled",
-      "friendly_fire": true
     },
     {
       "id": "swarm",
@@ -106,17 +49,6 @@
       "enemy_speed_multiplier": 0.88,
       "enemy_bonus_health": -10,
       "enemy_contact_damage_bonus": 5
-    },
-    {
-      "id": "heavy_patrol",
-      "name": "Heavy Patrol",
-      "description": "Fewer waves, but every enemy is tougher. Pick your fights.",
-      "tint": [0.45, 0.52, 0.62, 1.0],
-      "min_step": 2,
-      "pool": "disabled",
-      "spawn_interval_multiplier": 1.4,
-      "enemy_bonus_health": 20,
-      "enemy_speed_multiplier": 0.92
     }
   ]
 }
