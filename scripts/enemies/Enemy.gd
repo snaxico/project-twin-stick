@@ -1,7 +1,7 @@
 extends CharacterBody2D
 
 signal enemy_died(enemy)
-signal fire_requested(origin, direction, speed, damage, team, color)
+signal fire_requested(origin, direction, speed, damage, team, color, projectile_scale)
 signal hit_received(enemy, damage_amount, lethal)
 
 const FLASH_SHADER_CODE := """
@@ -55,6 +55,7 @@ var _death_explosion_radius: float = 0.0
 var _death_explosion_damage: int = 0
 var _projectile_burst_count := 1
 var _projectile_spread_radians := 0.0
+var _projectile_visual_scale := 1.0
 var _knockback_velocity: Vector2 = Vector2.ZERO
 var _flash_material: ShaderMaterial = null
 var _flash_tween: Tween = null
@@ -73,6 +74,7 @@ var _next_lunge_at := 0.0
 var _charge_direction := Vector2.ZERO
 var _charge_windup_ends_at := 0.0
 var _charge_dash_ends_at := 0.0
+var _charge_recovery_ends_at := 0.0
 var _next_charge_at := 0.0
 var _slam_direction := Vector2.ZERO
 var _slam_windup_ends_at := 0.0
@@ -91,14 +93,15 @@ func setup(type_name: String, combat_owner) -> void:
 	match type_name:
 		"spitter":
 			enemy_type = EnemyType.SPITTER
-			max_health = 20
+			max_health = 24
 			move_speed = 110.0
-			fire_interval = 2.6
-			projectile_speed = 280.0
+			fire_interval = 3.9
+			projectile_speed = 224.0
 			projectile_damage = 10
 			preferred_distance = 230.0
 			_projectile_burst_count = 1
 			_projectile_spread_radians = 0.0
+			_projectile_visual_scale = 1.1
 		"charger":
 			enemy_type = EnemyType.CHARGER
 			max_health = 40
@@ -110,6 +113,7 @@ func setup(type_name: String, combat_owner) -> void:
 			preferred_distance = 200.0
 			_projectile_burst_count = 0
 			_projectile_spread_radians = 0.0
+			_projectile_visual_scale = 1.0
 		"bruiser":
 			enemy_type = EnemyType.BRUISER
 			max_health = 60
@@ -121,6 +125,7 @@ func setup(type_name: String, combat_owner) -> void:
 			preferred_distance = 60.0
 			_projectile_burst_count = 0
 			_projectile_spread_radians = 0.0
+			_projectile_visual_scale = 1.0
 		"boss":
 			enemy_type = EnemyType.BOSS
 			max_health = 180
@@ -132,9 +137,10 @@ func setup(type_name: String, combat_owner) -> void:
 			preferred_distance = 240.0
 			_projectile_burst_count = 5
 			_projectile_spread_radians = 0.14
+			_projectile_visual_scale = 1.0
 		_:
 			enemy_type = EnemyType.CHASER
-			max_health = 30
+			max_health = 21
 			move_speed = 145.0
 			fire_interval = 1.3
 			projectile_speed = 340.0
@@ -142,6 +148,7 @@ func setup(type_name: String, combat_owner) -> void:
 			preferred_distance = 190.0
 			_projectile_burst_count = 1
 			_projectile_spread_radians = 0.0
+			_projectile_visual_scale = 1.0
 	current_health = max_health
 	_reset_behavior_state()
 	_apply_type_visual()
@@ -261,8 +268,10 @@ func _physics_process(_delta: float) -> void:
 		EnemyType.BOSS:
 			base_velocity = _update_boss_behavior(direction, distance, now)
 
-	base_velocity += _compute_separation_force()
-	base_velocity = _apply_obstacle_detour(base_velocity, direction)
+	var charger_committed_dash: bool = enemy_type == EnemyType.CHARGER and now < _charge_dash_ends_at
+	if not charger_committed_dash:
+		base_velocity += _compute_separation_force()
+		base_velocity = _apply_obstacle_detour(base_velocity, direction)
 	_knockback_velocity = _knockback_velocity.move_toward(Vector2.ZERO, 900.0 * _delta)
 	velocity = base_velocity + _knockback_velocity
 	move_and_slide()
@@ -420,13 +429,17 @@ func _update_spitter_behavior(direction: Vector2, distance: float, now: float) -
 func _update_charger_behavior(direction: Vector2, distance: float, now: float) -> Vector2:
 	if now < _charge_windup_ends_at:
 		return Vector2.ZERO
+	if now < _charge_recovery_ends_at:
+		return Vector2.ZERO
 	if now < _charge_dash_ends_at:
-		return _charge_direction * move_speed * 3.4
+		return _charge_direction * move_speed * 5.45
 	if distance > 115.0 and distance < 360.0 and now >= _next_charge_at:
 		_charge_direction = direction
-		_charge_windup_ends_at = now + 0.20
+		_charge_windup_ends_at = now + 0.35
 		_charge_dash_ends_at = _charge_windup_ends_at + 0.24
-		_next_charge_at = now + 1.8
+		_charge_recovery_ends_at = _charge_dash_ends_at + 1.2
+		_next_charge_at = _charge_recovery_ends_at + 0.25
+		_play_charger_windup_telegraph()
 		return Vector2.ZERO
 	if distance > preferred_distance:
 		return direction * move_speed * 0.92
@@ -474,7 +487,8 @@ func _emit_projectile_burst(base_direction: Vector2) -> void:
 			projectile_speed,
 			projectile_damage,
 			get_team(),
-			visual.color.lightened(0.08)
+			visual.color.lightened(0.08),
+			_projectile_visual_scale
 		)
 
 func _emit_spitter_shot(base_direction: Vector2) -> void:
@@ -487,7 +501,8 @@ func _emit_spitter_shot(base_direction: Vector2) -> void:
 		projectile_speed,
 		projectile_damage,
 		get_team(),
-		visual.color.lightened(0.08)
+		visual.color.lightened(0.08),
+		_projectile_visual_scale
 	)
 
 func _build_spread_directions(base_direction: Vector2, projectile_count: int, spread_radians: float) -> Array:
@@ -654,6 +669,16 @@ func _play_flash(color: Color, duration: float) -> void:
 	_flash_tween = create_tween()
 	_flash_tween.tween_property(flash_material, "shader_parameter/flash_intensity", 0.0, duration)
 
+func _play_charger_windup_telegraph() -> void:
+	_play_flash(Color(1.0, 1.0, 1.0, 1.0), 0.22)
+	_outline_pulse = 1.45
+	if body_root != null:
+		body_root.modulate = Color(1.18, 1.18, 1.18, 1.0)
+		var tween := create_tween()
+		tween.tween_property(body_root, "modulate", Color.WHITE, 0.22)
+	if _combat_owner != null and _combat_owner.has_method("handle_enemy_charge_windup"):
+		_combat_owner.handle_enemy_charge_windup(global_position)
+
 func _get_flash_material() -> ShaderMaterial:
 	if _flash_material != null:
 		return _flash_material
@@ -747,6 +772,7 @@ func _reset_behavior_state() -> void:
 	_charge_direction = Vector2.ZERO
 	_charge_windup_ends_at = 0.0
 	_charge_dash_ends_at = 0.0
+	_charge_recovery_ends_at = 0.0
 	_next_charge_at = 0.0
 	_slam_direction = Vector2.ZERO
 	_slam_windup_ends_at = 0.0

@@ -917,15 +917,16 @@ func _on_player_secondary_requested(origin: Vector2, direction: Vector2, speed: 
 	else:
 		_spawn_grenade(origin, direction, speed, damage, team, projectile_data, color)
 
-func _on_enemy_fire_requested(origin: Vector2, direction: Vector2, speed: float, damage: int, team: String, color: Color) -> void:
+func _on_enemy_fire_requested(origin: Vector2, direction: Vector2, speed: float, damage: int, team: String, color: Color, projectile_scale: float = 1.0) -> void:
 	if _room_is_cleared or _room_is_failed:
 		return
-	_spawn_projectile(origin, direction, speed, damage, team, color)
+	_spawn_projectile(origin, direction, speed, damage, team, color, null, "rifle", 1.0, projectile_scale)
 
-func _spawn_projectile(origin: Vector2, direction: Vector2, speed: float, damage: int, team: String, color: Color, shooter: Node = null, feedback_profile: String = "rifle", impact_weight: float = 1.0) -> void:
+func _spawn_projectile(origin: Vector2, direction: Vector2, speed: float, damage: int, team: String, color: Color, shooter: Node = null, feedback_profile: String = "rifle", impact_weight: float = 1.0, projectile_scale: float = 1.0) -> void:
 	var projectile = projectile_scene.instantiate()
 	projectile.global_position = origin
 	projectile.setup(team, direction, speed, damage, color, shooter, feedback_profile, impact_weight)
+	projectile.collision_half_width = max(projectile.collision_half_width * projectile_scale, 1.0)
 	projectile.allow_friendly_fire = _friendly_fire_enabled and team == "player"
 	projectile.impact_requested.connect(_on_projectile_impact_requested)
 	projectiles.add_child(projectile)
@@ -1321,11 +1322,14 @@ func _find_lowest_health_living_player() -> Node:
 func _on_enemy_died(enemy) -> void:
 	var enemy_weight: float = enemy.get_feedback_weight() if enemy != null and is_instance_valid(enemy) and enemy.has_method("get_feedback_weight") else 1.0
 	var enemy_color: Color = enemy.get_feedback_color() if enemy != null and is_instance_valid(enemy) and enemy.has_method("get_feedback_color") else Color(1.0, 0.28, 0.28, 1.0)
-	_trigger_hitstop(0.06 + enemy_weight * 0.032)
-	_add_camera_trauma(0.28 + enemy_weight * 0.24)
+	var death_burst_weight: float = enemy_weight
+	var death_hitstop: float = 0.045 if is_equal_approx(enemy_weight, 0.9) else 0.06 + enemy_weight * 0.032
+	var death_trauma: float = 0.18 if is_equal_approx(enemy_weight, 0.9) else 0.28 + enemy_weight * 0.24
+	_trigger_hitstop(death_hitstop)
+	_add_camera_trauma(death_trauma)
 	_play_sfx_enemy_death(enemy_weight)
 	_spawn_world_effect(
-		ParticleFactoryData.create_death_burst(enemy_color, enemy_weight),
+		ParticleFactoryData.create_death_burst(enemy_color, death_burst_weight),
 		enemy.global_position
 	)
 	_spawn_world_effect(
@@ -1366,10 +1370,14 @@ func _on_player_revived(player) -> void:
 	_refresh_debug_ui()
 
 func _on_explosive_detonated(origin: Vector2, color: Color, feedback_profile: String, impact_weight: float, explosion_radius: float, combat_context: Dictionary) -> void:
+	var burst_weight: float = impact_weight * 1.08 if feedback_profile == "grenade" else impact_weight
+	var camera_trauma: float = 0.18 + impact_weight * 0.17
+	if feedback_profile == "grenade":
+		camera_trauma *= 1.08
 	_play_sfx_explosion(impact_weight, feedback_profile)
-	_spawn_world_effect(ParticleFactoryData.create_explosion_burst(color, impact_weight), origin)
+	_spawn_world_effect(ParticleFactoryData.create_explosion_burst(color, burst_weight), origin)
 	_spawn_world_effect(ParticleFactoryData.create_explosion_ring(color.lightened(0.1), max(explosion_radius, 46.0), 3.0 + impact_weight), origin)
-	_add_camera_trauma(0.18 + impact_weight * 0.17)
+	_add_camera_trauma(camera_trauma)
 	_play_zoom_punch(0.04 + impact_weight * 0.018, 0.04, 0.1 + impact_weight * 0.03)
 	_process_primary_trigger_event("on_explosion", combat_context)
 
@@ -1381,7 +1389,7 @@ func _on_player_muzzle_flash_requested(origin: Vector2, direction: Vector2, colo
 	elif feedback_profile == "scatter":
 		_add_camera_trauma(0.10)
 	else:
-		_add_camera_trauma(0.05)
+		_add_camera_trauma(0.04)
 
 func _on_player_dash_trail_requested(origin: Vector2, color: Color) -> void:
 	_spawn_world_effect(ParticleFactoryData.create_dash_trail(color.darkened(0.15), 1.1), origin)
@@ -1398,7 +1406,7 @@ func _on_enemy_hit_received(enemy, damage_amount: int, lethal: bool) -> void:
 	var enemy_weight: float = enemy.get_feedback_weight() if enemy != null and is_instance_valid(enemy) and enemy.has_method("get_feedback_weight") else 1.0
 	_play_sfx_hit(enemy_weight)
 	if not lethal:
-		_trigger_hitstop(0.022 + enemy_weight * 0.013)
+		_trigger_hitstop(0.018 + enemy_weight * 0.010)
 	if enemy != null and is_instance_valid(enemy):
 		var text_color: Color = Color(1.0, 0.85, 0.7, 1.0)
 		if lethal:
@@ -2501,12 +2509,16 @@ func _update_hot_floor_zones(now: float) -> void:
 		_spawn_hot_floor_batch()
 		_next_hot_floor_batch_at = now + _room_random.randf_range(maxf(batch_interval - 1.0, 0.5), batch_interval + 1.0)
 	var active_players: Array = get_active_players()
-	for zone_variant in _hot_floor_zones.duplicate():
-		var zone: HotFloorZoneData = zone_variant as HotFloorZoneData
-		if zone == null or not is_instance_valid(zone):
-			_hot_floor_zones.erase(zone_variant)
+	var live_zones: Array = []
+	for zone_variant in _hot_floor_zones:
+		if not is_instance_valid(zone_variant):
 			continue
+		if not (zone_variant is HotFloorZoneData):
+			continue
+		var zone: HotFloorZoneData = zone_variant
+		live_zones.append(zone)
 		zone.apply_damage_to_targets(active_players)
+	_hot_floor_zones = live_zones
 
 func _spawn_hot_floor_batch() -> void:
 	var zone_interval: float = _modifier_engine.get_hot_floor_zone_interval(_active_modifier)
@@ -2601,12 +2613,16 @@ func _spawn_death_puddle(origin: Vector2) -> void:
 
 func _update_death_puddles() -> void:
 	var active_players: Array = get_active_players()
-	for puddle_variant in _death_puddles.duplicate():
-		var puddle: DeathPuddleData = puddle_variant as DeathPuddleData
-		if puddle == null or not is_instance_valid(puddle):
-			_death_puddles.erase(puddle_variant)
+	var live_puddles: Array = []
+	for puddle_variant in _death_puddles:
+		if not is_instance_valid(puddle_variant):
 			continue
+		if not (puddle_variant is DeathPuddleData):
+			continue
+		var puddle: DeathPuddleData = puddle_variant
+		live_puddles.append(puddle)
 		puddle.apply_damage_to_targets(active_players)
+	_death_puddles = live_puddles
 
 func _clear_modifier_hazards() -> void:
 	for zone_variant in _hot_floor_zones:
@@ -3198,6 +3214,12 @@ func _spawn_world_effect(effect: Node2D, origin: Vector2) -> void:
 
 func spawn_enemy_attack_trail(origin: Vector2, direction: Vector2, color: Color, weight: float = 1.0) -> void:
 	_spawn_world_effect(ParticleFactoryData.create_attack_trail(color, direction, weight), origin)
+
+func handle_enemy_charge_windup(origin: Vector2) -> void:
+	for player in get_active_players():
+		if player != null and is_instance_valid(player) and player.global_position.distance_to(origin) <= 200.0:
+			_add_camera_trauma(0.03)
+			return
 
 func _play_sfx_fire(profile: String = "rifle", weight: float = 1.0) -> void:
 	if _sfx_engine != null:

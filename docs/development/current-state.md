@@ -274,6 +274,7 @@ Godot `4.6.2` prototype for a same-screen local co-op twin-stick roguelite. The 
   - pause-settings option syncing no longer runs on every gameplay frame
   - enemy steering/separation now queries combat-owner target lists instead of repeated scene-tree group scans
   - recent shadowed-variable parser warnings were cleared from runtime/UI scripts
+  - hot-floor and death-puddle hazard tracking now prunes freed runtime nodes before applying damage, avoiding stale-reference cast errors during room updates
 - Patch 10 baseline landed on top of that combat layer:
   - combat values now use a base-10 display scale while preserving relative balance and pace
   - player baseline HP now presents as `50`
@@ -305,6 +306,8 @@ Godot `4.6.2` prototype for a same-screen local co-op twin-stick roguelite. The 
   - weak open-room variants were removed from normal recipe pools
   - each live recipe now maps to one primary layout identity
   - legacy layouts remain available only for debug/builder validation
+- Patch 15 open arena combat feel pass is implemented; base weapon feel, Charger anti-kite, and secondary impact were tuned before expanding layouts or recipes further
+- Patch 15 follow-up toned feedback back down after the first pass added too much screen clutter and hitch-like hitstop/shake under live play
 - ranged pressure has been softened to make the game less oppressive
 - aim lines, projectiles, and arena contrast were pushed toward clearer combat reads
 - player-facing weapon and projectile art should stay readable and anchored to gameplay direction, not just cosmetic placement
@@ -350,6 +353,7 @@ Godot `4.6.2` prototype for a same-screen local co-op twin-stick roguelite. The 
   - whether persistent enemy projectiles stay readable once they travel until wall or obstacle impact
   - whether the six curated layout identities actually feel distinct across several runs
   - whether stronger `Swarm` pressure stays readable without overwhelming revive flow
+- Patch 15 combat feel tuning needs live play validation: does Charger anti-kite work, does Rifle feel lethal, does Grenade create breathing room, does Spitter create meaningful priority
 - `3–4` player runtime validation and tuning still need real play coverage
 - full-run pacing and solo-vs-group balance are still not finished
 - menu cleanup is partially in; there is now a real front door, but setup/debug/meta presentation still needs more polish
@@ -383,7 +387,6 @@ If work resumes, prefer cleanup and presentation polish over new mechanics:
 - tighten HUD wording and spacing after a few more live readability checks
 - validate the new loot, replacement, and shop UI flow with gamepad-first navigation
 - standardize runtime sprite folder and naming conventions before more art lands
-- update any remaining docs that still describe the old shared-economy progression model
 - keep validating pause/settings/meta routes across different player counts
 - verify debug single-room launches still cover combat, elite, rest, shop, and boss without UI regressions
 - force-test generator rooms against all non-directional layouts/modifiers after the new generator-safe obstacle placement pass

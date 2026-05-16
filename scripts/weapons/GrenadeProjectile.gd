@@ -120,6 +120,9 @@ func _apply_explosion_damage(origin: Vector2, radius: float, damage_amount: int)
 		return
 
 	var groups_to_check: Array = ["aim_target"] if team == "player" else ["player_target"]
+	var knockback_force: float = 240.0
+	if kind == "grenade":
+		knockback_force *= 1.4
 
 	for group_name in groups_to_check:
 		for candidate in tree.get_nodes_in_group(group_name):
@@ -135,6 +138,8 @@ func _apply_explosion_damage(origin: Vector2, radius: float, damage_amount: int)
 			var target_node: Node2D = candidate
 			var distance: float = origin.distance_to(target_node.global_position)
 			if distance <= radius and candidate.has_method("apply_damage"):
+				if candidate.has_method("apply_knockback"):
+					candidate.apply_knockback((target_node.global_position - origin).normalized(), knockback_force)
 				candidate.apply_damage(damage_amount)
 				damage_applied.emit(origin, (target_node.global_position - origin).normalized(), team, _tint_color, feedback_profile, impact_weight, candidate, _build_combat_context(origin, target_node, damage_amount))
 
