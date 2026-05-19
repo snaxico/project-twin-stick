@@ -1,7 +1,6 @@
-[gd_scene load_steps=4 format=3 uid="uid://duj7gr8f4jk4j"]
+[gd_scene load_steps=3 format=3 uid="uid://duj7gr8f4jk4j"]
 
 [ext_resource type="Script" path="res://scripts/player/Player.gd" id="1_n0xfx"]
-[ext_resource type="Texture2D" path="res://assets/sprites/player/player_p1_base.png" id="2_a3s1m"]
 
 [sub_resource type="CircleShape2D" id="CircleShape2D_body"]
 radius = 39.0
@@ -26,24 +25,6 @@ points = PackedVector2Array(0, -47, 18, -43, 34, -31, 44, -15, 47, 0, 44, 15, 34
 [node name="CollisionShape2D" type="CollisionShape2D" parent="."]
 shape = SubResource("CircleShape2D_body")
 
-[node name="SecondaryPreview" type="Node2D" parent="."]
-
-[node name="SecondaryTrajectory" type="Line2D" parent="SecondaryPreview"]
-visible = false
-width = 3.0
-default_color = Color(1, 0.82, 0.22, 0.95)
-
-[node name="SecondaryTargetRing" type="Line2D" parent="SecondaryPreview"]
-visible = false
-width = 2.5
-default_color = Color(1, 0.72, 0.18, 0.9)
-closed = true
-
-[node name="SecondaryTargetCross" type="Line2D" parent="SecondaryPreview"]
-visible = false
-width = 2.5
-default_color = Color(1, 0.9, 0.4, 0.95)
-
 [node name="BodyRoot" type="Node2D" parent="."]
 position = Vector2(0, -26.6)
 
@@ -55,26 +36,3 @@ scale = Vector2(1.28, 1.28)
 [node name="Visual" type="Polygon2D" parent="BodyRoot"]
 polygon = PackedVector2Array(0, -26, 14, -18, 18, -4, 15, 14, 0, 24, -15, 14, -18, -4, -14, -18)
 scale = Vector2(1.3566, 1.6226)
-
-[node name="SpriteVisual" type="Sprite2D" parent="BodyRoot"]
-visible = false
-scale = Vector2(0.0884, 0.0884)
-texture = ExtResource("2_a3s1m")
-
-[node name="AimPivot" type="Node2D" parent="BodyRoot"]
-
-[node name="WeaponSprite" type="Sprite2D" parent="BodyRoot/AimPivot"]
-visible = false
-position = Vector2(8, 4)
-scale = Vector2(0.0452, 0.0452)
-centered = false
-offset = Vector2(-560, -228)
-
-[node name="AimLineBackdrop" type="Line2D" parent="BodyRoot/AimPivot"]
-width = 8.0
-default_color = Color(0.04, 0.06, 0.08, 0.72)
-points = PackedVector2Array(0, 0, 46, 0)
-
-[node name="AimLine" type="Line2D" parent="BodyRoot/AimPivot"]
-width = 5.0
-points = PackedVector2Array(0, 0, 46, 0)

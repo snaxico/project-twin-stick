@@ -30,7 +30,7 @@ func play_impact(weight: float = 1.0) -> void:
 func play_hit(weight: float = 1.0) -> void:
 	play_impact(weight)
 
-func play_explosion(weight: float = 1.0, profile: String = "grenade") -> void:
+func play_explosion(weight: float = 1.0, profile: String = "shockwave") -> void:
 	_play_buffer(_build_explosion_frames(weight, profile), -5.2 + weight * 0.9)
 
 func play_dash(weight: float = 1.0) -> void:

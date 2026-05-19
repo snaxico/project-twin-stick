@@ -18,9 +18,7 @@ void fragment() {
 
 enum EnemyType {
 	CHASER,
-	SPITTER,
 	CHARGER,
-	BRUISER,
 	BOSS,
 }
 
@@ -62,11 +60,6 @@ var _flash_tween: Tween = null
 var _base_body_root_position := Vector2.ZERO
 var _base_shadow_scale := Vector2.ONE
 var _idle_phase := 0.0
-var _strafe_sign := 1.0
-var _next_strafe_flip_at := 0.0
-var _burst_shots_remaining := 0
-var _burst_shot_index := 0
-var _next_burst_shot_at := 0.0
 var _lunge_direction := Vector2.ZERO
 var _lunge_windup_ends_at := 0.0
 var _lunge_ends_at := 0.0
@@ -76,11 +69,6 @@ var _charge_windup_ends_at := 0.0
 var _charge_dash_ends_at := 0.0
 var _charge_recovery_ends_at := 0.0
 var _next_charge_at := 0.0
-var _slam_direction := Vector2.ZERO
-var _slam_windup_ends_at := 0.0
-var _slam_ends_at := 0.0
-var _slam_recovery_ends_at := 0.0
-var _next_slam_at := 0.0
 var _contact_range := 28.0
 var _outline_pulse := 1.0
 var _blocked_time := 0.0
@@ -91,21 +79,10 @@ var _next_attack_trail_at := 0.0
 func setup(type_name: String, combat_owner) -> void:
 	_combat_owner = combat_owner
 	match type_name:
-		"spitter":
-			enemy_type = EnemyType.SPITTER
-			max_health = 24
-			move_speed = 110.0
-			fire_interval = 3.9
-			projectile_speed = 224.0
-			projectile_damage = 10
-			preferred_distance = 230.0
-			_projectile_burst_count = 1
-			_projectile_spread_radians = 0.0
-			_projectile_visual_scale = 1.1
 		"charger":
 			enemy_type = EnemyType.CHARGER
 			max_health = 40
-			move_speed = 125.0
+			move_speed = 247.5
 			fire_interval = 2.0
 			projectile_speed = 0.0
 			projectile_damage = 0
@@ -114,34 +91,22 @@ func setup(type_name: String, combat_owner) -> void:
 			_projectile_burst_count = 0
 			_projectile_spread_radians = 0.0
 			_projectile_visual_scale = 1.0
-		"bruiser":
-			enemy_type = EnemyType.BRUISER
-			max_health = 60
-			move_speed = 92.0
-			fire_interval = 0.0
-			projectile_speed = 0.0
-			projectile_damage = 0
-			contact_damage = 20
-			preferred_distance = 60.0
-			_projectile_burst_count = 0
-			_projectile_spread_radians = 0.0
-			_projectile_visual_scale = 1.0
 		"boss":
 			enemy_type = EnemyType.BOSS
 			max_health = 180
-			move_speed = 105.0
-			fire_interval = 1.3
+			move_speed = 157.5
+			fire_interval = 1.0
 			projectile_speed = 380.0
 			projectile_damage = 10
 			contact_damage = 10
-			preferred_distance = 240.0
+			preferred_distance = 110.0
 			_projectile_burst_count = 5
 			_projectile_spread_radians = 0.14
 			_projectile_visual_scale = 1.0
 		_:
 			enemy_type = EnemyType.CHASER
 			max_health = 21
-			move_speed = 145.0
+			move_speed = 292.5
 			fire_interval = 1.3
 			projectile_speed = 340.0
 			projectile_damage = 10
@@ -206,12 +171,8 @@ func get_health_ratio() -> float:
 
 func get_feedback_weight() -> float:
 	match enemy_type:
-		EnemyType.SPITTER:
-			return 1.0
 		EnemyType.CHARGER:
 			return 1.35
-		EnemyType.BRUISER:
-			return 1.7
 		EnemyType.BOSS:
 			return 1.9
 		_:
@@ -259,12 +220,8 @@ func _physics_process(_delta: float) -> void:
 	match enemy_type:
 		EnemyType.CHASER:
 			base_velocity = _update_chaser_behavior(direction, distance, now)
-		EnemyType.SPITTER:
-			base_velocity = _update_spitter_behavior(direction, distance, now)
 		EnemyType.CHARGER:
 			base_velocity = _update_charger_behavior(direction, distance, now)
-		EnemyType.BRUISER:
-			base_velocity = _update_bruiser_behavior(direction, distance, now)
 		EnemyType.BOSS:
 			base_velocity = _update_boss_behavior(direction, distance, now)
 
@@ -281,7 +238,7 @@ func _physics_process(_delta: float) -> void:
 
 	var contact_range: float = maxf(_contact_range, _get_combined_contact_range(target))
 	if distance <= contact_range and now >= _next_contact_at:
-		_next_contact_at = now + (1.0 if enemy_type == EnemyType.BOSS else 0.75)
+		_next_contact_at = now + (0.65 if enemy_type == EnemyType.BOSS else 0.45)
 		target.apply_damage(contact_damage)
 
 func _apply_obstacle_detour(base_velocity: Vector2, direction: Vector2) -> Vector2:
@@ -377,8 +334,6 @@ func _maybe_emit_attack_trail(now: float) -> void:
 		weight = 0.95
 	elif enemy_type == EnemyType.CHARGER and now < _charge_dash_ends_at:
 		weight = 1.25
-	elif enemy_type == EnemyType.BRUISER and now < _slam_ends_at:
-		weight = 1.45
 	elif enemy_type == EnemyType.BOSS and now < _next_projectile_at and velocity.length() > move_speed * 0.8:
 		weight = 1.2
 	if weight <= 0.0 or not _combat_owner.has_method("spawn_enemy_attack_trail"):
@@ -391,84 +346,39 @@ func _update_chaser_behavior(direction: Vector2, distance: float, now: float) ->
 		return Vector2.ZERO
 	if now < _lunge_ends_at:
 		return _lunge_direction * move_speed * 2.35
-	if distance > 0.0 and distance < 250.0 and now >= _next_lunge_at:
+	if distance > 0.0 and distance < 520.0 and now >= _next_lunge_at:
 		_lunge_direction = direction
-		_lunge_windup_ends_at = now + 0.10
-		_lunge_ends_at = _lunge_windup_ends_at + 0.22
-		_next_lunge_at = now + 1.0
+		_lunge_windup_ends_at = now + 0.08
+		_lunge_ends_at = _lunge_windup_ends_at + 0.24
+		_next_lunge_at = now + 0.55
 		return Vector2.ZERO
-	return direction * move_speed * 0.86
-
-func _update_spitter_behavior(direction: Vector2, distance: float, now: float) -> Vector2:
-	var base_velocity := Vector2.ZERO
-	if distance > preferred_distance + 36.0:
-		base_velocity = direction * move_speed
-	elif distance < preferred_distance - 34.0:
-		base_velocity = -direction * move_speed
-	else:
-		if now >= _next_strafe_flip_at:
-			_next_strafe_flip_at = now + 0.9
-			_strafe_sign *= -1.0
-		base_velocity = Vector2(-direction.y, direction.x) * move_speed * 0.7 * _strafe_sign
-
-	if distance > 0.0:
-		if _burst_shots_remaining > 0 and now >= _next_burst_shot_at:
-			_emit_spitter_shot(direction)
-			_burst_shots_remaining -= 1
-			_burst_shot_index += 1
-			if _burst_shots_remaining > 0:
-				_next_burst_shot_at = now + 0.18
-			else:
-				_next_projectile_at = now + fire_interval
-		elif _burst_shots_remaining == 0 and now >= _next_projectile_at:
-			_burst_shots_remaining = _projectile_burst_count
-			_burst_shot_index = 0
-			_next_burst_shot_at = now
-	return base_velocity
+	return direction * move_speed * 1.0
 
 func _update_charger_behavior(direction: Vector2, distance: float, now: float) -> Vector2:
 	if now < _charge_windup_ends_at:
 		return Vector2.ZERO
 	if now < _charge_recovery_ends_at:
-		return Vector2.ZERO
+		return direction * move_speed * 0.55
 	if now < _charge_dash_ends_at:
 		return _charge_direction * move_speed * 5.45
-	if distance > 115.0 and distance < 360.0 and now >= _next_charge_at:
+	if distance > 60.0 and distance < 720.0 and now >= _next_charge_at:
 		_charge_direction = direction
-		_charge_windup_ends_at = now + 0.35
-		_charge_dash_ends_at = _charge_windup_ends_at + 0.24
-		_charge_recovery_ends_at = _charge_dash_ends_at + 1.2
-		_next_charge_at = _charge_recovery_ends_at + 0.25
+		_charge_windup_ends_at = now + 0.18
+		_charge_dash_ends_at = _charge_windup_ends_at + 0.32
+		_charge_recovery_ends_at = _charge_dash_ends_at + 0.45
+		_next_charge_at = _charge_recovery_ends_at + 0.1
 		_play_charger_windup_telegraph()
 		return Vector2.ZERO
-	if distance > preferred_distance:
-		return direction * move_speed * 0.92
-	return Vector2(-direction.y, direction.x) * move_speed * 0.35
-
-func _update_bruiser_behavior(direction: Vector2, distance: float, now: float) -> Vector2:
-	if now < _slam_recovery_ends_at:
-		return direction * move_speed * 0.3
-	if now < _slam_windup_ends_at:
-		return Vector2.ZERO
-	if now < _slam_ends_at:
-		return _slam_direction * move_speed * 2.0
-	if distance > 0.0 and distance < 100.0 and now >= _next_slam_at:
-		_slam_direction = direction
-		_slam_windup_ends_at = now + 0.30
-		_slam_ends_at = _slam_windup_ends_at + 0.15
-		_slam_recovery_ends_at = _slam_ends_at + 1.4
-		_next_slam_at = now + 1.9
-		return Vector2.ZERO
-	return direction * move_speed
+	return direction * move_speed * 1.05
 
 func _update_boss_behavior(direction: Vector2, distance: float, now: float) -> Vector2:
 	var base_velocity := Vector2.ZERO
-	if distance > preferred_distance + 55.0:
-		base_velocity = direction * move_speed
-	elif distance < preferred_distance - 55.0:
-		base_velocity = -direction * move_speed * 0.7
+	if distance > preferred_distance + 35.0:
+		base_velocity = direction * move_speed * 1.05
+	elif distance < preferred_distance - 35.0:
+		base_velocity = -direction * move_speed * 0.4
 	else:
-		base_velocity = Vector2(-direction.y, direction.x) * move_speed * 0.45
+		base_velocity = Vector2(-direction.y, direction.x) * move_speed * 0.28
 
 	if distance > 0.0 and now >= _next_projectile_at:
 		_next_projectile_at = now + fire_interval
@@ -490,20 +400,6 @@ func _emit_projectile_burst(base_direction: Vector2) -> void:
 			visual.color.lightened(0.08),
 			_projectile_visual_scale
 		)
-
-func _emit_spitter_shot(base_direction: Vector2) -> void:
-	var spread_offsets := [0.0, -0.12, 0.12]
-	var offset_index := clampi(_burst_shot_index, 0, spread_offsets.size() - 1)
-	var projectile_direction := base_direction.normalized().rotated(float(spread_offsets[offset_index]))
-	fire_requested.emit(
-		global_position + projectile_direction * 20.0,
-		projectile_direction,
-		projectile_speed,
-		projectile_damage,
-		get_team(),
-		visual.color.lightened(0.08),
-		_projectile_visual_scale
-	)
 
 func _build_spread_directions(base_direction: Vector2, projectile_count: int, spread_radians: float) -> Array:
 	var directions: Array = []
@@ -541,46 +437,20 @@ func _apply_type_visual() -> void:
 		return
 
 	match enemy_type:
-		EnemyType.SPITTER:
-			visual.color = Color(0.82, 0.18, 0.88, 1.0)
-			visual.polygon = PackedVector2Array([
-				Vector2(-24, -9),
-				Vector2(-10, -16),
-				Vector2(10, -16),
-				Vector2(24, -9),
-				Vector2(20, 9),
-				Vector2(-20, 9),
-			])
-			visual.scale = Vector2(1.0, 1.0)
-			_set_collision_radius(21.0)
-			_contact_range = 32.0
 		EnemyType.CHARGER:
-			visual.color = Color(0.88, 0.44, 0.08, 1.0)
+			visual.color = Color(1.0, 0.54, 0.12, 1.0)
 			visual.polygon = PackedVector2Array([
-				Vector2(-18, -18),
-				Vector2(18, -18),
-				Vector2(28, -2),
-				Vector2(20, 24),
-				Vector2(-20, 24),
+				Vector2(0, -28),
+				Vector2(24, -10),
+				Vector2(18, 24),
+				Vector2(-18, 24),
+				Vector2(-24, -10),
 			])
-			visual.scale = Vector2(1.34, 1.34)
+			visual.scale = Vector2(1.28, 1.28)
 			_set_collision_radius(28.0)
 			_contact_range = 38.0
-		EnemyType.BRUISER:
-			visual.color = Color(0.55, 0.38, 0.18, 1.0)
-			visual.polygon = PackedVector2Array([
-				Vector2(-22, -22),
-				Vector2(22, -22),
-				Vector2(26, 0),
-				Vector2(22, 26),
-				Vector2(-22, 26),
-				Vector2(-26, 0),
-			])
-			visual.scale = Vector2(1.5, 1.5)
-			_set_collision_radius(32.0)
-			_contact_range = 42.0
 		EnemyType.BOSS:
-			visual.color = Color(0.72, 0.06, 0.06, 1.0)
+			visual.color = Color(0.92, 0.12, 0.16, 1.0)
 			visual.polygon = PackedVector2Array([
 				Vector2(0, -42),
 				Vector2(14, -34),
@@ -602,15 +472,15 @@ func _apply_type_visual() -> void:
 			_set_collision_radius(44.0)
 			_contact_range = 54.0
 		_:
-			visual.color = Color(1.0, 0.2, 0.15, 1.0)
+			visual.color = Color(1.0, 0.24, 0.2, 1.0)
 			visual.polygon = PackedVector2Array([
-				Vector2(0, -26),
-				Vector2(14, 4),
-				Vector2(0, 16),
-				Vector2(-14, 4),
+				Vector2(0, -30),
+				Vector2(20, 12),
+				Vector2(0, 22),
+				Vector2(-20, 12),
 			])
-			visual.scale = Vector2(0.72, 0.72)
-			_set_collision_radius(14.0)
+			visual.scale = Vector2(0.78, 0.78)
+			_set_collision_radius(15.0)
 			_contact_range = 24.0
 	if outline != null:
 		outline.polygon = visual.polygon
@@ -706,15 +576,9 @@ func _apply_motion_polish(now: float, delta: float = 0.0) -> void:
 		EnemyType.CHASER:
 			bob_amount = 3.8
 			bob_frequency = 5.3
-		EnemyType.SPITTER:
-			bob_amount = 2.8
-			bob_frequency = 2.7
 		EnemyType.CHARGER:
 			bob_amount = 2.2
 			bob_frequency = 1.9
-		EnemyType.BRUISER:
-			bob_amount = 1.8
-			bob_frequency = 1.4
 		EnemyType.BOSS:
 			bob_amount = 5.8
 			bob_frequency = 1.6
@@ -728,12 +592,6 @@ func _apply_motion_polish(now: float, delta: float = 0.0) -> void:
 		squash_scale = Vector2(1.26, 0.76)
 	elif enemy_type == EnemyType.CHARGER and now < _charge_dash_ends_at:
 		squash_scale = Vector2(0.84, 1.30)
-	elif enemy_type == EnemyType.BRUISER and now < _slam_windup_ends_at:
-		squash_scale = Vector2(1.30, 0.72)
-	elif enemy_type == EnemyType.BRUISER and now < _slam_ends_at:
-		squash_scale = Vector2(0.80, 1.38)
-	elif enemy_type == EnemyType.BRUISER and now < _slam_recovery_ends_at:
-		squash_scale = Vector2(1.10, 0.90)
 	body_root.position = _base_body_root_position + Vector2(0.0, bob)
 	body_root.rotation = lerp_angle(body_root.rotation, clamp(velocity.x / max(move_speed, 1.0), -1.0, 1.0) * 0.08, 0.12)
 	body_root.scale = squash_scale
@@ -760,11 +618,6 @@ func _play_spawn_in_animation() -> void:
 		tween.tween_property(shadow, "modulate:a", 0.25, 0.24)
 
 func _reset_behavior_state() -> void:
-	_strafe_sign = -1.0 if int(get_instance_id() % 2) == 0 else 1.0
-	_next_strafe_flip_at = 0.0
-	_burst_shots_remaining = 0
-	_burst_shot_index = 0
-	_next_burst_shot_at = 0.0
 	_lunge_direction = Vector2.ZERO
 	_lunge_windup_ends_at = 0.0
 	_lunge_ends_at = 0.0
@@ -774,11 +627,6 @@ func _reset_behavior_state() -> void:
 	_charge_dash_ends_at = 0.0
 	_charge_recovery_ends_at = 0.0
 	_next_charge_at = 0.0
-	_slam_direction = Vector2.ZERO
-	_slam_windup_ends_at = 0.0
-	_slam_ends_at = 0.0
-	_slam_recovery_ends_at = 0.0
-	_next_slam_at = 0.0
 	_blocked_time = 0.0
 	_last_position = global_position
 	_detour_sign = -1.0 if int(get_instance_id() % 2) == 0 else 1.0

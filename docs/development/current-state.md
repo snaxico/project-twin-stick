@@ -2,391 +2,146 @@
 
 ## Project Role
 
-Godot `4.6.2` prototype for a same-screen local co-op twin-stick roguelite. The first-playable bar is still the Patch 7 target: one readable, stable `10–15` minute run that works without explanation.
+Godot `4.6.2` prototype for a same-screen local co-op neon roguelite.
+
+This branch is now the v3 gameplay line:
+
+- stable pre-rework gameplay is preserved separately on `main`
+- active rework continues on `v2/core-refactor`
+- current target is strictly `1–2` players
+- `3–4` player support is deferred until the v3 loop validates
 
 ## Current Runtime
 
-- player-facing front menu before gameplay:
+- front menu paths:
   - `Play`
-  - `Meta`
-  - `Settings`
   - `Encounter Builder`
-- `1–4` player pre-run configuration
-- run mode selection before gameplay:
-  - `Normal`: HP carries between cleared rooms
-  - `Easy`: all players fully heal after each cleared room
-- debug launcher now sits behind its own entry instead of dominating the first screen
-- settings are available before the run and from the in-run pause menu
-- screen effects level is profile-backed and selectable in both menus
-- connected node-map run flow with enforced links between floors
-- run map is now procedural instead of fixed:
-  - `5–7` pre-boss rows plus one boss row
-  - `3` starting nodes
-  - `2–4` nodes on each non-boss row
-  - only connected next-row nodes are selectable
-  - guaranteed reachable rest/shop presence
-- per-player gold wallets and inventories
-- combat and elite rooms now end in:
-  - physical loot drops
-  - Take / Scrap resolution
-  - contested winner rolls when multiple players want the same item
-  - replacement UI when a new weapon collides with full matching slots
-- shop rooms now run in-world:
-  - personal offers per player
-  - personal wallet checks
-  - weapon replacement support on purchase
-  - ready-up before exit opens
-- room clear no longer auto-transitions:
-  - loot or shop resolves first
-  - exit zone opens after resolution
-  - all living players can leave together or wait for auto-exit
-- persistent meta-gold, unlock purchases, and return-to-menu spending loop
-- combat rooms with downed/revive flow
-- combat rooms can now be either:
-  - timer-based `survive`
-  - control-based `capture_the_hill`
-  - objective-based `destroy_generators`
-- boss endpoint and run-end summary handoff
-- headless Godot validation passes with `Godot_v4.6.2-stable_win64_console.exe`
-- startup check passes with the local Godot console executable
+- settings menus were removed from both bootstrap and in-run pause flow
+- player setup currently targets `1–2` players only
+- run mode selection remains:
+  - `Normal`
+  - `Easy`
+- run flow still uses the stripped node map:
+  - `combat`
+  - `rest`
+  - `boss`
+- shop / gold / meta progression remain out of the live runtime
 
 ## Active Combat State
 
-- primary profiles:
-  - `Rifle`
-  - `Scatter`
-  - `Slug`
-  - `Incinerator`
-  - `Beam Lance`
-  - `Arc Caster`
-- secondary profiles:
-  - thrown: `Grenade`, `Cluster Grenade`, `Siege Grenade`
-  - proximity: `Mine`, `Shrapnel Mine`, `Heavy Mine`
-- primary runtime is no longer projectile-only:
-  - `Rifle`, `Scatter`, `Slug` use `projectile`
-  - `Incinerator` uses `cone`
-  - `Beam Lance` uses `beam`
-  - `Arc Caster` uses `chain`
-- primary weapons now compile through the new standard stat model:
-  - `damage`
-  - `fire_rate`
-  - `range`
-  - `area`
-  - `amount`
-- projectile primaries now also consume behavior-specific compiled fields:
-  - `projectile_speed`
-  - `spread_radians`
-  - `pierce_count`
-- passive application is now per-slot for weapons instead of one shared inventory-wide combat state
-- passive tag filtering is now live through optional `requires_tags`
-- hook passives are now implemented with centralized runtime dispatch for:
-  - `on_fire`
-  - `on_hit`
-  - `on_kill`
-  - `on_explosion`
-- grenade path and mine path are now separate scene/script runtimes
-- mines place instantly on secondary press and use proximity fuse detonation
-- mine proximity radius was doubled from the initial mine implementation
-- each player now has:
-  - `2` primary weapon slots
-  - `2` secondary weapon slots
-  - independent selected-slot state
-  - passive ownership
-  - `Lv1–Lv5` weapon progression on duplicates
-- modifier pool now includes tactical rules, not just stat pressure
-- wave composition now scales by room depth instead of using one fixed enemy mix
-- Patch 11 melee-first rebalance is now in:
-  - early rooms are mostly `Chaser`
-  - mid rooms introduce `Charger` and `Bruiser`
-  - late rooms are heavy-melee mixes dominated by `Charger` and `Bruiser`
-  - elite rooms now bias further toward melee pressure instead of adding ranged load
-  - boss support waves are melee-only
-- Patch 13 encounter identity layer is now in:
-  - `Bruiser` adds a slow durable slam enemy role
-  - modifiers are now gated by `min_step` and `pool`
-  - encounter data now only keeps the four live core modifiers:
-    - `Swarm`
-    - `Crossfire`
-    - `Hot Floor`
-    - `Death Pop`
-  - previously disabled recipe modifiers were removed from encounter data entirely:
-    - `Armoured`
-    - `Heavy Patrol`
-    - `Frenzy`
-    - `Stampede`
-    - `Friendly Fire`
-    - `Darkness`
-    - `One-Way`
-  - normal combat layout families are now reduced to five identities:
-    - `default`
-    - `lane`
-    - `pillars`
-    - `ring`
-    - `pockets`
-  - legacy layouts are kept only for builder/debug coverage:
-    - `crossfire`
-    - `pinch`
-    - `offset`
-    - `gauntlet_pockets`
-  - obstacle visuals now render as high-contrast pillars instead of blending into the arena floor
-  - obstacle spawning now reserves the arena center so loot/drop interaction cannot be softlocked
-  - generator slots are now sanitized against obstacle geometry so objective targets do not spawn inside blocker layouts
-  - `ring` is now a tighter eight-pillar loop
-  - `pockets` now read as clearer inward-facing objective pockets
-  - `lane` now uses broad divider walls to create three readable combat lanes without trapping revives
-  - combat and elite rooms now use six curated one-layout-per-recipe identities:
-    - `Open Swarm`
-    - `Hold Lanes`
-    - `Cover Fight`
-    - `Ring Run`
-    - `Dead Zone`
-    - `Pocket Breakthrough`
-  - recipes now carry optional pacing overrides and anti-repeat selection
-  - crossfire encounters now bias spitters to side spawns instead of only changing fire rate numbers
-  - `Swarm` now pushes much harder with a 200% spawn-rate increase plus extra wave size
-  - `Hot Floor` now uses telegraphed floor hazards instead of stationary-damage punishment
-  - `Death Pop` now uses brief death puddles instead of instant corpse explosions
-  - debug single-room launches can now test the full obstacle-layout set directly:
-    - `pillars`
-    - `ring`
-    - `pockets`
-    - `lane`
-- enemy steering/tempo follow-up is now in:
-  - obstacle avoidance now uses forward feelers instead of waiting for a long blocked-time delay
-  - enemy packs now apply a capped local separation force so Swarm rooms spread instead of pixel-stacking
-  - the old blocked-time detour flip remains only as a fallback recovery path
-  - base move speed was raised across `Chaser`, `Spitter`, `Charger`, `Bruiser`, and `Boss`
-  - `Chaser`, `Charger`, and `Bruiser` attack windups/cooldowns were tightened
-  - survival/support waves no longer rely on six fixed layout spawn markers
-  - wave spawns now sample valid arena positions across the room while respecting obstacle geometry and a minimum player distance
-- combat objective follow-up is now in:
-  - `capture_the_hill` is now a live combat objective path
-  - hill rooms reuse combat-wave pressure instead of generator-owned spawning
-  - hill progress fills while players control the zone and drains under enemy control
-  - `Pocket Breakthrough` now uses hill control so the pockets layout plays as a push-and-hold room instead of falling back to generators
-- boss health now scales modestly with rooms survived before the boss
-- gauntlet V1 layer is in:
-  - neutral generators spawn pressure enemies
-  - generator rooms clear only after generators are destroyed and the room is swept
-  - enemies can drop gold pickups and food pickups
-  - generators always drop one gold pickup and one food pickup
-  - food heals `10` HP and gold is awarded into each player wallet
-- enemy roster:
-  - `Chaser`: small red dart silhouette
-  - `Spitter`: medium magenta hex silhouette
-  - `Charger`: large brown wedge silhouette
-  - `Bruiser`: large brown hex bruiser silhouette
-  - boss: oversized crimson crown silhouette
+- arena remains the larger open room with same-screen zoom camera
+- camera now follows living players and zooms out to keep the group on one screen
+- hard player-to-player rubberbanding was removed; players are only constrained by arena bounds and camera framing
+- arena readability remains supported by:
+  - visible floor grid lines
+  - stronger repeating major guide lines
+  - visible perimeter wall visuals
+- each player now has exactly:
+  - `1` auto-firing primary weapon
+  - `1` cooldown secondary ability
+  - an ordered mutation list
+- live starting loadout is now fixed to:
+  - primary: `Rifle`
+  - secondary: `Shockwave`
+- primary fire is now automatic:
+  - no fire trigger input
+  - baseline rifle cadence is `3.0` shots per second
+  - target selection is handled by `AutoTarget.gd`
+- default control split is now:
+  - `P1` = gamepad
+  - `P2` = keyboard
+- live input scheme is now:
+  - gamepad left stick = movement
+  - `L2` = dash
+  - `R2` = shockwave
+  - keyboard `WASD` = movement
+  - keyboard `Ctrl` = dash
+  - keyboard `Space` = shockwave
+- nearest-enemy auto-targeting is always on; there is no aim-assist mode toggle in the menus
+- only these enemy roles are currently live:
+  - `Chaser`
+  - `Charger`
+  - `Boss`
+- room objectives currently supported:
+  - `survive`
+  - `capture_the_hill`
 
 ## Active Systems
 
-- `ProfileState` for save data, meta gold, and unlock ownership
-- `RunState` for run progression, per-player inventories, loadouts, wallet state, shop offers, run-mode health rules, outcomes, primary stat compilation, tag filtering, and trigger-passive compilation
-- `RecipeEngine` for encounter recipe selection and enemy-weight hint lookup
-- `RunFlow` for connected map rendering, node inspection, node selection, and room transitions
-- `CoopManager` for room orchestration, combat spawning, obstacle layouts, loot/shop resolution, exit flow, room-state signaling, primary behavior execution, and trigger-event processing
-- `HotFloorZone` for telegraphed floor hazard timing and overlap damage
-- `DeathPuddle` for telegraphed death-zone puddle timing and overlap damage
-- `PassiveTriggerSystem` for hook-passive throttling and trigger action collection
-- `IconFactory` for cached procedural placeholder icons and real-sprite fallback lookup
-- `docs/design/weapons-passives-balance.xlsx` as the balancing design document for:
-  - primary weapons
-  - secondary weapons
-  - passive items
-  - this spreadsheet must be updated whenever any of those balance surfaces change
-- `docs/design/enemies-arenas-modifiers-balance.xlsx` as the balancing design document for:
-  - enemies
-  - arena layouts
-  - encounter modifiers
-  - encounter recipes
-- bootstrap debug launcher for:
-  - normal run override starts
-  - encounter-builder single-room launches
-  - explicit room/objective/modifier/layout/depth selection
-  - builder exposes all three objectives: `survive`, `capture_the_hill`, and `destroy_generators`
-  - auto-launch into the configured room instead of stopping on a one-node debug map
-  - return-to-builder after the encounter ends
-  - single-room clears/fails now stay in the builder loop instead of falling through to full-run summary behavior
-- JSON-backed passives, weapons, modifiers, unlocks, enemies, and weapon/loadout tuning
-- per-player aim mode selection now lives in the shared settings menu instead of debug-only controls
-- screen effects are user-selectable through the shared settings menu:
-  - `Off`
-  - `Minimal`
-  - `Full`
-- current default profile setting is `Full`
-- styled combat HUD with per-player inventory panels, modifier chip, timer bar, and polished result/pause/intro panels
-- each player HUD now exposes:
-  - compact wallet value
-  - health state
-  - two primary slots
-  - two secondary slots
-  - selected-slot highlight
-  - secondary cooldown bars
-  - passive chips as icon-only markers instead of text abbreviations
-  - icon-first slot rendering with real primary weapon sprites where available
-  - lighter transparency so the arena stays readable behind the HUD
-- modifier intro panel plus active room tinting
-- darkness overlay, left-side spawn filtering, side-biased ranged spawn hooks, and optional friendly fire modifier hooks
-- fixed fullscreen same-screen arena with active layout presets: `default`, `lane`, `pillars`, `ring`, `pockets`, `boss gate`
-- legacy builder/debug-only layout presets: `crossfire`, `pinch`, `offset`, `gauntlet_pockets`
-- arena presentation is now cartoon-styled:
-  - thick player/enemy outlines
-  - one shared olive-neutral floor across all rooms
-  - subtle fullscreen grid lines for room texture
-  - only subtle room-to-room line/accent changes remain
-- player visuals are now partially sprite-backed:
-  - player 1 now uses `assets/sprites/player/player_p1_standing.png` while idle
-  - player 1 alternates between `assets/sprites/player/player_p1_running.png` and `assets/sprites/player/player_p1_running_alt.png` while moving
-  - player 1 now carries visible primary-weapon sprites attached to aim direction and mirrored on left aim:
-    - `player_rifle.png`
-    - `player_scattergun.png`
-    - `player_slug.png`
-  - player projectiles now use `assets/sprites/weapons/player_bullet.png`
-  - players 2–4 still use the procedural polygon body
-  - the imported sprite set had its white background removed and the player/weapon sprite scale was enlarged by roughly `33%`
-  - the player collision radius was also increased to better match the larger presentation
-- player combat pace is currently bumped above the earlier baseline:
-  - primary fire intervals are globally reduced by `20%`
-  - secondary cooldowns are globally reduced by `20%`
-- dash follow-up changed the defensive timing:
-  - dash cooldown is now `2.0s`
-  - each successful dash grants a visible shield for `0.5s`
-- loot/inventory/shop follow-up fixes now also landed:
-  - player loadouts reapply immediately after loot, replacements, and shop purchases
-  - `Rifle` and `Mine` are back in reward/shop pools, so starter weapons can level naturally
-  - loot drops now keep their label/color even though setup happens before `_ready()`
-  - shop reset correctly unlocks the active shopper
-  - duplicate pickup-point gold floating text was removed
-- replacement UI now ignores the same held confirm/cancel press that opened it, so it no longer closes instantly on entry
-- recent combat spectacle pass also landed:
-  - runtime weapon loadouts now carry `feedback_profile` and `impact_weight`
-  - dash has a short input buffer and slow primaries like `Slug` have a short fire buffer
-  - primary fire now drives weapon-specific muzzle flash, recoil, camera kick, and procedural SFX variation
-  - enemy hits/deaths now use stronger hitstop, burst/ring effects, and heavier camera/audio response
-  - grenade and mine detonations now use layered burst plus expanding ring feedback
-- enemy feedback follow-up is now in:
-  - heavy enemy attacks now emit short motion trails during active lunge / charge / slam windows
-  - heavier enemies now drive larger burst/spark payloads and stronger kill feedback
-  - camera shake ceiling and decay were both raised so impact spikes hit harder without lingering into mush
-  - enemy-hit, enemy-death, and explosion trauma/hitstop values were all pushed upward
-- runtime review/perf cleanup follow-up is now in:
-  - in-room HUD/debug refresh work is throttled instead of rebuilding every frame
-  - pause-settings option syncing no longer runs on every gameplay frame
-  - enemy steering/separation now queries combat-owner target lists instead of repeated scene-tree group scans
-  - recent shadowed-variable parser warnings were cleared from runtime/UI scripts
-  - hot-floor and death-puddle hazard tracking now prunes freed runtime nodes before applying damage, avoiding stale-reference cast errors during room updates
-- Patch 10 baseline landed on top of that combat layer:
-  - combat values now use a base-10 display scale while preserving relative balance and pace
-  - player baseline HP now presents as `50`
-  - primary and secondary damage now present in `10`-point steps instead of `1`-point steps
-  - generator HP, revive HP, hazard damage, rest healing, and flat passive/modifier combat bonuses were scaled to match
-  - loot drops now pop in with a short scale tween instead of appearing flat
-  - enemy gold pickups now burst slightly off the corpse position instead of stacking on one exact point
-- Patch 12 icon-first UI pass is now in:
-  - `IconFactory` generates procedural placeholder icons for weapons, passives, coin, and heart UI chrome
-  - real weapon sprites still take priority where they already exist
-  - HUD weapon slots now always show icons instead of falling back to text
-  - passive chips now use procedural icons
-  - loot vote, shop, and weapon replacement panels now lead with icon + short label instead of text-heavy blocks
-- shared placeholder visual language with player color identity and shooter-tinted projectiles/effects
-- juice stack through `J7`: hit flash, knockback, hitstop, shake, particles, procedural SFX, health bars, floating text, motion polish, screen overlays, and transition polish
-- sprite-generation documentation now lives in-project under `sprites/guidelines/`, separate from runtime assets in `assets/sprites/`
+- `RunState` remains the live run-state shell:
+  - room progression
+  - per-player health persistence
+  - per-player `1 primary + 1 secondary + mutations` inventory state
+- `CoopManager` now drives the v3 room loop:
+  - larger arena setup
+  - depth-based arena color shifts
+  - auto-attack projectile spawning
+  - shockwave blast handling + visual ring
+  - revive / fail / clear handling
+  - mutation pick handoff
+  - automatic room progression after mutation picks
+- `Player.gd` now implements:
+  - movement-facing + auto-attack runtime
+  - automatic primary fire
+  - shockwave cooldown ownership
+  - chevron-only player visual
+  - dash-damage mutation support
+- `AutoTarget.gd` replaced the old aim-assist path for auto-attack targeting
+- `MutationSystem` still compiles primary mutations, and now also handles:
+  - `shockwave_radius`
+  - `shockwave_cooldown`
+- `Projectile.gd` is now the live glowing-orb projectile path
+- `PlayerInventoryHUD` and `WeaponSlotHUD` remain the minimal HUD:
+  - health
+  - primary icon
+  - secondary cooldown
+  - dash cooldown
+  - mutation icons
+- encounter builder still supports:
+  - room type
+  - objective
+  - depth
+  - enemy mix override
+  - starting mutation presets
 
-## Recent Accepted Direction
+## Removed From Live V3
 
-- core loop is approved and should not be replaced casually
-- current work should favor tuning and readability over new systems
-- the primary ruleset/compiler migration is now implemented and should be validated before being widened further
-- the primary ruleset/compiler migration is now implemented and has passed gameplay validation
-- Patch 10 should stay a readability-and-feel pass, not a doorway into new content systems
-- Patch 11 should keep combat melee-first and survivable, not drift back into projectile-heavy pressure
-- Patch 12 icon-first UI pass is now implemented and verified; future UI work should preserve fast scan readability instead of growing text blocks again
-- Patch 13 encounter identity pass is now implemented in code, including the hazard/layout rework pass, and should be validated through live runs before further encounter expansion
-- Patch 14 layout identity cleanup is now in data/docs:
-  - weak open-room variants were removed from normal recipe pools
-  - each live recipe now maps to one primary layout identity
-  - legacy layouts remain available only for debug/builder validation
-- Patch 15 open arena combat feel pass is implemented; base weapon feel, Charger anti-kite, and secondary impact were tuned before expanding layouts or recipes further
-- Patch 15 follow-up toned feedback back down after the first pass added too much screen clutter and hitch-like hitstop/shake under live play
-- ranged pressure has been softened to make the game less oppressive
-- aim lines, projectiles, and arena contrast were pushed toward clearer combat reads
-- player-facing weapon and projectile art should stay readable and anchored to gameplay direction, not just cosmetic placement
-- arena color should read as one world first, with only minor room accent variation
-- enemy readability now depends on silhouette first, color second
-- layout identity should come from geometry and encounter shape more than full-room palette swaps
-- the combat HUD should read at a glance instead of exposing debug strings
-- the combat HUD should stay compact and icon-first where possible, not drift back toward text-heavy debug cards
-- the loot, shop, and replacement flows should feel player-facing rather than tool-like
-- icon-first UI should stay readable and fast rather than drifting back toward dense text blocks
-- grenade and mine roles should stay distinct instead of drifting back into one blended secondary design
-- run structure should vary between attempts through map length, room order, and enemy mix without changing the run-flow contract
-- aim-mode switching should stay in the shared settings UI, not developer-facing controls
-- screen effects should be selectable from the same settings flow and default to clear combat readability
-- sprite generation should follow the in-project guidelines and stay separate from runtime asset storage
-- gamepad dash now lives on `B / O`, not `A / X`
+- no manual fire input
+- no grenade runtime
+- no grenade preview / charge system
+- no aim-assist menu setting
+- no screen-effects menu setting
+- no sprite-based player body / weapon presentation
+- no shop runtime
+- no loot drops / vote flow
+- no weapon replacement UI
+- no meta progression loop
+- no recipe engine
+- no modifier engine
+- no generator objective
+- no alternative primary families in live combat
+- no `3–4` player support target for the current validation phase
+
+Obsolete v1 / v2 systems remain preserved under `archive/v1/`.
 
 ## Known Gaps
 
-- new primary behaviors still need feel/tuning passes:
-  - `cone`
-  - `beam`
-  - `chain`
-- hook-based passive interactions still need live balance and readability tuning
-- Patch 10 value scaling is in, but floating-text readability and full-run readability under `2–4` player load still need live observation
-- Patch 11 melee/sustain rebalance still needs live validation for:
-  - full-run `Normal` survivability
-  - food-drop feel under real room clear speeds
-  - whether `Spitter` still reads as distinct while being much rarer
-- Patch 12 icon-first UI still needs live readability checks for:
-  - placeholder icon clarity at gameplay scale
-  - shop offer scanning speed
-  - replacement flow clarity with unfamiliar placeholder icons
-  - these checks were exercised enough to accept the patch, but they still need follow-up after future UI or content growth
-- Patch 13 still needs live validation for:
-  - Bruiser readability, slam telegraph, and recovery punish window
-  - the reduced four-modifier encounter pool in Normal runs
-  - obstacle collision and anti-stuck behavior on `pillars`, `ring`, `pockets`, and `lane` after the new feeler steering pass
-  - whether arena-wide valid spawn sampling plus feeler steering stays stable once Swarm pressure rises in blocked layouts
-  - `Hot Floor` telegraph readability and damage fairness
-  - `Death Pop` puddle readability and melee fairness
-  - crossfire flank pressure after side-biased spitter spawning
-  - whether persistent enemy projectiles stay readable once they travel until wall or obstacle impact
-  - whether the six curated layout identities actually feel distinct across several runs
-  - whether stronger `Swarm` pressure stays readable without overwhelming revive flow
-- Patch 15 combat feel tuning needs live play validation: does Charger anti-kite work, does Rifle feel lethal, does Grenade create breathing room, does Spitter create meaningful priority
-- `3–4` player runtime validation and tuning still need real play coverage
-- full-run pacing and solo-vs-group balance are still not finished
-- menu cleanup is partially in; there is now a real front door, but setup/debug/meta presentation still needs more polish
-- new loot, shop, and replacement flows still need live UX validation
-- the new compact icon HUD still needs a live readability pass, especially for placeholder secondary/passive chips
-- grenade-vs-mine role clarity still needs a live feel pass
-- procedural run pacing and boss scaling still need live validation across several attempts
-- connected-map readability, route feel, and row-to-row pathing still need live validation
-- capture-the-hill pacing, hill placement, and control-rate tuning still need live validation
-- generator rooms are still in code but are no longer the preferred near-term validation target
-- enemy contact damage and pickup drop flow were recently fixed in code but still need live validation under combat load
-- single-room debug launcher still needs interactive coverage across room types and modifiers
-- new tactical modifiers still need live-behavior tuning and edge-case validation
-- combat feel is stronger after Patch 10, but final intensity tuning still needs real play rather than static review
-- no custom art, audio asset pipeline, export flow, or distribution polish yet
+- v3 now matches the new control model structurally, but still has not had a full feel-validation pass
+- shockwave, auto-attack cadence, and mutation payoff still need live tuning
+- boss behavior is still the older fight shape and has not yet had the separate v3 redesign
+- builder mutation presets are for testing, not polished end-user UX
+- glow / neon presentation is improved, but this is still a gameplay-first pass rather than a final art pass
+- full-screen effects are forced on for now and are no longer user-configurable
 
 ## Next Step
 
-If work resumes, prefer cleanup and presentation polish over new mechanics:
+If work continues on v3, the next priority is play validation:
 
-- run a live validation pass across:
-  - tune `Incinerator`, `Beam Lance`, and `Arc Caster` feel after the first validated pass
-  - tune `range`, `area`, `pierce`, and hook-passive behavior as needed
-- run a focused Patch 13 validation pass:
-  - confirm early rooms stay light and readable
-  - confirm Bruisers appear mid/late and in boss support only
-  - confirm pillar/ring/pocket/lane rooms change movement without trap bugs under the new feeler steering pass
-  - confirm the five active layouts and six curated recipes create memorable room identities across multiple runs
-- run one Easy and one Normal full-run pass specifically against the Patch 10 number scale, feedback intensity, loot/shop flow, and readability
-- simplify the play-setup screen further now that `Play` and `Debug` are separate paths
-- tighten HUD wording and spacing after a few more live readability checks
-- validate the new loot, replacement, and shop UI flow with gamepad-first navigation
-- standardize runtime sprite folder and naming conventions before more art lands
-- keep validating pause/settings/meta routes across different player counts
-- verify debug single-room launches still cover combat, elite, rest, shop, and boss without UI regressions
-- force-test generator rooms against all non-directional layouts/modifiers after the new generator-safe obstacle placement pass
+- run builder checks for:
+  - `Survive`
+  - `Hold Zone`
+  - `Mixed` / `Chasers Only` / `Chargers Only`
+  - stacked mutation presets
+- tune rifle pulse cadence, shockwave feel, and room pressure until the loop feels clearly better than v2
+- validate the mutation reward cadence across several full runs
+- only revisit shops, extra objectives, boss redesign, or higher player counts after the core v3 slice is fun

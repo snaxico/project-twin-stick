@@ -52,6 +52,9 @@ func get_velocity(move_input: Vector2, fallback_direction: Vector2, move_speed: 
 		return _dash_direction * dash_speed
 	return move_input * move_speed
 
+func get_direction() -> Vector2:
+	return _dash_direction if _dash_direction.length() > 0.0 else Vector2.RIGHT
+
 func is_active(now: float) -> bool:
 	return now < _active_until
 

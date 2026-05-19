@@ -1,7 +1,8 @@
-[gd_scene load_steps=11 format=3 uid="uid://c6ov0pl7m3y8a"]
+[gd_scene load_steps=12 format=3 uid="uid://c6ov0pl7m3y8a"]
 
 [ext_resource type="Script" path="res://scripts/game/CoopManager.gd" id="1_4o0x5"]
 [ext_resource type="PackedScene" path="res://scenes/player/Player.tscn" id="1_3sby6"]
+[ext_resource type="Script" path="res://scripts/game/ZoomCamera.gd" id="2_x21aa"]
 [ext_resource type="Script" path="res://scripts/juice/ScreenShake.gd" id="3_msc66"]
 [ext_resource type="Script" path="res://scripts/juice/ScreenEffects.gd" id="4_0rmhf"]
 
@@ -67,6 +68,7 @@ shape = SubResource("RectangleShape2D_right")
 position = Vector2(960, 540)
 enabled = true
 zoom = Vector2(1, 1)
+script = ExtResource("2_x21aa")
 
 [node name="ScreenShake" type="Node" parent="Camera2D"]
 script = ExtResource("3_msc66")
@@ -339,6 +341,9 @@ text = "Settings"
 
 [node name="PauseRetryButton" type="Button" parent="UI/PausePanel/MarginContainer/PauseLayout"]
 text = "Restart Room"
+
+[node name="PauseMainMenuButton" type="Button" parent="UI/PausePanel/MarginContainer/PauseLayout"]
+text = "Main Menu"
 
 [node name="SettingsPanel" type="Panel" parent="UI"]
 visible = false

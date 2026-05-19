@@ -1,17 +1,10 @@
 extends CharacterBody2D
 
 const PlayerConfigData = preload("res://scripts/player/PlayerConfig.gd")
-const AimAssistData = preload("res://scripts/player/AimAssist.gd")
+const AutoTargetData = preload("res://scripts/player/AutoTarget.gd")
 const DashData = preload("res://scripts/player/Dash.gd")
-const PLAYER_P1_STANDING_TEXTURE_PATH := "res://assets/sprites/player/player_p1_standing.png"
-const PLAYER_P1_RUNNING_TEXTURE_PATH := "res://assets/sprites/player/player_p1_running.png"
-const PLAYER_P1_RUNNING_ALT_TEXTURE_PATH := "res://assets/sprites/player/player_p1_running_alt.png"
-const PLAYER_RIFLE_TEXTURE_PATH := "res://assets/sprites/weapons/player_rifle.png"
-const PLAYER_SCATTERGUN_TEXTURE_PATH := "res://assets/sprites/weapons/player_scattergun.png"
-const PLAYER_SLUG_TEXTURE_PATH := "res://assets/sprites/weapons/player_slug.png"
+
 const DASH_SHIELD_DURATION := 0.5
-const PRIMARY_FIRE_BUFFER_DURATION := 0.08
-const SLOW_PRIMARY_BUFFER_THRESHOLD := 0.34
 const FLASH_SHADER_CODE := """
 shader_type canvas_item;
 
@@ -25,7 +18,7 @@ void fragment() {
 """
 
 signal fire_requested(origin, direction, config)
-signal secondary_requested(origin, direction, speed, damage, team, projectile_data, color)
+signal shockwave_requested(origin, direction, stats)
 signal health_changed(current_health, max_health)
 signal downed(player)
 signal revived(player)
@@ -35,143 +28,91 @@ signal dash_started(origin, color, shield_duration)
 signal damage_taken(player, amount, current_health)
 
 @export_range(1, 4, 1) var player_id: int = 1
-@export var move_speed: float = 260.0
+@export var move_speed: float = 390.0
 @export var max_health: int = 50
-@export var primary_fire_interval: float = 0.24
-@export var projectile_speed: float = 540.0
-@export var projectile_damage: int = 10
-@export var secondary_cooldown: float = 4.0
-@export var secondary_projectile_speed: float = 125.0
-@export var secondary_damage: int = 30
+@export var primary_fire_interval: float = 0.33
+@export var projectile_speed: float = 850.0
+@export var projectile_damage: int = 14
 
 @onready var shadow: Polygon2D = $Shadow
 @onready var dash_shield_ring: Line2D = $DashShieldRing
+@onready var collision_shape: CollisionShape2D = $CollisionShape2D
 @onready var body_root: Node2D = $BodyRoot
 @onready var outline: Polygon2D = $BodyRoot/Outline
 @onready var visual: Polygon2D = $BodyRoot/Visual
-@onready var sprite_visual: Sprite2D = $BodyRoot/SpriteVisual
-@onready var aim_pivot: Node2D = $BodyRoot/AimPivot
-@onready var weapon_sprite: Sprite2D = $BodyRoot/AimPivot/WeaponSprite
-@onready var aim_line_backdrop: Line2D = $BodyRoot/AimPivot/AimLineBackdrop
-@onready var aim_line: Line2D = $BodyRoot/AimPivot/AimLine
-@onready var secondary_preview: Node2D = $SecondaryPreview
-@onready var secondary_trajectory: Line2D = $SecondaryPreview/SecondaryTrajectory
-@onready var secondary_target_ring: Line2D = $SecondaryPreview/SecondaryTargetRing
-@onready var secondary_target_cross: Line2D = $SecondaryPreview/SecondaryTargetCross
 
 var player_index: int = 0
 var player_config = PlayerConfigData.new()
 var gamepad_device_id: int = -1
-var aim_direction: Vector2 = Vector2.RIGHT
 var current_health: int = 0
 
-var _aim_assist = null
-var _dash = null
+var _auto_targeter = AutoTargetData.new()
+var _dash = DashData.new()
 var _dash_pressed_last_frame := false
-var _fire_pressed_last_frame := false
-var _next_primary_fire_at := 0.0
-var _secondary_pressed_last_frame := false
-var _switch_primary_pressed_last_frame := false
-var _switch_secondary_pressed_last_frame := false
-var _secondary_hold_active := false
+var _shockwave_pressed_last_frame := false
 var _is_downed := false
+var _input_locked := false
+var _move_facing := Vector2.RIGHT
+var _auto_attack_direction := Vector2.RIGHT
+var _auto_target: Node2D = null
+var _next_primary_fire_at := 0.0
+var _dash_cooldown := 5.0
+var _shockwave_cooldown_until := 0.0
+var _shockwave_cooldown := 5.0
+var _shockwave_radius := 250.0
+var _shockwave_damage := 30
+var _shockwave_knockback := 950.0
+var _shockwave_expand_duration := 0.15
+var _primary_weapon_id := "rifle"
 var _primary_profile_name := "Rifle"
-var _primary_amount := 1
-var _primary_projectile_count := 1
-var _primary_spread_radians := 0.0
-var _primary_pierce_count := 0
-var _secondary_profile_name := "Mine"
-var _secondary_projectile_count := 1
-var _secondary_spread_radians := 0.0
-var _secondary_projectile_data: Dictionary = {
-	"kind": "mine",
-	"explosion_radius": 92.0,
-	"fuse_time": 12.0,
-	"gravity_force": 0.0,
-	"pulse_count": 1,
-	"pulse_interval": 0.18,
-	"cluster_blast_count": 0,
-	"cluster_spread_radius": 52.0,
-	"proximity_radius": 52.0,
-}
-var _primary_slots: Array = []
-var _secondary_slots: Array = []
-var _selected_primary_index: int = 0
-var _selected_secondary_index: int = 0
-var _secondary_cooldowns: Array = [0.0, 0.0]
-var _primary_fire_buffered_until: float = 0.0
-var _primary_fire_buffered_direction: Vector2 = Vector2.RIGHT
-var _input_locked: bool = false
-var _base_collision_layer := 0
-var _base_collision_mask := 0
-var _flash_material: ShaderMaterial = null
-var _flash_tween: Tween = null
+var _secondary_weapon_id := "shockwave"
+var _secondary_profile_name := "Shockwave"
+var _primary_range := 950.0
+var _primary_area := 4.0
+var _primary_feedback_profile := "rifle"
+var _primary_impact_weight := 1.0
+var _secondary_feedback_profile := "shockwave"
+var _secondary_impact_weight := 1.9
+var _mutation_ids: Array = []
+var _dash_damage_enabled := false
+var _dash_damage_multiplier := 0.0
+var _dash_hit_targets: Array = []
+var _shield_until := 0.0
 var _next_dash_trail_at := 0.0
 var _base_visual_scale := Vector2.ONE
-var _base_sprite_scale := Vector2.ONE
 var _base_shadow_scale := Vector2.ONE
-var _display_move_input := Vector2.ZERO
-var _previous_move_input := Vector2.ZERO
-var _sprite_facing_left := false
-var _sprite_is_running := false
-var _standing_sprite_texture: Texture2D = null
-var _running_sprite_texture: Texture2D = null
-var _running_sprite_alt_texture: Texture2D = null
-var _weapon_texture: Texture2D = null
-var _weapon_textures_by_id: Dictionary = {}
-var _primary_weapon_id: String = "rifle"
-var _primary_behavior: String = "projectile"
-var _primary_weapon_tags: Array = []
-var _primary_trigger_passives: Array = []
-var _global_trigger_passives: Array = []
-var _primary_range: float = 0.0
-var _primary_area: float = 4.0
-var _primary_feedback_profile: String = "rifle"
-var _secondary_feedback_profile: String = "mine"
-var _primary_impact_weight: float = 1.0
-var _secondary_impact_weight: float = 1.6
-var _base_weapon_scale := Vector2.ONE
+var _chevron_polygon := PackedVector2Array([
+	Vector2(16, 0),
+	Vector2(-12, -14),
+	Vector2(-6, 0),
+	Vector2(-12, 14),
+])
 var _turn_squash := 0.0
-var _aim_line_recoil := 0.0
-var _outline_pulse := 1.0
-var _shield_until: float = 0.0
+var _flash_material: ShaderMaterial = null
+var _flash_tween: Tween = null
 
-func _get_projectile_tint() -> Color:
-	return player_config.tint
+func _ready() -> void:
+	add_to_group("player_target")
+	current_health = max_health
+	if visual != null:
+		_base_visual_scale = visual.scale
+	if shadow != null:
+		_base_shadow_scale = shadow.scale
+	health_changed.emit(current_health, max_health)
+	_apply_visual_state(_current_time_seconds())
 
 func setup(config, assigned_gamepad_device_id: int) -> void:
 	player_config = config
 	player_id = config.player_id
 	gamepad_device_id = assigned_gamepad_device_id
-	if is_node_ready():
-		_apply_visual_state(_current_time_seconds())
-
-func cycle_aim_mode() -> void:
-	player_config.cycle_aim_mode()
-	_apply_visual_state(_current_time_seconds())
-
-func set_aim_mode(aim_mode: int) -> void:
-	player_config.aim_mode = clampi(
-		aim_mode,
-		PlayerConfigData.AimMode.HEAVY_AUTO,
-		PlayerConfigData.AimMode.MANUAL
-	)
-	_apply_visual_state(_current_time_seconds())
-
-func get_aim_mode_name() -> String:
-	return player_config.get_aim_mode_name()
 
 func is_dash_active() -> bool:
-	if _dash == null:
-		return false
 	return _dash.is_active(_current_time_seconds())
 
 func is_dash_shield_active() -> bool:
 	return _current_time_seconds() < _shield_until
 
 func get_dash_cooldown_remaining() -> float:
-	if _dash == null:
-		return 0.0
 	return _dash.get_cooldown_remaining(_current_time_seconds())
 
 func get_team() -> String:
@@ -184,20 +125,13 @@ func is_downed() -> bool:
 	return _is_downed
 
 func get_health_ratio_text() -> String:
-	if _is_downed:
-		return "DOWN"
-	return "%d/%d" % [current_health, max_health]
+	return "DOWN" if _is_downed else "%d/%d" % [current_health, max_health]
 
 func get_secondary_cooldown_remaining() -> float:
-	if _selected_secondary_index < 0 or _selected_secondary_index >= _secondary_cooldowns.size():
-		return 0.0
-	return max(float(_secondary_cooldowns[_selected_secondary_index]) - _current_time_seconds(), 0.0)
+	return max(_shockwave_cooldown_until - _current_time_seconds(), 0.0)
 
 func get_health_state() -> Dictionary:
-	return {
-		"current": current_health,
-		"max": max_health,
-	}
+	return {"current": current_health, "max": max_health}
 
 func get_primary_profile_name() -> String:
 	return _primary_profile_name
@@ -205,913 +139,275 @@ func get_primary_profile_name() -> String:
 func get_secondary_profile_name() -> String:
 	return _secondary_profile_name
 
-func get_primary_slot_hud_data() -> Array:
-	var slot_rows: Array = []
-	for slot_index in range(_primary_slots.size()):
-		slot_rows.append(_build_slot_hud_data(_primary_slots, slot_index, false))
-	return slot_rows
+func get_primary_hud_data() -> Dictionary:
+	return {
+		"weapon_id": _primary_weapon_id,
+		"name": _primary_profile_name,
+	}
 
-func get_secondary_slot_hud_data() -> Array:
-	var slot_rows: Array = []
-	for slot_index in range(_secondary_slots.size()):
-		slot_rows.append(_build_slot_hud_data(_secondary_slots, slot_index, true))
-	return slot_rows
+func get_secondary_hud_data() -> Dictionary:
+	return {
+		"weapon_id": _secondary_weapon_id,
+		"name": _secondary_profile_name,
+		"cooldown_remaining": get_secondary_cooldown_remaining(),
+		"cooldown_duration": _shockwave_cooldown,
+	}
 
-func get_health_status_text() -> String:
-	return "DOWN" if _is_downed else "%d/%d" % [current_health, max_health]
+func get_dash_hud_data() -> Dictionary:
+	return {
+		"weapon_id": "dash",
+		"name": "Dash",
+		"cooldown_remaining": get_dash_cooldown_remaining(),
+		"cooldown_duration": _dash_cooldown,
+	}
+
+func get_mutation_ids() -> Array:
+	return _mutation_ids.duplicate()
 
 func set_input_locked(locked: bool) -> void:
 	_input_locked = locked
 	if locked:
-		if _dash != null:
-			_dash.clear_buffer()
-		_fire_pressed_last_frame = false
-		_primary_fire_buffered_until = 0.0
-		_secondary_hold_active = false
-		_dash_pressed_last_frame = false
-		_secondary_pressed_last_frame = false
-		_switch_primary_pressed_last_frame = false
-		_switch_secondary_pressed_last_frame = false
+		_dash.clear_buffer()
 		velocity = Vector2.ZERO
+	_auto_target = null
+	_dash_pressed_last_frame = false
+	_shockwave_pressed_last_frame = false
 
 func apply_loadout(loadout: Dictionary) -> void:
 	move_speed = float(loadout.get("move_speed", move_speed))
-	_global_trigger_passives = (loadout.get("global_trigger_passives", []) as Array).duplicate(true)
-	_primary_slots = _normalize_slot_loadout_array(loadout.get("primary_slots", []))
-	_secondary_slots = _normalize_slot_loadout_array(loadout.get("secondary_slots", []))
-	if _primary_slots.is_empty():
-		_primary_slots = [null, null]
-	if _secondary_slots.is_empty():
-		_secondary_slots = [null, null]
-	_selected_primary_index = clampi(int(loadout.get("selected_primary", 0)), 0, max(_primary_slots.size() - 1, 0))
-	_selected_secondary_index = clampi(int(loadout.get("selected_secondary", 0)), 0, max(_secondary_slots.size() - 1, 0))
-	_selected_primary_index = _resolve_selected_slot_index(_primary_slots, _selected_primary_index)
-	_selected_secondary_index = _resolve_selected_slot_index(_secondary_slots, _selected_secondary_index)
-	_secondary_cooldowns = []
-	for _index in range(max(_secondary_slots.size(), 2)):
-		_secondary_cooldowns.append(0.0)
-	_sync_inventory_selection()
-	_apply_selected_slot_state()
+	_primary_weapon_id = str(loadout.get("primary_weapon_id", "rifle"))
+	_primary_profile_name = str(loadout.get("primary_name", "Rifle"))
+	_secondary_weapon_id = str(loadout.get("secondary_weapon_id", "shockwave"))
+	_secondary_profile_name = str(loadout.get("secondary_name", "Shockwave"))
+	_mutation_ids = (loadout.get("mutations", []) as Array).duplicate()
+	var primary_stats: Dictionary = (loadout.get("primary_stats", {}) as Dictionary).duplicate(true)
+	var secondary_stats: Dictionary = (loadout.get("secondary_stats", {}) as Dictionary).duplicate(true)
+	projectile_damage = int(round(float(primary_stats.get("damage", projectile_damage))))
+	primary_fire_interval = 1.0 / max(float(primary_stats.get("fire_rate", 3.0)), 0.01)
+	projectile_speed = float(primary_stats.get("projectile_speed", projectile_speed))
+	_primary_range = float(primary_stats.get("range", _primary_range))
+	_primary_area = float(primary_stats.get("area", _primary_area))
+	_dash_cooldown = max(0.25, float(secondary_stats.get("dash_cooldown", secondary_stats.get("cooldown", _dash_cooldown))))
+	_shockwave_cooldown = max(0.25, float(secondary_stats.get("cooldown", _shockwave_cooldown)))
+	_shockwave_radius = float(secondary_stats.get("radius", _shockwave_radius))
+	_shockwave_damage = int(round(float(secondary_stats.get("damage", _shockwave_damage))))
+	_shockwave_knockback = float(secondary_stats.get("knockback_force", _shockwave_knockback))
+	_shockwave_expand_duration = max(0.05, float(secondary_stats.get("expand_duration", _shockwave_expand_duration)))
+	_dash.cooldown_duration = _dash_cooldown
+	_shockwave_cooldown_until = 0.0
+	_dash_damage_multiplier = float(loadout.get("dash_damage_multiplier", 0.0))
+	_dash_damage_enabled = _dash_damage_multiplier > 0.0
 
 func set_health_state(state: Dictionary) -> void:
-	var target_max := int(state.get("max", max_health))
-	var target_current := int(state.get("current", target_max))
-	max_health = target_max
-	current_health = clampi(target_current, 1, max_health)
+	max_health = int(state.get("max", max_health))
+	current_health = clampi(int(state.get("current", current_health)), 0, max_health)
+	if current_health <= 0:
+		_enter_downed_state()
+	else:
+		health_changed.emit(current_health, max_health)
+
+func revive(health_amount: int) -> void:
 	_is_downed = false
-	_shield_until = 0.0
-	if _dash != null:
-		_dash.clear_buffer()
-	_primary_fire_buffered_until = 0.0
-	visible = true
-	collision_layer = _base_collision_layer
-	collision_mask = _base_collision_mask
+	current_health = clampi(health_amount, 1, max_health)
+	collision_layer = 1
+	collision_mask = 1
 	set_physics_process(true)
+	revived.emit(self)
 	health_changed.emit(current_health, max_health)
-	_apply_visual_state(_current_time_seconds())
 
 func apply_damage(amount: int) -> void:
 	if _is_downed:
 		return
 	if is_dash_shield_active():
 		return
-
 	current_health = max(current_health - amount, 0)
-	_play_damage_flash()
+	health_changed.emit(current_health, max_health)
 	damage_taken.emit(self, amount, current_health)
-	health_changed.emit(current_health, max_health)
-	if current_health == 0:
+	_play_damage_flash()
+	if current_health <= 0:
 		_enter_downed_state()
-
-func heal(amount: int) -> int:
-	if _is_downed:
-		return 0
-	var applied_heal: int = max(amount, 0)
-	if applied_heal <= 0:
-		return 0
-	var previous_health: int = current_health
-	current_health = min(current_health + applied_heal, max_health)
-	var healed_amount: int = current_health - previous_health
-	if healed_amount > 0:
-		health_changed.emit(current_health, max_health)
-		_apply_visual_state(_current_time_seconds())
-	return healed_amount
-
-func revive(health_amount: int) -> void:
-	if not _is_downed:
-		return
-
-	current_health = clampi(health_amount, 1, max_health)
-	_is_downed = false
-	_shield_until = 0.0
-	if _dash != null:
-		_dash.clear_buffer()
-	_primary_fire_buffered_until = 0.0
-	visible = true
-	collision_layer = _base_collision_layer
-	collision_mask = _base_collision_mask
-	set_physics_process(true)
-	health_changed.emit(current_health, max_health)
-	revived.emit(self)
-	_apply_visual_state(_current_time_seconds())
-
-func _ready() -> void:
-	_aim_assist = AimAssistData.new()
-	_dash = DashData.new()
-	add_to_group("player_target")
-	_base_collision_layer = collision_layer
-	_base_collision_mask = collision_mask
-	_standing_sprite_texture = _load_sprite_texture(PLAYER_P1_STANDING_TEXTURE_PATH)
-	_running_sprite_texture = _load_sprite_texture(PLAYER_P1_RUNNING_TEXTURE_PATH)
-	_running_sprite_alt_texture = _load_sprite_texture(PLAYER_P1_RUNNING_ALT_TEXTURE_PATH)
-	_weapon_textures_by_id = {
-		"rifle": _load_sprite_texture(PLAYER_RIFLE_TEXTURE_PATH),
-		"scatter": _load_sprite_texture(PLAYER_SCATTERGUN_TEXTURE_PATH),
-		"spread": _load_sprite_texture(PLAYER_SCATTERGUN_TEXTURE_PATH),
-		"slug": _load_sprite_texture(PLAYER_SLUG_TEXTURE_PATH),
-	}
-	if visual != null:
-		_base_visual_scale = visual.scale
-	if sprite_visual != null:
-		_base_sprite_scale = sprite_visual.scale
-	if weapon_sprite != null:
-		_base_weapon_scale = weapon_sprite.scale
-	if shadow != null:
-		_base_shadow_scale = shadow.scale
-	current_health = max_health
-	_apply_selected_slot_state()
-	health_changed.emit(current_health, max_health)
-	_apply_visual_state(_current_time_seconds())
 
 func _physics_process(delta: float) -> void:
 	var now := _current_time_seconds()
-	if _input_locked:
+	if _input_locked or _is_downed:
 		velocity = Vector2.ZERO
 		move_and_slide()
-		_update_animation_state(Vector2.ZERO, delta)
 		_apply_visual_state(now, delta)
 		return
 
 	var move_input := _get_move_input()
-	var raw_aim_input := _get_aim_input()
-	aim_direction = _aim_assist.resolve_aim_direction(
-		self,
-		raw_aim_input,
-		move_input,
-		aim_direction,
-		player_config.aim_mode,
-		_primary_range
-	)
+	if move_input.length() > 0.0:
+		_move_facing = move_input.normalized()
+
+	_auto_target = _find_auto_target()
+	if _auto_target != null:
+		_auto_attack_direction = (_auto_target.global_position - global_position).normalized()
+		if now >= _next_primary_fire_at:
+			_fire_primary(now, _auto_attack_direction)
 
 	var dash_pressed := _is_dash_pressed()
 	if dash_pressed and not _dash_pressed_last_frame:
-		var dash_direction := move_input if move_input.length() > 0.0 else aim_direction
-		if _dash.try_trigger(dash_direction, now):
-			_activate_dash_shield(now)
+		if _dash.try_trigger(_move_facing, now):
+			_activate_dash_shield(now, _dash.get_direction())
 	_dash_pressed_last_frame = dash_pressed
 	if _dash.consume_buffer_if_ready(now):
-		_activate_dash_shield(now)
+		_activate_dash_shield(now, _dash.get_direction())
 
-	var switch_primary_pressed := _is_switch_primary_pressed()
-	if switch_primary_pressed and not _switch_primary_pressed_last_frame:
-		_cycle_primary_slot()
-	_switch_primary_pressed_last_frame = switch_primary_pressed
-
-	var switch_secondary_pressed := _is_switch_secondary_pressed()
-	if switch_secondary_pressed and not _switch_secondary_pressed_last_frame:
-		_cycle_secondary_slot()
-	_switch_secondary_pressed_last_frame = switch_secondary_pressed
-
-	var fire_pressed := _is_fire_pressed()
-	var fire_just_pressed: bool = fire_pressed and not _fire_pressed_last_frame
-	if fire_just_pressed and _should_buffer_primary_fire(now):
-		_primary_fire_buffered_until = now + PRIMARY_FIRE_BUFFER_DURATION
-		_primary_fire_buffered_direction = aim_direction
-	if fire_pressed and now >= _next_primary_fire_at and aim_direction.length() > 0.0:
-		_fire_primary(now, aim_direction)
-	elif _primary_fire_buffered_until > 0.0 and now >= _next_primary_fire_at and now <= _primary_fire_buffered_until:
-		var buffered_direction: Vector2 = _primary_fire_buffered_direction if _primary_fire_buffered_direction.length() > 0.0 else aim_direction
-		if buffered_direction.length() > 0.0:
-			_fire_primary(now, buffered_direction.normalized())
-	elif _primary_fire_buffered_until > 0.0 and now > _primary_fire_buffered_until:
-		_primary_fire_buffered_until = 0.0
-	_fire_pressed_last_frame = fire_pressed
-
-	var secondary_pressed := _is_secondary_pressed()
-	if _uses_hold_to_aim_secondary():
-		if secondary_pressed and not _secondary_pressed_last_frame and _can_activate_secondary():
-			_secondary_hold_active = true
-		elif not secondary_pressed and _secondary_pressed_last_frame and _secondary_hold_active:
-			_fire_secondary()
-			_secondary_hold_active = false
-	elif secondary_pressed and not _secondary_pressed_last_frame and _can_activate_secondary():
-		_fire_secondary()
-	_secondary_pressed_last_frame = secondary_pressed
+	var shockwave_pressed := _is_shockwave_pressed()
+	if shockwave_pressed and not _shockwave_pressed_last_frame and _can_activate_shockwave(now):
+		_fire_shockwave(now)
+	_shockwave_pressed_last_frame = shockwave_pressed
 
 	if is_dash_active() and now >= _next_dash_trail_at:
 		_next_dash_trail_at = now + 0.045
 		dash_trail_requested.emit(global_position + Vector2(0.0, -10.0), player_config.tint)
 
-	velocity = _dash.get_velocity(move_input, aim_direction, move_speed, now)
+	velocity = _dash.get_velocity(move_input, _move_facing, move_speed, now)
 	move_and_slide()
-	_update_animation_state(move_input, delta)
 	_apply_visual_state(now, delta)
 
-func _get_move_input() -> Vector2:
-	var keyboard_vector := _get_keyboard_move_vector()
-	var gamepad_vector := _get_gamepad_move_vector()
-	match player_config.control_source:
-		"keyboard":
-			return keyboard_vector
-		"gamepad":
-			return gamepad_vector
-		"hybrid":
-			return _choose_stronger_vector(keyboard_vector, gamepad_vector)
-		_:
-			return keyboard_vector
+func _find_auto_target() -> Node2D:
+	return _auto_targeter.find_nearest(self, _primary_range)
 
-func _get_aim_input() -> Vector2:
-	var keyboard_vector := _get_keyboard_aim_vector()
-	var gamepad_vector := _get_gamepad_aim_vector()
-	match player_config.control_source:
-		"keyboard":
-			return keyboard_vector
-		"gamepad":
-			return gamepad_vector
-		"hybrid":
-			return _choose_stronger_vector(keyboard_vector, gamepad_vector)
-		_:
-			return keyboard_vector
-
-func _get_keyboard_move_vector() -> Vector2:
-	var prefix := "p%d_" % player_id
-	return Input.get_vector(
-		"%smove_left" % prefix,
-		"%smove_right" % prefix,
-		"%smove_up" % prefix,
-		"%smove_down" % prefix
-	)
-
-func _get_keyboard_aim_vector() -> Vector2:
-	var mouse_direction := get_global_mouse_position() - global_position
-	if mouse_direction.length() >= 8.0:
-		return mouse_direction.normalized()
-	match player_id:
-		1:
-			return _build_key_vector(KEY_LEFT, KEY_RIGHT, KEY_UP, KEY_DOWN)
-		2:
-			return _build_key_vector(KEY_KP_4, KEY_KP_6, KEY_KP_8, KEY_KP_5)
-		_:
-			return Vector2.ZERO
-
-func _get_gamepad_move_vector() -> Vector2:
-	return _get_gamepad_stick_vector(JOY_AXIS_LEFT_X, JOY_AXIS_LEFT_Y)
-
-func _get_gamepad_aim_vector() -> Vector2:
-	return _get_gamepad_stick_vector(JOY_AXIS_RIGHT_X, JOY_AXIS_RIGHT_Y)
-
-func _get_gamepad_stick_vector(axis_x: JoyAxis, axis_y: JoyAxis) -> Vector2:
-	if gamepad_device_id < 0:
-		return Vector2.ZERO
-	if not Input.get_connected_joypads().has(gamepad_device_id):
-		return Vector2.ZERO
-
-	var vector := Vector2(
-		Input.get_joy_axis(gamepad_device_id, axis_x),
-		Input.get_joy_axis(gamepad_device_id, axis_y)
-	)
-	return vector if vector.length() >= 0.2 else Vector2.ZERO
-
-func _build_key_vector(left_key: Key, right_key: Key, up_key: Key, down_key: Key) -> Vector2:
-	var horizontal := int(Input.is_physical_key_pressed(right_key)) - int(Input.is_physical_key_pressed(left_key))
-	var vertical := int(Input.is_physical_key_pressed(down_key)) - int(Input.is_physical_key_pressed(up_key))
-	var vector := Vector2(horizontal, vertical)
-	return vector.normalized() if vector.length() > 1.0 else vector
-
-func _is_dash_pressed() -> bool:
-	match player_config.control_source:
-		"keyboard":
-			return _is_keyboard_dash_pressed()
-		"gamepad":
-			return _is_gamepad_dash_pressed()
-		"hybrid":
-			return _is_keyboard_dash_pressed() or _is_gamepad_dash_pressed()
-		_:
-			return _is_keyboard_dash_pressed()
-
-func _is_fire_pressed() -> bool:
-	match player_config.control_source:
-		"keyboard":
-			return _is_keyboard_fire_pressed()
-		"gamepad":
-			return _is_gamepad_fire_pressed()
-		"hybrid":
-			return _is_keyboard_fire_pressed() or _is_gamepad_fire_pressed()
-		_:
-			return _is_keyboard_fire_pressed()
-
-func _is_secondary_pressed() -> bool:
-	match player_config.control_source:
-		"keyboard":
-			return _is_keyboard_secondary_pressed()
-		"gamepad":
-			return _is_gamepad_secondary_pressed()
-		"hybrid":
-			return _is_keyboard_secondary_pressed() or _is_gamepad_secondary_pressed()
-		_:
-			return _is_keyboard_secondary_pressed()
-
-func _is_switch_primary_pressed() -> bool:
-	match player_config.control_source:
-		"keyboard":
-			return _is_keyboard_switch_primary_pressed()
-		"gamepad":
-			return _is_gamepad_switch_primary_pressed()
-		"hybrid":
-			return _is_keyboard_switch_primary_pressed() or _is_gamepad_switch_primary_pressed()
-		_:
-			return _is_keyboard_switch_primary_pressed()
-
-func _is_switch_secondary_pressed() -> bool:
-	match player_config.control_source:
-		"keyboard":
-			return _is_keyboard_switch_secondary_pressed()
-		"gamepad":
-			return _is_gamepad_switch_secondary_pressed()
-		"hybrid":
-			return _is_keyboard_switch_secondary_pressed() or _is_gamepad_switch_secondary_pressed()
-		_:
-			return _is_keyboard_switch_secondary_pressed()
-
-func _is_keyboard_fire_pressed() -> bool:
-	return Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT)
-
-func _is_gamepad_fire_pressed() -> bool:
-	if gamepad_device_id < 0:
-		return false
-	if not Input.get_connected_joypads().has(gamepad_device_id):
-		return false
-	return Input.get_joy_axis(gamepad_device_id, JOY_AXIS_TRIGGER_RIGHT) >= 0.5
-
-func _is_keyboard_secondary_pressed() -> bool:
-	return Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT)
-
-func _is_gamepad_secondary_pressed() -> bool:
-	if gamepad_device_id < 0:
-		return false
-	if not Input.get_connected_joypads().has(gamepad_device_id):
-		return false
-	return Input.get_joy_axis(gamepad_device_id, JOY_AXIS_TRIGGER_LEFT) >= 0.5
-
-func _is_keyboard_dash_pressed() -> bool:
-	match player_id:
-		1:
-			return Input.is_physical_key_pressed(KEY_SPACE)
-		2:
-			return Input.is_physical_key_pressed(KEY_ENTER) or Input.is_physical_key_pressed(KEY_KP_ENTER)
-		_:
-			return false
-
-func _is_keyboard_switch_primary_pressed() -> bool:
-	match player_id:
-		1:
-			return Input.is_physical_key_pressed(KEY_Q)
-		2:
-			return Input.is_physical_key_pressed(KEY_T)
-		_:
-			return false
-
-func _is_keyboard_switch_secondary_pressed() -> bool:
-	match player_id:
-		1:
-			return Input.is_physical_key_pressed(KEY_E)
-		2:
-			return Input.is_physical_key_pressed(KEY_Y)
-		_:
-			return false
-
-func _is_gamepad_dash_pressed() -> bool:
-	if gamepad_device_id < 0:
-		return false
-	if not Input.get_connected_joypads().has(gamepad_device_id):
-		return false
-	return Input.is_joy_button_pressed(gamepad_device_id, JOY_BUTTON_B)
-
-func _is_gamepad_switch_primary_pressed() -> bool:
-	if gamepad_device_id < 0:
-		return false
-	if not Input.get_connected_joypads().has(gamepad_device_id):
-		return false
-	return Input.is_joy_button_pressed(gamepad_device_id, JOY_BUTTON_RIGHT_SHOULDER)
-
-func _is_gamepad_switch_secondary_pressed() -> bool:
-	if gamepad_device_id < 0:
-		return false
-	if not Input.get_connected_joypads().has(gamepad_device_id):
-		return false
-	return Input.is_joy_button_pressed(gamepad_device_id, JOY_BUTTON_LEFT_SHOULDER)
-
-func _choose_stronger_vector(primary: Vector2, secondary: Vector2) -> Vector2:
-	return secondary if secondary.length() > primary.length() else primary
-
-func _normalize_slot_loadout_array(slot_entries: Variant) -> Array:
-	var normalized: Array = []
-	if not (slot_entries is Array):
-		return normalized
-	for slot_entry in slot_entries:
-		if slot_entry is Dictionary:
-			normalized.append((slot_entry as Dictionary).duplicate(true))
-		else:
-			normalized.append(null)
-	return normalized
-
-func _get_selected_primary_slot() -> Dictionary:
-	return _get_slot_loadout(_primary_slots, _selected_primary_index)
-
-func _get_selected_secondary_slot() -> Dictionary:
-	return _get_slot_loadout(_secondary_slots, _selected_secondary_index)
-
-func _get_slot_loadout(slot_group: Array, slot_index: int) -> Dictionary:
-	if slot_index < 0 or slot_index >= slot_group.size():
-		return {}
-	var slot_entry: Variant = slot_group[slot_index]
-	if not (slot_entry is Dictionary):
-		return {}
-	return (slot_entry as Dictionary).duplicate(true)
-
-func _build_slot_hud_data(slot_group: Array, slot_index: int, is_secondary: bool) -> Dictionary:
-	var slot_loadout: Dictionary = _get_slot_loadout(slot_group, slot_index)
-	if slot_loadout.is_empty():
-		return {
-			"weapon_id": "",
-			"name": "---",
-			"level": 0,
-			"selected": false,
-			"cooldown_remaining": 0.0,
-			"cooldown_duration": 0.0,
-		}
-	var selected_index: int = _selected_secondary_index if is_secondary else _selected_primary_index
-	var cooldown_duration: float = float(slot_loadout.get("secondary_cooldown", 0.0)) if is_secondary else 0.0
-	var cooldown_remaining: float = _get_secondary_cooldown_remaining_for_slot(slot_index) if is_secondary else 0.0
-	return {
-		"weapon_id": str(slot_loadout.get("weapon_id", "")),
-		"name": str(slot_loadout.get("primary_profile_name", slot_loadout.get("secondary_profile_name", "Weapon"))),
-		"level": int(slot_loadout.get("weapon_level", 1)),
-		"selected": slot_index == selected_index,
-		"cooldown_remaining": cooldown_remaining,
-		"cooldown_duration": cooldown_duration,
-	}
-
-func _get_secondary_cooldown_remaining_for_slot(slot_index: int) -> float:
-	if slot_index < 0 or slot_index >= _secondary_cooldowns.size():
-		return 0.0
-	return max(float(_secondary_cooldowns[slot_index]) - _current_time_seconds(), 0.0)
-
-func _resolve_selected_slot_index(slot_group: Array, selected_index: int) -> int:
-	if slot_group.is_empty():
-		return selected_index
-	if selected_index >= 0 and selected_index < slot_group.size() and slot_group[selected_index] is Dictionary:
-		return selected_index
-	for slot_index in range(slot_group.size()):
-		if slot_group[slot_index] is Dictionary:
-			return slot_index
-	return clampi(selected_index, 0, max(slot_group.size() - 1, 0))
-
-func _apply_selected_slot_state() -> void:
-	var primary_slot: Dictionary = _get_selected_primary_slot()
-	_primary_weapon_id = str(primary_slot.get("weapon_id", "rifle"))
-	_primary_behavior = str(primary_slot.get("primary_behavior", "projectile"))
-	_primary_weapon_tags = (primary_slot.get("primary_weapon_tags", []) as Array).duplicate(true)
-	_primary_trigger_passives = (primary_slot.get("primary_trigger_passives", []) as Array).duplicate(true)
-	_primary_profile_name = str(primary_slot.get("primary_profile_name", "Rifle"))
-	_primary_amount = max(1, int(primary_slot.get("primary_amount", 1)))
-	_primary_projectile_count = max(1, int(primary_slot.get("primary_projectile_count", 1)))
-	_primary_spread_radians = float(primary_slot.get("primary_spread_radians", 0.0))
-	_primary_pierce_count = max(0, int(primary_slot.get("primary_pierce_count", 0)))
-	_primary_range = max(0.0, float(primary_slot.get("primary_range", 0.0)))
-	_primary_area = max(0.1, float(primary_slot.get("primary_area", 4.0)))
-	_primary_feedback_profile = str(primary_slot.get("feedback_profile", "rifle"))
-	_primary_impact_weight = float(primary_slot.get("impact_weight", 1.0))
-	primary_fire_interval = float(primary_slot.get("primary_fire_interval", 0.27))
-	projectile_speed = float(primary_slot.get("projectile_speed", 540.0))
-	projectile_damage = max(1, int(primary_slot.get("projectile_damage", 1)))
-	_weapon_texture = _get_weapon_texture_for_primary_id(_primary_weapon_id)
-
-	var secondary_slot: Dictionary = _get_selected_secondary_slot()
-	_secondary_profile_name = str(secondary_slot.get("secondary_profile_name", "Mine"))
-	_secondary_projectile_count = max(1, int(secondary_slot.get("secondary_projectile_count", 1)))
-	_secondary_spread_radians = float(secondary_slot.get("secondary_spread_radians", 0.0))
-	_secondary_feedback_profile = str(secondary_slot.get("feedback_profile", "mine"))
-	_secondary_impact_weight = float(secondary_slot.get("impact_weight", 1.6))
-	secondary_cooldown = float(secondary_slot.get("secondary_cooldown", 4.0))
-	secondary_projectile_speed = float(secondary_slot.get("secondary_projectile_speed", 0.0))
-	secondary_damage = max(1, int(secondary_slot.get("secondary_damage", 3)))
-	_secondary_projectile_data = {
-		"kind": str(secondary_slot.get("secondary_projectile_kind", "mine")),
-		"explosion_radius": float(secondary_slot.get("secondary_explosion_radius", 92.0)),
-		"fuse_time": float(secondary_slot.get("secondary_fuse_time", 12.0)),
-		"gravity_force": float(secondary_slot.get("secondary_gravity_force", 0.0)),
-		"pulse_count": int(secondary_slot.get("secondary_pulse_count", 1)),
-		"pulse_interval": float(secondary_slot.get("secondary_pulse_interval", 0.18)),
-		"cluster_blast_count": int(secondary_slot.get("secondary_cluster_blast_count", 0)),
-		"cluster_spread_radius": float(secondary_slot.get("secondary_cluster_spread_radius", 52.0)),
-		"proximity_radius": float(secondary_slot.get("secondary_proximity_radius", 52.0)),
-		"feedback_profile": _secondary_feedback_profile,
-		"impact_weight": _secondary_impact_weight,
-		"source_type": "secondary",
-		"weapon_id": str(secondary_slot.get("weapon_id", "")),
-		"trigger_passives": _global_trigger_passives.duplicate(true),
-	}
-
-func _cycle_primary_slot() -> void:
-	var next_index := _find_next_filled_slot_index(_primary_slots, _selected_primary_index)
-	if next_index == _selected_primary_index:
-		return
-	_selected_primary_index = next_index
-	_sync_inventory_selection()
-	_apply_selected_slot_state()
-
-func _cycle_secondary_slot() -> void:
-	var next_index := _find_next_filled_slot_index(_secondary_slots, _selected_secondary_index)
-	if next_index == _selected_secondary_index:
-		return
-	_selected_secondary_index = next_index
-	_secondary_hold_active = false
-	_sync_inventory_selection()
-	_apply_selected_slot_state()
-
-func _find_next_filled_slot_index(slot_group: Array, current_index: int) -> int:
-	if slot_group.is_empty():
-		return current_index
-	for offset in range(1, slot_group.size() + 1):
-		var candidate_index: int = (current_index + offset) % slot_group.size()
-		if slot_group[candidate_index] is Dictionary:
-			return candidate_index
-	return current_index
-
-func _sync_inventory_selection() -> void:
-	if player_index < 0 or player_index >= RunState.player_inventories.size():
-		return
-	var inventory = RunState.player_inventories[player_index]
-	if inventory == null:
-		return
-	inventory.selected_primary = _selected_primary_index
-	inventory.selected_secondary = _selected_secondary_index
-
-func _build_spread_directions(base_direction: Vector2, projectile_count: int, spread_radians: float) -> Array:
-	var directions: Array = []
-	var normalized_direction := base_direction.normalized()
-	if projectile_count <= 1 or spread_radians <= 0.0:
-		directions.append(normalized_direction)
-		return directions
-
-	var center_offset := (projectile_count - 1) * 0.5
-	for index in range(projectile_count):
-		var offset := (float(index) - center_offset) * spread_radians
-		directions.append(normalized_direction.rotated(offset))
-	return directions
-
-func _apply_visual_state(now: float, delta: float = 0.0) -> void:
-	if visual == null or aim_pivot == null or aim_line == null or aim_line_backdrop == null or body_root == null:
-		return
-	var dash_active: bool = _dash != null and _dash.is_active(now)
-	var dash_shield_active: bool = now < _shield_until
-	var shield_remaining_ratio: float = clamp((_shield_until - now) / DASH_SHIELD_DURATION, 0.0, 1.0)
-	var downed_pulse: float = 0.5 + 0.5 * sin(now * 6.0)
-	var use_sprite: bool = _uses_sprite_visual()
-	var fill_tint: Color = player_config.tint.darkened(0.45) if _is_downed else player_config.tint
-	fill_tint.a = 0.56 + 0.24 * downed_pulse if _is_downed else 1.0
-	if delta > 0.0:
-		_outline_pulse = move_toward(_outline_pulse, 1.0, delta * 5.0)
-	var dash_scale: float = 1.15 if dash_active else 1.0
-	var move_stretch: float = clamp(velocity.length() / max(move_speed, 1.0), 0.0, 1.0) * 0.06
-	var squash_x: float = 1.0 + _turn_squash * 0.18 - move_stretch * 0.03
-	var squash_y: float = 1.0 - _turn_squash * 0.12 + move_stretch
-	var scaled_visual: Vector2 = Vector2(_base_visual_scale.x * dash_scale * squash_x, _base_visual_scale.y * dash_scale * squash_y)
-	visual.visible = not use_sprite
-	if visual.visible:
-		visual.color = fill_tint
-		visual.scale = scaled_visual
-	if outline != null:
-		outline.visible = not use_sprite
-		if outline.visible:
-			outline.polygon = visual.polygon
-			outline.scale = scaled_visual * 1.28 * _outline_pulse
-			var outline_color := Color(0.04, 0.06, 0.08, 0.92)
-			outline_color.a = 0.52 + 0.28 * downed_pulse if _is_downed else 0.92
-			outline.color = outline_color
-	if sprite_visual != null:
-		sprite_visual.visible = use_sprite
-		if sprite_visual.visible:
-			sprite_visual.texture = _get_active_sprite_texture(now)
-			var sprite_scale_x := _base_sprite_scale.x * dash_scale * squash_x
-			if _sprite_facing_left:
-				sprite_scale_x *= -1.0
-			sprite_visual.scale = Vector2(sprite_scale_x, _base_sprite_scale.y * dash_scale * squash_y)
-			var sprite_modulate := Color(1.0, 1.0, 1.0, 1.0)
-			sprite_modulate.a = 0.56 + 0.24 * downed_pulse if _is_downed else 1.0
-			sprite_visual.modulate = sprite_modulate
-	if shadow != null:
-		shadow.scale = Vector2(
-			_base_shadow_scale.x * (1.0 + _turn_squash * 0.08),
-			_base_shadow_scale.y * (1.0 - _turn_squash * 0.05)
-		)
-		var shadow_modulate: Color = shadow.modulate
-		shadow_modulate.a = 0.1 + 0.14 * downed_pulse if _is_downed else 0.25
-		shadow.modulate = shadow_modulate
-	if dash_shield_ring != null:
-		dash_shield_ring.visible = dash_shield_active and not _is_downed
-		if dash_shield_ring.visible:
-			var shield_pulse: float = 0.88 + 0.12 * sin(now * 14.0)
-			dash_shield_ring.width = 3.5 + 2.0 * shield_remaining_ratio
-			dash_shield_ring.scale = Vector2.ONE * (0.92 + 0.16 * shield_pulse)
-			var shield_color: Color = player_config.tint.lerp(Color(0.9, 1.0, 1.0, 1.0), 0.45)
-			shield_color.a = 0.42 + 0.28 * shield_remaining_ratio
-			dash_shield_ring.default_color = shield_color
-	var lean_target: float = 0.0 if _is_downed else clamp(_display_move_input.x, -1.0, 1.0) * 0.16
-	body_root.rotation = lerp_angle(body_root.rotation, lean_target, 0.18)
-	aim_pivot.rotation = aim_direction.angle()
-	aim_pivot.position = Vector2(-_aim_line_recoil * 0.2, 0.0)
-	if weapon_sprite != null:
-		weapon_sprite.visible = use_sprite and _weapon_texture != null
-		if weapon_sprite.visible:
-			weapon_sprite.texture = _weapon_texture
-			var weapon_scale_mult: float = 2.0 if _primary_weapon_id == "slug" else 1.0
-			weapon_sprite.scale = Vector2(
-				_base_weapon_scale.x * weapon_scale_mult,
-				(-_base_weapon_scale.y if aim_direction.x < 0.0 else _base_weapon_scale.y) * weapon_scale_mult
-			)
-	aim_line_backdrop.visible = false
-	aim_line.visible = false
-	_update_secondary_preview(now)
-
-func _current_time_seconds() -> float:
-	return Time.get_ticks_msec() / 1000.0
-
-func _enter_downed_state() -> void:
-	_is_downed = true
-	_shield_until = 0.0
-	if _dash != null:
-		_dash.clear_buffer()
-	velocity = Vector2.ZERO
-	_secondary_hold_active = false
-	collision_layer = 0
-	collision_mask = 0
-	set_physics_process(false)
-	downed.emit(self)
-	_apply_visual_state(_current_time_seconds())
-
-func _update_animation_state(move_input: Vector2, delta: float) -> void:
-	if move_input.length() > 0.2 and _previous_move_input.length() > 0.2 and move_input.dot(_previous_move_input) < -0.2:
-		_turn_squash = 1.0
-	if move_input.x <= -0.1:
-		_sprite_facing_left = true
-	elif move_input.x >= 0.1:
-		_sprite_facing_left = false
-	_sprite_is_running = velocity.length() > 20.0 or move_input.length() > 0.2
-	_display_move_input = _display_move_input.lerp(move_input, clamp(delta * 10.0, 0.0, 1.0))
-	_previous_move_input = move_input if move_input.length() > 0.05 else _previous_move_input.move_toward(Vector2.ZERO, delta * 5.0)
-	_turn_squash = move_toward(_turn_squash, 0.0, delta * 3.8)
-	_aim_line_recoil = move_toward(_aim_line_recoil, 0.0, delta * 85.0)
-
-func _activate_dash_shield(now: float) -> void:
+func _activate_dash_shield(now: float, dash_direction: Vector2) -> void:
 	_shield_until = now + DASH_SHIELD_DURATION
+	_dash_hit_targets.clear()
+	if _dash_damage_enabled:
+		_apply_dash_damage(dash_direction)
 	dash_started.emit(global_position, player_config.tint, DASH_SHIELD_DURATION)
 
-func _should_buffer_primary_fire(now: float) -> bool:
-	if aim_direction.length() <= 0.0:
-		return false
-	if primary_fire_interval < SLOW_PRIMARY_BUFFER_THRESHOLD:
-		return false
-	var remaining: float = _next_primary_fire_at - now
-	return remaining > 0.0 and remaining <= PRIMARY_FIRE_BUFFER_DURATION
+func _apply_dash_damage(dash_direction: Vector2) -> void:
+	var normalized_direction: Vector2 = dash_direction.normalized() if dash_direction.length() > 0.0 else Vector2.RIGHT
+	var dash_end: Vector2 = global_position + normalized_direction * _dash.dash_speed * _dash.dash_duration
+	var damage_amount: int = maxi(1, int(round(float(projectile_damage) * _dash_damage_multiplier)))
+	for candidate in get_tree().get_nodes_in_group("aim_target"):
+		if candidate == null or not is_instance_valid(candidate) or not candidate.has_method("apply_damage"):
+			continue
+		if _dash_hit_targets.has(candidate):
+			continue
+		if _distance_to_segment((candidate as Node2D).global_position, global_position, dash_end) > 42.0:
+			continue
+		candidate.apply_damage(damage_amount)
+		_dash_hit_targets.append(candidate)
+
+func _distance_to_segment(point: Vector2, from_point: Vector2, to_point: Vector2) -> float:
+	var segment := to_point - from_point
+	if segment.length_squared() <= 0.001:
+		return point.distance_to(from_point)
+	var weight := clampf((point - from_point).dot(segment) / segment.length_squared(), 0.0, 1.0)
+	return point.distance_to(from_point + segment * weight)
 
 func _fire_primary(now: float, fire_direction: Vector2) -> void:
-	_primary_fire_buffered_until = 0.0
 	_next_primary_fire_at = now + primary_fire_interval
-	_play_fire_recoil(_primary_impact_weight)
-	var projectile_color: Color = _get_projectile_tint()
-	muzzle_flash_requested.emit(
-		global_position + fire_direction * 24.0,
-		fire_direction,
-		projectile_color,
-		_primary_feedback_profile,
-		_primary_impact_weight
-	)
-	var projectile_config: Dictionary = {
-		"behavior": _primary_behavior,
+	_play_fire_recoil()
+	muzzle_flash_requested.emit(global_position + fire_direction * 24.0, fire_direction, player_config.tint, _primary_feedback_profile, _primary_impact_weight)
+	var projectile_config := {
 		"weapon_id": _primary_weapon_id,
-		"weapon_tags": _primary_weapon_tags,
-		"trigger_passives": _merge_trigger_passive_lists(_global_trigger_passives, _primary_trigger_passives),
-		"source_type": "primary",
 		"speed": projectile_speed,
 		"damage": projectile_damage,
 		"team": get_team(),
-		"color": projectile_color,
+		"color": player_config.tint,
 		"shooter": self,
 		"feedback_profile": _primary_feedback_profile,
 		"impact_weight": _primary_impact_weight,
 		"max_distance": _primary_range,
 		"collision_half_width": _primary_area,
-		"amount": _primary_amount,
-		"spread_radians": _primary_spread_radians,
-		"pierce_count": _primary_pierce_count,
 	}
-	match _primary_behavior:
-		"cone":
-			_fire_primary_cone(fire_direction, projectile_config)
-		"beam":
-			_fire_primary_beam(fire_direction, projectile_config)
-		"chain":
-			_fire_primary_chain(fire_direction, projectile_config)
-		_:
-			_fire_primary_projectile(fire_direction, projectile_config)
+	fire_requested.emit(global_position + fire_direction * 24.0, fire_direction, projectile_config)
 
-func _fire_primary_projectile(fire_direction: Vector2, projectile_config: Dictionary) -> void:
-	for projectile_direction in _build_spread_directions(fire_direction, _primary_projectile_count, _primary_spread_radians):
-		fire_requested.emit(global_position + projectile_direction * 26.0, projectile_direction, projectile_config)
+func _can_activate_shockwave(now: float) -> bool:
+	return now >= _shockwave_cooldown_until
 
-func _fire_primary_cone(fire_direction: Vector2, projectile_config: Dictionary) -> void:
-	fire_requested.emit(global_position + fire_direction * 20.0, fire_direction, projectile_config)
+func _fire_shockwave(now: float) -> void:
+	_shockwave_cooldown_until = now + _shockwave_cooldown
+	shockwave_requested.emit(global_position, Vector2.ZERO, {
+		"weapon_id": _secondary_weapon_id,
+		"damage": _shockwave_damage,
+		"radius": _shockwave_radius,
+		"knockback_force": _shockwave_knockback,
+		"expand_duration": _shockwave_expand_duration,
+		"color": player_config.tint,
+		"feedback_profile": _secondary_feedback_profile,
+		"impact_weight": _secondary_impact_weight,
+		"shooter": self,
+	})
 
-func _fire_primary_beam(fire_direction: Vector2, projectile_config: Dictionary) -> void:
-	fire_requested.emit(global_position + fire_direction * 20.0, fire_direction, projectile_config)
+func _get_move_input() -> Vector2:
+	var keyboard_vector := Input.get_vector("p%d_move_left" % player_id, "p%d_move_right" % player_id, "p%d_move_up" % player_id, "p%d_move_down" % player_id)
+	var gamepad_vector := _get_gamepad_stick_vector(JOY_AXIS_LEFT_X, JOY_AXIS_LEFT_Y)
+	return gamepad_vector if player_config.control_source == "gamepad" else keyboard_vector
 
-func _fire_primary_chain(fire_direction: Vector2, projectile_config: Dictionary) -> void:
-	fire_requested.emit(global_position + fire_direction * 20.0, fire_direction, projectile_config)
+func _get_gamepad_stick_vector(axis_x: JoyAxis, axis_y: JoyAxis) -> Vector2:
+	if gamepad_device_id < 0 or not Input.get_connected_joypads().has(gamepad_device_id):
+		return Vector2.ZERO
+	var vector := Vector2(Input.get_joy_axis(gamepad_device_id, axis_x), Input.get_joy_axis(gamepad_device_id, axis_y))
+	return vector if vector.length() >= 0.2 else Vector2.ZERO
 
-func _play_fire_recoil(intensity: float = 1.0) -> void:
-	_aim_line_recoil = max(_aim_line_recoil, 14.0 + 8.0 * intensity)
-	_turn_squash = max(_turn_squash, 0.28 + 0.16 * intensity)
+func _is_dash_pressed() -> bool:
+	if player_config.control_source == "gamepad":
+		if gamepad_device_id < 0:
+			return false
+		return Input.get_joy_axis(gamepad_device_id, JOY_AXIS_TRIGGER_LEFT) >= 0.5 or Input.is_joy_button_pressed(gamepad_device_id, JOY_BUTTON_B)
+	return Input.is_action_pressed("p%d_dash" % player_id)
+
+func _is_shockwave_pressed() -> bool:
+	if player_config.control_source == "gamepad":
+		return gamepad_device_id >= 0 and Input.get_joy_axis(gamepad_device_id, JOY_AXIS_TRIGGER_RIGHT) >= 0.5
+	return Input.is_action_pressed("p%d_secondary" % player_id)
+
+func _enter_downed_state() -> void:
+	_is_downed = true
+	velocity = Vector2.ZERO
+	_shield_until = 0.0
+	set_physics_process(false)
+	collision_layer = 0
+	collision_mask = 0
+	downed.emit(self)
+
+func _apply_visual_state(_now: float, delta: float = 0.0) -> void:
+	if visual == null or body_root == null:
+		return
+	var dash_active := is_dash_active()
+	var dash_scale := 1.14 if dash_active else 1.0
+	var squash_x := 1.0 + _turn_squash * 0.18
+	var squash_y := 1.0 - _turn_squash * 0.12
+	if visual.polygon != _chevron_polygon:
+		visual.polygon = _chevron_polygon
+	visual.color = player_config.tint if not _is_downed else player_config.tint.darkened(0.55)
+	visual.scale = Vector2(_base_visual_scale.x * dash_scale * squash_x, _base_visual_scale.y * dash_scale * squash_y)
+	if outline != null and outline.polygon != _chevron_polygon:
+		outline.polygon = _chevron_polygon
+	if outline != null:
+		outline.scale = visual.scale * 1.28
+		outline.color = Color(0.04, 0.06, 0.08, 0.92)
+	if shadow != null:
+		shadow.scale = _base_shadow_scale
+	if dash_shield_ring != null:
+		dash_shield_ring.visible = is_dash_shield_active() and not _is_downed
+		dash_shield_ring.default_color = player_config.tint.lerp(Color(0.92, 1.0, 1.0, 1.0), 0.38)
+	body_root.rotation = lerp_angle(body_root.rotation, _move_facing.angle(), 0.22)
+	_turn_squash = move_toward(_turn_squash, 0.0, delta * 4.0)
+
+func _play_fire_recoil() -> void:
+	_turn_squash = max(_turn_squash, 0.28)
 
 func _play_damage_flash() -> void:
-	if _get_flash_target() == null:
-		return
-	_outline_pulse = 1.18
-	var flash_material := _get_flash_material()
+	var flash_material := _get_flash_material(visual)
 	flash_material.set_shader_parameter("flash_intensity", 1.0)
 	if _flash_tween != null and _flash_tween.is_valid():
 		_flash_tween.kill()
 	_flash_tween = create_tween()
 	_flash_tween.tween_property(flash_material, "shader_parameter/flash_intensity", 0.0, 0.12)
 
-func _get_flash_material() -> ShaderMaterial:
-	var flash_target := _get_flash_target()
-	if _flash_material != null and flash_target != null and flash_target.material == _flash_material:
+func _get_flash_material(target: CanvasItem) -> ShaderMaterial:
+	if _flash_material != null and target.material == _flash_material:
 		return _flash_material
 	_flash_material = ShaderMaterial.new()
 	var shader := Shader.new()
 	shader.code = FLASH_SHADER_CODE
 	_flash_material.shader = shader
-	_flash_material.set_shader_parameter("flash_intensity", 0.0)
-	_flash_material.set_shader_parameter("flash_color", Color(1.0, 0.2, 0.2, 1.0))
-	if flash_target != null:
-		flash_target.material = _flash_material
+	target.material = _flash_material
 	return _flash_material
 
-func _get_flash_target() -> CanvasItem:
-	if _uses_sprite_visual() and sprite_visual != null:
-		return sprite_visual
-	return visual
-
-func _uses_sprite_visual() -> bool:
-	return player_id == 1 and sprite_visual != null and _standing_sprite_texture != null
-
-func _get_active_sprite_texture(now: float) -> Texture2D:
-	if not _sprite_is_running:
-		return _standing_sprite_texture
-	if _running_sprite_texture == null:
-		return _standing_sprite_texture
-	if _running_sprite_alt_texture == null:
-		return _running_sprite_texture
-	return _running_sprite_texture if int(floor(now * 8.0)) % 2 == 0 else _running_sprite_alt_texture
-
-func _load_sprite_texture(path: String) -> Texture2D:
-	var texture: Texture2D = load(path) as Texture2D
-	if texture == null:
-		push_warning("Failed to load sprite texture: %s" % path)
-		return null
-	return texture
-
-func _get_weapon_texture_for_primary_id(primary_weapon_id: String) -> Texture2D:
-	var normalized_weapon_id: String = primary_weapon_id.strip_edges().to_lower()
-	if _weapon_textures_by_id.has(normalized_weapon_id):
-		return _weapon_textures_by_id[normalized_weapon_id] as Texture2D
-	if _weapon_textures_by_id.has("rifle"):
-		return _weapon_textures_by_id["rifle"] as Texture2D
-	return null
-
-func _update_secondary_preview(now: float) -> void:
-	if secondary_preview == null or secondary_trajectory == null or secondary_target_ring == null or secondary_target_cross == null:
-		return
-
-	var show_preview := _should_show_secondary_preview(now)
-	secondary_preview.visible = show_preview
-	secondary_trajectory.visible = show_preview
-	secondary_target_ring.visible = show_preview
-	secondary_target_cross.visible = show_preview
-	if not show_preview:
-		return
-
-	var preview_tint: Color = _get_projectile_tint()
-	var trajectory_tint: Color = preview_tint
-	trajectory_tint.a = 0.95
-	var ring_tint: Color = preview_tint
-	ring_tint.a = 0.82
-	var cross_tint: Color = preview_tint
-	cross_tint.a = 0.95
-	secondary_trajectory.default_color = trajectory_tint
-	secondary_target_ring.default_color = ring_tint
-	secondary_target_cross.default_color = cross_tint
-
-	var origin_offset: Vector2 = aim_direction.normalized() * 22.0
-	var initial_velocity: Vector2 = aim_direction.normalized() * secondary_projectile_speed + Vector2(0.0, -180.0)
-	var gravity_force: float = float(_secondary_projectile_data.get("gravity_force", 520.0))
-	var fuse_time: float = float(_secondary_projectile_data.get("fuse_time", 1.0))
-	var explosion_radius: float = float(_secondary_projectile_data.get("explosion_radius", 92.0))
-
-	var trajectory_points: Array = []
-	var sample_count := 9
-	for index in range(sample_count):
-		var t := fuse_time * float(index) / float(sample_count - 1)
-		trajectory_points.append(origin_offset + initial_velocity * t + Vector2(0.0, 0.5 * gravity_force * t * t))
-	secondary_trajectory.points = PackedVector2Array(trajectory_points)
-
-	var landing_local: Vector2 = origin_offset + initial_velocity * fuse_time + Vector2(0.0, 0.5 * gravity_force * fuse_time * fuse_time)
-	secondary_target_ring.points = _build_circle_points(landing_local, explosion_radius, 28)
-	secondary_target_cross.points = PackedVector2Array([
-		landing_local + Vector2(-12, 0),
-		landing_local + Vector2(12, 0),
-		landing_local,
-		landing_local + Vector2(0, -12),
-		landing_local + Vector2(0, 12),
-	])
-
-func _build_circle_points(center: Vector2, radius: float, point_count: int) -> PackedVector2Array:
-	var points: Array = []
-	for index in range(point_count):
-		var angle := TAU * float(index) / float(point_count)
-		points.append(center + Vector2.RIGHT.rotated(angle) * radius)
-	return PackedVector2Array(points)
-
-func _should_show_secondary_preview(_now: float) -> bool:
-	if _is_downed:
-		return false
-	if _is_proximity_mine_secondary():
-		return false
-	if aim_direction.length() <= 0.0:
-		return false
-	if get_secondary_cooldown_remaining() > 0.0:
-		return false
-	if not _supports_secondary_preview():
-		return false
-	return _secondary_hold_active and _is_secondary_pressed()
-
-func _uses_hold_to_aim_secondary() -> bool:
-	return _supports_secondary_preview()
-
-func _supports_secondary_preview() -> bool:
-	return not _is_proximity_mine_secondary()
-
-func _is_proximity_mine_secondary() -> bool:
-	var kind := str(_secondary_projectile_data.get("kind", ""))
-	return kind == "mine" or kind == "shrapnel_mine" or kind == "heavy_mine" or kind == "cluster_mine" or kind == "siege_mine"
-
-func _can_activate_secondary() -> bool:
-	if get_secondary_cooldown_remaining() > 0.0:
-		return false
-	if _is_proximity_mine_secondary():
-		return true
-	return aim_direction.length() > 0.0
-
-func _fire_secondary() -> void:
-	var now := _current_time_seconds()
-	if not _can_activate_secondary():
-		return
-	if _selected_secondary_index >= 0 and _selected_secondary_index < _secondary_cooldowns.size():
-		_secondary_cooldowns[_selected_secondary_index] = now + secondary_cooldown
-	var secondary_color: Color = _get_projectile_tint()
-	var secondary_direction: Vector2 = aim_direction.normalized() if aim_direction.length() > 0.0 else Vector2.RIGHT
-	var spawn_origin: Vector2 = global_position + secondary_direction * 14.0 if _is_proximity_mine_secondary() else global_position
-	for projectile_direction in _build_spread_directions(secondary_direction, _secondary_projectile_count, _secondary_spread_radians):
-		var projectile_data: Dictionary = _secondary_projectile_data.duplicate(true)
-		projectile_data["shooter"] = self
-		projectile_data["color"] = secondary_color
-		secondary_requested.emit(
-			spawn_origin if _is_proximity_mine_secondary() else global_position + projectile_direction * 22.0,
-			projectile_direction,
-			secondary_projectile_speed,
-			secondary_damage,
-			get_team(),
-			projectile_data,
-			secondary_color
-		)
-
-func _merge_trigger_passive_lists(global_triggers: Array, slot_triggers: Array) -> Array:
-	if global_triggers.is_empty():
-		return slot_triggers
-	if slot_triggers.is_empty():
-		return global_triggers
-	var merged: Array = global_triggers.duplicate()
-	merged.append_array(slot_triggers)
-	return merged
+func _current_time_seconds() -> float:
+	return Time.get_ticks_msec() / 1000.0
