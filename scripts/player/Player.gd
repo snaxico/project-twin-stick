@@ -18,19 +18,19 @@ void fragment() {
 """
 
 signal fire_requested(origin, direction, config)
-signal shockwave_requested(origin, direction, stats)
+signal primary_skill_requested(origin, direction, stats)
 signal health_changed(current_health, max_health)
 signal downed(player)
 signal revived(player)
 signal muzzle_flash_requested(origin, direction, color, feedback_profile, impact_weight)
-signal dash_trail_requested(origin, color)
-signal dash_started(origin, color, shield_duration)
+signal secondary_skill_trail_requested(origin, color)
+signal secondary_skill_started(origin, color, shield_duration)
 signal damage_taken(player, amount, current_health)
 
 @export_range(1, 4, 1) var player_id: int = 1
 @export var move_speed: float = 390.0
 @export var max_health: int = 50
-@export var primary_fire_interval: float = 0.33
+@export var weapon_fire_interval: float = 0.33
 @export var projectile_speed: float = 850.0
 @export var projectile_damage: int = 14
 
@@ -48,31 +48,31 @@ var current_health: int = 0
 
 var _auto_targeter = AutoTargetData.new()
 var _dash = DashData.new()
-var _dash_pressed_last_frame := false
-var _shockwave_pressed_last_frame := false
+var _secondary_skill_pressed_last_frame := false
+var _primary_skill_pressed_last_frame := false
 var _is_downed := false
 var _input_locked := false
 var _move_facing := Vector2.RIGHT
 var _auto_attack_direction := Vector2.RIGHT
 var _auto_target: Node2D = null
-var _next_primary_fire_at := 0.0
+var _next_weapon_fire_at := 0.0
 var _dash_cooldown := 5.0
-var _shockwave_cooldown_until := 0.0
-var _shockwave_cooldown := 5.0
-var _shockwave_radius := 250.0
-var _shockwave_damage := 30
-var _shockwave_knockback := 950.0
-var _shockwave_expand_duration := 0.15
-var _primary_weapon_id := "rifle"
-var _primary_profile_name := "Rifle"
-var _secondary_weapon_id := "shockwave"
-var _secondary_profile_name := "Shockwave"
-var _primary_range := 950.0
-var _primary_area := 4.0
-var _primary_feedback_profile := "rifle"
-var _primary_impact_weight := 1.0
-var _secondary_feedback_profile := "shockwave"
-var _secondary_impact_weight := 1.9
+var _primary_skill_cooldown_until := 0.0
+var _primary_skill_cooldown := 5.0
+var _primary_skill_radius := 250.0
+var _primary_skill_damage := 30
+var _primary_skill_knockback := 950.0
+var _primary_skill_expand_duration := 0.15
+var _weapon_id := "rifle"
+var _weapon_profile_name := "Rifle"
+var _primary_skill_id := "shockwave"
+var _primary_skill_profile_name := "Shockwave"
+var _weapon_range := 950.0
+var _weapon_area := 4.0
+var _weapon_feedback_profile := "rifle"
+var _weapon_impact_weight := 1.0
+var _primary_skill_feedback_profile := "shockwave"
+var _primary_skill_impact_weight := 1.9
 var _mutation_ids: Array = []
 var _dash_damage_enabled := false
 var _dash_damage_multiplier := 0.0
@@ -106,13 +106,13 @@ func setup(config, assigned_gamepad_device_id: int) -> void:
 	player_id = config.player_id
 	gamepad_device_id = assigned_gamepad_device_id
 
-func is_dash_active() -> bool:
+func is_secondary_skill_active() -> bool:
 	return _dash.is_active(_current_time_seconds())
 
-func is_dash_shield_active() -> bool:
+func is_secondary_skill_shield_active() -> bool:
 	return _current_time_seconds() < _shield_until
 
-func get_dash_cooldown_remaining() -> float:
+func get_secondary_skill_cooldown_remaining() -> float:
 	return _dash.get_cooldown_remaining(_current_time_seconds())
 
 func get_team() -> String:
@@ -127,37 +127,37 @@ func is_downed() -> bool:
 func get_health_ratio_text() -> String:
 	return "DOWN" if _is_downed else "%d/%d" % [current_health, max_health]
 
-func get_secondary_cooldown_remaining() -> float:
-	return max(_shockwave_cooldown_until - _current_time_seconds(), 0.0)
+func get_primary_skill_cooldown_remaining() -> float:
+	return max(_primary_skill_cooldown_until - _current_time_seconds(), 0.0)
 
 func get_health_state() -> Dictionary:
 	return {"current": current_health, "max": max_health}
 
-func get_primary_profile_name() -> String:
-	return _primary_profile_name
+func get_weapon_profile_name() -> String:
+	return _weapon_profile_name
 
-func get_secondary_profile_name() -> String:
-	return _secondary_profile_name
+func get_primary_skill_profile_name() -> String:
+	return _primary_skill_profile_name
 
-func get_primary_hud_data() -> Dictionary:
+func get_weapon_hud_data() -> Dictionary:
 	return {
-		"weapon_id": _primary_weapon_id,
-		"name": _primary_profile_name,
+		"weapon_id": _weapon_id,
+		"name": _weapon_profile_name,
 	}
 
-func get_secondary_hud_data() -> Dictionary:
+func get_primary_skill_hud_data() -> Dictionary:
 	return {
-		"weapon_id": _secondary_weapon_id,
-		"name": _secondary_profile_name,
-		"cooldown_remaining": get_secondary_cooldown_remaining(),
-		"cooldown_duration": _shockwave_cooldown,
+		"skill_id": _primary_skill_id,
+		"name": _primary_skill_profile_name,
+		"cooldown_remaining": get_primary_skill_cooldown_remaining(),
+		"cooldown_duration": _primary_skill_cooldown,
 	}
 
-func get_dash_hud_data() -> Dictionary:
+func get_secondary_skill_hud_data() -> Dictionary:
 	return {
-		"weapon_id": "dash",
+		"skill_id": "dash",
 		"name": "Dash",
-		"cooldown_remaining": get_dash_cooldown_remaining(),
+		"cooldown_remaining": get_secondary_skill_cooldown_remaining(),
 		"cooldown_duration": _dash_cooldown,
 	}
 
@@ -170,31 +170,31 @@ func set_input_locked(locked: bool) -> void:
 		_dash.clear_buffer()
 		velocity = Vector2.ZERO
 	_auto_target = null
-	_dash_pressed_last_frame = false
-	_shockwave_pressed_last_frame = false
+	_secondary_skill_pressed_last_frame = false
+	_primary_skill_pressed_last_frame = false
 
 func apply_loadout(loadout: Dictionary) -> void:
 	move_speed = float(loadout.get("move_speed", move_speed))
-	_primary_weapon_id = str(loadout.get("primary_weapon_id", "rifle"))
-	_primary_profile_name = str(loadout.get("primary_name", "Rifle"))
-	_secondary_weapon_id = str(loadout.get("secondary_weapon_id", "shockwave"))
-	_secondary_profile_name = str(loadout.get("secondary_name", "Shockwave"))
+	_weapon_id = str(loadout.get("weapon_id", "rifle"))
+	_weapon_profile_name = str(loadout.get("weapon_name", "Rifle"))
+	_primary_skill_id = str(loadout.get("primary_skill_id", "shockwave"))
+	_primary_skill_profile_name = str(loadout.get("primary_skill_name", "Shockwave"))
 	_mutation_ids = (loadout.get("mutations", []) as Array).duplicate()
-	var primary_stats: Dictionary = (loadout.get("primary_stats", {}) as Dictionary).duplicate(true)
-	var secondary_stats: Dictionary = (loadout.get("secondary_stats", {}) as Dictionary).duplicate(true)
-	projectile_damage = int(round(float(primary_stats.get("damage", projectile_damage))))
-	primary_fire_interval = 1.0 / max(float(primary_stats.get("fire_rate", 3.0)), 0.01)
-	projectile_speed = float(primary_stats.get("projectile_speed", projectile_speed))
-	_primary_range = float(primary_stats.get("range", _primary_range))
-	_primary_area = float(primary_stats.get("area", _primary_area))
-	_dash_cooldown = max(0.25, float(secondary_stats.get("dash_cooldown", secondary_stats.get("cooldown", _dash_cooldown))))
-	_shockwave_cooldown = max(0.25, float(secondary_stats.get("cooldown", _shockwave_cooldown)))
-	_shockwave_radius = float(secondary_stats.get("radius", _shockwave_radius))
-	_shockwave_damage = int(round(float(secondary_stats.get("damage", _shockwave_damage))))
-	_shockwave_knockback = float(secondary_stats.get("knockback_force", _shockwave_knockback))
-	_shockwave_expand_duration = max(0.05, float(secondary_stats.get("expand_duration", _shockwave_expand_duration)))
+	var weapon_stats: Dictionary = (loadout.get("weapon_stats", {}) as Dictionary).duplicate(true)
+	var skill_stats: Dictionary = (loadout.get("primary_skill_stats", {}) as Dictionary).duplicate(true)
+	projectile_damage = int(round(float(weapon_stats.get("damage", projectile_damage))))
+	weapon_fire_interval = 1.0 / max(float(weapon_stats.get("fire_rate", 3.0)), 0.01)
+	projectile_speed = float(weapon_stats.get("projectile_speed", projectile_speed))
+	_weapon_range = float(weapon_stats.get("range", _weapon_range))
+	_weapon_area = float(weapon_stats.get("area", _weapon_area))
+	_dash_cooldown = max(0.25, float(skill_stats.get("dash_cooldown", skill_stats.get("cooldown", _dash_cooldown))))
+	_primary_skill_cooldown = max(0.25, float(skill_stats.get("cooldown", _primary_skill_cooldown)))
+	_primary_skill_radius = float(skill_stats.get("radius", _primary_skill_radius))
+	_primary_skill_damage = int(round(float(skill_stats.get("damage", _primary_skill_damage))))
+	_primary_skill_knockback = float(skill_stats.get("knockback_force", _primary_skill_knockback))
+	_primary_skill_expand_duration = max(0.05, float(skill_stats.get("expand_duration", _primary_skill_expand_duration)))
 	_dash.cooldown_duration = _dash_cooldown
-	_shockwave_cooldown_until = 0.0
+	_primary_skill_cooldown_until = 0.0
 	_dash_damage_multiplier = float(loadout.get("dash_damage_multiplier", 0.0))
 	_dash_damage_enabled = _dash_damage_multiplier > 0.0
 
@@ -218,7 +218,7 @@ func revive(health_amount: int) -> void:
 func apply_damage(amount: int) -> void:
 	if _is_downed:
 		return
-	if is_dash_shield_active():
+	if is_secondary_skill_shield_active():
 		return
 	current_health = max(current_health - amount, 0)
 	health_changed.emit(current_health, max_health)
@@ -242,39 +242,39 @@ func _physics_process(delta: float) -> void:
 	_auto_target = _find_auto_target()
 	if _auto_target != null:
 		_auto_attack_direction = (_auto_target.global_position - global_position).normalized()
-		if now >= _next_primary_fire_at:
-			_fire_primary(now, _auto_attack_direction)
+		if now >= _next_weapon_fire_at:
+			_fire_weapon(now, _auto_attack_direction)
 
-	var dash_pressed := _is_dash_pressed()
-	if dash_pressed and not _dash_pressed_last_frame:
+	var dash_pressed := _is_secondary_skill_pressed()
+	if dash_pressed and not _secondary_skill_pressed_last_frame:
 		if _dash.try_trigger(_move_facing, now):
 			_activate_dash_shield(now, _dash.get_direction())
-	_dash_pressed_last_frame = dash_pressed
+	_secondary_skill_pressed_last_frame = dash_pressed
 	if _dash.consume_buffer_if_ready(now):
 		_activate_dash_shield(now, _dash.get_direction())
 
-	var shockwave_pressed := _is_shockwave_pressed()
-	if shockwave_pressed and not _shockwave_pressed_last_frame and _can_activate_shockwave(now):
-		_fire_shockwave(now)
-	_shockwave_pressed_last_frame = shockwave_pressed
+	var primary_skill_pressed := _is_primary_skill_pressed()
+	if primary_skill_pressed and not _primary_skill_pressed_last_frame and _can_activate_primary_skill(now):
+		_fire_primary_skill(now)
+	_primary_skill_pressed_last_frame = primary_skill_pressed
 
-	if is_dash_active() and now >= _next_dash_trail_at:
+	if is_secondary_skill_active() and now >= _next_dash_trail_at:
 		_next_dash_trail_at = now + 0.045
-		dash_trail_requested.emit(global_position + Vector2(0.0, -10.0), player_config.tint)
+		secondary_skill_trail_requested.emit(global_position + Vector2(0.0, -10.0), player_config.tint)
 
 	velocity = _dash.get_velocity(move_input, _move_facing, move_speed, now)
 	move_and_slide()
 	_apply_visual_state(now, delta)
 
 func _find_auto_target() -> Node2D:
-	return _auto_targeter.find_nearest(self, _primary_range)
+	return _auto_targeter.find_nearest(self, _weapon_range)
 
 func _activate_dash_shield(now: float, dash_direction: Vector2) -> void:
 	_shield_until = now + DASH_SHIELD_DURATION
 	_dash_hit_targets.clear()
 	if _dash_damage_enabled:
 		_apply_dash_damage(dash_direction)
-	dash_started.emit(global_position, player_config.tint, DASH_SHIELD_DURATION)
+	secondary_skill_started.emit(global_position, player_config.tint, DASH_SHIELD_DURATION)
 
 func _apply_dash_damage(dash_direction: Vector2) -> void:
 	var normalized_direction: Vector2 = dash_direction.normalized() if dash_direction.length() > 0.0 else Vector2.RIGHT
@@ -297,38 +297,38 @@ func _distance_to_segment(point: Vector2, from_point: Vector2, to_point: Vector2
 	var weight := clampf((point - from_point).dot(segment) / segment.length_squared(), 0.0, 1.0)
 	return point.distance_to(from_point + segment * weight)
 
-func _fire_primary(now: float, fire_direction: Vector2) -> void:
-	_next_primary_fire_at = now + primary_fire_interval
+func _fire_weapon(now: float, fire_direction: Vector2) -> void:
+	_next_weapon_fire_at = now + weapon_fire_interval
 	_play_fire_recoil()
-	muzzle_flash_requested.emit(global_position + fire_direction * 24.0, fire_direction, player_config.tint, _primary_feedback_profile, _primary_impact_weight)
+	muzzle_flash_requested.emit(global_position + fire_direction * 24.0, fire_direction, player_config.tint, _weapon_feedback_profile, _weapon_impact_weight)
 	var projectile_config := {
-		"weapon_id": _primary_weapon_id,
+		"weapon_id": _weapon_id,
 		"speed": projectile_speed,
 		"damage": projectile_damage,
 		"team": get_team(),
 		"color": player_config.tint,
 		"shooter": self,
-		"feedback_profile": _primary_feedback_profile,
-		"impact_weight": _primary_impact_weight,
-		"max_distance": _primary_range,
-		"collision_half_width": _primary_area,
+		"feedback_profile": _weapon_feedback_profile,
+		"impact_weight": _weapon_impact_weight,
+		"max_distance": _weapon_range,
+		"collision_half_width": _weapon_area,
 	}
 	fire_requested.emit(global_position + fire_direction * 24.0, fire_direction, projectile_config)
 
-func _can_activate_shockwave(now: float) -> bool:
-	return now >= _shockwave_cooldown_until
+func _can_activate_primary_skill(now: float) -> bool:
+	return now >= _primary_skill_cooldown_until
 
-func _fire_shockwave(now: float) -> void:
-	_shockwave_cooldown_until = now + _shockwave_cooldown
-	shockwave_requested.emit(global_position, Vector2.ZERO, {
-		"weapon_id": _secondary_weapon_id,
-		"damage": _shockwave_damage,
-		"radius": _shockwave_radius,
-		"knockback_force": _shockwave_knockback,
-		"expand_duration": _shockwave_expand_duration,
+func _fire_primary_skill(now: float) -> void:
+	_primary_skill_cooldown_until = now + _primary_skill_cooldown
+	primary_skill_requested.emit(global_position, Vector2.ZERO, {
+		"skill_id": _primary_skill_id,
+		"damage": _primary_skill_damage,
+		"radius": _primary_skill_radius,
+		"knockback_force": _primary_skill_knockback,
+		"expand_duration": _primary_skill_expand_duration,
 		"color": player_config.tint,
-		"feedback_profile": _secondary_feedback_profile,
-		"impact_weight": _secondary_impact_weight,
+		"feedback_profile": _primary_skill_feedback_profile,
+		"impact_weight": _primary_skill_impact_weight,
 		"shooter": self,
 	})
 
@@ -343,14 +343,14 @@ func _get_gamepad_stick_vector(axis_x: JoyAxis, axis_y: JoyAxis) -> Vector2:
 	var vector := Vector2(Input.get_joy_axis(gamepad_device_id, axis_x), Input.get_joy_axis(gamepad_device_id, axis_y))
 	return vector if vector.length() >= 0.2 else Vector2.ZERO
 
-func _is_dash_pressed() -> bool:
+func _is_secondary_skill_pressed() -> bool:
 	if player_config.control_source == "gamepad":
 		if gamepad_device_id < 0:
 			return false
 		return Input.get_joy_axis(gamepad_device_id, JOY_AXIS_TRIGGER_LEFT) >= 0.5 or Input.is_joy_button_pressed(gamepad_device_id, JOY_BUTTON_B)
 	return Input.is_action_pressed("p%d_dash" % player_id)
 
-func _is_shockwave_pressed() -> bool:
+func _is_primary_skill_pressed() -> bool:
 	if player_config.control_source == "gamepad":
 		return gamepad_device_id >= 0 and Input.get_joy_axis(gamepad_device_id, JOY_AXIS_TRIGGER_RIGHT) >= 0.5
 	return Input.is_action_pressed("p%d_secondary" % player_id)
@@ -367,7 +367,7 @@ func _enter_downed_state() -> void:
 func _apply_visual_state(_now: float, delta: float = 0.0) -> void:
 	if visual == null or body_root == null:
 		return
-	var dash_active := is_dash_active()
+	var dash_active := is_secondary_skill_active()
 	var dash_scale := 1.14 if dash_active else 1.0
 	var squash_x := 1.0 + _turn_squash * 0.18
 	var squash_y := 1.0 - _turn_squash * 0.12
@@ -383,7 +383,7 @@ func _apply_visual_state(_now: float, delta: float = 0.0) -> void:
 	if shadow != null:
 		shadow.scale = _base_shadow_scale
 	if dash_shield_ring != null:
-		dash_shield_ring.visible = is_dash_shield_active() and not _is_downed
+		dash_shield_ring.visible = is_secondary_skill_shield_active() and not _is_downed
 		dash_shield_ring.default_color = player_config.tint.lerp(Color(0.92, 1.0, 1.0, 1.0), 0.38)
 	body_root.rotation = lerp_angle(body_root.rotation, _move_facing.angle(), 0.22)
 	_turn_squash = move_toward(_turn_squash, 0.0, delta * 4.0)

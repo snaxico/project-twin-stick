@@ -3,7 +3,7 @@
 ## Context
 
 Converting the live v2 branch to the v3 design described in `game-direction-v3.md`.
-The v2 codebase is already simplified (1 primary + 1 secondary, zoom camera, bigger arena, mutation system, hold zone objective). The v3 changes are mechanical (auto-attack, shockwave) and visual (neon geometric), not architectural.
+The v2 codebase is already simplified (1 weapon + 1 primary skill + 1 secondary skill, zoom camera, bigger arena, mutation system, hold zone objective). The v3 changes are mechanical (auto-attack, shockwave, dash) and visual (neon geometric), not architectural.
 
 ## Resolved Decisions
 
@@ -11,14 +11,14 @@ The v2 codebase is already simplified (1 primary + 1 secondary, zoom camera, big
 |----------|--------|
 | Branch strategy | Continue on `v2/core-refactor`. No new branch — v3 is an evolution, not a rewrite. |
 | AimAssist.gd | Repurpose as AutoTarget. The `_find_target()` logic is exactly what auto-attack needs. |
-| Grenade scene | Archive `GrenadeProjectile.tscn` to `archive/v1/`. Shockwave replaces it. |
+| Grenade scene | Archive `GrenadeProjectile.tscn` to `archive/v1/`. Primary skill (shockwave) replaces it. |
 | Sprite assets | Stop loading P1 sprite textures. Chevron polygon replaces them. Sprites stay on disk for future rubberhose pivot. |
-| Existing mutations | All primary mutations (ricochet, pierce, split_shot, big_shot, fire_trail, rapid_fire, knockback) work unchanged with auto-attack since they modify projectile behavior, not input. |
-| Secondary mutations | `blast_radius` → `shockwave_radius`. `extra_charge` → `shockwave_cooldown` ("Quick Pulse", reduces cooldown by 2s per stack, stackable). |
-| Input mapping | Left stick = move. **RT / Left click = shockwave** (same button as old fire — brain reads "attack button"). **LT + B / Space = dash.** No fire trigger — auto-attack has no input. Right stick reserved for future use. |
-| Shockwave center | **Centered on player (offset = 0).** Fully radial — no directional aiming. Simplest, most panic-button feel. |
-| Shockwave cooldown ownership | **Player.gd owns cooldown + signal.** No separate ShockwaveAbility.gd. Stats come from loadout dictionary (weapons.json → RunState → Player). CoopManager handles the blast effect. Dash has its own separate cooldown in Player.gd. |
-| Direction variables | **Three separate directions in Player.gd:** `_move_facing` (left stick, used for chevron rotation + dash), `_auto_attack_direction` (toward current auto-target), `_shockwave_aim_direction` (right stick). No shared `aim_direction` overloading. |
+| Existing mutations | All weapon mutations (ricochet, pierce, split_shot, big_shot, fire_trail, rapid_fire, knockback) work unchanged with auto-attack since they modify projectile behavior, not input. |
+| Primary skill mutations | `blast_radius` → `shockwave_radius`. `extra_charge` → `shockwave_cooldown` ("Quick Pulse", reduces cooldown by 2s per stack, stackable). |
+| Input mapping | Left stick = move. **RT = primary skill / shockwave** (gamepad), **Space = primary skill / shockwave** (keyboard P2). **LT / B = secondary skill / dash** (gamepad), **Ctrl = secondary skill / dash** (keyboard P2). No fire trigger — weapon auto-fires. Right stick reserved for future use. P1 keyboard bindings are empty (P1 defaults to gamepad). |
+| Primary skill center | **Centered on player (offset = 0).** Fully radial — no directional aiming. Simplest, most panic-button feel. |
+| Primary skill cooldown ownership | **Player.gd owns cooldown + signal.** No separate ShockwaveAbility.gd. Stats come from loadout dictionary (weapons.json → RunState → Player). CoopManager handles the blast effect. Secondary skill (dash) has its own separate cooldown in Player.gd. |
+| Direction variables | **Two directions in Player.gd:** `_move_facing` (left stick, used for chevron rotation + secondary skill), `_auto_attack_direction` (toward current auto-target). Skill aim direction removed — primary skill is fully radial. |
 
 ---
 
@@ -39,10 +39,9 @@ Remove:
 Add:
 - `_auto_target: Node2D = null` — current auto-attack target
 - `_next_auto_fire_at: float = 0.0`
-- **Three explicit direction vars replacing the old single `aim_direction`:**
-  - `_move_facing: Vector2 = Vector2.RIGHT` — tracks left stick. Used for chevron rotation, dash direction, directional auto-target mode. Updated every frame from move input. Persists last nonzero value when stick is released.
+- **Two direction vars replacing the old single `aim_direction`:**
+  - `_move_facing: Vector2 = Vector2.RIGHT` — tracks left stick. Used for chevron rotation, dash direction. Updated every frame from move input. Persists last nonzero value when stick is released.
   - `_auto_attack_direction: Vector2 = Vector2.RIGHT` — direction toward current auto-target. Updated every frame. Only valid when `_auto_target != null`.
-  - `_shockwave_aim_direction: Vector2 = Vector2.RIGHT` — tracks right stick. Used for shockwave knockback direction. Persists last nonzero value when stick is released.
 - New block in `_physics_process()`:
   ```
   _auto_target = _find_auto_target()
@@ -58,7 +57,6 @@ Modify:
 - Remove the old single `aim_direction` var entirely. Update all references:
   - Dash direction → `_move_facing`
   - Primary fire direction → `_auto_attack_direction`
-  - Shockwave aim → `_shockwave_aim_direction`
   - `aim_pivot` rotation (if kept) → `_auto_attack_direction`
   - Body tilt → `_move_facing`
 - `_fire_primary()` — stays as-is. It already takes a direction and emits `fire_requested`. No changes needed.
@@ -66,18 +64,13 @@ Modify:
 
 **`scripts/player/AimAssist.gd` → rename to `scripts/player/AutoTarget.gd`**
 
-Repurpose. The existing `_find_target()` already scores by distance + alignment. Two modes:
+Repurpose. Single mode: **pure nearest** within weapon range.
 
-- **Pure nearest:** Call with `require_alignment = false`, ignore `desired_direction`.
-- **Directional (120° cone, fallback nearest):** Call with `require_alignment = true`, `desired_direction = move_input`. If no target in cone, fall back to pure nearest.
-
-Add a `targeting_mode` parameter or two wrapper functions:
 ```
 func find_nearest(owner, range) -> Node2D
-func find_directional(owner, move_direction, range) -> Node2D
 ```
 
-Keep the file, rename the class. Update the preload in Player.gd.
+Keep the file, rename the class. Update the preload in Player.gd. Directional targeting can be added later if needed.
 
 **`data/weapons.json`**
 
@@ -104,7 +97,7 @@ Change rifle baseline fire_rate from 5.8 to 3.0:
 
 ---
 
-## Phase 2 — Shockwave Ability (replace grenade)
+## Phase 2 — Primary Skill: Shockwave (replace grenade)
 
 **Goal:** Shockwave pulse centered on player. 5s cooldown, 250px radius, 950 knockback force, damage + strong knockback.
 
@@ -123,24 +116,23 @@ Remove:
 - `_secondary_charges_remaining`, `_secondary_charges_max` charge system
 - `_refresh_secondary_charges()` function
 - References to `SecondaryPreview`, `SecondaryTrajectory`, `SecondaryTargetRing`, `SecondaryTargetCross` nodes
-- `_is_secondary_pressed()` → replaced by `_is_shockwave_pressed()`
+- `_is_secondary_pressed()` → replaced by `_is_primary_skill_pressed()`
 
 Add:
-- `_shockwave_cooldown_until: float = 0.0` — **sole cooldown owner**
-- `_shockwave_cooldown: float = 5.0` — set from loadout
-- `_shockwave_radius: float = 250.0` — set from loadout
-- `_shockwave_damage: int = 30` — set from loadout
-- `_shockwave_knockback: float = 950.0` — set from loadout
-- `_shockwave_aim_direction` exists but shockwave is fully radial — knockback is always away from player center
-- `_is_shockwave_pressed()` — **RT / Left click** (same binding as old `_is_fire_pressed()`)
-- On press when cooldown ready: emit `shockwave_requested(global_position, _shockwave_aim_direction, stats_dict)`
+- `_primary_skill_cooldown_until: float = 0.0` — **sole cooldown owner**
+- `_primary_skill_cooldown: float = 5.0` — set from loadout
+- `_primary_skill_radius: float = 250.0` — set from loadout
+- `_primary_skill_damage: int = 30` — set from loadout
+- `_primary_skill_knockback: float = 950.0` — set from loadout
+- `_is_primary_skill_pressed()` — **RT** (gamepad) or action `p%d_secondary` (keyboard, maps to Space for P2)
+- On press when cooldown ready: emit `primary_skill_requested(global_position, Vector2.ZERO, stats_dict)`
   - **Blast is centered on player (offset = 0).** Knockback is radial (away from player), not directional.
-- Set `_shockwave_cooldown_until = now + _shockwave_cooldown`
-- **Dash** — separate ability with its own 5s cooldown. Triggered by LT + B / Space. Uses `_move_facing` direction.
+- Set `_primary_skill_cooldown_until = now + _primary_skill_cooldown`
+- **Secondary skill (dash)** — separate ability with its own 5s cooldown. Triggered by LT / B (gamepad) or Ctrl (keyboard P2). Uses `_move_facing` direction.
 
 Modify:
-- `get_secondary_hud_data()` → return shockwave cooldown info (cooldown_remaining, cooldown_duration) instead of charge count.
-- `apply_loadout()` → read shockwave stats from secondary_stats dict: `cooldown`, `radius`, `damage`, `knockback_force`. Apply mutation-adjusted cooldown from MutationSystem.
+- `get_primary_skill_hud_data()` → return primary skill cooldown info (cooldown_remaining, cooldown_duration) instead of charge count.
+- `apply_loadout()` → read primary skill stats from `primary_skill_stats` dict: `cooldown`, `radius`, `damage`, `knockback_force`. Apply mutation-adjusted cooldown from MutationSystem.
 
 **`scripts/game/CoopManager.gd`**
 
@@ -149,7 +141,7 @@ Remove:
 - `GrenadeProjectileSceneData` preload
 
 Add:
-- `_on_player_shockwave_requested(origin, direction, stats)` handler:
+- `_on_player_primary_skill_requested(origin, direction, stats)` handler:
   - `origin` = player's `global_position` (blast centered on player, offset = 0)
   - `direction` = passed but knockback is fully radial (away from player center)
   - Find all enemies within `stats.radius` of `origin`
@@ -174,7 +166,7 @@ Replace grenade entry:
 {
   "id": "shockwave",
   "name": "Shockwave",
-  "type": "secondary_weapon",
+  "type": "primary_skill",
   "stats": {
     "kind": "shockwave",
     "damage": 30.0,
@@ -188,8 +180,8 @@ Replace grenade entry:
 
 **`scripts/game/RunState.gd`**
 
-- `_build_default_player_inventories()` — change `secondary_weapon_id` from `"grenade"` to `"shockwave"`
-- `get_player_runtime_loadout_for()` — fallback secondary changes from grenade to shockwave
+- `_build_default_player_inventories()` — change `primary_skill_id` from `"grenade"` to `"shockwave"`
+- `get_player_runtime_loadout_for()` — fallback primary skill changes from grenade to shockwave
 
 **`data/mutations.json`**
 
@@ -208,11 +200,11 @@ Replace grenade entry:
 **Archive:** Move `GrenadeProjectile.tscn` and `GrenadeProjectile.gd` (if separate) to `archive/v1/`.
 
 ### Verification
-- RT / Left click fires shockwave pulse centered on player
+- RT (gamepad) / Space (keyboard P2) fires shockwave pulse centered on player
 - Enemies get pushed away from blast center (950 knockback)
 - 5s cooldown visible on HUD
 - Shockwave radius mutation makes it bigger
-- Dash on LT+B / Space with separate 5s cooldown
+- Dash on LT / B (gamepad) or Ctrl (keyboard) with separate 5s cooldown
 - No grenade references remain in live code
 
 ---
@@ -326,12 +318,12 @@ Alternative (simpler): skip full-screen bloom, instead give projectiles and shoc
 
 ### `data/weapons.json`
 
-Already updated in Phase 2. Verify rifle fire_rate = 3.0, secondary = shockwave.
+Already updated in Phase 2. Verify rifle fire_rate = 3.0, primary skill = shockwave.
 
 ### `data/mutations.json`
 
 Already updated in Phase 2. Verify:
-- Primary mutations unchanged (ricochet, pierce, split_shot, big_shot, fire_trail, rapid_fire, knockback)
+- Weapon mutations unchanged (ricochet, pierce, split_shot, big_shot, fire_trail, rapid_fire, knockback)
 - `blast_radius` → `shockwave_radius`
 - `extra_charge` → `shockwave_cooldown`
 - `dash_damage` stays
@@ -340,14 +332,14 @@ Already updated in Phase 2. Verify:
 
 Already updated in Phase 2. Verify:
 - `get_compiled_weapon_stats()` works with 3.0 base fire_rate
-- `get_secondary_radius_multiplier()` applies to shockwave
-- `get_shockwave_cooldown_reduction()` works
+- `get_primary_skill_radius_multiplier()` applies to shockwave
+- `get_primary_skill_cooldown_reduction()` works
 - No references to grenade, charges, or grenade-specific params
 
 ### `scripts/game/RunState.gd`
 
-- Default secondary = "shockwave"
-- `get_player_runtime_loadout_for()` fallback secondary = shockwave stats
+- Default primary skill = "shockwave"
+- `get_player_runtime_loadout_for()` fallback primary skill = shockwave stats
 - Remove any grenade-specific fallback logic
 
 ### `scripts/game/CoopManager.gd`
@@ -357,16 +349,20 @@ Already updated in Phase 2. Verify:
 
 ### `scripts/game/PlayerInventory.gd`
 
-- Default `secondary_weapon_id = "shockwave"`
+- Default `primary_skill_id = "shockwave"`
 
 ### Grep verification
 
 After all changes, grep the live `scripts/`, `scenes/`, and `data/` trees for:
-- `grenade` (should only appear in archive/)
-- `GrenadeProjectile` (should only appear in archive/)
-- `_is_fire_pressed` (should be gone)
-- `aim_assist` / `AimAssist` (should be replaced by AutoTarget)
-- `charges_remaining` (gone — shockwave is cooldown, not charges)
+- `grenade` (should only appear in archive/) ✅ Clean
+- `GrenadeProjectile` (should only appear in archive/) ✅ Clean
+- `_is_fire_pressed` (should be gone) ✅ Clean
+- `aim_assist` / `AimAssist` (should be replaced by AutoTarget) ✅ Clean
+- `charges_remaining` (gone — shockwave is cooldown, not charges) ✅ Clean
+- `AimMode` / `aim_mode` (removed — auto-attack has no aim modes) ✅ Clean
+- `SPITTER` / `BRUISER` (removed from active roster and code) ✅ Clean
+- `_shockwave_aim_direction` (removed — shockwave is fully radial) ✅ Clean
+- `find_directional` (removed — pure nearest only) ✅ Clean
 
 ---
 
@@ -390,11 +386,11 @@ After all changes, grep the live `scripts/`, `scenes/`, and `data/` trees for:
 ### Dash tuning
 - Cooldown: 5s (separate from shockwave)
 - Direction: follows `_move_facing` (left stick direction)
-- Input: LT + B / Space
+- Input: LT / B (gamepad), Ctrl (keyboard P2)
 
 ### Enemy tuning (live values — +50% speed from original plan)
-- Chaser: HP 21, speed 292.5, lunge range 400px
-- Charger: HP 40, speed 247.5, charge range 115-560px, preferred_distance 200
+- Chaser: HP 21, speed 292.5, lunge range 520px
+- Charger: HP 40, speed 247.5, charge range 60-720px, preferred_distance 200
 - Boss: HP 180, speed 157.5, preferred_distance 110, fire_interval 1.0
 - Spawn cooldown: maxf((0.55 - depth * 0.03) * 0.5, 0.09)
 

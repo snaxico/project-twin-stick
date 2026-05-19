@@ -6,7 +6,7 @@ Neon co-op roguelite where your character auto-attacks and you focus on movement
 
 ## The Feel
 
-You're a glowing shape in a dark arena. Enemies swarm from the edges. Your weapon fires by itself — your job is to move. Weave through gaps, kite clusters, position for your aimed power ability. Every room you pick a mutation and your auto-attack gets crazier. By the boss room the screen is a light show and you're at the center of it. Brain off, flow state, power fantasy.
+You're a glowing shape in a dark arena. Enemies swarm from the edges. Your weapon fires by itself — your job is to move. Weave through gaps, kite clusters, dash out of danger, shockwave when they close in. Every room you pick a mutation and your auto-attack gets crazier. By the boss room the screen is a light show and you're at the center of it. Brain off, flow state, power fantasy.
 
 ## Reference Mix
 
@@ -28,27 +28,27 @@ You're a glowing shape in a dark arena. Enemies swarm from the edges. Your weapo
 
 ## Combat
 
-### Auto-Attack (Primary)
+### Weapon (Auto-Attack): Rifle
 
 - Fires automatically at the nearest enemy. Always. No trigger, no aiming.
-- Player controls ONLY movement (left stick) and power ability (right stick)
+- Player controls movement (left stick), primary skill (RT), and secondary skill (LT / B)
 - Baseline: ~3 shots/sec — slow, chunky, each orb feels impactful
 - Bolt visual: glowing dot/orb that flies toward the target
 - Perfectly accurate at baseline — no spread. Mutations like split_shot add spread.
-- Targeting: build both **pure nearest** and **nearest-in-move-direction (120° cone, fallback nearest)**, playtest to pick winner
-- The auto-attack is the main mutation target — it starts as a single weak orb and snowballs
+- Targeting: **pure nearest** — fires at closest enemy in weapon range (950px)
+- The weapon is the main mutation target — it starts as a single weak orb and snowballs
 - Fire rate, projectile count, pierce, ricochet, trails — all visible, all stacking
 - The player never thinks about aiming. They think about where to stand.
 
-### Power Ability (Secondary): Shockwave
+### Primary Skill: Shockwave
 
 - Expanding ring/pulse centered on the player that pushes + damages everything nearby
 - Fully player-centered (offset = 0). No directional aiming — blast radiates equally in all directions.
-- Triggered by **RT / Left click**
-- Also mutates but separately from the auto-attack (bigger radius, more damage, slow effect)
+- Triggered by **RT** (gamepad) or **Space** (keyboard P2)
+- Also mutates but separately from the weapon (bigger radius, more damage, slow effect)
 - Used for: panic button, cluster clear, objective pressure, boss damage windows
 
-**Locked shockwave stats:**
+**Locked primary skill (shockwave) stats:**
 - Cooldown: **5 seconds** — available for most dangerous moments, can't spam
 - Blast radius: **~250px** — clears the immediate threat bubble around the player
 - Knockback force: **950** — primary purpose is space creation, damage secondary
@@ -59,13 +59,13 @@ You're a glowing shape in a dark arena. Enemies swarm from the edges. Your weapo
 - Knockback direction = away from player center
 - Mutations can affect: radius, cooldown, damage, add effects (slow, burn, stun)
 
-### Dash
+### Secondary Skill: Dash
 
 - Quick burst of movement in the current move direction
-- Triggered by **LT + B / Space**
-- Cooldown: **5 seconds** (separate from shockwave cooldown)
+- Triggered by **LT / B** (gamepad) or **Ctrl** (keyboard P2)
+- Cooldown: **5 seconds** (separate from primary skill cooldown)
 - Uses `_move_facing` direction — always dashes where the player is moving
-- Dash and shockwave cooldowns are fully independent
+- Primary and secondary skill cooldowns are fully independent
 
 ### Why This Works
 
@@ -80,13 +80,13 @@ You're a glowing shape in a dark arena. Enemies swarm from the edges. Your weapo
 - Enemy density and variety — chasers swarm, chargers punish bad positioning
 - Objective pressure — "enemies left, capture zone right, where do I go?"
 - Revive decisions in co-op — partner is down, enemies are between you
-- Shockwave cooldown — it's not ready, enemies closing in, gotta kite
-- Dash cooldown — can't reposition instantly, have to weave manually
+- Primary skill cooldown — it's not ready, enemies closing in, gotta kite
+- Secondary skill cooldown — can't reposition instantly, have to weave manually
 - NOT: precise aiming, ammo management, weapon swapping, build math
 
 ## Upgrades / Mutations
 
-- Auto-attack and power ability both mutate over the run
+- Weapon and skills both mutate over the run
 - Every upgrade is always positive — no trap picks, no sidegrades
 - Upgrades are VISIBLE immediately:
   - Bolt count: 1 → 3 → 5 projectiles
@@ -98,7 +98,7 @@ You're a glowing shape in a dark arena. Enemies swarm from the edges. Your weapo
   - Size: bolts get physically bigger
   - Speed: fire rate visibly increases
 - No percentage stat text — the player SEES the difference, doesn't read it
-- By late run the auto-attack should look and feel completely different from room 1
+- By late run the weapon should look and feel completely different from room 1
 - Slay the Spire reward model:
   - After each room: each player independently picks 1 of 3 mutation cards
   - On shop nodes: buy mutations from a larger selection with gold (design TBD)
@@ -151,7 +151,7 @@ Core roster — add more later once these feel right:
 - **Chaser** (triangle) — small, fast, melee. Swarms in numbers. The fodder that makes auto-attack feel good. Dies in 1-3 hits.
 - **Charger** (pentagon) — winds up with a telegraph, dashes through you. Punishes standing still. Forces repositioning.
 - **Boss** (large star/crown) — end-of-run fight. Fires projectile bursts. Has phases or escalating patterns.
-- Spitter and Bruiser removed from active roster. May return later as unlockable enemy types.
+- Spitter and Bruiser code removed. Recoverable from git history if needed later.
 
 ## Room Objectives
 
@@ -178,7 +178,7 @@ Every room is "survive + do something." Auto-attack handles the fighting. The ob
 - Each player picks their own mutations — builds diverge naturally
 - Co-op coordination happens through positioning, not communication
 - Revive flow: stand near downed partner to revive — creates risk/reward moments
-- Power ability coordination: "I'll blast left cluster, you handle right"
+- Primary skill coordination: "I'll blast left cluster, you handle right"
 
 ## Run Structure
 
@@ -195,7 +195,7 @@ Every room is "survive + do something." Auto-attack handles the fighting. The ob
 
 - Minimal and neon-styled to match the aesthetic
 - Health bar (glowing, matches player color)
-- Power ability cooldown indicator
+- Primary skill + secondary skill cooldown indicators
 - Small mutation icons showing current build
 - Room objective + progress indicator (timer bar or capture %)
 - Keep the screen CLEAN — combat readability is the priority
@@ -204,8 +204,8 @@ Every room is "survive + do something." Auto-attack handles the fighting. The ob
 
 A non-gamer should be able to:
 - Pick up a controller, move around, enemies die. Immediate understanding.
-- Never touch the triggers and still be useful (auto-attack carries)
-- Use the shockwave trigger when they're ready — natural skill progression
+- Never touch the triggers and still be useful (weapon auto-fire carries)
+- Use the primary skill trigger when they're ready — natural skill progression
 - Feel stronger every 60 seconds from mutations
 - Laugh at the screen by the boss room
 - Want to play again
@@ -227,10 +227,10 @@ A non-gamer should be able to:
 
 | Change | Status |
 |--------|--------|
-| Auto-attack — auto-targeting nearest enemy, no trigger input | ✅ Done |
-| AimAssist.gd → AutoTarget.gd — repurposed for auto-attack targeting | ✅ Done |
-| Shockwave ability — expanding ring/pulse, 5s cooldown, 950 knockback, centered on player | ✅ Done |
-| Dash — movement burst on LT+B/Space, separate 5s cooldown | ✅ Done |
+| Weapon auto-fire — auto-targeting nearest enemy, no trigger input | ✅ Done |
+| AimAssist.gd → AutoTarget.gd — repurposed for weapon targeting | ✅ Done |
+| Primary skill (shockwave) — expanding ring/pulse, 5s cooldown, 950 knockback, centered on player | ✅ Done |
+| Secondary skill (dash) — movement burst on LT/B (gamepad) or Ctrl (keyboard), separate 5s cooldown | ✅ Done |
 | Player chevron visual — arrow shape, P1 cyan / P2 magenta | ✅ Done |
 | Arena color shifts — grid/wall HSV hue rotation per depth | ✅ Done |
 | Neon visual pass — orb projectiles, glow, particle effects | ✅ Done |
@@ -242,12 +242,12 @@ A non-gamer should be able to:
 ### Architecture (as implemented)
 
 **What changed from v2:**
-- `Player.gd` — fire input removed, auto-target + auto-fire loop, three direction vars (`_move_facing`, `_auto_attack_direction`, `_shockwave_aim_direction`), shockwave cooldown + signal, dash cooldown, chevron visual
-- `AimAssist.gd` → `AutoTarget.gd` — repurposed for auto-attack target acquisition (pure nearest)
-- `CoopManager.gd` — shockwave blast handler + visual, arena color shifts, auto-advance room flow, mutation pick pause, GrenadeProjectile removed
-- `weapons.json` — secondary entry is shockwave (cooldown 5.0, knockback 950, radius 250, damage 30)
+- `Player.gd` — fire input removed, auto-target + auto-fire loop, two direction vars (`_move_facing`, `_auto_attack_direction`), primary skill cooldown + signal, secondary skill (dash) cooldown, chevron visual
+- `AimAssist.gd` → `AutoTarget.gd` — repurposed for weapon target acquisition (pure nearest)
+- `CoopManager.gd` — primary skill blast handler + visual, arena color shifts, auto-advance room flow, mutation pick pause, GrenadeProjectile removed
+- `weapons.json` — primary skill entry is shockwave (cooldown 5.0, knockback 950, radius 250, damage 30)
 - `mutations.json` — `blast_radius` → `shockwave_radius`, `extra_charge` → `shockwave_cooldown`
-- `RunState.gd` — default secondary = "shockwave", move_speed = 390
+- `RunState.gd` — default primary skill = "shockwave", move_speed = 390
 
 **What stayed identical:**
 - Mutation system, pick screen
@@ -262,23 +262,23 @@ A non-gamer should be able to:
 |----------|--------|
 | Player shape | **Chevron / arrow** — points in move direction, reads as fast and forward |
 | Player speed | **390** — base move speed |
-| Auto-attack bolt | **Glowing dot / orb** — round energy ball, scales well with size mutations |
-| Power ability | **Shockwave / pulse** — expanding ring centered on player, pushes + damages nearby. Fully player-centered, no directional aiming. |
-| Shockwave input | **RT / Left click** — same button as old fire, brain reads "attack button" |
-| Shockwave cooldown | **5 seconds** — available for dangerous moments, can't spam. Mutation brings to 1s with 2 stacks. |
-| Shockwave radius | **~250px** — clears immediate threat bubble. |
-| Shockwave knockback | **950 force** — primary purpose is space creation. Sends enemies flying. |
-| Shockwave damage | **30** — kills ~1.5 chasers per blast |
-| Dash input | **LT + B / Space** — separate from shockwave |
-| Dash cooldown | **5 seconds** — separate from shockwave cooldown |
-| Auto-attack spread | **No spread** — perfectly accurate at target. Mutations (split_shot) add spread instead. |
+| Weapon bolt | **Glowing dot / orb** — round energy ball, scales well with size mutations |
+| Primary skill | **Shockwave / pulse** — expanding ring centered on player, pushes + damages nearby. Fully player-centered, no directional aiming. |
+| Primary skill input | **RT** (gamepad), **Space** (keyboard P2) — brain reads "attack button" |
+| Primary skill cooldown | **5 seconds** — available for dangerous moments, can't spam. Mutation brings to 1s with 2 stacks. |
+| Primary skill radius | **~250px** — clears immediate threat bubble. |
+| Primary skill knockback | **950 force** — primary purpose is space creation. Sends enemies flying. |
+| Primary skill damage | **30** — kills ~1.5 chasers per blast |
+| Secondary skill input | **LT / B** (gamepad), **Ctrl** (keyboard P2) — separate from primary skill |
+| Secondary skill cooldown | **5 seconds** — separate from primary skill cooldown |
+| Weapon spread | **No spread** — perfectly accurate at target. Mutations (split_shot) add spread instead. |
 | Baseline fire rate | **~3 shots/sec** — slow, chunky, each shot feels impactful. Big headroom for fire rate mutations. |
 | Arena visual variety | **Color shifts per room** — grid and wall colors change with depth via HSV hue rotation. Deeper = warmer/more intense. |
 | Audio direction | **Punchy arcade** — crisp retro-inspired SFX. Satisfying pops, crunches, dings. Impact over atmosphere. |
 | Third objective | **Deferred** — get Survive and Hold Zone feeling good first, then decide. |
 | Shop design | **Gold from kills, spend at shop nodes** — deferred from v3 vertical slice. Added later once core loop validates. |
 | Co-op player identity | **Same chevron shape, different color** — P1 cyan, P2 magenta. Clear, simple. |
-| Auto-attack targeting | **Pure nearest** implemented. Directional-nearest stub exists (`find_directional` calls `find_nearest`), playtest to decide if needed. |
+| Weapon targeting | **Pure nearest** implemented. Directional-nearest can be added later if needed (recoverable from git). |
 | Survive duration | **Flat 60 seconds** — all depths. Difficulty comes from enemy scaling, not longer timers. |
 | Hold zone contest | **No contest** — progress only increases when player in zone, never decreases. |
 | Room clear flow | **Auto-advance** — no exit zone walk. Room clears → mutation pick (game pauses) → next room. |

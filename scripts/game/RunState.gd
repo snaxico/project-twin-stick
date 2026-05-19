@@ -150,17 +150,17 @@ func get_player_inventory(player_index: int):
 		return null
 	return player_inventories[player_index]
 
-func get_primary_weapon(player_index: int) -> Dictionary:
+func get_weapon(player_index: int) -> Dictionary:
 	var inventory = get_player_inventory(player_index)
 	if inventory == null:
 		return {}
-	return (_weapons_by_id.get(inventory.primary_weapon_id, {}) as Dictionary).duplicate(true)
+	return (_weapons_by_id.get(inventory.weapon_id, {}) as Dictionary).duplicate(true)
 
-func get_secondary_weapon(player_index: int) -> Dictionary:
+func get_primary_skill(player_index: int) -> Dictionary:
 	var inventory = get_player_inventory(player_index)
 	if inventory == null:
 		return {}
-	return (_weapons_by_id.get(inventory.secondary_weapon_id, {}) as Dictionary).duplicate(true)
+	return (_weapons_by_id.get(inventory.primary_skill_id, {}) as Dictionary).duplicate(true)
 
 func get_mutations(player_index: int) -> Array:
 	var inventory = get_player_inventory(player_index)
@@ -169,19 +169,19 @@ func get_mutations(player_index: int) -> Array:
 	return inventory.mutations.duplicate()
 
 func get_player_runtime_loadout_for(player_index: int) -> Dictionary:
-	var primary_weapon: Dictionary = get_primary_weapon(player_index)
-	var secondary_weapon: Dictionary = get_secondary_weapon(player_index)
-	if primary_weapon.is_empty():
-		primary_weapon = {"id": "rifle", "name": "Rifle", "stats": {}}
-	if secondary_weapon.is_empty():
-		secondary_weapon = {"id": "shockwave", "name": "Shockwave", "stats": {}}
+	var weapon: Dictionary = get_weapon(player_index)
+	var primary_skill: Dictionary = get_primary_skill(player_index)
+	if weapon.is_empty():
+		weapon = {"id": "rifle", "name": "Rifle", "stats": {}}
+	if primary_skill.is_empty():
+		primary_skill = {"id": "shockwave", "name": "Shockwave", "stats": {}}
 	return {
-		"primary_weapon_id": str(primary_weapon.get("id", "rifle")),
-		"primary_name": str(primary_weapon.get("name", "Rifle")),
-		"primary_stats": (primary_weapon.get("stats", {}) as Dictionary).duplicate(true),
-		"secondary_weapon_id": str(secondary_weapon.get("id", "shockwave")),
-		"secondary_name": str(secondary_weapon.get("name", "Shockwave")),
-		"secondary_stats": (secondary_weapon.get("stats", {}) as Dictionary).duplicate(true),
+		"weapon_id": str(weapon.get("id", "rifle")),
+		"weapon_name": str(weapon.get("name", "Rifle")),
+		"weapon_stats": (weapon.get("stats", {}) as Dictionary).duplicate(true),
+		"primary_skill_id": str(primary_skill.get("id", "shockwave")),
+		"primary_skill_name": str(primary_skill.get("name", "Shockwave")),
+		"primary_skill_stats": (primary_skill.get("stats", {}) as Dictionary).duplicate(true),
 		"mutations": get_mutations(player_index),
 		"move_speed": 390.0,
 	}
@@ -213,8 +213,8 @@ func _build_default_player_inventories(player_count: int) -> Array:
 	for index in range(player_count):
 		var inventory := PlayerInventoryData.new()
 		inventory.player_index = index
-		inventory.primary_weapon_id = "rifle"
-		inventory.secondary_weapon_id = "shockwave"
+		inventory.weapon_id = "rifle"
+		inventory.primary_skill_id = "shockwave"
 		inventories.append(inventory)
 	return inventories
 

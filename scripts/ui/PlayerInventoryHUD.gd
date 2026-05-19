@@ -7,9 +7,9 @@ const IconFactoryData = preload("res://scripts/ui/IconFactory.gd")
 
 var _header_label: Label = null
 var _health_bar = null
-var _primary_slot: WeaponSlotHUD = null
-var _secondary_slot: WeaponSlotHUD = null
-var _dash_slot: WeaponSlotHUD = null
+var _weapon_slot: WeaponSlotHUD = null
+var _primary_skill_slot: WeaponSlotHUD = null
+var _secondary_skill_slot: WeaponSlotHUD = null
 var _mutation_row: HBoxContainer = null
 var _panel_style: StyleBoxFlat = null
 
@@ -32,9 +32,9 @@ func update_hud(data: Dictionary) -> void:
 	_header_label.text = str(data.get("header", _header_label.text))
 	var health_state: Dictionary = data.get("health_state", {}) as Dictionary
 	_health_bar.set_health(int(health_state.get("current", 0)), int(health_state.get("max", 1)), str(data.get("health_status", "")))
-	_primary_slot.configure(data.get("primary", {}) as Dictionary, false)
-	_secondary_slot.configure(data.get("secondary", {}) as Dictionary, true)
-	_dash_slot.configure(data.get("dash", {}) as Dictionary, true)
+	_weapon_slot.configure(data.get("weapon", {}) as Dictionary, false)
+	_primary_skill_slot.configure(data.get("primary_skill", {}) as Dictionary, true)
+	_secondary_skill_slot.configure(data.get("secondary_skill", {}) as Dictionary, true)
 	_update_mutation_icons(data.get("mutations", []))
 
 func _build() -> void:
@@ -73,12 +73,12 @@ func _build() -> void:
 	weapon_row.add_theme_constant_override("separation", 6)
 	layout.add_child(weapon_row)
 
-	_primary_slot = WeaponSlotHUDData.new()
-	weapon_row.add_child(_primary_slot)
-	_secondary_slot = WeaponSlotHUDData.new()
-	weapon_row.add_child(_secondary_slot)
-	_dash_slot = WeaponSlotHUDData.new()
-	weapon_row.add_child(_dash_slot)
+	_weapon_slot = WeaponSlotHUDData.new()
+	weapon_row.add_child(_weapon_slot)
+	_primary_skill_slot = WeaponSlotHUDData.new()
+	weapon_row.add_child(_primary_skill_slot)
+	_secondary_skill_slot = WeaponSlotHUDData.new()
+	weapon_row.add_child(_secondary_skill_slot)
 
 	_mutation_row = HBoxContainer.new()
 	_mutation_row.add_theme_constant_override("separation", 4)

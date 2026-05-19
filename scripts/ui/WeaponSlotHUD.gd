@@ -18,12 +18,12 @@ func _ready() -> void:
 func configure(slot_data: Dictionary, is_secondary: bool) -> void:
 	if _icon_rect == null:
 		_build()
-	var weapon_id := str(slot_data.get("weapon_id", ""))
-	var weapon_name := str(slot_data.get("name", "---"))
-	_name_label.text = weapon_name
+	var slot_id := str(slot_data.get("weapon_id", slot_data.get("skill_id", "")))
+	var slot_name := str(slot_data.get("name", "---"))
+	_name_label.text = slot_name
 	_name_label.visible = false
-	tooltip_text = weapon_name
-	_icon_rect.texture = IconFactoryData.get_weapon_icon(weapon_id)
+	tooltip_text = slot_name
+	_icon_rect.texture = IconFactoryData.get_weapon_icon(slot_id)
 	_icon_rect.visible = _icon_rect.texture != null
 	if is_secondary:
 		_cooldown_track.visible = true

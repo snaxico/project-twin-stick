@@ -37,13 +37,15 @@ This branch is now the v3 gameplay line:
   - stronger repeating major guide lines
   - visible perimeter wall visuals
 - each player now has exactly:
-  - `1` auto-firing primary weapon
-  - `1` cooldown secondary ability
+  - `1` auto-firing weapon (rifle)
+  - `1` primary skill (shockwave — RT / Space)
+  - `1` secondary skill (dash — LT / B / Ctrl)
   - an ordered mutation list
 - live starting loadout is now fixed to:
-  - primary: `Rifle`
-  - secondary: `Shockwave`
-- primary fire is now automatic:
+  - weapon: `Rifle`
+  - primary skill: `Shockwave`
+  - secondary skill: `Dash`
+- weapon fire is automatic:
   - no fire trigger input
   - baseline rifle cadence is `3.0` shots per second
   - target selection is handled by `AutoTarget.gd`
@@ -52,11 +54,12 @@ This branch is now the v3 gameplay line:
   - `P2` = keyboard
 - live input scheme is now:
   - gamepad left stick = movement
-  - `L2` = dash
-  - `R2` = shockwave
-  - keyboard `WASD` = movement
-  - keyboard `Ctrl` = dash
-  - keyboard `Space` = shockwave
+  - `L2` or `B` = secondary skill (dash)
+  - `R2` = primary skill (shockwave)
+  - keyboard `WASD` = movement (P2)
+  - keyboard `Ctrl` = secondary skill / dash (P2)
+  - keyboard `Space` = primary skill / shockwave (P2)
+  - P1 keyboard bindings for skills are empty (P1 defaults to gamepad)
 - nearest-enemy auto-targeting is always on; there is no aim-assist mode toggle in the menus
 - only these enemy roles are currently live:
   - `Chaser`
@@ -71,31 +74,31 @@ This branch is now the v3 gameplay line:
 - `RunState` remains the live run-state shell:
   - room progression
   - per-player health persistence
-  - per-player `1 primary + 1 secondary + mutations` inventory state
+  - per-player `1 weapon + 1 primary skill + 1 secondary skill + mutations` inventory state
 - `CoopManager` now drives the v3 room loop:
   - larger arena setup
   - depth-based arena color shifts
   - auto-attack projectile spawning
-  - shockwave blast handling + visual ring
+  - primary skill (shockwave) blast handling + visual ring
   - revive / fail / clear handling
   - mutation pick handoff
   - automatic room progression after mutation picks
 - `Player.gd` now implements:
   - movement-facing + auto-attack runtime
-  - automatic primary fire
-  - shockwave cooldown ownership
+  - automatic weapon fire
+  - primary skill cooldown ownership
   - chevron-only player visual
-  - dash-damage mutation support
+  - secondary skill (dash) damage mutation support
 - `AutoTarget.gd` replaced the old aim-assist path for auto-attack targeting
-- `MutationSystem` still compiles primary mutations, and now also handles:
-  - `shockwave_radius`
-  - `shockwave_cooldown`
+- `MutationSystem` still compiles weapon mutations, and now also handles:
+  - `shockwave_radius` (primary skill radius)
+  - `shockwave_cooldown` (primary skill cooldown)
 - `Projectile.gd` is now the live glowing-orb projectile path
 - `PlayerInventoryHUD` and `WeaponSlotHUD` remain the minimal HUD:
   - health
-  - primary icon
-  - secondary cooldown
-  - dash cooldown
+  - weapon icon
+  - primary skill cooldown
+  - secondary skill (dash) cooldown
   - mutation icons
 - encounter builder still supports:
   - room type
@@ -127,7 +130,7 @@ Obsolete v1 / v2 systems remain preserved under `archive/v1/`.
 ## Known Gaps
 
 - v3 now matches the new control model structurally, but still has not had a full feel-validation pass
-- shockwave, auto-attack cadence, and mutation payoff still need live tuning
+- primary skill (shockwave), weapon cadence, and mutation payoff still need live tuning
 - boss behavior is still the older fight shape and has not yet had the separate v3 redesign
 - builder mutation presets are for testing, not polished end-user UX
 - glow / neon presentation is improved, but this is still a gameplay-first pass rather than a final art pass
@@ -142,6 +145,6 @@ If work continues on v3, the next priority is play validation:
   - `Hold Zone`
   - `Mixed` / `Chasers Only` / `Chargers Only`
   - stacked mutation presets
-- tune rifle pulse cadence, shockwave feel, and room pressure until the loop feels clearly better than v2
+- tune weapon cadence, primary skill feel, and room pressure until the loop feels clearly better than v2
 - validate the mutation reward cadence across several full runs
 - only revisit shops, extra objectives, boss redesign, or higher player counts after the core v3 slice is fun

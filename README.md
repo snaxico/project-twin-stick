@@ -1,111 +1,89 @@
-# Project Placeholder
+# Project Twin-Stick — v3 Neon Roguelite
 
-Personal couch co-op twin-stick roguelite prototype built in Godot 4.6.2.
+Same-screen local co-op neon auto-attack roguelite prototype built in Godot 4.6.2.
 
-## Current Position
+## Current Direction
 
-- Development is now in a cleanup, encounter-identity, HUD, menu, and validation phase after the Patch 13 runtime pass and Patch 14 data cleanup.
-- The prototype remains locked to a same-screen, room-based, local co-op structure.
-- The first-playable milestone is still defined by the Patch 7 target: one complete 10-15 minute run that is readable, stable, and usable without explanation.
-- The current build includes connected map flow, persistent meta progression, per-player inventories, personal gold wallets, and in-room loot/shop handling.
-- The current build also includes expanded primary behavior families, split grenade-vs-mine secondary behavior, a compact icon-first HUD, and the first sprite-backed player/weapon pass.
-- The current build now also includes encounter recipes, five active combat layout identities, `capture_the_hill`, telegraphed hazard modifiers, and an Encounter Builder flow for single-room validation.
-- The current build now also includes a combat spectacle pass, a short post-dash shield, faster melee-first enemy pressure, and arena-wide valid spawn sampling instead of fixed spawn markers.
+This is a **neon auto-attack co-op survivor roguelite**. The player auto-attacks the nearest enemy — all skill expression is movement, positioning, shockwave timing, and dash usage. Mutations snowball the auto-attack into screen-filling chaos over a run.
+
+Reference mix: Vampire Survivors (auto-attack escalation), Brotato (wave structure, camera zoom), Geometry Wars (neon aesthetic).
 
 ## Stack
 
 - Engine: Godot 4.6.2 stable
 - Language: GDScript
-- Data: JSON-first content definitions
-- Platform target: Windows desktop first
+- Data: JSON content definitions
+- Platform target: Windows desktop
 
 ## Current Runtime
 
-1. Open the project in Godot 4.6.2 stable and run the main scene.
-2. A front menu opens with `Play`, `Meta`, `Settings`, and `Encounter Builder`.
-3. `Play` opens run setup with `1–4` players, per-player control source selection, and `Normal` / `Easy` run modes.
-4. `Encounter Builder` opens the single-room validation flow with room, objective, modifier, layout, and depth overrides, then returns to the builder after the encounter ends.
-5. Starting a run opens a connected node-map flow with room, modifier, and reward preview.
-6. Combat and elite nodes launch recipe-driven rooms with `survive`, `capture_the_hill`, or `destroy_generators` objectives, recurring enemy pressure, and room modifiers.
-7. Cleared combat and elite rooms now drop physical loot, then wait for players to exit through an opened exit zone.
-8. Shop nodes launch a real shop room with personal offers, personal gold wallets, replacement support, and a shared ready-up flow.
-9. Clearing the final boss room resolves into a run-victory screen and meta-gold summary. Losing all active players resolves into a defeat screen with the same return path.
+1. Open the project in Godot 4.6.2 and run the main scene.
+2. Front menu: `Play` or `Encounter Builder`.
+3. `Play` opens run setup: 1-2 players, per-player control source, Normal/Easy mode.
+4. Run flow uses a node map: combat, rest, boss.
+5. Combat rooms have objectives: Survive (60s) or Hold Zone (capture area).
+6. Auto-attack fires at nearest enemy. Player focuses on movement and abilities.
+7. Room clears — game pauses, each player picks 1 of 3 mutations.
+8. Auto-advances to map. Repeat until boss.
 
-## Current Feature Baseline
+## Active Loadout
 
-- `1–4` local players
-- persistent profile save data
-- meta-gold rewards after each completed run
-- persistent unlock purchases that gate future reward/shop pools
-- dedicated run-end summary panel with direct meta-menu handoff
-- per-player gold wallets
-- per-player inventories with:
-  - `2` primary slots
-  - `2` secondary slots
-  - selected-slot switching
-  - passive ownership
-- data-driven primary weapons: `Rifle`, `Scatter`, `Slug`
-- expanded primary behavior families: `Incinerator`, `Beam Lance`, `Arc Caster`
-- data-driven secondary weapons: `Grenade`, `Cluster Grenade`, `Siege Grenade`, `Mine`, `Shrapnel Mine`, `Heavy Mine`
-- weapon duplicate leveling through `Lv1–Lv5`
-- physical loot drops with Take/Scrap resolution
-- contested loot rolls and replacement flow when weapon slots are full
-- real shop rooms with personal offers and personal purchases
-- manual room exit after loot/shop resolution
-- Encounter Builder single-room launches with explicit room/objective/modifier/layout/depth selection
-- normal/easy run modes
-- pause menu with resume and room restart
-- gamepad menu confirm/back support
-- mouse aim and mouse buttons for keyboard/mouse play
-- `L2` secondary for gamepad play
-- movement-first dash direction with aim fallback
-- downed and proximity-revive flow
-- room modifiers with pre-fight telegraphing
-- multiple room layout presets with five active normal-run identities: `default`, `lane`, `pillars`, `ring`, `pockets`
-- enemy archetypes: `Chaser`, `Spitter`, `Charger`, `Bruiser`, and placeholder boss
-- placeholder boss encounter
-- clean rectangular grid arena with placeholder walls
-- arena framing pushed closer so the room fills most of the screen
-- projectile, impact, and grenade burst colors now inherit from the firing actor
-- mine secondaries now use instant placement plus proximity detonation
-- arena-wide valid spawn sampling and feeler-based enemy obstacle steering
-- return-to-menu flow after a run so meta unlocks can be spent
-- connected map with linked route selection before each room
-- first sprite-backed presentation pass for player 1, the rifle, and player bullets
-- player-facing HUD with compact per-player wallets, icon-based weapon slots, passive chips, cooldowns, timer/objective header, and boss bar
+Each player has:
+- **Weapon: Rifle** (auto-fire) — 3 shots/sec, glowing orb projectiles, pure nearest targeting
+- **Primary Skill: Shockwave** (RT / Space) — expanding ring, 5s cooldown, 950 knockback, centered on player
+- **Secondary Skill: Dash** (LT / B / Ctrl) — movement burst in move direction, 5s cooldown, shield on activation
+- **Mutations** — picked after each room, modify weapon and skill abilities
+
+## Mutations
+
+10 mutations, all visible effects:
+- Weapon: ricochet, pierce, split shot, big shot, fire trail, rapid fire, knockback
+- Primary Skill: shockwave radius, shockwave cooldown (Quick Pulse)
+- Secondary Skill: dash damage
+
+## Enemies
+
+- **Chaser** (triangle) — fast melee swarmers, HP 21, speed 292.5
+- **Charger** (pentagon) — telegraph + dash attack, HP 40, speed 247.5
+- **Boss** (star/crown) — projectile bursts, HP 180, speed 157.5
+
+## Visual Style
+
+Neon geometric: dark background, glowing Polygon2D shapes, Line2D grid floor, color shifts per room depth via HSV hue rotation. Player is a chevron (P1 cyan, P2 magenta). Future pivot to rubberhose sprites planned once gameplay validates.
 
 ## Controls
 
-- Keyboard/mouse:
-  - move: `WASD`
-  - aim: mouse
-  - primary fire: left mouse button
-  - secondary: right mouse button
-  - dash: `Space`
-- Gamepad:
-  - move: left stick
-  - aim: right stick
-  - primary fire: `R2`
-  - secondary: `L2`
-  - dash: `B / O`
-  - pause: `Start`
-  - menu confirm: `A / X`
-  - menu back: `B / O`
+Gamepad (P1 default):
+- Left stick: move
+- LT / B: secondary skill (dash)
+- RT: primary skill (shockwave)
+- Start: pause
 
-## Placeholder Policy
+Keyboard (P2 default):
+- WASD: move
+- Ctrl: secondary skill (dash)
+- Space: primary skill (shockwave)
 
-- Use Godot-native placeholder visuals only during the current prototype stage.
-- The art pipeline is still provisional, but sprite integration has started.
-- Current readability is mixed:
-  - `P1`: custom standing/running sprite, attached rifle sprite, and sprite bullet
-  - `P2`: blue
-  - `P3`: yellow
-  - `P4`: orange
-  - enemies: colored placeholder silhouettes
-- Players `2–4` still use procedural bodies.
-- The current HUD uses real rifle / scatter / slug sprites as primary-slot icons; secondaries and passives still use placeholder badges.
+Weapon auto-fires at the nearest enemy — no input needed.
+
+## Branch Structure
+
+- `main` — stable pre-rework build (commit `e71d366`)
+- `v2/core-refactor` — active v3 development branch
+
+## What's Deferred
+
+- Shop nodes / gold economy
+- Third objective type
+- Boss redesign
+- 3-4 player support
+- Audio pass
+- Meta progression
+- Rubberhose sprite art pivot
 
 ## Documentation
 
+- Design direction: `docs/design/game-direction-v3.md`
+- Implementation plan: `docs/design/v3-implementation-plan.md`
+- Current state: `docs/development/current-state.md`
 - Process docs: `docs/process/`
-- Development memory: `docs/development/`

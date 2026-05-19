@@ -93,10 +93,10 @@ func get_compiled_weapon_stats(player_index: int, base_stats: Dictionary) -> Dic
 		compiled["knockback_force"] = float(_get_param("knockback", "force", 300.0)) * knockback_count
 	return compiled
 
-func get_secondary_radius_multiplier(player_index: int) -> float:
+func get_primary_skill_radius_multiplier(player_index: int) -> float:
 	return 1.0 + 0.5 * float(get_mutation_count(player_index, "shockwave_radius"))
 
-func get_shockwave_cooldown_reduction(player_index: int) -> float:
+func get_primary_skill_cooldown_reduction(player_index: int) -> float:
 	return float(get_mutation_count(player_index, "shockwave_cooldown")) * float(_get_param("shockwave_cooldown", "cooldown_reduction", 2.0))
 
 func get_dash_damage_multiplier(player_index: int) -> float:

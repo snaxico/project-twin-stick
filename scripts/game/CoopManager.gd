@@ -206,12 +206,12 @@ func _spawn_players() -> void:
 		player.setup(_player_configs[index], assigned_gamepad)
 		_clamp_player_to_arena(player)
 		player.fire_requested.connect(_on_player_fire_requested)
-		player.shockwave_requested.connect(_on_player_shockwave_requested)
+		player.primary_skill_requested.connect(_on_player_primary_skill_requested)
 		player.downed.connect(_on_player_downed)
 		player.revived.connect(_on_player_revived)
 		player.damage_taken.connect(_on_player_damage_taken)
 		player.muzzle_flash_requested.connect(_on_muzzle_flash_requested)
-		player.dash_trail_requested.connect(_on_dash_trail_requested)
+		player.secondary_skill_trail_requested.connect(_on_secondary_skill_trail_requested)
 		_player_nodes.append(player)
 	_rebuild_player_loadouts()
 	if camera.has_method("set_players"):
@@ -222,15 +222,15 @@ func _rebuild_player_loadouts() -> void:
 	_compiled_loadouts.clear()
 	for index in range(_player_nodes.size()):
 		var base_loadout: Dictionary = RunState.get_player_runtime_loadout_for(index)
-		var compiled_primary := _mutation_system.get_compiled_weapon_stats(index, (base_loadout.get("primary_stats", {}) as Dictionary))
-		var secondary_stats := _build_secondary_runtime_stats(index, (base_loadout.get("secondary_stats", {}) as Dictionary))
+		var compiled_weapon := _mutation_system.get_compiled_weapon_stats(index, (base_loadout.get("weapon_stats", {}) as Dictionary))
+		var compiled_skill_stats := _build_primary_skill_runtime_stats(index, (base_loadout.get("primary_skill_stats", {}) as Dictionary))
 		var compiled_loadout := {
-			"primary_weapon_id": str(base_loadout.get("primary_weapon_id", "rifle")),
-			"primary_name": str(base_loadout.get("primary_name", "Rifle")),
-			"primary_stats": compiled_primary,
-			"secondary_weapon_id": str(base_loadout.get("secondary_weapon_id", "shockwave")),
-			"secondary_name": str(base_loadout.get("secondary_name", "Shockwave")),
-			"secondary_stats": secondary_stats,
+			"weapon_id": str(base_loadout.get("weapon_id", "rifle")),
+			"weapon_name": str(base_loadout.get("weapon_name", "Rifle")),
+			"weapon_stats": compiled_weapon,
+			"primary_skill_id": str(base_loadout.get("primary_skill_id", "shockwave")),
+			"primary_skill_name": str(base_loadout.get("primary_skill_name", "Shockwave")),
+			"primary_skill_stats": compiled_skill_stats,
 			"mutations": _mutation_system.get_active_mutations(index),
 			"move_speed": float(base_loadout.get("move_speed", 390.0)),
 			"dash_damage_multiplier": _mutation_system.get_dash_damage_multiplier(index),
@@ -238,16 +238,16 @@ func _rebuild_player_loadouts() -> void:
 		_compiled_loadouts.append(compiled_loadout)
 		_player_nodes[index].apply_loadout(compiled_loadout)
 
-func _build_secondary_runtime_stats(player_index: int, base_stats: Dictionary) -> Dictionary:
+func _build_primary_skill_runtime_stats(player_index: int, base_stats: Dictionary) -> Dictionary:
 	var knockback_force := float(base_stats.get("knockback_force", 950.0))
 	if _mutation_system.has_mutation(player_index, "knockback"):
 		knockback_force += float(_mutation_system.get_mutation_count(player_index, "knockback")) * 60.0
-	var cooldown: float = maxf(0.5, float(base_stats.get("cooldown", 8.0)) - _mutation_system.get_shockwave_cooldown_reduction(player_index))
+	var cooldown: float = maxf(0.5, float(base_stats.get("cooldown", 8.0)) - _mutation_system.get_primary_skill_cooldown_reduction(player_index))
 	return {
 		"kind": str(base_stats.get("kind", "shockwave")),
 		"damage": float(base_stats.get("damage", 30.0)),
 		"cooldown": cooldown,
-		"radius": float(base_stats.get("radius", 250.0)) * _mutation_system.get_secondary_radius_multiplier(player_index),
+		"radius": float(base_stats.get("radius", 250.0)) * _mutation_system.get_primary_skill_radius_multiplier(player_index),
 		"knockback_force": knockback_force,
 		"expand_duration": float(base_stats.get("expand_duration", 0.15)),
 	}
@@ -337,8 +337,8 @@ func _apply_collision_bounds_from_floor() -> void:
 	_set_wall_rect(left_wall, Vector2(ARENA_MARGIN * 0.5, ARENA_CENTER.y), Vector2(ARENA_MARGIN, ARENA_SIZE.y - ARENA_MARGIN * 2.0))
 	_set_wall_rect(right_wall, Vector2(ARENA_RECT.end.x - ARENA_MARGIN * 0.5, ARENA_CENTER.y), Vector2(ARENA_MARGIN, ARENA_SIZE.y - ARENA_MARGIN * 2.0))
 
-func _set_wall_rect(node: CollisionShape2D, position: Vector2, size: Vector2) -> void:
-	node.position = position
+func _set_wall_rect(node: CollisionShape2D, wall_position: Vector2, size: Vector2) -> void:
+	node.position = wall_position
 	if node.shape == null or not (node.shape is RectangleShape2D):
 		node.shape = RectangleShape2D.new()
 	(node.shape as RectangleShape2D).size = size
@@ -516,39 +516,39 @@ func _on_player_fire_requested(origin: Vector2, direction: Vector2, config: Dict
 		return
 	var player_index := int(shooter.player_index)
 	var loadout: Dictionary = _compiled_loadouts[player_index]
-	var primary_stats: Dictionary = loadout.get("primary_stats", {})
-	var split_extra_count := int(primary_stats.get("split_extra_count", 0))
-	var spread_step := deg_to_rad(float(primary_stats.get("split_spread_degrees", 15.0)))
+	var weapon_stats: Dictionary = loadout.get("weapon_stats", {})
+	var split_extra_count := int(weapon_stats.get("split_extra_count", 0))
+	var spread_step := deg_to_rad(float(weapon_stats.get("split_spread_degrees", 15.0)))
 	var projectile_count := 1 + split_extra_count
 	var directions := _build_spread_directions(direction, projectile_count, spread_step)
 	for projectile_direction in directions:
 		var projectile = ProjectileSceneData.instantiate()
 		projectile.global_position = origin
 		var projectile_config := {
-			"speed": float(primary_stats.get("projectile_speed", 648.0)),
-			"damage": int(round(float(primary_stats.get("damage", 14.0)))),
+			"speed": float(weapon_stats.get("projectile_speed", 648.0)),
+			"damage": int(round(float(weapon_stats.get("damage", 14.0)))),
 			"color": shooter.player_config.tint,
 			"shooter": shooter,
 			"feedback_profile": "rifle",
 			"impact_weight": 1.0,
-			"max_distance": float(primary_stats.get("range", 520.0)),
-			"collision_half_width": float(primary_stats.get("area", 4.0)),
-			"pierce_count": int(primary_stats.get("pierce_count", 0)),
-			"ricochet_count": int(primary_stats.get("ricochet_count", 0)),
-			"ricochet_range": float(primary_stats.get("ricochet_range", 200.0)),
-			"leaves_fire_trail": bool(primary_stats.get("leaves_fire_trail", false)),
-			"trail_lifetime": float(primary_stats.get("trail_lifetime", 1.5)),
-			"trail_tick_interval": float(primary_stats.get("trail_tick_interval", 0.5)),
-			"trail_damage_percent": float(primary_stats.get("trail_damage_percent", 0.3)),
-			"knockback_force": float(primary_stats.get("knockback_force", 0.0)),
-			"weapon_id": str(loadout.get("primary_weapon_id", "rifle")),
-			"source_type": "primary",
+			"max_distance": float(weapon_stats.get("range", 520.0)),
+			"collision_half_width": float(weapon_stats.get("area", 4.0)),
+			"pierce_count": int(weapon_stats.get("pierce_count", 0)),
+			"ricochet_count": int(weapon_stats.get("ricochet_count", 0)),
+			"ricochet_range": float(weapon_stats.get("ricochet_range", 200.0)),
+			"leaves_fire_trail": bool(weapon_stats.get("leaves_fire_trail", false)),
+			"trail_lifetime": float(weapon_stats.get("trail_lifetime", 1.5)),
+			"trail_tick_interval": float(weapon_stats.get("trail_tick_interval", 0.5)),
+			"trail_damage_percent": float(weapon_stats.get("trail_damage_percent", 0.3)),
+			"knockback_force": float(weapon_stats.get("knockback_force", 0.0)),
+			"weapon_id": str(loadout.get("weapon_id", "rifle")),
+			"source_type": "weapon",
 		}
 		projectile.setup_from_config("player", projectile_direction, projectile_config)
 		projectile.impact_requested.connect(_on_projectile_impact)
 		projectiles.add_child(projectile)
 
-func _on_player_shockwave_requested(origin: Vector2, direction: Vector2, stats: Dictionary) -> void:
+func _on_player_primary_skill_requested(origin: Vector2, _direction: Vector2, stats: Dictionary) -> void:
 	var radius := float(stats.get("radius", 250.0))
 	var damage := int(round(float(stats.get("damage", 30.0))))
 	var knockback_force := float(stats.get("knockback_force", 500.0))
@@ -662,7 +662,7 @@ func _on_muzzle_flash_requested(_origin: Vector2, _direction: Vector2, _color: C
 	if screen_shake != null and screen_shake.has_method("add_trauma"):
 		screen_shake.add_trauma(clampf(0.02 * impact_weight, 0.0, 0.08))
 
-func _on_dash_trail_requested(_origin: Vector2, _color: Color) -> void:
+func _on_secondary_skill_trail_requested(_origin: Vector2, _color: Color) -> void:
 	pass
 
 func _update_revives(delta: float) -> void:
@@ -839,9 +839,9 @@ func _refresh_hud() -> void:
 			"header": "P%d" % (index + 1),
 			"health_state": _player_nodes[index].get_health_state(),
 			"health_status": _player_nodes[index].get_health_ratio_text(),
-			"primary": _player_nodes[index].get_primary_hud_data(),
-			"secondary": _player_nodes[index].get_secondary_hud_data(),
-			"dash": _player_nodes[index].get_dash_hud_data(),
+			"weapon": _player_nodes[index].get_weapon_hud_data(),
+			"primary_skill": _player_nodes[index].get_primary_skill_hud_data(),
+			"secondary_skill": _player_nodes[index].get_secondary_skill_hud_data(),
 			"mutations": _mutation_system.get_active_mutations(index),
 		})
 
