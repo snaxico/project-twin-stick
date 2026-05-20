@@ -2,6 +2,8 @@ extends Node2D
 
 const EnemySceneData = preload("res://scenes/enemies/Enemy.tscn")
 const ProjectileSceneData = preload("res://scenes/weapons/Projectile.tscn")
+const GoldPickupSceneData = preload("res://scenes/pickups/GoldPickup.tscn")
+const GoldPickupData = preload("res://scripts/pickups/GoldPickup.gd")
 const PlayerInventoryHUDData = preload("res://scripts/ui/PlayerInventoryHUD.gd")
 const MutationSystemData = preload("res://scripts/game/MutationSystem.gd")
 const MutationPickUIScene = preload("res://scenes/ui/MutationPickUI.tscn")
@@ -20,6 +22,13 @@ const EXIT_HOLD_DURATION := 0.8
 const REVIVE_RADIUS := 96.0
 const REVIVE_HOLD_DURATION := 1.2
 const SURVIVE_DURATION := 60.0
+const SURVIVAL_BONUS_GOLD := 20
+const MUTATION_PICK_COSTS := [15, 50, 100]
+const GOLD_DROP_VALUES := {
+	"chaser": {"min": 3, "max": 5},
+	"charger": {"min": 8, "max": 12},
+	"boss": {"min": 0, "max": 0},
+}
 
 @export var player_scene: PackedScene
 
@@ -32,6 +41,7 @@ signal return_to_menu_requested
 @onready var players: Node2D = $Players
 @onready var projectiles: Node2D = $Projectiles
 @onready var enemies: Node2D = $Enemies
+@onready var pickups: Node2D = $Pickups
 @onready var effects: Node2D = $Effects
 @onready var exit_zone: Area2D = $ExitZone
 @onready var exit_zone_shape: CollisionShape2D = $ExitZone/CollisionShape2D
@@ -88,6 +98,7 @@ var _capture_hill_progress := 0.0
 var _revive_progress_by_player_id: Dictionary = {}
 var _hud_root: Control = null
 var _player_inventory_huds: Array = []
+var _gold_labels: Array = []
 var _timer_label: Label = null
 var _timer_fill: ColorRect = null
 var _mutation_pick_ui = null
@@ -95,6 +106,8 @@ var _arena_minor_grid_color := Color(0.32, 0.72, 0.86, 0.24)
 var _arena_major_grid_color := Color(0.42, 0.9, 1.0, 0.42)
 var _arena_wall_color := Color(0.12, 0.32, 0.38, 0.92)
 var _pending_clear_summary := ""
+var _room_gold_multiplier: float = 1.0
+var _room_gold_earned: int = 0
 
 func configure_players(configs: Array) -> void:
 	_player_configs = configs.duplicate()
@@ -181,12 +194,23 @@ func _build_hud() -> void:
 	timer_track.add_child(_timer_fill)
 
 	_player_inventory_huds.clear()
+	_gold_labels.clear()
 	for index in range(_player_configs.size()):
 		var hud := PlayerInventoryHUDData.new()
-		hud.position = Vector2(24.0, 860.0 + index * 140.0) if index == 0 else Vector2(1676.0, 860.0)
+		var hud_position := Vector2(24.0, 860.0 + index * 140.0) if index == 0 else Vector2(1676.0, 860.0)
+		hud.position = hud_position
 		hud.configure_player("P%d" % (index + 1), _player_configs[index].tint)
 		_hud_root.add_child(hud)
 		_player_inventory_huds.append(hud)
+
+		var gold_label := Label.new()
+		gold_label.text = "0g"
+		gold_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+		gold_label.add_theme_font_size_override("font_size", 16)
+		gold_label.add_theme_color_override("font_color", Color(1.0, 0.85, 0.2, 0.95))
+		gold_label.position = hud_position + Vector2(0.0, -24.0)
+		_hud_root.add_child(gold_label)
+		_gold_labels.append(gold_label)
 
 func _spawn_players() -> void:
 	for child in players.get_children():
@@ -361,6 +385,8 @@ func _start_room() -> void:
 	_room_timer_remaining = SURVIVE_DURATION
 	_boss_spawned = false
 	_pending_clear_summary = ""
+	_room_gold_multiplier = 1.0
+	_room_gold_earned = 0
 	result_panel.visible = false
 	pause_panel.visible = false
 	settings_panel.visible = false
@@ -375,7 +401,7 @@ func _start_room() -> void:
 		_open_exit_zone()
 
 func _clear_runtime_nodes() -> void:
-	for group in [projectiles, enemies, effects]:
+	for group in [projectiles, enemies, effects, pickups]:
 		for child in group.get_children():
 			child.queue_free()
 	_enemy_nodes.clear()
@@ -400,6 +426,7 @@ func _physics_process(delta: float) -> void:
 	_clamp_players_to_arena()
 	_update_revives(delta)
 	_update_room(delta)
+	_update_gold_pickups(delta)
 	_update_exit_zone(delta)
 	_refresh_hud()
 
@@ -630,6 +657,9 @@ func _on_enemy_died(enemy) -> void:
 	_enemy_nodes.erase(enemy)
 	if screen_shake != null and screen_shake.has_method("add_trauma"):
 		screen_shake.add_trauma(clampf(0.06 * enemy.get_feedback_weight(), 0.0, 0.2))
+	var gold_amount := _get_gold_drop_amount(enemy.get_type_name())
+	if gold_amount > 0:
+		_spawn_gold_pickup(enemy.global_position, gold_amount)
 
 func _on_enemy_hit_received(_enemy, _damage_amount: int, lethal: bool) -> void:
 	if lethal:
@@ -688,11 +718,14 @@ func _handle_room_clear(summary: String) -> void:
 	if _room_clear_started:
 		return
 	_room_clear_started = true
-	_pending_clear_summary = summary
+	_auto_collect_all_gold()
+	_award_survival_bonus()
+	var gold_summary := "\nGold earned: %dg (includes %dg survival bonus)" % [_room_gold_earned, SURVIVAL_BONUS_GOLD]
+	_pending_clear_summary = summary + gold_summary
 	_lock_player_input(true)
 	_end_active_encounter()
 	if _room_type == "boss":
-		_finish_room_progression(summary)
+		_finish_room_progression(_pending_clear_summary)
 		return
 	_show_mutation_pick()
 
@@ -701,17 +734,26 @@ func _show_mutation_pick() -> void:
 	_mutation_pick_ui = MutationPickUIScene.instantiate()
 	_mutation_pick_ui.process_mode = Node.PROCESS_MODE_WHEN_PAUSED
 	var options_by_player: Array = []
+	var gold_per_player: Array = []
 	for player_index in range(_player_nodes.size()):
 		options_by_player.append(_mutation_system.roll_mutation_options(player_index, 3))
-	_mutation_pick_ui.configure_for_players(_player_configs, options_by_player)
+		gold_per_player.append(RunState.get_player_gold(player_index))
+	_mutation_pick_ui.configure_for_players(_player_configs, options_by_player, gold_per_player, MUTATION_PICK_COSTS)
 	_mutation_pick_ui.selections_confirmed.connect(_on_mutation_selections_confirmed)
 	ui_layer.add_child(_mutation_pick_ui)
 	get_tree().paused = true
 
-func _on_mutation_selections_confirmed(selections: Array) -> void:
+func _on_mutation_selections_confirmed(selections_per_player: Array) -> void:
 	get_tree().paused = false
-	for player_index in range(min(selections.size(), _player_nodes.size())):
-		_mutation_system.apply_mutation(player_index, str(selections[player_index]))
+	for player_index in range(min(selections_per_player.size(), _player_nodes.size())):
+		var selected_ids: Array = selections_per_player[player_index]
+		for pick_index in range(selected_ids.size()):
+			var mutation_id := str(selected_ids[pick_index])
+			if mutation_id.is_empty():
+				continue
+			var cost: int = MUTATION_PICK_COSTS[mini(pick_index, MUTATION_PICK_COSTS.size() - 1)]
+			if RunState.spend_player_gold(player_index, cost):
+				_mutation_system.apply_mutation(player_index, mutation_id)
 	_rebuild_player_loadouts()
 	if _mutation_pick_ui != null and is_instance_valid(_mutation_pick_ui):
 		_mutation_pick_ui.queue_free()
@@ -844,6 +886,8 @@ func _refresh_hud() -> void:
 			"secondary_skill": _player_nodes[index].get_secondary_skill_hud_data(),
 			"mutations": _mutation_system.get_active_mutations(index),
 		})
+	for index in range(min(_gold_labels.size(), _player_configs.size())):
+		(_gold_labels[index] as Label).text = "%dg" % RunState.get_player_gold(index)
 
 func get_active_players() -> Array:
 	var active_players: Array = []
@@ -889,6 +933,63 @@ func _lock_player_input(locked: bool) -> void:
 	for player in _player_nodes:
 		if player != null and is_instance_valid(player):
 			player.set_input_locked(locked)
+
+func _get_gold_drop_amount(enemy_type_name: String) -> int:
+	var entry: Dictionary = GOLD_DROP_VALUES.get(enemy_type_name, {"min": 3, "max": 5})
+	var base := randi_range(int(entry.get("min", 3)), int(entry.get("max", 5)))
+	if base <= 0:
+		return 0
+	return maxi(1, int(round(float(base) * _room_gold_multiplier)))
+
+func _spawn_gold_pickup(position: Vector2, amount: int) -> void:
+	var pickup = GoldPickupSceneData.instantiate()
+	pickup.amount = amount
+	pickup.global_position = position
+	pickups.add_child(pickup)
+
+func _update_gold_pickups(delta: float) -> void:
+	var active_players := get_active_players()
+	if active_players.is_empty():
+		return
+	var to_remove: Array = []
+	for pickup in pickups.get_children():
+		if not is_instance_valid(pickup):
+			continue
+		var nearest_player = null
+		var nearest_distance := INF
+		for player in active_players:
+			var dist: float = player.global_position.distance_to(pickup.global_position)
+			if dist < nearest_distance:
+				nearest_distance = dist
+				nearest_player = player
+		if nearest_player == null:
+			continue
+		pickup._magnet_target = nearest_player
+		if nearest_distance < GoldPickupData.MAGNET_RADIUS:
+			var direction: Vector2 = (nearest_player.global_position - pickup.global_position).normalized()
+			pickup._magnet_speed = minf(pickup._magnet_speed + GoldPickupData.MAGNET_ACCELERATION * delta, GoldPickupData.MAGNET_MAX_SPEED)
+			pickup.global_position += direction * pickup._magnet_speed * delta
+			nearest_distance = nearest_player.global_position.distance_to(pickup.global_position)
+		if nearest_distance < GoldPickupData.COLLECT_RADIUS:
+			RunState.add_gold_to_all_players(pickup.amount)
+			_room_gold_earned += pickup.amount
+			if pickup.has_signal("collected"):
+				pickup.collected.emit(pickup.amount, nearest_player)
+			to_remove.append(pickup)
+	for pickup in to_remove:
+		pickup.queue_free()
+
+func _auto_collect_all_gold() -> void:
+	for pickup in pickups.get_children():
+		if not is_instance_valid(pickup):
+			continue
+		RunState.add_gold_to_all_players(pickup.amount)
+		_room_gold_earned += pickup.amount
+		pickup.queue_free()
+
+func _award_survival_bonus() -> void:
+	RunState.add_gold_to_all_players(SURVIVAL_BONUS_GOLD)
+	_room_gold_earned += SURVIVAL_BONUS_GOLD
 
 func _unhandled_input(event: InputEvent) -> void:
 	if _awaiting_mutation_pick:

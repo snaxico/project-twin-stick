@@ -25,7 +25,12 @@ This branch is now the v3 gameplay line:
   - `combat`
   - `rest`
   - `boss`
-- shop / gold / meta progression remain out of the live runtime
+- dedicated shop nodes and meta progression remain out of the live runtime
+- gold economy is now live:
+  - enemies drop gold pickups on death
+  - pickups magnet to the nearest living player
+  - gold is shared on collection and copied into every player's personal wallet
+  - room clear auto-collects leftovers and adds a flat survival bonus
 
 ## Active Combat State
 
@@ -68,6 +73,11 @@ This branch is now the v3 gameplay line:
 - room objectives currently supported:
   - `survive`
   - `capture_the_hill`
+- mutation rewards are no longer free:
+  - each room-end pick screen shows `3` rolled mutations
+  - each player can buy `0–3` picks from that set
+  - current placeholder costs are `15 / 50 / 100`
+  - unspent gold carries forward between rooms
 
 ## Active Systems
 
@@ -75,14 +85,20 @@ This branch is now the v3 gameplay line:
   - room progression
   - per-player health persistence
   - per-player `1 weapon + 1 primary skill + 1 secondary skill + mutations` inventory state
+  - per-player gold wallet state
 - `CoopManager` now drives the v3 room loop:
   - larger arena setup
   - depth-based arena color shifts
   - auto-attack projectile spawning
   - primary skill (shockwave) blast handling + visual ring
+  - enemy gold drop spawning and room-end gold payout
   - revive / fail / clear handling
   - mutation pick handoff
   - automatic room progression after mutation picks
+- `GoldPickup.gd` is now the live room-currency pickup path:
+  - procedural neon coin/orb visual
+  - magnet pull to nearest player
+  - no collision-shape dependency; `CoopManager` owns collection checks
 - `Player.gd` now implements:
   - movement-facing + auto-attack runtime
   - automatic weapon fire
@@ -100,6 +116,9 @@ This branch is now the v3 gameplay line:
   - primary skill cooldown
   - secondary skill (dash) cooldown
   - mutation icons
+- live combat HUD now also shows per-player gold
+- map route UI now also shows per-player gold totals
+- mutation pick UI now reuses each player's live input bindings instead of separate hardcoded menu keys
 - encounter builder still supports:
   - room type
   - objective
@@ -135,6 +154,8 @@ Obsolete v1 / v2 systems remain preserved under `archive/v1/`.
 - builder mutation presets are for testing, not polished end-user UX
 - glow / neon presentation is improved, but this is still a gameplay-first pass rather than a final art pass
 - full-screen effects are forced on for now and are no longer user-configurable
+- the economy loop is now implemented structurally, but gold values, survival bonus, and mutation costs are still placeholder tuning values
+- dedicated shop nodes are still design-only; only the gold + room-end mutation spend loop is live
 
 ## Next Step
 
@@ -146,5 +167,9 @@ If work continues on v3, the next priority is play validation:
   - `Mixed` / `Chasers Only` / `Chargers Only`
   - stacked mutation presets
 - tune weapon cadence, primary skill feel, and room pressure until the loop feels clearly better than v2
-- validate the mutation reward cadence across several full runs
+- validate the new gold economy across several full runs:
+  - passive survival should fall behind gradually, not instantly
+  - aggressive rooms should fund multiple picks reliably
+  - `15 / 50 / 100` mutation pricing should feel fair in both `1P` and `2P`
+  - the shared-pickup / personal-wallet model should feel natural in couch co-op
 - only revisit shops, extra objectives, boss redesign, or higher player counts after the core v3 slice is fun

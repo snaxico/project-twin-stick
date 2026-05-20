@@ -178,6 +178,15 @@ func get_feedback_weight() -> float:
 		_:
 			return 0.9
 
+func get_type_name() -> String:
+	match enemy_type:
+		EnemyType.CHARGER:
+			return "charger"
+		EnemyType.BOSS:
+			return "boss"
+		_:
+			return "chaser"
+
 func get_feedback_color() -> Color:
 	return visual.color if visual != null else Color(1.0, 0.28, 0.28, 1.0)
 

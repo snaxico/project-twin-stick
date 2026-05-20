@@ -143,12 +143,33 @@ func get_run_summary_text() -> String:
 	for index in range(player_health_states.size()):
 		var state: Dictionary = player_health_states[index]
 		lines.append("P%d HP: %d/%d" % [index + 1, int(state.get("current", 0)), int(state.get("max", 50))])
+		lines.append("P%d Gold: %d" % [index + 1, get_player_gold(index)])
 	return "\n".join(lines)
 
 func get_player_inventory(player_index: int):
 	if player_index < 0 or player_index >= player_inventories.size():
 		return null
 	return player_inventories[player_index]
+
+func get_player_gold(player_index: int) -> int:
+	var inventory = get_player_inventory(player_index)
+	if inventory == null:
+		return 0
+	return inventory.gold
+
+func add_gold_to_all_players(amount: int) -> void:
+	for inventory in player_inventories:
+		if inventory != null:
+			inventory.gold += amount
+
+func spend_player_gold(player_index: int, amount: int) -> bool:
+	var inventory = get_player_inventory(player_index)
+	if inventory == null:
+		return false
+	if inventory.gold < amount:
+		return false
+	inventory.gold -= amount
+	return true
 
 func get_weapon(player_index: int) -> Dictionary:
 	var inventory = get_player_inventory(player_index)

@@ -45,7 +45,10 @@ func _show_map() -> void:
 	var map_rows: Array = RunState.get_map_rows()
 	var current_floor: int = min(RunState.current_step_index + 1, max(map_rows.size(), 1))
 	map_title_label.text = "Choose Route"
-	map_status_label.text = "Floor %d of %d." % [current_floor, map_rows.size()]
+	var gold_text := ""
+	for player_index in range(RunState.player_configs.size()):
+		gold_text += "  P%d: %dg" % [player_index + 1, RunState.get_player_gold(player_index)]
+	map_status_label.text = "Floor %d of %d.%s" % [current_floor, map_rows.size(), gold_text]
 	map_detail_title_label.text = "Path Preview"
 	map_detail_body_label.text = "Focus a node to inspect its objective and route."
 	call_deferred("_refresh_map_panel")

@@ -5,6 +5,7 @@ var player_index: int = 0
 var weapon_id: String = "rifle"
 var primary_skill_id: String = "shockwave"
 var mutations: Array = []
+var gold: int = 0
 
 func get_selected_weapon() -> Dictionary:
 	return {
