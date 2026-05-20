@@ -41,6 +41,9 @@ const FEELER_SPREAD: float = 0.52
 const SEPARATION_RADIUS: float = 22.0
 const SEPARATION_STRENGTH: float = 60.0
 const SEPARATION_FALLOFF_POWER: float = 2.0
+const CROWD_OPTIMIZATION_THRESHOLD: int = 18
+const TARGET_REFRESH_INTERVAL: float = 0.10
+const STEERING_REFRESH_INTERVAL: float = 0.08
 
 var enemy_type: EnemyType = EnemyType.CHASER
 var current_health: int = 0
@@ -75,6 +78,15 @@ var _blocked_time := 0.0
 var _last_position := Vector2.ZERO
 var _detour_sign := 1.0
 var _next_attack_trail_at := 0.0
+var _cached_target = null
+var _next_target_refresh_at := 0.0
+var _cached_separation := Vector2.ZERO
+var _next_separation_refresh_at := 0.0
+var _cached_left_penalty := 0.0
+var _cached_right_penalty := 0.0
+var _next_feeler_refresh_at := 0.0
+var _feeler_excludes_cache: Array = []
+var _feeler_excludes_frame := -1
 
 func setup(type_name: String, combat_owner) -> void:
 	_combat_owner = combat_owner
@@ -213,7 +225,7 @@ func _physics_process(_delta: float) -> void:
 		return
 
 	var now := _current_time_seconds()
-	var target = _get_closest_player()
+	var target = _get_closest_player(now)
 	if target == null:
 		_knockback_velocity = _knockback_velocity.move_toward(Vector2.ZERO, 900.0 * _delta)
 		velocity = _knockback_velocity
@@ -236,8 +248,8 @@ func _physics_process(_delta: float) -> void:
 
 	var charger_committed_dash: bool = enemy_type == EnemyType.CHARGER and now < _charge_dash_ends_at
 	if not charger_committed_dash:
-		base_velocity += _compute_separation_force()
-		base_velocity = _apply_obstacle_detour(base_velocity, direction)
+		base_velocity += _compute_separation_force(now)
+		base_velocity = _apply_obstacle_detour(base_velocity, direction, now)
 	_knockback_velocity = _knockback_velocity.move_toward(Vector2.ZERO, 900.0 * _delta)
 	velocity = base_velocity + _knockback_velocity
 	move_and_slide()
@@ -250,14 +262,26 @@ func _physics_process(_delta: float) -> void:
 		_next_contact_at = now + (0.65 if enemy_type == EnemyType.BOSS else 0.45)
 		target.apply_damage(contact_damage)
 
-func _apply_obstacle_detour(base_velocity: Vector2, direction: Vector2) -> Vector2:
+func _apply_obstacle_detour(base_velocity: Vector2, direction: Vector2, now: float) -> Vector2:
 	if direction.length() <= 0.0 or base_velocity.length() <= 20.0:
 		return base_velocity
 	var move_direction: Vector2 = base_velocity.normalized()
-	var left_direction := move_direction.rotated(-FEELER_SPREAD)
-	var right_direction := move_direction.rotated(FEELER_SPREAD)
-	var left_penalty: float = _sample_feeler_penalty(left_direction)
-	var right_penalty: float = _sample_feeler_penalty(right_direction)
+	var left_penalty := 0.0
+	var right_penalty := 0.0
+	if _should_throttle_crowd_queries():
+		if now >= _next_feeler_refresh_at:
+			var left_direction := move_direction.rotated(-FEELER_SPREAD)
+			var right_direction := move_direction.rotated(FEELER_SPREAD)
+			_cached_left_penalty = _sample_feeler_penalty(left_direction)
+			_cached_right_penalty = _sample_feeler_penalty(right_direction)
+			_next_feeler_refresh_at = now + STEERING_REFRESH_INTERVAL + float(get_instance_id() % 5) * 0.005
+		left_penalty = _cached_left_penalty
+		right_penalty = _cached_right_penalty
+	else:
+		var left_direction := move_direction.rotated(-FEELER_SPREAD)
+		var right_direction := move_direction.rotated(FEELER_SPREAD)
+		left_penalty = _sample_feeler_penalty(left_direction)
+		right_penalty = _sample_feeler_penalty(right_direction)
 	if left_penalty <= 0.0 and right_penalty <= 0.0:
 		if _blocked_time < 0.4:
 			return base_velocity
@@ -302,6 +326,9 @@ func _sample_feeler_penalty(feeler_direction: Vector2) -> float:
 	return clamp(1.0 - distance / FEELER_LENGTH, 0.0, 1.0)
 
 func _build_feeler_excludes() -> Array:
+	var frame := Engine.get_physics_frames()
+	if _feeler_excludes_frame == frame:
+		return _feeler_excludes_cache
 	var excludes: Array = [get_rid()]
 	if _combat_owner != null and _combat_owner.has_method("get_enemy_target_nodes"):
 		for candidate in _combat_owner.get_enemy_target_nodes():
@@ -313,9 +340,13 @@ func _build_feeler_excludes() -> Array:
 			if not is_instance_valid(player) or not (player is CollisionObject2D):
 				continue
 			excludes.append((player as CollisionObject2D).get_rid())
-	return excludes
+	_feeler_excludes_cache = excludes
+	_feeler_excludes_frame = frame
+	return _feeler_excludes_cache
 
-func _compute_separation_force() -> Vector2:
+func _compute_separation_force(now: float) -> Vector2:
+	if _should_throttle_crowd_queries() and now < _next_separation_refresh_at:
+		return _cached_separation
 	var separation := Vector2.ZERO
 	if _combat_owner == null or not _combat_owner.has_method("get_enemy_target_nodes"):
 		return separation
@@ -333,7 +364,12 @@ func _compute_separation_force() -> Vector2:
 	var max_separation: float = move_speed * 0.35
 	if separation.length() > max_separation:
 		separation = separation.normalized() * max_separation
-	return separation
+	_cached_separation = separation
+	if _should_throttle_crowd_queries():
+		_next_separation_refresh_at = now + STEERING_REFRESH_INTERVAL + float(get_instance_id() % 4) * 0.004
+	else:
+		_next_separation_refresh_at = now
+	return _cached_separation
 
 func _maybe_emit_attack_trail(now: float) -> void:
 	if _combat_owner == null or now < _next_attack_trail_at or velocity.length() < 40.0:
@@ -422,9 +458,11 @@ func _build_spread_directions(base_direction: Vector2, projectile_count: int, sp
 		directions.append(base_direction.rotated(offset))
 	return directions
 
-func _get_closest_player():
+func _get_closest_player(now: float):
 	if _combat_owner == null:
 		return null
+	if _should_throttle_crowd_queries() and is_instance_valid(_cached_target) and _cached_target.is_alive() and now < _next_target_refresh_at:
+		return _cached_target
 
 	var players: Array = _combat_owner.get_active_players()
 	var best_player = null
@@ -439,7 +477,17 @@ func _get_closest_player():
 			best_distance = distance
 			best_player = player
 
+	_cached_target = best_player
+	if _should_throttle_crowd_queries():
+		_next_target_refresh_at = now + TARGET_REFRESH_INTERVAL + float(get_instance_id() % 3) * 0.01
+	else:
+		_next_target_refresh_at = now
 	return best_player
+
+func _should_throttle_crowd_queries() -> bool:
+	if _combat_owner == null or not _combat_owner.has_method("get_enemy_target_nodes"):
+		return false
+	return _combat_owner.get_enemy_target_nodes().size() >= CROWD_OPTIMIZATION_THRESHOLD
 
 func _apply_type_visual() -> void:
 	if visual == null:

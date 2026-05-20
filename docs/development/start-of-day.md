@@ -301,6 +301,8 @@ Read this first to restore project context quickly, then read `current-state.md`
 - `history/` records what changed, why, and what remains open.
 - `docs/design/weapons-passives-balance.xlsx` is the balancing design document for weapons and passives.
 - `docs/design/enemies-arenas-modifiers-balance.xlsx` is the balancing design document for enemies, arenas, modifiers, and encounter recipes.
+- `docs/design/roadmap.md` is the feature roadmap — locked design decisions, open design tasks, and implementation tier ordering. Read this before starting any new feature.
+- `docs/design/v3-economy-encounters.md` is the design document for the gold economy, encounter model, modifier system, shops, mutation rarity split, side objectives, and temp buffs.
 - `docs/process/` stays the source of truth for scope, roadmap, architecture, and workflow rules.
 - Any change to primary weapons, secondary weapons, or passive items must update `docs/design/weapons-passives-balance.xlsx` in the same slice.
 - Write for continuation, not presentation.
@@ -317,4 +319,5 @@ Read this first to restore project context quickly, then read `current-state.md`
   - `start-of-day.md`
   - `current-state.md`
   - latest file in `docs/development/history/`
+  - `docs/design/roadmap.md` if the task touches mutations, encounters, side objectives, buffs, or economy
   - any process doc that the task touches

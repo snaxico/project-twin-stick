@@ -132,8 +132,12 @@ func _build_node_button_text(node: Dictionary) -> String:
 			return "Rest"
 		"boss":
 			return "Boss"
+		"shop":
+			return "Shop"
+		"elite":
+			return "Elite"
 		_:
-			return _format_objective(str(node.get("objective", "survive")))
+			return "Survive"
 
 func _get_node_color(node: Dictionary, is_reachable: bool) -> Color:
 	var node_id := str(node.get("id", ""))
@@ -142,6 +146,12 @@ func _get_node_color(node: Dictionary, is_reachable: bool) -> Color:
 		return Color(1.0, 0.84, 0.32, 1.0)
 	if room_type == "boss":
 		return Color(0.86, 0.22, 0.26, 1.0) if is_reachable else Color(0.42, 0.16, 0.18, 0.92)
+	if room_type == "elite":
+		return Color(0.92, 0.48, 0.16, 1.0) if is_reachable else Color(0.46, 0.26, 0.12, 0.92)
+	if room_type == "shop":
+		return Color(0.28, 0.86, 0.56, 1.0) if is_reachable else Color(0.16, 0.44, 0.3, 0.92)
+	if room_type == "rest":
+		return Color(0.48, 0.78, 1.0, 1.0) if is_reachable else Color(0.28, 0.42, 0.56, 0.92)
 	if is_reachable:
 		return Color(0.92, 0.94, 1.0, 1.0)
 	if RunState.visited_node_ids.has(node_id):
@@ -170,7 +180,7 @@ func _on_map_node_pressed(node_id: String) -> void:
 		return
 	var node: Dictionary = RunState.get_map_node(node_id)
 	match str(node.get("room_type", "combat")):
-		"combat", "boss":
+		"combat", "elite", "boss", "shop":
 			_launch_room(node)
 		_:
 			_show_outcome(RunState.resolve_current_noncombat_node())
@@ -238,8 +248,8 @@ func _clear_active_game() -> void:
 		_active_game.queue_free()
 	_active_game = null
 
-func _format_objective(objective: String) -> String:
-	return "Hold Zone" if objective == "capture_the_hill" else "Survive"
+func _format_objective(_objective: String) -> String:
+	return "Survive"
 
 func _focus_resolution_panel() -> void:
 	resolution_button.grab_focus()

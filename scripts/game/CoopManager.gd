@@ -7,7 +7,7 @@ const GoldPickupData = preload("res://scripts/pickups/GoldPickup.gd")
 const PlayerInventoryHUDData = preload("res://scripts/ui/PlayerInventoryHUD.gd")
 const MutationSystemData = preload("res://scripts/game/MutationSystem.gd")
 const MutationPickUIScene = preload("res://scenes/ui/MutationPickUI.tscn")
-const CaptureHillZoneData = preload("res://scripts/game/CaptureHillZone.gd")
+
 const ParticleFactoryData = preload("res://scripts/juice/ParticleFactory.gd")
 
 const ARENA_SIZE := Vector2(4800.0, 2700.0)
@@ -29,6 +29,14 @@ const GOLD_DROP_VALUES := {
 	"charger": {"min": 8, "max": 12},
 	"boss": {"min": 0, "max": 0},
 }
+const SHOP_MUTATION_COST := 80
+const SHOP_HEAL_COST := 40
+const SHOP_REROLL_COST := 20
+const SHOP_HEAL_AMOUNT := 25
+const SHOP_MUTATION_COUNT := 3
+const MAX_ACTIVE_PROJECTILES := 180
+const IMPACT_EFFECT_SOFT_CAP := 120
+const HUD_REFRESH_INTERVAL := 0.08
 
 @export var player_scene: PackedScene
 
@@ -93,8 +101,6 @@ var _awaiting_mutation_pick := false
 var _room_timer_remaining := 0.0
 var _spawn_cooldown_remaining := 0.0
 var _boss_spawned := false
-var _capture_hill_zone = null
-var _capture_hill_progress := 0.0
 var _revive_progress_by_player_id: Dictionary = {}
 var _hud_root: Control = null
 var _player_inventory_huds: Array = []
@@ -102,12 +108,17 @@ var _gold_labels: Array = []
 var _timer_label: Label = null
 var _timer_fill: ColorRect = null
 var _mutation_pick_ui = null
+var _shop_ui = null
 var _arena_minor_grid_color := Color(0.32, 0.72, 0.86, 0.24)
 var _arena_major_grid_color := Color(0.42, 0.9, 1.0, 0.42)
 var _arena_wall_color := Color(0.12, 0.32, 0.38, 0.92)
 var _pending_clear_summary := ""
 var _room_gold_multiplier: float = 1.0
 var _room_gold_earned: int = 0
+var _next_hud_refresh_at := 0.0
+var _active_players_cache: Array = []
+var _active_players_cache_frame := -1
+var _pause_selection_index := 0
 
 func configure_players(configs: Array) -> void:
 	_player_configs = configs.duplicate()
@@ -116,6 +127,7 @@ func configure_room(room_config: Dictionary) -> void:
 	_room_config = room_config.duplicate(true)
 
 func _ready() -> void:
+	process_mode = Node.PROCESS_MODE_ALWAYS
 	if player_scene == null:
 		player_scene = load("res://scenes/player/Player.tscn")
 	_hide_legacy_ui()
@@ -370,8 +382,6 @@ func _set_wall_rect(node: CollisionShape2D, wall_position: Vector2, size: Vector
 func _start_room() -> void:
 	_clear_runtime_nodes()
 	_room_type = str(_room_config.get("room_type", "combat"))
-	if _room_type == "elite":
-		_room_type = "combat"
 	_room_objective = str(_room_config.get("objective", _room_config.get("room_objective", "survive")))
 	_room_enemy_mix = str(_room_config.get("enemy_mix", "mixed"))
 	_room_depth = max(int(_room_config.get("depth", _room_config.get("step_index", 1))), 1)
@@ -380,37 +390,35 @@ func _start_room() -> void:
 	_room_failed = false
 	_exit_zone_open = false
 	_awaiting_mutation_pick = false
-	_capture_hill_progress = 0.0
 	_spawn_cooldown_remaining = 0.15
 	_room_timer_remaining = SURVIVE_DURATION
 	_boss_spawned = false
 	_pending_clear_summary = ""
-	_room_gold_multiplier = 1.0
+	_room_gold_multiplier = 1.3 if _room_type == "elite" else 1.0
 	_room_gold_earned = 0
+	_next_hud_refresh_at = 0.0
 	result_panel.visible = false
 	pause_panel.visible = false
 	settings_panel.visible = false
 	get_tree().paused = false
 	_restore_player_health_states()
 	_lock_player_input(false)
-	if _room_objective == "capture_the_hill":
-		_spawn_capture_hill_zone()
 	if _room_type == "boss":
 		_spawn_boss()
-	elif _room_type == "rest":
-		_open_exit_zone()
+	elif _room_type == "rest" or _room_type == "shop":
+		_start_non_combat_room()
 
 func _clear_runtime_nodes() -> void:
 	for group in [projectiles, enemies, effects, pickups]:
 		for child in group.get_children():
 			child.queue_free()
 	_enemy_nodes.clear()
-	if _capture_hill_zone != null and is_instance_valid(_capture_hill_zone):
-		_capture_hill_zone.queue_free()
-	_capture_hill_zone = null
 	if _mutation_pick_ui != null and is_instance_valid(_mutation_pick_ui):
 		_mutation_pick_ui.queue_free()
 	_mutation_pick_ui = null
+	if _shop_ui != null and is_instance_valid(_shop_ui):
+		_shop_ui.queue_free()
+	_shop_ui = null
 
 func _restore_player_health_states() -> void:
 	for index in range(min(_player_nodes.size(), RunState.player_health_states.size())):
@@ -423,15 +431,19 @@ func _restore_player_health_states() -> void:
 func _physics_process(delta: float) -> void:
 	if get_tree().paused:
 		return
+	_invalidate_runtime_caches()
 	_clamp_players_to_arena()
 	_update_revives(delta)
 	_update_room(delta)
 	_update_gold_pickups(delta)
 	_update_exit_zone(delta)
-	_refresh_hud()
+	var now := _current_time_seconds()
+	if now >= _next_hud_refresh_at:
+		_refresh_hud()
+		_next_hud_refresh_at = now + HUD_REFRESH_INTERVAL
 
 func _update_room(delta: float) -> void:
-	if _room_clear_started or _room_failed or _room_type == "rest":
+	if _room_clear_started or _room_failed or _room_type == "rest" or _room_type == "shop":
 		return
 	if _room_type == "boss":
 		var boss_alive := false
@@ -443,40 +455,20 @@ func _update_room(delta: float) -> void:
 		if _boss_spawned and not boss_alive:
 			_handle_room_clear("Boss defeated.")
 		return
-	if _room_objective == "capture_the_hill":
-		_spawn_cooldown_remaining -= delta
-		if _spawn_cooldown_remaining <= 0.0:
-			_spawn_enemy_wave()
-			_spawn_cooldown_remaining = maxf((0.55 - float(_room_depth) * 0.03) * 0.5, 0.09)
-		_update_capture_hill_room(delta)
-	else:
-		_room_timer_remaining = max(_room_timer_remaining - delta, 0.0)
-		if _room_timer_remaining <= 0.0:
-			_handle_room_clear("Survival timer complete.")
-			return
-		_spawn_cooldown_remaining -= delta
-		if _spawn_cooldown_remaining <= 0.0:
-			_spawn_enemy_wave()
-			_spawn_cooldown_remaining = maxf((0.55 - float(_room_depth) * 0.03) * 0.5, 0.09)
-	_check_failure()
-
-func _update_capture_hill_room(delta: float) -> void:
-	if _capture_hill_zone == null:
+	_room_timer_remaining = max(_room_timer_remaining - delta, 0.0)
+	if _room_timer_remaining <= 0.0:
+		_handle_room_clear("Survival timer complete.")
 		return
-	var players_in_zone := 0
-	for player in get_active_players():
-		if _capture_hill_zone.contains_point(player.global_position):
-			players_in_zone += 1
-	if players_in_zone > 0:
-		_capture_hill_progress += delta * 0.18 * float(players_in_zone)
-	_capture_hill_progress = clampf(_capture_hill_progress, 0.0, 1.0)
-	_capture_hill_zone.set_fill_ratio(_capture_hill_progress)
-	if _capture_hill_progress >= 1.0:
-		_handle_room_clear("Hold zone secured.")
+	_spawn_cooldown_remaining -= delta
+	if _spawn_cooldown_remaining <= 0.0:
+		_spawn_enemy_wave()
+		_spawn_cooldown_remaining = maxf((0.55 - float(_room_depth) * 0.03) * 0.5, 0.09)
+	_check_failure()
 
 func _spawn_enemy_wave() -> void:
 	var alive_count: int = _enemy_nodes.size()
-	var target_alive: int = mini(10 + _room_depth * 4, 36)
+	var elite_bonus := 6 if _room_type == "elite" else 0
+	var target_alive: int = mini(10 + _room_depth * 4 + elite_bonus, 44)
 	if alive_count >= target_alive:
 		return
 	var spawn_count: int = mini(target_alive - alive_count, maxi(3, 3 + _room_depth))
@@ -497,6 +489,8 @@ func _roll_wave_enemy_type() -> String:
 			return "chaser"
 		"charger_only":
 			return "charger"
+		"charger_heavy":
+			return "charger" if randf() < 0.55 else "chaser"
 	if _room_depth <= 1:
 		return "chaser"
 	if _room_depth == 2:
@@ -513,6 +507,336 @@ func _spawn_boss() -> void:
 	enemies.add_child(boss)
 	_enemy_nodes.append(boss)
 	_boss_spawned = true
+
+func _start_non_combat_room() -> void:
+	if _room_type == "shop":
+		_show_shop()
+	else:
+		_open_exit_zone()
+
+func _show_shop() -> void:
+	_awaiting_mutation_pick = true
+	_shop_ui = _build_shop_panel()
+	_shop_ui.process_mode = Node.PROCESS_MODE_WHEN_PAUSED
+	ui_layer.add_child(_shop_ui)
+	get_tree().paused = true
+
+func _build_shop_panel() -> Control:
+	var root := Control.new()
+	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	root.mouse_filter = Control.MOUSE_FILTER_STOP
+
+	var backdrop := ColorRect.new()
+	backdrop.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	backdrop.color = Color(0.0, 0.0, 0.0, 0.82)
+	root.add_child(backdrop)
+
+	var margin := MarginContainer.new()
+	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	margin.add_theme_constant_override("margin_left", 60)
+	margin.add_theme_constant_override("margin_top", 60)
+	margin.add_theme_constant_override("margin_right", 60)
+	margin.add_theme_constant_override("margin_bottom", 60)
+	root.add_child(margin)
+
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 40)
+	margin.add_child(row)
+
+	for player_index in range(_player_configs.size()):
+		var player_panel := _build_shop_player_panel(player_index)
+		row.add_child(player_panel)
+	return root
+
+func _build_shop_player_panel(player_index: int) -> VBoxContainer:
+	var panel := VBoxContainer.new()
+	panel.custom_minimum_size = Vector2(560.0, 0.0)
+	panel.add_theme_constant_override("separation", 10)
+
+	var title := Label.new()
+	title.text = "Player %d Shop" % (player_index + 1)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 20)
+	panel.add_child(title)
+
+	var gold_label := Label.new()
+	gold_label.name = "GoldLabel"
+	gold_label.text = "Gold: %dg" % RunState.get_player_gold(player_index)
+	gold_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	gold_label.add_theme_color_override("font_color", Color(1.0, 0.85, 0.2, 0.95))
+	panel.add_child(gold_label)
+
+	var hint := Label.new()
+	hint.text = "Navigate with D-Pad/Arrows, confirm with A/Space, done with B/Escape."
+	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	hint.add_theme_font_size_override("font_size", 11)
+	hint.modulate = Color(0.75, 0.78, 0.84, 0.7)
+	panel.add_child(hint)
+
+	var options_container := VBoxContainer.new()
+	options_container.name = "Options"
+	options_container.add_theme_constant_override("separation", 6)
+	panel.add_child(options_container)
+
+	var mutation_options: Array = _mutation_system.roll_mutation_options(player_index, SHOP_MUTATION_COUNT)
+	for option_index in range(mutation_options.size()):
+		var mutation: Dictionary = mutation_options[option_index]
+		var option_row := _build_shop_option_row(
+			str(mutation.get("name", "Unknown")),
+			str(mutation.get("description", "")),
+			SHOP_MUTATION_COST,
+			"mutation_%d" % option_index,
+		)
+		option_row.set_meta("mutation_id", str(mutation.get("id", "")))
+		option_row.set_meta("option_type", "mutation")
+		options_container.add_child(option_row)
+
+	var heal_row := _build_shop_option_row("Heal (+%d HP)" % SHOP_HEAL_AMOUNT, "Restore health.", SHOP_HEAL_COST, "heal")
+	heal_row.set_meta("option_type", "heal")
+	options_container.add_child(heal_row)
+
+	var reroll_row := _build_shop_option_row("Reroll Mutations", "Refresh mutation options.", SHOP_REROLL_COST, "reroll")
+	reroll_row.set_meta("option_type", "reroll")
+	options_container.add_child(reroll_row)
+
+	var done_row := _build_shop_option_row("Done", "Leave the shop.", 0, "done")
+	done_row.set_meta("option_type", "done")
+	options_container.add_child(done_row)
+
+	panel.set_meta("player_index", player_index)
+	panel.set_meta("selected_index", 0)
+	panel.set_meta("confirmed", false)
+	panel.set_meta("mutation_options", mutation_options)
+	_refresh_shop_panel_highlight(panel)
+	return panel
+
+func _build_shop_option_row(title_text: String, desc_text: String, cost: int, _option_id: String) -> PanelContainer:
+	var panel := PanelContainer.new()
+	panel.custom_minimum_size = Vector2(0.0, 48.0)
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.08, 0.1, 0.14, 0.92)
+	style.border_color = Color(0.3, 0.34, 0.4, 0.5)
+	style.set_border_width_all(1)
+	style.set_corner_radius_all(6)
+	style.set_content_margin_all(8)
+	panel.add_theme_stylebox_override("panel", style)
+
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 12)
+	panel.add_child(row)
+
+	var text_box := VBoxContainer.new()
+	text_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(text_box)
+
+	var title := Label.new()
+	title.name = "Title"
+	title.text = title_text
+	title.add_theme_font_size_override("font_size", 14)
+	text_box.add_child(title)
+
+	if not desc_text.is_empty():
+		var desc := Label.new()
+		desc.text = desc_text
+		desc.add_theme_font_size_override("font_size", 11)
+		desc.modulate = Color(0.72, 0.76, 0.84, 0.8)
+		text_box.add_child(desc)
+
+	var cost_label := Label.new()
+	cost_label.name = "CostLabel"
+	if cost > 0:
+		cost_label.text = "%dg" % cost
+		cost_label.add_theme_color_override("font_color", Color(1.0, 0.85, 0.2, 0.95))
+	else:
+		cost_label.text = ""
+	cost_label.add_theme_font_size_override("font_size", 14)
+	row.add_child(cost_label)
+	return panel
+
+func _refresh_shop_panel_highlight(panel: VBoxContainer) -> void:
+	var options_container: VBoxContainer = panel.get_node("Options")
+	var selected_index: int = int(panel.get_meta("selected_index", 0))
+	var is_confirmed: bool = bool(panel.get_meta("confirmed", false))
+	var player_index: int = int(panel.get_meta("player_index", 0))
+	var gold_label: Label = panel.get_node("GoldLabel")
+	gold_label.text = "Gold: %dg" % RunState.get_player_gold(player_index)
+
+	for child_index in range(options_container.get_child_count()):
+		var option: PanelContainer = options_container.get_child(child_index) as PanelContainer
+		if option == null:
+			continue
+		var style: StyleBoxFlat = option.get_theme_stylebox("panel") as StyleBoxFlat
+		if style == null:
+			continue
+		var new_style := style.duplicate() as StyleBoxFlat
+		if child_index == selected_index and not is_confirmed:
+			new_style.border_color = Color(0.95, 0.82, 0.28, 0.96)
+			new_style.set_border_width_all(2)
+		else:
+			new_style.border_color = Color(0.3, 0.34, 0.4, 0.5)
+			new_style.set_border_width_all(1)
+		if is_confirmed:
+			new_style.bg_color = Color(0.06, 0.08, 0.1, 0.8)
+		else:
+			new_style.bg_color = Color(0.08, 0.1, 0.14, 0.92)
+		option.add_theme_stylebox_override("panel", new_style)
+
+func _handle_shop_input(event: InputEvent) -> void:
+	if _shop_ui == null:
+		return
+	var row: HBoxContainer = _shop_ui.get_child(1).get_child(0) as HBoxContainer
+	if row == null:
+		return
+	for child_index in range(row.get_child_count()):
+		var panel: VBoxContainer = row.get_child(child_index) as VBoxContainer
+		if panel == null:
+			continue
+		if bool(panel.get_meta("confirmed", false)):
+			continue
+		var player_index: int = int(panel.get_meta("player_index", 0))
+		var options_container: VBoxContainer = panel.get_node("Options")
+		var option_count: int = options_container.get_child_count()
+		var selected_index: int = int(panel.get_meta("selected_index", 0))
+
+		var direction := _get_shop_direction(event, player_index)
+		if direction != 0:
+			selected_index = wrapi(selected_index + direction, 0, option_count)
+			panel.set_meta("selected_index", selected_index)
+			_refresh_shop_panel_highlight(panel)
+			get_viewport().set_input_as_handled()
+			return
+
+		if _is_shop_skip_pressed(event, player_index):
+			_finalize_shop_player(panel)
+			get_viewport().set_input_as_handled()
+			return
+
+		if _is_shop_confirm_pressed(event, player_index):
+			_execute_shop_option(panel, selected_index)
+			get_viewport().set_input_as_handled()
+			return
+
+func _execute_shop_option(panel: VBoxContainer, option_index: int) -> void:
+	var player_index: int = int(panel.get_meta("player_index", 0))
+	var options_container: VBoxContainer = panel.get_node("Options")
+	var option: PanelContainer = options_container.get_child(option_index) as PanelContainer
+	if option == null:
+		return
+	var option_type: String = str(option.get_meta("option_type", ""))
+	match option_type:
+		"mutation":
+			var mutation_id: String = str(option.get_meta("mutation_id", ""))
+			if mutation_id.is_empty():
+				return
+			if not RunState.spend_player_gold(player_index, SHOP_MUTATION_COST):
+				return
+			_mutation_system.apply_mutation(player_index, mutation_id)
+			_rebuild_player_loadouts()
+			var title_label: Label = option.get_node("Title") as Label
+			if title_label != null:
+				title_label.text += "  [BOUGHT]"
+			option.set_meta("option_type", "sold")
+		"heal":
+			if not RunState.spend_player_gold(player_index, SHOP_HEAL_COST):
+				return
+			var health_state: Dictionary = RunState.player_health_states[player_index]
+			health_state["current"] = mini(int(health_state.get("current", 0)) + SHOP_HEAL_AMOUNT, int(health_state.get("max", 50)))
+			RunState.player_health_states[player_index] = health_state
+			if player_index < _player_nodes.size():
+				_player_nodes[player_index].set_health_state(health_state)
+		"reroll":
+			if not RunState.spend_player_gold(player_index, SHOP_REROLL_COST):
+				return
+			_reroll_shop_mutations(panel, player_index)
+		"done":
+			_finalize_shop_player(panel)
+			return
+	_refresh_shop_panel_highlight(panel)
+
+func _reroll_shop_mutations(panel: VBoxContainer, player_index: int) -> void:
+	var options_container: VBoxContainer = panel.get_node("Options")
+	var new_mutations: Array = _mutation_system.roll_mutation_options(player_index, SHOP_MUTATION_COUNT)
+	panel.set_meta("mutation_options", new_mutations)
+	for child_index in range(mini(new_mutations.size(), options_container.get_child_count())):
+		var option: PanelContainer = options_container.get_child(child_index) as PanelContainer
+		if option == null:
+			continue
+		var mutation: Dictionary = new_mutations[child_index]
+		option.set_meta("mutation_id", str(mutation.get("id", "")))
+		option.set_meta("option_type", "mutation")
+		var title_label: Label = option.get_node("Title") as Label
+		if title_label != null:
+			title_label.text = str(mutation.get("name", "Unknown"))
+
+func _finalize_shop_player(panel: VBoxContainer) -> void:
+	panel.set_meta("confirmed", true)
+	_refresh_shop_panel_highlight(panel)
+	if _all_shop_players_done():
+		_close_shop()
+
+func _all_shop_players_done() -> bool:
+	if _shop_ui == null:
+		return true
+	var row: HBoxContainer = _shop_ui.get_child(1).get_child(0) as HBoxContainer
+	if row == null:
+		return true
+	for child_index in range(row.get_child_count()):
+		var panel: VBoxContainer = row.get_child(child_index) as VBoxContainer
+		if panel == null:
+			continue
+		if not bool(panel.get_meta("confirmed", false)):
+			return false
+	return true
+
+func _close_shop() -> void:
+	get_tree().paused = false
+	_awaiting_mutation_pick = false
+	if _shop_ui != null and is_instance_valid(_shop_ui):
+		_shop_ui.queue_free()
+	_shop_ui = null
+	_open_exit_zone()
+
+func _get_shop_direction(event: InputEvent, player_index: int) -> int:
+	var config = _player_configs[player_index]
+	if config.control_source == "gamepad" and event is InputEventJoypadButton:
+		var joy_button := event as InputEventJoypadButton
+		if joy_button.pressed and joy_button.device == _get_shop_gamepad_device(player_index):
+			if joy_button.button_index == JOY_BUTTON_DPAD_UP:
+				return -1
+			if joy_button.button_index == JOY_BUTTON_DPAD_DOWN:
+				return 1
+	if config.control_source == "gamepad" and event is InputEventJoypadMotion:
+		var motion := event as InputEventJoypadMotion
+		if motion.device == _get_shop_gamepad_device(player_index) and motion.axis == JOY_AXIS_LEFT_Y:
+			if motion.axis_value < -0.5:
+				return -1
+			if motion.axis_value > 0.5:
+				return 1
+	if config.control_source != "gamepad":
+		if _event_matches_action(event, "p%d_move_up" % int(config.player_id)):
+			return -1
+		if _event_matches_action(event, "p%d_move_down" % int(config.player_id)):
+			return 1
+	return 0
+
+func _is_shop_confirm_pressed(event: InputEvent, player_index: int) -> bool:
+	var config = _player_configs[player_index]
+	if config.control_source == "gamepad":
+		if not (event is InputEventJoypadButton):
+			return false
+		var joy_button := event as InputEventJoypadButton
+		return joy_button.pressed and joy_button.device == _get_shop_gamepad_device(player_index) and joy_button.button_index == JOY_BUTTON_A
+	return _event_matches_action(event, "p%d_secondary" % int(config.player_id))
+
+func _is_shop_skip_pressed(event: InputEvent, player_index: int) -> bool:
+	var config = _player_configs[player_index]
+	if config.control_source == "gamepad":
+		if not (event is InputEventJoypadButton):
+			return false
+		var joy_button := event as InputEventJoypadButton
+		return joy_button.pressed and joy_button.device == _get_shop_gamepad_device(player_index) and joy_button.button_index == JOY_BUTTON_B
+	return _event_matches_action(event, "p%d_dash" % int(config.player_id)) or _event_matches_action(event, "ui_cancel")
 
 func _find_enemy_spawn_position() -> Vector2:
 	var players_active := get_active_players()
@@ -541,12 +865,16 @@ func _on_player_fire_requested(origin: Vector2, direction: Vector2, config: Dict
 	var shooter = config.get("shooter", null)
 	if shooter == null:
 		return
+	if projectiles.get_child_count() >= MAX_ACTIVE_PROJECTILES:
+		return
 	var player_index := int(shooter.player_index)
 	var loadout: Dictionary = _compiled_loadouts[player_index]
 	var weapon_stats: Dictionary = loadout.get("weapon_stats", {})
 	var split_extra_count := int(weapon_stats.get("split_extra_count", 0))
 	var spread_step := deg_to_rad(float(weapon_stats.get("split_spread_degrees", 15.0)))
 	var projectile_count := 1 + split_extra_count
+	if projectiles.get_child_count() >= MAX_ACTIVE_PROJECTILES / 2:
+		projectile_count = 1
 	var directions := _build_spread_directions(direction, projectile_count, spread_step)
 	for projectile_direction in directions:
 		var projectile = ProjectileSceneData.instantiate()
@@ -619,6 +947,8 @@ func _spawn_shockwave_visual(center: Vector2, radius: float, color: Color, durat
 	tween.chain().tween_callback(ring.queue_free)
 
 func _on_enemy_fire_requested(origin: Vector2, direction: Vector2, speed: float, damage: int, team: String, color: Color, projectile_scale: float) -> void:
+	if projectiles.get_child_count() >= MAX_ACTIVE_PROJECTILES:
+		return
 	var projectile = ProjectileSceneData.instantiate()
 	projectile.global_position = origin
 	projectile.setup_from_config(team, direction, {
@@ -640,6 +970,8 @@ func _on_projectile_impact(origin: Vector2, direction: Vector2, _team: String, c
 
 func _spawn_projectile_hit_effect(origin: Vector2, direction: Vector2, color: Color, impact_weight: float, target: Node) -> void:
 	if effects == null:
+		return
+	if projectiles.get_child_count() >= IMPACT_EFFECT_SOFT_CAP and impact_weight <= 1.0:
 		return
 	var effect_color := color.lightened(0.2)
 	if target != null and is_instance_valid(target) and target.has_method("get_feedback_color"):
@@ -773,9 +1105,6 @@ func _end_active_encounter() -> void:
 		if enemy != null and is_instance_valid(enemy):
 			enemy.queue_free()
 	_enemy_nodes.clear()
-	if _capture_hill_zone != null and is_instance_valid(_capture_hill_zone):
-		_capture_hill_zone.queue_free()
-	_capture_hill_zone = null
 
 func _finish_room_progression(summary: String) -> void:
 	room_cleared.emit(capture_player_health_states(), {"summary": summary})
@@ -827,21 +1156,6 @@ func _check_failure() -> void:
 		_room_failed = true
 		all_players_dead.emit()
 
-func _spawn_capture_hill_zone() -> void:
-	_capture_hill_zone = CaptureHillZoneData.new()
-	_capture_hill_zone.configure(180.0)
-	_capture_hill_zone.global_position = _roll_capture_hill_position()
-	add_child(_capture_hill_zone)
-
-func _roll_capture_hill_position() -> Vector2:
-	var quadrants := [
-		Vector2(ARENA_RECT.position.x + ARENA_SIZE.x * 0.28, ARENA_RECT.position.y + ARENA_SIZE.y * 0.28),
-		Vector2(ARENA_RECT.position.x + ARENA_SIZE.x * 0.72, ARENA_RECT.position.y + ARENA_SIZE.y * 0.28),
-		Vector2(ARENA_RECT.position.x + ARENA_SIZE.x * 0.28, ARENA_RECT.position.y + ARENA_SIZE.y * 0.72),
-		Vector2(ARENA_RECT.position.x + ARENA_SIZE.x * 0.72, ARENA_RECT.position.y + ARENA_SIZE.y * 0.72),
-	]
-	return quadrants[randi() % quadrants.size()]
-
 func _get_player_spawn_position(index: int) -> Vector2:
 	if _player_configs.size() <= 1:
 		return ARENA_CENTER
@@ -868,14 +1182,10 @@ func _clamp_player_to_arena(player) -> void:
 func _refresh_hud() -> void:
 	if _timer_label == null or _timer_fill == null:
 		return
-	if _room_objective == "capture_the_hill":
-		_timer_label.text = "Hold Zone  %d%%" % int(round(_capture_hill_progress * 100.0))
-		_timer_fill.scale = Vector2(_capture_hill_progress, 1.0)
-	else:
-		var max_duration := SURVIVE_DURATION
-		var ratio := clampf(_room_timer_remaining / max(max_duration, 0.01), 0.0, 1.0)
-		_timer_label.text = "Survive  %.1fs" % _room_timer_remaining if _room_type != "boss" else "Boss Fight"
-		_timer_fill.scale = Vector2(1.0 if _room_type == "boss" else ratio, 1.0)
+	var max_duration := SURVIVE_DURATION
+	var ratio := clampf(_room_timer_remaining / max(max_duration, 0.01), 0.0, 1.0)
+	_timer_label.text = "Survive  %.1fs" % _room_timer_remaining if _room_type != "boss" else "Boss Fight"
+	_timer_fill.scale = Vector2(1.0 if _room_type == "boss" else ratio, 1.0)
 	for index in range(min(_player_inventory_huds.size(), _player_nodes.size())):
 		_player_inventory_huds[index].update_hud({
 			"header": "P%d" % (index + 1),
@@ -890,17 +1200,22 @@ func _refresh_hud() -> void:
 		(_gold_labels[index] as Label).text = "%dg" % RunState.get_player_gold(index)
 
 func get_active_players() -> Array:
+	var frame := Engine.get_physics_frames()
+	if _active_players_cache_frame == frame:
+		return _active_players_cache
 	var active_players: Array = []
 	for player in _player_nodes:
 		if player != null and is_instance_valid(player) and player.is_alive():
 			active_players.append(player)
-	return active_players
+	_active_players_cache = active_players
+	_active_players_cache_frame = frame
+	return _active_players_cache
 
 func get_player_target_nodes() -> Array:
-	return _player_nodes.duplicate()
+	return _player_nodes
 
 func get_enemy_target_nodes() -> Array:
-	return _enemy_nodes.duplicate()
+	return _enemy_nodes
 
 func _build_circle_points(center: Vector2, radius: float, point_count: int) -> PackedVector2Array:
 	var points := PackedVector2Array()
@@ -941,10 +1256,10 @@ func _get_gold_drop_amount(enemy_type_name: String) -> int:
 		return 0
 	return maxi(1, int(round(float(base) * _room_gold_multiplier)))
 
-func _spawn_gold_pickup(position: Vector2, amount: int) -> void:
+func _spawn_gold_pickup(spawn_position: Vector2, amount: int) -> void:
 	var pickup = GoldPickupSceneData.instantiate()
 	pickup.amount = amount
-	pickup.global_position = position
+	pickup.global_position = spawn_position
 	pickups.add_child(pickup)
 
 func _update_gold_pickups(delta: float) -> void:
@@ -964,17 +1279,14 @@ func _update_gold_pickups(delta: float) -> void:
 				nearest_player = player
 		if nearest_player == null:
 			continue
-		pickup._magnet_target = nearest_player
 		if nearest_distance < GoldPickupData.MAGNET_RADIUS:
 			var direction: Vector2 = (nearest_player.global_position - pickup.global_position).normalized()
-			pickup._magnet_speed = minf(pickup._magnet_speed + GoldPickupData.MAGNET_ACCELERATION * delta, GoldPickupData.MAGNET_MAX_SPEED)
-			pickup.global_position += direction * pickup._magnet_speed * delta
+			pickup.magnet_speed = minf(pickup.magnet_speed + GoldPickupData.MAGNET_ACCELERATION * delta, GoldPickupData.MAGNET_MAX_SPEED)
+			pickup.global_position += direction * pickup.magnet_speed * delta
 			nearest_distance = nearest_player.global_position.distance_to(pickup.global_position)
 		if nearest_distance < GoldPickupData.COLLECT_RADIUS:
 			RunState.add_gold_to_all_players(pickup.amount)
 			_room_gold_earned += pickup.amount
-			if pickup.has_signal("collected"):
-				pickup.collected.emit(pickup.amount, nearest_player)
 			to_remove.append(pickup)
 	for pickup in to_remove:
 		pickup.queue_free()
@@ -991,20 +1303,41 @@ func _award_survival_bonus() -> void:
 	RunState.add_gold_to_all_players(SURVIVAL_BONUS_GOLD)
 	_room_gold_earned += SURVIVAL_BONUS_GOLD
 
+func _get_shop_gamepad_device(player_index: int) -> int:
+	if player_index >= 0 and player_index < _player_nodes.size():
+		var player = _player_nodes[player_index]
+		if player != null and is_instance_valid(player):
+			return int(player.gamepad_device_id)
+	var config = _player_configs[player_index]
+	return int(config.player_id) - 1
+
+func _event_matches_action(event: InputEvent, action_name: String) -> bool:
+	if not (event is InputEventKey):
+		return false
+	var key_event := event as InputEventKey
+	if not key_event.pressed or key_event.echo:
+		return false
+	return event.is_action_pressed(action_name)
+
 func _unhandled_input(event: InputEvent) -> void:
+	if pause_panel.visible:
+		_handle_pause_input(event)
+		get_viewport().set_input_as_handled()
+		return
+	if _shop_ui != null:
+		_handle_shop_input(event)
+		return
 	if _awaiting_mutation_pick:
 		return
 	if not _is_pause_request(event):
-		return
-	if pause_panel.visible:
-		_on_resume_pressed()
-		get_viewport().set_input_as_handled()
 		return
 	_show_pause_menu()
 	get_viewport().set_input_as_handled()
 
 func _show_pause_menu() -> void:
 	pause_panel.visible = true
+	_pause_selection_index = 0
+	_focus_pause_selection()
 	get_tree().paused = true
 
 func _on_resume_pressed() -> void:
@@ -1027,3 +1360,92 @@ func _is_pause_request(event: InputEvent) -> bool:
 		return false
 	var joy_event := event as InputEventJoypadButton
 	return joy_event.pressed and joy_event.button_index == JOY_BUTTON_START
+
+func _current_time_seconds() -> float:
+	return Time.get_ticks_msec() / 1000.0
+
+func _invalidate_runtime_caches() -> void:
+	_active_players_cache_frame = -1
+
+func _handle_pause_input(event: InputEvent) -> void:
+	var direction := _get_pause_direction(event)
+	if direction != 0:
+		var buttons := _get_pause_buttons()
+		if not buttons.is_empty():
+			_pause_selection_index = wrapi(_pause_selection_index + direction, 0, buttons.size())
+			_focus_pause_selection()
+		return
+	if _is_pause_confirm_pressed(event):
+		_activate_pause_selection()
+		return
+	if _is_pause_cancel_pressed(event):
+		_on_resume_pressed()
+
+func _get_pause_buttons() -> Array:
+	var buttons: Array = []
+	for button in [resume_button, pause_settings_button, pause_retry_button, pause_main_menu_button]:
+		if button != null and is_instance_valid(button) and button.visible:
+			buttons.append(button)
+	return buttons
+
+func _focus_pause_selection() -> void:
+	var buttons := _get_pause_buttons()
+	if buttons.is_empty():
+		return
+	_pause_selection_index = clampi(_pause_selection_index, 0, buttons.size() - 1)
+	(buttons[_pause_selection_index] as Button).grab_focus()
+
+func _activate_pause_selection() -> void:
+	var buttons := _get_pause_buttons()
+	if buttons.is_empty():
+		return
+	_pause_selection_index = clampi(_pause_selection_index, 0, buttons.size() - 1)
+	var selected: Button = buttons[_pause_selection_index] as Button
+	if selected == resume_button:
+		_on_resume_pressed()
+	elif selected == pause_retry_button:
+		_on_retry_pressed()
+	elif selected == pause_main_menu_button:
+		_on_main_menu_pressed()
+	elif selected == pause_settings_button and pause_settings_button.visible:
+		pause_settings_button.pressed.emit()
+
+func _get_pause_direction(event: InputEvent) -> int:
+	if event is InputEventJoypadButton:
+		var joy_button := event as InputEventJoypadButton
+		if joy_button.pressed and _is_player_gamepad_device(joy_button.device):
+			if joy_button.button_index == JOY_BUTTON_DPAD_UP:
+				return -1
+			if joy_button.button_index == JOY_BUTTON_DPAD_DOWN:
+				return 1
+	for player_index in range(_player_configs.size()):
+		if _event_matches_action(event, "p%d_move_up" % (player_index + 1)):
+			return -1
+		if _event_matches_action(event, "p%d_move_down" % (player_index + 1)):
+			return 1
+	return 0
+
+func _is_pause_confirm_pressed(event: InputEvent) -> bool:
+	if event is InputEventJoypadButton:
+		var joy_button := event as InputEventJoypadButton
+		return joy_button.pressed and _is_player_gamepad_device(joy_button.device) and joy_button.button_index == JOY_BUTTON_A
+	for player_index in range(_player_configs.size()):
+		if _event_matches_action(event, "p%d_secondary" % (player_index + 1)):
+			return true
+	return false
+
+func _is_pause_cancel_pressed(event: InputEvent) -> bool:
+	if event is InputEventJoypadButton:
+		var joy_button := event as InputEventJoypadButton
+		if joy_button.pressed and _is_player_gamepad_device(joy_button.device):
+			return joy_button.button_index == JOY_BUTTON_B or joy_button.button_index == JOY_BUTTON_START
+	for player_index in range(_player_configs.size()):
+		if _event_matches_action(event, "p%d_dash" % (player_index + 1)):
+			return true
+	return event.is_action_pressed("ui_cancel")
+
+func _is_player_gamepad_device(device_id: int) -> bool:
+	for player in _player_nodes:
+		if player != null and is_instance_valid(player) and int(player.gamepad_device_id) == device_id:
+			return true
+	return false

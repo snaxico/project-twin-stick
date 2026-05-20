@@ -4,6 +4,8 @@ const ParticleFactoryData = preload("res://scripts/juice/ParticleFactory.gd")
 const FireTrailZoneData = preload("res://scripts/weapons/FireTrailZone.gd")
 const BASE_COLLISION_HALF_WIDTH := 4.0
 const TRAIL_SPAWN_INTERVAL := 0.15
+const TRAIL_PARTICLE_SOFT_CAP := 90
+const ENEMY_TRAIL_PARTICLE_SOFT_CAP := 36
 
 @export var lifetime: float = 1.8
 
@@ -114,8 +116,9 @@ func _ready() -> void:
 		collision_shape.shape = (collision_shape.shape as CircleShape2D).duplicate()
 		_base_collision_radius = (collision_shape.shape as CircleShape2D).radius
 	_apply_visual_state()
-	_trail_particles = ParticleFactoryData.create_projectile_trail(_get_projectile_color())
-	add_child(_trail_particles)
+	if _should_spawn_trail_particles():
+		_trail_particles = ParticleFactoryData.create_projectile_trail(_get_projectile_color())
+		add_child(_trail_particles)
 	_next_trail_spawn_at = _current_time_seconds()
 
 func _physics_process(delta: float) -> void:
@@ -230,6 +233,17 @@ func _apply_visual_state() -> void:
 
 func _get_projectile_color() -> Color:
 	return tint_color
+
+func _should_spawn_trail_particles() -> bool:
+	var parent_node := get_parent()
+	if parent_node == null:
+		return false
+	var sibling_count := parent_node.get_child_count()
+	if sibling_count >= TRAIL_PARTICLE_SOFT_CAP:
+		return false
+	if team == "enemy" and sibling_count >= ENEMY_TRAIL_PARTICLE_SOFT_CAP:
+		return false
+	return true
 
 func _build_orb_polygon(radius: float, point_count: int = 8) -> PackedVector2Array:
 	var points := PackedVector2Array()

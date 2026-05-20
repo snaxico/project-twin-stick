@@ -125,12 +125,13 @@ func _populate_menu() -> void:
 	_populate_profile_option(debug_secondary_option, [{"label": "Shockwave", "value": "shockwave"}], "shockwave")
 	_populate_profile_option(debug_room_type_option, [
 		{"label": "Combat", "value": "combat"},
+		{"label": "Elite", "value": "elite"},
 		{"label": "Rest", "value": "rest"},
+		{"label": "Shop", "value": "shop"},
 		{"label": "Boss", "value": "boss"},
 	], "combat")
 	_populate_profile_option(debug_room_objective_option, [
 		{"label": "Survive", "value": "survive"},
-		{"label": "Hold Zone", "value": "capture_the_hill"},
 	], "survive")
 	_populate_profile_option(debug_layout_option, [
 		{"label": "Mixed", "value": "mixed"},

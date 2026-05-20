@@ -260,17 +260,31 @@ func _build_single_room_map() -> Array:
 func _generate_node_map() -> Array:
 	var rows: Array = []
 	var pre_boss_rows := _random.randi_range(RUN_LENGTH_MIN, RUN_LENGTH_MAX)
-	var rest_row := _random.randi_range(1, max(pre_boss_rows - 1, 1))
+	var rest_row := _random.randi_range(1, max(pre_boss_rows - 2, 1))
+	var shop_row := _random.randi_range(max(rest_row + 1, 2), max(pre_boss_rows - 1, 2))
+	if shop_row == rest_row:
+		shop_row = mini(shop_row + 1, pre_boss_rows - 1)
 	for row_index in range(pre_boss_rows):
 		var nodes_in_row: Array = []
 		var columns: Array = _roll_row_columns(row_index)
 		for column in columns:
-			var room_type := "rest" if row_index == rest_row else "combat"
+			var room_type := _pick_room_type(row_index, pre_boss_rows, rest_row, shop_row)
 			nodes_in_row.append(_build_map_node(row_index, int(column), room_type, row_index + 1))
 		rows.append(nodes_in_row)
 	rows.append([_build_map_node(pre_boss_rows, 2, "boss", pre_boss_rows + 1)])
 	_link_rows(rows)
 	return rows
+
+func _pick_room_type(row_index: int, total_rows: int, rest_row: int, shop_row: int) -> String:
+	if row_index == rest_row:
+		return "rest"
+	if row_index == shop_row:
+		return "shop"
+	var depth := row_index + 1
+	var mid_row := ceili(float(total_rows) * 0.4)
+	if depth >= mid_row and _random.randf() < 0.35:
+		return "elite"
+	return "combat"
 
 func _roll_row_columns(row_index: int) -> Array:
 	if row_index == 0:
@@ -285,19 +299,16 @@ func _roll_row_columns(row_index: int) -> Array:
 	return columns
 
 func _build_map_node(row_index: int, column: int, room_type: String, depth: int) -> Dictionary:
-	var objective := "survive"
-	if room_type == "combat" and depth >= 2:
-		objective = "capture_the_hill" if depth % 2 == 0 else "survive"
 	return {
 		"id": "r%d_c%d" % [row_index, column],
 		"row": row_index,
 		"column": column,
 		"room_type": room_type,
 		"title": _build_room_title(room_type, depth),
-		"description": _build_room_description(room_type, objective),
-		"objective": objective,
+		"description": _build_room_description(room_type),
+		"objective": "survive",
 		"depth": depth,
-		"enemy_mix": "mixed",
+		"enemy_mix": "charger_heavy" if room_type == "elite" else "mixed",
 		"next_node_ids": [],
 	}
 
@@ -307,17 +318,25 @@ func _build_room_title(room_type: String, depth: int) -> String:
 			return "Boss Arena"
 		"rest":
 			return "Rest Site"
+		"shop":
+			return "Shop"
+		"elite":
+			return "Elite Depth %d" % depth
 		_:
 			return "Depth %d" % depth
 
-func _build_room_description(room_type: String, objective: String) -> String:
+func _build_room_description(room_type: String) -> String:
 	match room_type:
 		"boss":
 			return "Final fight. Bring the whole build."
 		"rest":
 			return "Recover before the next push."
+		"shop":
+			return "Spend gold on mutations, healing, or rerolls."
+		"elite":
+			return "Tougher enemies. Higher rewards."
 		_:
-			return "Survive the room and complete %s." % _format_objective(objective).to_lower()
+			return "Survive the room."
 
 func _link_rows(rows: Array) -> void:
 	for row_index in range(rows.size() - 1):
@@ -407,9 +426,5 @@ func _build_outcome(title: String, summary: String, post_action: String, button_
 		"button_text": button_text,
 	}
 
-func _format_objective(objective: String) -> String:
-	match objective:
-		"capture_the_hill":
-			return "Hold Zone"
-		_:
-			return "Survive"
+func _format_objective(_objective: String) -> String:
+	return "Survive"

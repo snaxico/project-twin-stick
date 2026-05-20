@@ -21,16 +21,21 @@ This branch is now the v3 gameplay line:
 - run mode selection remains:
   - `Normal`
   - `Easy`
-- run flow still uses the stripped node map:
+- run flow now uses the full node map:
   - `combat`
+  - `elite` (harder encounters, 1.3x gold multiplier, charger-heavy mix)
   - `rest`
+  - `shop` (buy mutations, healing, rerolls with gold)
   - `boss`
-- dedicated shop nodes and meta progression remain out of the live runtime
+- elite nodes appear in mid-to-late rows with ~35% chance
+- one rest and one shop row guaranteed reachable per run
+- meta progression remains out of the live runtime
 - gold economy is now live:
   - enemies drop gold pickups on death
   - pickups magnet to the nearest living player
   - gold is shared on collection and copied into every player's personal wallet
   - room clear auto-collects leftovers and adds a flat survival bonus
+  - latest pickup tuning doubled the gold orb size and doubled pickup reach
 
 ## Active Combat State
 
@@ -70,9 +75,8 @@ This branch is now the v3 gameplay line:
   - `Chaser`
   - `Charger`
   - `Boss`
-- room objectives currently supported:
-  - `survive`
-  - `capture_the_hill`
+- room objective: `survive` only (capture_the_hill removed)
+- map node types: `combat`, `elite`, `rest`, `shop`, `boss`
 - mutation rewards are no longer free:
   - each room-end pick screen shows `3` rolled mutations
   - each player can buy `0–3` picks from that set
@@ -99,6 +103,7 @@ This branch is now the v3 gameplay line:
   - procedural neon coin/orb visual
   - magnet pull to nearest player
   - no collision-shape dependency; `CoopManager` owns collection checks
+  - script warning cleanup completed so the pickup path is parse-clean without unused-signal / unused-field noise
 - `Player.gd` now implements:
   - movement-facing + auto-attack runtime
   - automatic weapon fire
@@ -119,9 +124,11 @@ This branch is now the v3 gameplay line:
 - live combat HUD now also shows per-player gold
 - map route UI now also shows per-player gold totals
 - mutation pick UI now reuses each player's live input bindings instead of separate hardcoded menu keys
-- encounter builder still supports:
-  - room type
-  - objective
+- shop UI now also follows the live per-player bindings and actual assigned gamepad device IDs
+- pause menu now also follows the live per-player bindings and actual assigned gamepad device IDs
+- encounter builder now supports:
+  - room type (`combat`, `elite`, `rest`, `shop`, `boss`)
+  - objective (`survive` only)
   - depth
   - enemy mix override
   - starting mutation presets
@@ -134,7 +141,6 @@ This branch is now the v3 gameplay line:
 - no aim-assist menu setting
 - no screen-effects menu setting
 - no sprite-based player body / weapon presentation
-- no shop runtime
 - no loot drops / vote flow
 - no weapon replacement UI
 - no meta progression loop
@@ -154,22 +160,36 @@ Obsolete v1 / v2 systems remain preserved under `archive/v1/`.
 - builder mutation presets are for testing, not polished end-user UX
 - glow / neon presentation is improved, but this is still a gameplay-first pass rather than a final art pass
 - full-screen effects are forced on for now and are no longer user-configurable
-- the economy loop is now implemented structurally, but gold values, survival bonus, and mutation costs are still placeholder tuning values
-- dedicated shop nodes are still design-only; only the gold + room-end mutation spend loop is live
+- the economy loop is now implemented structurally, but gold values, survival bonus, and mutation costs are still placeholder and too cheap
+- shop nodes are now live but shop UI is basic (list-based, not polished)
+- elite rooms are functional but have no unique anchor enemies (mini-bosses) yet
+- mutation rarity split (common/rare), upgradable commons, side objectives, and temp buffs are designed and locked in `docs/design/roadmap.md` but not yet implemented
+- heavy projectile scenes now have first-pass runtime guard rails:
+  - HUD refresh is throttled instead of updating every physics frame
+  - dense projectile trails are suppressed under load
+  - projectile/effect spam is capped under extreme load
+- heavy enemy-count scenes now also have first-pass CPU guard rails:
+  - active-player lists are cached once per physics frame instead of rebuilt repeatedly
+  - enemy/player target getters no longer duplicate arrays on every query
+  - enemy target selection, separation, and obstacle-feeler steering are throttled when crowd counts get high
 
 ## Next Step
 
 If work continues on v3, the next priority is play validation:
 
-- run builder checks for:
-  - `Survive`
-  - `Hold Zone`
-  - `Mixed` / `Chasers Only` / `Chargers Only`
-  - stacked mutation presets
-- tune weapon cadence, primary skill feel, and room pressure until the loop feels clearly better than v2
-- validate the new gold economy across several full runs:
+- validate the full encounter restructure across several runs:
+  - combat, elite, rest, shop, boss node types visible and reachable on the map
+  - elite rooms should feel noticeably harder and reward more gold
+  - shop should be usable (buy mutations, heal, reroll, done)
+  - gold economy pacing across a complete run
   - passive survival should fall behind gradually, not instantly
   - aggressive rooms should fund multiple picks reliably
   - `15 / 50 / 100` mutation pricing should feel fair in both `1P` and `2P`
   - the shared-pickup / personal-wallet model should feel natural in couch co-op
-- only revisit shops, extra objectives, boss redesign, or higher player counts after the core v3 slice is fun
+- tune weapon cadence, primary skill feel, and room pressure
+- future additions beyond this validation:
+  - modifier system reintroduction (fire floor, ice zones, directional spawns)
+  - mini-boss / elite enemy archetypes (3-4 minimum)
+  - side challenges (optional bonus objectives for extra gold)
+  - boss redesign for v3
+  - `3-4` player support

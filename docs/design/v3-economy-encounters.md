@@ -196,6 +196,42 @@ Elite encounters may combine two modifiers for higher difficulty (e.g., fire flo
 
 ---
 
+## Mutation Rarity
+
+### Two Tiers
+
+Mutations are split into two rarity tiers. This is a locked design direction.
+
+| Tier | Upgradable | Source | Examples |
+|------|-----------|--------|----------|
+| **Common** | Yes (Lv1 → Lv2 → Lv3) | Room-end picks (all combat/elite rooms) | Pierce, Rapid Fire, Damage, Shockwave Radius, Move Speed |
+| **Rare** | No (binary: have it or don't) | Elite room rewards, shop purchases only | Fire Trail, Ricochet, Split Shot, Chain Lightning |
+
+### Common Mutations
+
+- Stat-scaling upgrades with visible per-level impact.
+- Picking the same common mutation again upgrades it (no separate upgrade UI).
+- Max level: 3 (placeholder, balance later).
+- Each level should produce a **visible gameplay difference**, not invisible percentage bumps.
+- Good commons: Pierce +1/+2/+3 (see more enemies hit), Fire Rate (visibly faster shots), Shockwave Radius (visibly bigger ring).
+- Bad commons: +8% damage per level (invisible without damage numbers).
+
+### Rare Mutations
+
+- Build-defining one-off effects. You have it or you don't.
+- **Not available from normal room-end picks.** Only from elite room rewards and shop purchases.
+- This makes elite rooms and shops the only source of rare mutations, creating a real incentive to take harder routes.
+- The guaranteed shop row ensures at least one rare mutation opportunity per run even on safe paths.
+
+### Design Rationale
+
+- Avoids the "always upgrade" trap: room-end picks are always common pool, so upgrades vs new commons is the only decision there.
+- Binary mutations (Fire Trail) don't need awkward leveling curves.
+- Rare mutations from elites give elite rooms unique identity beyond "more gold."
+- Route decisions become: safe path = strong common scaling, hard path = rare build-defining mutations.
+
+---
+
 ## Room-End Mutation Picks
 
 ### Flow
@@ -203,10 +239,11 @@ Elite encounters may combine two modifiers for higher difficulty (e.g., fire flo
 1. Room clears (survive timer ends)
 2. All remaining gold on the ground is auto-collected
 3. Mutation pick screen appears
-4. Screen shows: total gold available, 3 random mutation options, cost per pick
+4. Screen shows: total gold available, 3 random **common** mutation options, cost per pick
 5. Player buys 0, 1, 2, or 3 mutation picks depending on available gold
-6. Unspent gold is banked for future rooms/shops
-7. Advance to map, pick next node
+6. If a common mutation the player already owns appears, picking it upgrades to the next level
+7. Unspent gold is banked for future rooms/shops
+8. Advance to map, pick next node
 
 ### Mutation Pick Costs (Placeholder)
 
@@ -287,12 +324,13 @@ Abilities are the player's active kit pieces:
 
 ### Abilities vs Mutations
 
-| | Abilities | Mutations |
-|---|-----------|-----------|
-| **What** | Kit pieces (weapon, skills) | Run upgrades that modify abilities |
-| **When acquired** | Pre-run loadout selection | During run (room-end picks, shops) |
-| **Persistence** | Permanent unlocks (meta progression) | Run-only (reset each new run) |
-| **Examples** | Rifle, Beam, Shockwave, Teleport, Dash, Shield | Pierce, Ricochet, Split Shot, Rapid Fire, Shockwave Radius |
+| | Abilities | Common Mutations | Rare Mutations |
+|---|-----------|-----------------|----------------|
+| **What** | Kit pieces (weapon, skills) | Stat-scaling run upgrades | Build-defining one-off effects |
+| **When acquired** | Pre-run loadout selection | Room-end picks (all combat/elite rooms) | Elite room rewards, shop purchases |
+| **Upgradable** | N/A | Yes (Lv1 → Lv2 → Lv3) | No (binary) |
+| **Persistence** | Permanent unlocks (meta progression) | Run-only (reset each new run) | Run-only (reset each new run) |
+| **Examples** | Rifle, Beam, Shockwave, Teleport, Dash, Shield | Pierce, Rapid Fire, Damage, Shockwave Radius | Fire Trail, Ricochet, Split Shot, Chain Lightning |
 
 ### Current Prototype State
 
@@ -321,23 +359,45 @@ This is the default starting loadout. It is NOT the permanent universal kit. Fut
 
 ### Role
 
-Side challenges are optional bonus objectives available in some Combat and Elite rooms. They provide extra gold but are not required to clear the room.
+Side challenges are optional bonus objectives available in some Combat and Elite rooms. Completing a side challenge rewards a **temporary buff** that lasts until the room ends. This is a locked design direction.
+
+Side challenges are NOT required to clear the room. They are a risk/reward layer for aggressive or skilled players.
+
+### Reward: Temporary Buffs
+
+Side challenges reward temporary buffs instead of gold. This creates an immediate in-room power spike rather than a deferred economic reward.
+
+- Buffs last **until room end** (not a fixed timer). Completing the objective early = more buff time = more kills = more gold. This rewards speed.
+- Buffs are shared (all players get the buff when the side objective is completed).
+- Buffs do not persist between rooms. They are purely in-room rewards.
+- Buffs stack with mutations but should not be so strong that they trivialize the room.
+
+### Side Challenge Types
+
+| Challenge | Gameplay | Buff Reward |
+|-----------|----------|-------------|
+| **Hold Zone** | Stand in a marked area for X seconds total (not consecutive) | Speed boost |
+| **Beacon Defense** | Keep enemies away from a beacon for X seconds | Damage boost |
+| **Collection** | Gather X special pickups scattered around the arena | Attack speed boost |
+
+Each objective type pairs with a thematically appropriate buff. Different side objectives in different rooms give the run variety.
 
 ### Design Constraints
 
 - Side challenges must not conflict with the kill economy. The player should never feel punished for completing a side challenge.
 - Side challenges should be completable WHILE fighting, not instead of fighting.
 - Side challenges are authored per encounter template, not randomly assigned.
+- The in-room decision: play safe (ignore objective, just survive) vs go for it (riskier positioning, but buff makes the back half easier).
 
-### Possible Side Challenge Directions
+### Three Reward Layers (No Overlap)
 
-| Challenge | Description |
-|-----------|-------------|
-| **Hold Zone** | Stand in a marked area for X seconds total (not consecutive). Gold bonus on completion. |
-| **Beacon Defense** | Keep enemies away from a beacon for X seconds. Gold bonus if beacon survives. |
-| **Collection** | Gather X special pickups that spawn around the arena. Gold bonus on completion. |
+| Layer | Scope | Source | Persistence |
+|-------|-------|--------|-------------|
+| **Temporary buffs** | Single room | Side objectives | Expires at room end |
+| **Common mutations** | Full run | Room-end picks | Upgradable (Lv1-3), persists all run |
+| **Rare mutations** | Full run | Elites / shops | One-off, persists all run |
 
-Side challenges are a future design task. The economy and encounter system work without them. They are an additive layer for skilled/aggressive players.
+Side challenges are a future implementation task. The economy and encounter system work without them. They are an additive layer.
 
 ---
 
@@ -373,14 +433,18 @@ A typical run looks like this:
 
 | Item | Status | Notes |
 |------|--------|-------|
+| Gold economy balance | Placeholder | Mutations too cheap currently. All values need playtesting. |
 | Gold drop values per enemy type | Placeholder | Balance after playtesting |
 | Mutation pick costs (15/50/100) | Placeholder | Balance after playtesting |
 | Survival bonus (20g) | Placeholder | Balance after playtesting |
-| Shop item prices (80-150g mutations, 40g heal, 20g reroll) | Placeholder | Balance after playtesting |
+| Shop item prices (80g mutations, 40g heal, 20g reroll) | Placeholder | Balance after playtesting |
+| Common mutation definitions + level scaling | Future | Need concrete list of commons with per-level values |
+| Rare mutation definitions | Future | Need concrete list of rares with effects |
+| Mutation rarity split implementation | Future | Direction locked: common (upgradable) vs rare (one-off from elites/shops) |
+| Side challenge implementation | Future | Direction locked: temp buff reward, not gold. Hold Zone / Beacon / Collection. |
+| Temporary buff system | Future | Speed / damage / attack speed buffs. Last until room end. |
 | Modifier detailed design | Future | Authored per encounter, not random |
 | Mini-boss / elite enemy archetypes | Future | Need 3-4 archetypes minimum |
-| Side challenge implementation | Future | Additive layer, not required for core loop |
-| Shop node implementation | Future | Curated mutations + healing + rerolls. Node type defined, implementation deferred. |
 | Meta progression / ability unlocks | Future | Pre-run loadout selection (prototype direction, not locked) |
 | Ability variety (beyond rifle/shockwave/dash) | Future | New weapons and skills |
 | Consumable design | Future | One-use shop items, TBD |
