@@ -1,9 +1,11 @@
 class_name Mine
 extends Node2D
 
-const TRIGGER_RADIUS := 56.0
+const ExplosionEffectData = preload("res://scripts/modifiers/MineExplosionEffect.gd")
+
+const TRIGGER_RADIUS := 84.0
 const EXPLOSION_RADIUS := 86.0
-const DETONATE_DELAY := 0.5
+const DETONATE_DELAY := 0.2
 const DAMAGE := 10
 
 var _detonating := false
@@ -29,6 +31,7 @@ func update_mine(delta: float, player_nodes: Array) -> void:
 					continue
 				if player.global_position.distance_to(global_position) <= EXPLOSION_RADIUS:
 					player.apply_damage(DAMAGE)
+			_spawn_explosion_effect()
 			queue_free()
 			return
 		queue_redraw()
@@ -41,6 +44,12 @@ func update_mine(delta: float, player_nodes: Array) -> void:
 			_detonate_timer = DETONATE_DELAY
 			queue_redraw()
 			return
+
+func _spawn_explosion_effect() -> void:
+	var effect := ExplosionEffectData.new()
+	effect.global_position = global_position
+	get_tree().current_scene.add_child(effect)
+	effect.play(EXPLOSION_RADIUS)
 
 func _draw() -> void:
 	var body_color := Color(0.82, 0.18, 0.16, 0.92) if _detonating else Color(0.94, 0.62, 0.18, 0.9)

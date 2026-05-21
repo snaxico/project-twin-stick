@@ -66,6 +66,7 @@ Active gameplay work happens on `v2/core-refactor`:
   - primary skill: `Shockwave`
   - secondary skill: `Dash`
 - base player move speed is now tuned up to `487.5` (`+25%` over the earlier `390`)
+- dash travel range is now tuned up by `33%`
 - weapon fire is automatic:
   - no fire trigger input
   - baseline rifle cadence is `3.0` shots per second
@@ -111,6 +112,7 @@ Active gameplay work happens on `v2/core-refactor`:
   - `Fire Floor`
   - `Ice Zone`
   - `Mine Field`
+- `Mine Field` tuning currently uses a larger `84` trigger radius, a `0.2s` detonation delay, and a visible explosion burst for readability
 - hold-zone completion now grants a room-limited temporary buff:
   - `Speed`
   - `Damage`

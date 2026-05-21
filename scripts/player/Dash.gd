@@ -5,7 +5,7 @@ const INPUT_BUFFER_DURATION := 0.12
 
 var dash_duration: float = 0.4
 var cooldown_duration: float = 2.0
-var dash_speed: float = 640.0
+var dash_speed: float = 851.2
 
 var _active_until: float = 0.0
 var _cooldown_until: float = 0.0
