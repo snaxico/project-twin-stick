@@ -6,8 +6,11 @@ Read this first to restore project context quickly, then read `current-state.md`
 
 - Active gameplay work happens on `v2/core-refactor`.
 - Treat this branch as the current game.
+- `v2/core-refactor` is now also the GitHub default branch / mainline.
 - Treat older v1 gameplay as archived reference only:
   - preserved historically on `main`
+  - additionally archived on `archive/v1-main`
+  - tagged as `v1-main-archive`
   - preserved locally under `archive/v1/`
 - Do not use archived v1 behavior as the default assumption for live runtime decisions.
 

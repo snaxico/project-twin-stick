@@ -7,8 +7,11 @@ Godot `4.6.2` prototype for a same-screen local co-op neon roguelite.
 Active gameplay work happens on `v2/core-refactor`:
 
 - this is the current working branch
+- this is now also the GitHub default branch / mainline
 - older v1 gameplay is preserved as archived reference:
   - historically on `main`
+  - additionally on `archive/v1-main`
+  - tagged as `v1-main-archive`
   - locally under `archive/v1/`
 - current target is strictly `1–2` players
 - `3–4` player support is deferred until the current loop validates
