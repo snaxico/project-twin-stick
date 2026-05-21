@@ -35,12 +35,14 @@ Active gameplay work happens on `v2/core-refactor`:
 - gold economy is now live:
   - enemies drop gold pickups on death
   - non-boss enemies also have an `8%` chance to drop a `5 HP` healing pickup
-  - pickups magnet to the nearest living player
+  - health pickups only magnet to injured living players and stay on the floor when everyone is full HP
+  - pickups magnet to the nearest eligible living player
   - gold is shared on collection and copied into every player's personal wallet
   - room clear auto-collects leftovers
   - survival bonus is now `0`
   - latest pickup tuning doubled the gold orb size and doubled pickup reach
 - combat and elite nodes now also roll room modifiers from `data/modifiers.json`
+- first-row combat rooms now force `0` modifiers for a softer run start
 - combat and elite nodes now also carry the `hold_zone` side objective in the run-state map data
 
 ## Active Combat State
@@ -67,6 +69,7 @@ Active gameplay work happens on `v2/core-refactor`:
   - no fire trigger input
   - baseline rifle cadence is `3.0` shots per second
   - target selection is handled by `AutoTarget.gd`
+- shockwave now also destroys enemy projectiles caught inside its radius
 - default control split is now:
   - `P1` = gamepad
   - `P2` = keyboard
@@ -87,6 +90,9 @@ Active gameplay work happens on `v2/core-refactor`:
 - base `Spitter` pressure is now tuned down from the earlier rapid-fire version:
   - `1` projectile burst
   - `1.0s` fire interval
+  - `280` move speed
+  - slower approach / strafe behavior
+  - projectile spawn offset now starts outside the spitter body
 - elite mini-boss variants are now live:
   - `Elite Charger`
   - `Elite Spitter`
@@ -162,18 +168,24 @@ Active gameplay work happens on `v2/core-refactor`:
   - `skill_range` (primary skill radius)
   - `skill_cooldown` (primary skill cooldown)
 - `Projectile.gd` is now the live glowing-orb projectile path
-- `PlayerInventoryHUD` and `WeaponSlotHUD` remain the minimal HUD:
-  - health
-  - weapon icon
-  - primary skill cooldown
-  - secondary skill (dash) cooldown
-  - mutation icons
-- live combat HUD now also shows per-player gold
+- live combat now uses a stripped-back player-space `PlayerCombatIndicator`:
+  - a thin health bar below each player body
+  - hidden at full HP
+  - quiet by default, louder only on low HP / downed state
+  - pixel-snapped so it stays stable while moving
+  - a thin `Shockwave` cooldown arc appears around the player while the skill cools down and gives a brief ready pulse
+  - a smaller `Dash` cooldown arc uses the same language with a lighter weight and its own brief ready pulse
+- `PlayerInventoryHUD` and `WeaponSlotHUD` are no longer the active combat panel
+- live combat HUD now also shows a compact top-left loadout summary per player:
+  - gold
+  - weapon / primary / dash icons
+  - current mutation strip with compressed level display
 - live combat HUD now also shows:
   - active room modifiers
   - hold-zone progress / active buff state
 - map route UI now also shows per-player gold totals
 - map route UI now also shows modifier counts on nodes and modifier names on hover
+- elite enemy units now use a high-contrast in-body badge with a visible `E` marker for faster recognition
 - mutation pick UI now reuses each player's live input bindings instead of separate hardcoded menu keys
 - shop UI now also follows the live per-player bindings and actual assigned gamepad device IDs
 - pause menu now also follows the live per-player bindings and actual assigned gamepad device IDs
@@ -213,6 +225,7 @@ Active gameplay work happens on `v2/core-refactor`:
 - shop nodes are now live but shop UI is basic (list-based, not polished)
 - elite support aura, room modifiers, and hold-zone buff rewards still need real gameplay tuning
 - upgradable commons still render as duplicate mutation chips in the HUD instead of a single leveled badge
+- the top-left loadout summary is still a compact first pass and may need tighter mutation overflow handling later
 - heavy projectile scenes now have first-pass runtime guard rails:
   - HUD refresh is throttled instead of updating every physics frame
   - dense projectile trails are suppressed under load

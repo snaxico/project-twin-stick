@@ -92,6 +92,14 @@ The run should feel readable first and explosive second.
 - geometric placeholder visuals are acceptable while tuning remains the priority
 - spectacle should never bury enemy, projectile, or HUD readability
 
+## Combat HUD Direction
+
+- combat-critical player info should read as lightweight player-space feedback, not as a boxed HUD panel
+- shared room state should stay on the screen frame
+- active combat should prioritize HP and cooldown readability over inventory detail or slot display
+- the default combat HUD state should stay quiet and only become loud when health or recovery urgency matters
+- future `4` player local support should not depend on corner-owned HUD panels
+
 ## What This Direction Is Not
 
 - It is not the old manual-fire twin-stick version.

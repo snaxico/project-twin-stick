@@ -5,7 +5,8 @@ const ProjectileSceneData = preload("res://scenes/weapons/Projectile.tscn")
 const GoldPickupSceneData = preload("res://scenes/pickups/GoldPickup.tscn")
 const GoldPickupData = preload("res://scripts/pickups/GoldPickup.gd")
 const HealthPickupData = preload("res://scripts/pickups/HealthPickup.gd")
-const PlayerInventoryHUDData = preload("res://scripts/ui/PlayerInventoryHUD.gd")
+const PlayerCombatIndicatorData = preload("res://scripts/ui/PlayerCombatIndicator.gd")
+const PlayerLoadoutSummaryRowData = preload("res://scripts/ui/PlayerLoadoutSummaryRow.gd")
 const MutationSystemData = preload("res://scripts/game/MutationSystem.gd")
 const MutationPickUIScene = preload("res://scenes/ui/MutationPickUI.tscn")
 const TempBuffSystemData = preload("res://scripts/buffs/TempBuffSystem.gd")
@@ -109,8 +110,8 @@ var _spawn_cooldown_remaining := 0.0
 var _boss_spawned := false
 var _revive_progress_by_player_id: Dictionary = {}
 var _hud_root: Control = null
-var _player_inventory_huds: Array = []
-var _gold_labels: Array = []
+var _player_combat_indicators: Array = []
+var _player_summary_rows: Array = []
 var _timer_label: Label = null
 var _timer_fill: ColorRect = null
 var _modifier_hud: VBoxContainer = null
@@ -240,24 +241,24 @@ func _build_hud() -> void:
 	_modifier_hud.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_hud_root.add_child(_modifier_hud)
 
-	_player_inventory_huds.clear()
-	_gold_labels.clear()
-	for index in range(_player_configs.size()):
-		var hud := PlayerInventoryHUDData.new()
-		var hud_position := Vector2(24.0, 860.0 + index * 140.0) if index == 0 else Vector2(1676.0, 860.0)
-		hud.position = hud_position
-		hud.configure_player("P%d" % (index + 1), _player_configs[index].tint)
-		_hud_root.add_child(hud)
-		_player_inventory_huds.append(hud)
+	var gold_strip := VBoxContainer.new()
+	gold_strip.position = Vector2(24.0, 24.0)
+	gold_strip.add_theme_constant_override("separation", 6)
+	gold_strip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_hud_root.add_child(gold_strip)
 
-		var gold_label := Label.new()
-		gold_label.text = "0g"
-		gold_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-		gold_label.add_theme_font_size_override("font_size", 16)
-		gold_label.add_theme_color_override("font_color", Color(1.0, 0.85, 0.2, 0.95))
-		gold_label.position = hud_position + Vector2(0.0, -24.0)
-		_hud_root.add_child(gold_label)
-		_gold_labels.append(gold_label)
+	_player_combat_indicators.clear()
+	_player_summary_rows.clear()
+	for index in range(_player_configs.size()):
+		var indicator := PlayerCombatIndicatorData.new()
+		indicator.configure_player(_player_configs[index].tint)
+		_hud_root.add_child(indicator)
+		_player_combat_indicators.append(indicator)
+
+		var summary_row := PlayerLoadoutSummaryRowData.new()
+		summary_row.configure_player("P%d" % (index + 1), _player_configs[index].tint)
+		gold_strip.add_child(summary_row)
+		_player_summary_rows.append(summary_row)
 
 func _spawn_players() -> void:
 	for child in players.get_children():
@@ -519,6 +520,8 @@ func _physics_process(delta: float) -> void:
 		return
 	_invalidate_runtime_caches()
 	_clamp_players_to_arena()
+	_update_player_combat_indicators()
+	_update_player_combat_indicator_positions()
 	_update_revives(delta)
 	_update_elite_support_auras()
 	_update_room(delta)
@@ -1048,6 +1051,18 @@ func _on_player_primary_skill_requested(origin: Vector2, _direction: Vector2, st
 			var distance_ratio := 1.0 - clampf(distance / max(radius, 0.01), 0.0, 1.0)
 			var applied_force: float = knockback_force * (0.7 + distance_ratio * 0.75)
 			enemy.apply_knockback(radial_direction, applied_force)
+	for projectile in projectiles.get_children():
+		if projectile == null or not is_instance_valid(projectile):
+			continue
+		if not ("team" in projectile) or str(projectile.team) != "enemy":
+			continue
+		var projectile_distance: float = projectile.global_position.distance_to(origin)
+		if projectile_distance > radius:
+			continue
+		var projectile_direction: Vector2 = projectile.direction if "direction" in projectile else Vector2.RIGHT
+		var projectile_color: Color = projectile.tint_color if "tint_color" in projectile else tint
+		_spawn_projectile_hit_effect(projectile.global_position, -projectile_direction, projectile_color, 0.8, null)
+		projectile.queue_free()
 	_spawn_shockwave_visual(
 		origin,
 		radius,
@@ -1345,18 +1360,50 @@ func _refresh_hud() -> void:
 				_hold_zone_status_label.text = _hold_zone.get_progress_text()
 		else:
 			_hold_zone_status_label.text = ""
-	for index in range(min(_player_inventory_huds.size(), _player_nodes.size())):
-		_player_inventory_huds[index].update_hud({
-			"header": "P%d" % (index + 1),
-			"health_state": _player_nodes[index].get_health_state(),
-			"health_status": _player_nodes[index].get_health_ratio_text(),
-			"weapon": _player_nodes[index].get_weapon_hud_data(),
-			"primary_skill": _player_nodes[index].get_primary_skill_hud_data(),
-			"secondary_skill": _player_nodes[index].get_secondary_skill_hud_data(),
+	for index in range(min(_player_summary_rows.size(), _player_configs.size(), _compiled_loadouts.size())):
+		var summary_row = _player_summary_rows[index]
+		if summary_row == null or not is_instance_valid(summary_row):
+			continue
+		var loadout: Dictionary = _compiled_loadouts[index]
+		summary_row.update_row({
+			"gold": RunState.get_player_gold(index),
+			"weapon_id": str(loadout.get("weapon_id", "rifle")),
+			"primary_skill_id": str(loadout.get("primary_skill_id", "shockwave")),
 			"mutations": _mutation_system.get_active_mutations(index),
 		})
-	for index in range(min(_gold_labels.size(), _player_configs.size())):
-		(_gold_labels[index] as Label).text = "%dg" % RunState.get_player_gold(index)
+
+func _update_player_combat_indicators() -> void:
+	for index in range(min(_player_combat_indicators.size(), _player_nodes.size())):
+		var player = _player_nodes[index]
+		var health_state: Dictionary = player.get_health_state()
+		var primary_hud_data: Dictionary = player.get_primary_skill_hud_data()
+		var secondary_hud_data: Dictionary = player.get_secondary_skill_hud_data()
+		_player_combat_indicators[index].update_state(
+			int(health_state.get("current", 0)),
+			int(health_state.get("max", 1)),
+			player.is_downed(),
+			float(player.get_primary_skill_cooldown_remaining()),
+			float(primary_hud_data.get("cooldown_duration", 1.0)),
+			float(player.get_secondary_skill_cooldown_remaining()),
+			float(secondary_hud_data.get("cooldown_duration", 1.0))
+		)
+
+func _update_player_combat_indicator_positions() -> void:
+	if _player_combat_indicators.is_empty():
+		return
+	var viewport_size: Vector2 = get_viewport_rect().size
+	var canvas_transform: Transform2D = get_viewport().get_canvas_transform()
+	for index in range(min(_player_combat_indicators.size(), _player_nodes.size())):
+		var indicator = _player_combat_indicators[index]
+		var player = _player_nodes[index]
+		if indicator == null or not is_instance_valid(indicator) or player == null or not is_instance_valid(player):
+			continue
+		var screen_position: Vector2 = (canvas_transform * player.global_position).round()
+		var indicator_size: Vector2 = indicator.custom_minimum_size
+		var top_left := screen_position + Vector2(-indicator_size.x * 0.5, -20.0)
+		top_left.x = clampf(top_left.x, 8.0, viewport_size.x - indicator_size.x - 8.0)
+		top_left.y = clampf(top_left.y, 8.0, viewport_size.y - indicator_size.y - 8.0)
+		indicator.position = top_left.round()
 
 func _load_modifier_definitions() -> void:
 	_modifier_definitions.clear()
@@ -1551,12 +1598,14 @@ func _spawn_health_pickup(spawn_position: Vector2, heal_amount: int) -> void:
 	pickups.add_child(pickup)
 
 func _update_gold_pickups(delta: float) -> void:
-	var eligible_players := _get_pickup_eligible_players()
-	if eligible_players.is_empty():
-		return
 	var to_remove: Array = []
 	for pickup in pickups.get_children():
 		if not is_instance_valid(pickup):
+			continue
+		var eligible_players := _get_pickup_eligible_players(pickup)
+		if eligible_players.is_empty():
+			if pickup is HealthPickupData:
+				pickup.magnet_speed = 0.0
 			continue
 		var nearest_player = null
 		var nearest_distance := INF
@@ -1613,11 +1662,15 @@ func _award_modifier_gold_bonus() -> void:
 	RunState.add_gold_to_all_players(bonus_gold)
 	_room_gold_earned += bonus_gold
 
-func _get_pickup_eligible_players() -> Array:
+func _get_pickup_eligible_players(pickup = null) -> Array:
 	var eligible_players: Array = []
 	for player in _player_nodes:
 		if player == null or not is_instance_valid(player) or not player.has_method("is_alive") or not player.is_alive():
 			continue
+		if pickup is HealthPickupData:
+			var health_state: Dictionary = player.get_health_state()
+			if int(health_state.get("current", 0)) >= int(health_state.get("max", 0)):
+				continue
 		eligible_players.append(player)
 	return eligible_players
 

@@ -374,7 +374,9 @@ func _assign_modifiers_to_map(rows: Array) -> void:
 			var node: Dictionary = row[node_index]
 			var room_type := str(node.get("room_type", "combat"))
 			var modifiers: Array = []
-			if room_type == "combat" and not _valid_combat_modifier_combinations.is_empty():
+			if room_type == "combat" and row_index == 0:
+				modifiers = []
+			elif room_type == "combat" and not _valid_combat_modifier_combinations.is_empty():
 				modifiers = (_valid_combat_modifier_combinations[_random.randi_range(0, _valid_combat_modifier_combinations.size() - 1)] as Array).duplicate()
 			elif room_type == "elite" and not _valid_elite_modifier_combinations.is_empty():
 				modifiers = (_valid_elite_modifier_combinations[_random.randi_range(0, _valid_elite_modifier_combinations.size() - 1)] as Array).duplicate()

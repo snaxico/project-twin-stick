@@ -99,6 +99,8 @@ var _base_move_speed: float = 0.0
 var _base_fire_interval: float = 0.0
 var _aura_speed_modifier: float = 1.0
 var _aura_attack_modifier: float = 1.0
+var _elite_badge: Polygon2D = null
+var _elite_marker: Line2D = null
 
 func setup(type_name: String, combat_owner) -> void:
 	_combat_owner = combat_owner
@@ -118,7 +120,7 @@ func setup(type_name: String, combat_owner) -> void:
 		"spitter":
 			enemy_type = EnemyType.SPITTER
 			max_health = 30
-			move_speed = 312.0
+			move_speed = 280.0
 			fire_interval = 1.0
 			projectile_speed = 340.0
 			projectile_damage = 10
@@ -241,6 +243,8 @@ func _ready() -> void:
 	add_to_group("aim_target")
 	if body_root != null:
 		_base_body_root_position = body_root.position
+		_ensure_elite_badge()
+		_ensure_elite_marker()
 	if shadow != null:
 		_base_shadow_scale = shadow.scale
 	_idle_phase = float(get_instance_id() % 17) * 0.43
@@ -532,11 +536,11 @@ func _update_spitter_behavior(direction: Vector2, distance: float, now: float) -
 	if distance > 0.0 and now >= _next_projectile_at:
 		_next_projectile_at = now + fire_interval
 		_emit_projectile_burst(direction)
-	if distance < 180.0:
-		return -direction * move_speed
-	if distance > preferred_distance + 50.0:
-		return direction * move_speed * 0.92
-	return Vector2(-direction.y, direction.x) * move_speed * _circle_sign * 0.8
+	if distance < 220.0:
+		return -direction * move_speed * 0.92
+	if distance > preferred_distance + 80.0:
+		return direction * move_speed * 0.72
+	return Vector2(-direction.y, direction.x) * move_speed * _circle_sign * 0.58
 
 func _update_boss_behavior(direction: Vector2, distance: float, now: float) -> Vector2:
 	var base_velocity := Vector2.ZERO
@@ -600,9 +604,10 @@ func _emit_projectile_burst(base_direction: Vector2) -> void:
 	var normalized_direction := base_direction.normalized()
 	if normalized_direction.length() <= 0.0:
 		return
+	var spawn_offset := maxf(_get_collision_radius(self) + 12.0, 20.0)
 	for projectile_direction in _build_spread_directions(normalized_direction, _projectile_burst_count, _projectile_spread_radians):
 		fire_requested.emit(
-			global_position + projectile_direction * 20.0,
+			global_position + projectile_direction * spawn_offset,
 			projectile_direction,
 			projectile_speed,
 			projectile_damage,
@@ -703,6 +708,67 @@ func _apply_type_visual() -> void:
 		outline.polygon = visual.polygon
 		outline.scale = visual.scale * 1.28
 		outline.color = Color(0.12, 0.02, 0.02, 0.94) if enemy_type == EnemyType.BOSS else Color(0.04, 0.06, 0.08, 0.92)
+	_update_elite_badge()
+	_update_elite_marker()
+
+func _ensure_elite_badge() -> void:
+	if body_root == null:
+		return
+	_elite_badge = body_root.get_node_or_null("EliteBadge") as Polygon2D
+	if _elite_badge != null:
+		return
+	_elite_badge = Polygon2D.new()
+	_elite_badge.name = "EliteBadge"
+	_elite_badge.color = Color(0.06, 0.07, 0.1, 0.94)
+	_elite_badge.z_index = 4
+	body_root.add_child(_elite_badge)
+
+func _ensure_elite_marker() -> void:
+	if body_root == null:
+		return
+	_elite_marker = body_root.get_node_or_null("EliteMarker") as Line2D
+	if _elite_marker != null:
+		return
+	_elite_marker = Line2D.new()
+	_elite_marker.name = "EliteMarker"
+	_elite_marker.width = 5.0
+	_elite_marker.default_color = Color(1.0, 0.95, 0.62, 0.98)
+	_elite_marker.antialiased = true
+	_elite_marker.joint_mode = Line2D.LINE_JOINT_ROUND
+	_elite_marker.begin_cap_mode = Line2D.LINE_CAP_ROUND
+	_elite_marker.end_cap_mode = Line2D.LINE_CAP_ROUND
+	_elite_marker.z_index = 5
+	body_root.add_child(_elite_marker)
+
+func _update_elite_badge() -> void:
+	if _elite_badge == null:
+		return
+	var is_elite := enemy_type == EnemyType.ELITE_CHARGER or enemy_type == EnemyType.ELITE_SPITTER or enemy_type == EnemyType.ELITE_SUPPORT
+	_elite_badge.visible = is_elite
+	if not is_elite:
+		return
+	_elite_badge.polygon = _build_regular_polygon(6, 18.0)
+	_elite_badge.scale = Vector2.ONE
+
+func _update_elite_marker() -> void:
+	if _elite_marker == null:
+		return
+	var is_elite := enemy_type == EnemyType.ELITE_CHARGER or enemy_type == EnemyType.ELITE_SPITTER or enemy_type == EnemyType.ELITE_SUPPORT
+	_elite_marker.visible = is_elite
+	if not is_elite:
+		return
+	_elite_marker.points = PackedVector2Array([
+		Vector2(-10.0, -16.0),
+		Vector2(-10.0, 16.0),
+		Vector2(-10.0, 0.0),
+		Vector2(8.0, 0.0),
+		Vector2(-10.0, 0.0),
+		Vector2(-10.0, -16.0),
+		Vector2(10.0, -16.0),
+		Vector2(-10.0, -16.0),
+		Vector2(-10.0, 16.0),
+		Vector2(10.0, 16.0),
+	])
 
 func _build_regular_polygon(point_count: int, radius: float) -> PackedVector2Array:
 	var points := PackedVector2Array()
