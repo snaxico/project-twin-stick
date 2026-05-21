@@ -4,14 +4,12 @@
 
 This document summarizes the current gameplay/runtime direction of `v2/core-refactor`.
 
-It is not a plan for future migration and it is not a description of archived v1 gameplay.
+It is not a plan for future migration.
 
 ## Branch Position
 
 - `v2/core-refactor` is the active gameplay branch.
-- Older v1 gameplay is preserved as archived reference:
-  - historically on `main`
-  - locally under `archive/v1/`
+- This branch is also the GitHub default branch / mainline.
 - The current branch runtime is the game that should be treated as live today.
 
 ## Current Runtime Direction
@@ -35,6 +33,7 @@ The branch now centers on a simpler `1-2` player loop built around:
 - live enemies:
   - `Chaser`
   - `Charger`
+  - `Spitter`
   - `Boss`
 - live room types:
   - `combat`
@@ -76,13 +75,12 @@ Compared with older branch states, the current runtime:
 - The current unanswered questions are about:
   - pacing
   - economy
+  - modifier readability
   - elite identity
-  - mutation progression feel
   - boss quality
 
 ## How To Use This Branch
 
 - Treat this branch as the live game.
-- Treat archived v1 content as reference only.
 - Use `docs/development/current-state.md` for exact runtime truth.
 - Use `docs/design/roadmap.md` for next feature-design decisions.

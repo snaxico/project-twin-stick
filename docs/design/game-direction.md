@@ -1,9 +1,8 @@
-# Game Direction — Current Auto-Fire Branch
+# Game Direction
 
 ## Scope Note
 
-- This file name is kept for continuity, but the content here describes the active direction on `v2/core-refactor`.
-- Older v1 gameplay is archived reference only.
+- This file describes the active direction on `v2/core-refactor`.
 
 ## One-Line Pitch
 
@@ -60,6 +59,7 @@ The run should feel readable first and explosive second.
 - current live enemies:
   - `Chaser`
   - `Charger`
+  - `Spitter`
   - `Boss`
 - current live room types:
   - `combat`
@@ -95,7 +95,6 @@ The run should feel readable first and explosive second.
 ## What This Direction Is Not
 
 - It is not the old manual-fire twin-stick version.
-- It is not the archived v1 patch line.
 - It is not currently a modifier-heavy, layout-heavy, objective-heavy build.
 - It is not a `3-4` player target yet.
 
@@ -103,14 +102,13 @@ The run should feel readable first and explosive second.
 
 - validate the current run loop in live play
 - balance economy values
-- implement the locked common/rare mutation split
-- decide elite rare-mutation delivery
-- add side objectives only after the current loop remains readable
+- tune modifier readability and pressure
+- validate elite reward identity and side-objective payoff
+- redesign the boss around the current branch runtime
 
 ## Next Expansion Areas
 
-- mutation rarity split
-- elite reward identity
-- side objectives and temporary buffs
+- side challenges beyond `hold_zone`
+- elite reward identity follow-up
 - encounter-depth reintroduction
 - boss redesign

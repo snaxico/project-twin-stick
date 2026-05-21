@@ -3,7 +3,6 @@
 ## Scope Note
 
 - This file describes the active runtime on `v2/core-refactor`.
-- Older v1 gameplay is archive/reference material only.
 - If this file conflicts with `docs/development/current-state.md`, update this file to match `current-state.md`.
 
 ## Folder Ownership
@@ -12,10 +11,9 @@
 - `scripts/`: gameplay and runtime logic
 - `data/`: editable JSON definitions for the live runtime
 - `assets/`: runtime art, audio, fonts, and imported content
-- `archive/`: preserved old content that is no longer part of the live runtime
 - `docs/process/`: source of truth for scope, roadmap, and architecture
 - `docs/development/`: current runtime truth and session memory
-- `docs/design/`: design direction, roadmap, and implementation history
+- `docs/design/`: active design direction, roadmap, and implementation planning
 
 ## Runtime Boundaries
 
@@ -144,12 +142,6 @@
   - `mutations`
   - `gold`
 - `RunState.get_player_runtime_loadout_for()` returns the runtime loadout contract consumed by `Player.gd`.
-
-## Archived Content Rule
-
-- `archive/v1/` is not part of the live runtime.
-- Archived files may be referenced for recovery or comparison.
-- Archived behavior should not be treated as default design intent for the current branch.
 
 ## Current Architecture Risks
 

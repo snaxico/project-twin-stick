@@ -3,7 +3,6 @@
 ## Scope Note
 
 - This scope applies to the active branch runtime on `v2/core-refactor`.
-- Older v1 gameplay is archived reference only.
 
 ## Current Prototype Goal
 
@@ -60,7 +59,7 @@ Pick a node on the map -> enter room -> survive under room pressure -> earn and 
 - major frontend polish
 - expanded enemy roster before current pacing validates
 - modifier re-expansion before the base loop validates
-- restoring archived v1 systems just because they already exist somewhere in the repo
+- resurrecting discarded directions before the current loop validates
 
 ## Current Validation Focus
 

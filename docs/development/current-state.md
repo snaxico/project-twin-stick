@@ -8,11 +8,7 @@ Active gameplay work happens on `v2/core-refactor`:
 
 - this is the current working branch
 - this is now also the GitHub default branch / mainline
-- older v1 gameplay is preserved as archived reference:
-  - historically on `main`
-  - additionally on `archive/v1-main`
-  - tagged as `v1-main-archive`
-  - locally under `archive/v1/`
+- the repo is now aligned around this runtime only
 - current target is strictly `1–2` players
 - `3–4` player support is deferred until the current loop validates
 - the live runtime on this branch currently follows the later auto-fire / shockwave / dash direction from the newer design docs
@@ -204,8 +200,6 @@ Active gameplay work happens on `v2/core-refactor`:
 - no generator objective
 - no alternative primary families in live combat
 - no `3–4` player support target for the current validation phase
-
-Obsolete v1 systems remain preserved under `archive/v1/` as archive/reference content only.
 
 ## Known Gaps
 

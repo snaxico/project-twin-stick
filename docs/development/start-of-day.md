@@ -7,12 +7,8 @@ Read this first to restore project context quickly, then read `current-state.md`
 - Active gameplay work happens on `v2/core-refactor`.
 - Treat this branch as the current game.
 - `v2/core-refactor` is now also the GitHub default branch / mainline.
-- Treat older v1 gameplay as archived reference only:
-  - preserved historically on `main`
-  - additionally archived on `archive/v1-main`
-  - tagged as `v1-main-archive`
-  - preserved locally under `archive/v1/`
-- Do not use archived v1 behavior as the default assumption for live runtime decisions.
+- Treat the repo as the current game only.
+- Old v1 branch/archive content was intentionally removed and should not shape live runtime decisions.
 
 ## Source Of Truth
 
@@ -24,9 +20,9 @@ Read this first to restore project context quickly, then read `current-state.md`
 ## Project Snapshot
 
 - Same-screen local co-op twin-stick roguelite prototype in Godot `4.6.2`.
-- Current target is the active `1-2` player v2 branch runtime, not the old v1 patch line.
+- Current target is the active `1-2` player branch runtime.
 - The live runtime currently uses the later auto-fire / shockwave / dash combat direction described by the newer design docs.
-- Current focus is validation, tuning, and roadmap design clarity, not restoring archived systems.
+- Current focus is validation, tuning, and roadmap design clarity.
 
 ## Live Runtime Summary
 
@@ -40,6 +36,7 @@ Read this first to restore project context quickly, then read `current-state.md`
 - Current live enemies:
   - `Chaser`
   - `Charger`
+  - `Spitter`
   - `Boss`
 - Current live room objective:
   - `survive`
@@ -71,7 +68,7 @@ Read this first to restore project context quickly, then read `current-state.md`
   - dash usefulness
   - room pressure
 - Keep scope tight:
-  - no casual re-expansion back toward archived v1 systems
+  - no casual re-expansion toward discarded directions
   - no casual `3-4` player work
 
 ## Current Design Context
@@ -80,11 +77,11 @@ Read this first to restore project context quickly, then read `current-state.md`
 - Roadmap work should assume:
   - the working branch is `v2/core-refactor`
   - the live game is the runtime described in `current-state.md`
-  - archived v1 content is reference material only
 - Current roadmap discussion areas are the post-economy follow-ups:
-  - common vs rare mutation split
-  - elite rare-mutation delivery
-  - side objectives and temporary buffs
+  - modifier / economy pacing
+  - elite difficulty and reward feel
+  - hold-zone / buff readability
+  - boss redesign priorities
 
 ## Important Runtime Ownership
 
