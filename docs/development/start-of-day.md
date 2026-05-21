@@ -301,6 +301,8 @@ Read this first to restore project context quickly, then read `current-state.md`
 - `history/` records what changed, why, and what remains open.
 - `docs/design/weapons-passives-balance.xlsx` is the balancing design document for weapons and passives.
 - `docs/design/enemies-arenas-modifiers-balance.xlsx` is the balancing design document for enemies, arenas, modifiers, and encounter recipes.
+- `docs/design/v3-economy-encounters.md` is the design document for the gold economy, encounter model, modifier system, shops, and ability acquisition.
+- `docs/design/v3-economy-implementation-plan.md` is the phased implementation plan for the gold economy (8 phases, designed for Codex execution).
 - `docs/process/` stays the source of truth for scope, roadmap, architecture, and workflow rules.
 - Any change to primary weapons, secondary weapons, or passive items must update `docs/design/weapons-passives-balance.xlsx` in the same slice.
 - Write for continuation, not presentation.

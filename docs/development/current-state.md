@@ -138,13 +138,13 @@ Obsolete v1 / v2 systems remain preserved under `archive/v1/`.
 
 ## Next Step
 
-If work continues on v3, the next priority is play validation:
+V3 core loop (auto-attack + shockwave + dash + mutations) has passed first playtest and GF test. Next priority is implementing the economy and encounter layer described in `docs/design/v3-economy-encounters.md`:
 
-- run builder checks for:
-  - `Survive`
-  - `Hold Zone`
-  - `Mixed` / `Chasers Only` / `Chargers Only`
-  - stacked mutation presets
-- tune weapon cadence, primary skill feel, and room pressure until the loop feels clearly better than v2
-- validate the mutation reward cadence across several full runs
-- only revisit shops, extra objectives, boss redesign, or higher player counts after the core v3 slice is fun
+- implement gold drop economy (enemies drop gold on kill, no free mutations)
+- implement room-end mutation pick screen (spend gold to buy mutation picks)
+- restructure encounters: Combat / Elite / Rest / Boss node types
+- reintroduce modifiers as authored encounter properties (fire floor, directional spawns, etc.)
+- design 3-4 mini-boss / elite enemy archetypes
+- implement shop nodes (curated mutations + healing + rerolls)
+- validate gold economy balance and mutation pacing across full runs
+- validate that passive play is naturally punished by the economy (no gold = no mutations = death spiral)
