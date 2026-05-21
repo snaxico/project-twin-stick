@@ -163,7 +163,7 @@ Obsolete v1 / v2 systems remain preserved under `archive/v1/`.
 - the economy loop is now implemented structurally, but gold values, survival bonus, and mutation costs are still placeholder and too cheap
 - shop nodes are now live but shop UI is basic (list-based, not polished)
 - elite rooms are functional but have no unique anchor enemies (mini-bosses) yet
-- mutation rarity split (common/rare), upgradable commons, side objectives, and temp buffs are designed and locked in `docs/design/roadmap.md` but not yet implemented
+- mutation rarity split (common/rare), upgradable commons, side objectives (Hold Zone), temp buffs, modifier system (6 modifiers), Spitter enemy, elite mini-bosses (3 archetypes), and economy flatten are all designed and locked in `docs/design/roadmap.md` — a detailed 8-slice implementation plan exists at `docs/design/implementation-plan.md` but none of it is implemented yet
 - heavy projectile scenes now have first-pass runtime guard rails:
   - HUD refresh is throttled instead of updating every physics frame
   - dense projectile trails are suppressed under load
@@ -175,21 +175,19 @@ Obsolete v1 / v2 systems remain preserved under `archive/v1/`.
 
 ## Next Step
 
-If work continues on v3, the next priority is play validation:
+Implementation of roadmap Tiers 1–6 via the 8-slice plan in `docs/design/implementation-plan.md`:
 
-- validate the full encounter restructure across several runs:
-  - combat, elite, rest, shop, boss node types visible and reachable on the map
-  - elite rooms should feel noticeably harder and reward more gold
-  - shop should be usable (buy mutations, heal, reroll, done)
-  - gold economy pacing across a complete run
-  - passive survival should fall behind gradually, not instantly
-  - aggressive rooms should fund multiple picks reliably
-  - `15 / 50 / 100` mutation pricing should feel fair in both `1P` and `2P`
-  - the shared-pickup / personal-wallet model should feel natural in couch co-op
-- tune weapon cadence, primary skill feel, and room pressure
-- future additions beyond this validation:
-  - modifier system reintroduction (fire floor, ice zones, directional spawns)
-  - mini-boss / elite enemy archetypes (3-4 minimum)
-  - side challenges (optional bonus objectives for extra gold)
-  - boss redesign for v3
-  - `3-4` player support
+- Slice 0: fix elite debug path + add reversible Player stat modifier layer (prerequisite)
+- Slice 1: economy flatten (1g per enemy, remove survival bonus)
+- Slice 2: mutation rarity system (commons Lv1–3, rares binary, new scaling)
+- Slice 3: elite rare-only picks (1 rare per elite room-end)
+- Slice 4: Spitter enemy (new type + kiting AI)
+- Slice 5: modifier system (6 modifiers, data JSON, run gen, 3 new scripts)
+- Slice 6: elite mini-bosses (3 archetypes, aura system)
+- Slice 7: Hold Zone side objective + temp buffs
+
+After implementation, validate in live play before expanding further. Remaining future work:
+- boss redesign for v3
+- `3-4` player support
+- meta progression / ability unlocks
+- shop UI polish
