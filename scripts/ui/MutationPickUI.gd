@@ -32,6 +32,12 @@ func configure_for_players(configs: Array, options_by_player: Array, gold_per_pl
 		_confirmed.append(false)
 	_build()
 	_refresh_panels()
+	for idx in range(_player_configs.size()):
+		if (_options_by_player[idx] as Array).is_empty():
+			_confirmed[idx] = true
+	_refresh_panels()
+	if _all_confirmed():
+		call_deferred("emit_signal", "selections_confirmed", _build_final_selections())
 
 func _unhandled_input(event: InputEvent) -> void:
 	for player_index in range(_player_configs.size()):
@@ -145,6 +151,7 @@ func _build() -> void:
 		_player_views.append({
 			"title": title,
 			"gold": gold_label,
+			"hint": hint,
 			"cards": cards,
 		})
 
@@ -153,11 +160,13 @@ func _refresh_panels() -> void:
 		var view: Dictionary = _player_views[player_index]
 		var title: Label = view["title"]
 		var gold_label: Label = view["gold"]
+		var hint: Label = view["hint"]
 		var cards: HBoxContainer = view["cards"]
 		for child in cards.get_children():
 			cards.remove_child(child)
 			child.queue_free()
-		title.text = "Player %d Mutations" % (player_index + 1)
+		title.text = "Player %d Elite Reward" % (player_index + 1) if _pick_costs.size() == 1 else "Player %d Mutations" % (player_index + 1)
+		hint.text = "Buy this rare or confirm Done." if _pick_costs.size() == 1 else "Select cards to buy, then confirm Done."
 		var selected_count := (_selected_option_orders[player_index] as Array).size()
 		gold_label.text = "Gold: %dg   Remaining: %dg   Picks: %d/%d" % [
 			int(_gold_per_player[player_index]),
@@ -237,6 +246,10 @@ func _build_card(player_index: int, option_index: int, is_done: bool) -> Control
 		return panel
 
 	var option: Dictionary = (_options_by_player[player_index] as Array)[option_index]
+	if str(option.get("rarity", "common")) == "rare":
+		style.border_color = Color(0.95, 0.76, 0.18, 0.96)
+		if is_selected_cursor:
+			style.set_border_width_all(2)
 	var icon := TextureRect.new()
 	icon.custom_minimum_size = Vector2(64.0, 64.0)
 	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE

@@ -1,5 +1,10 @@
 # Patch 11 — Melee-First Enemy Balance and Survivability
 
+## Status Note
+
+- This file is a historical implementation record for an earlier slice.
+- It is not the current runtime source of truth.
+
 Hard scope lock: no new enemies, no new weapons, no new systems. Rebalance existing enemy roster so combat is primarily melee-dodge, with ranged as rare flavoring. Smooth the Normal mode difficulty curve by improving healing economy and reducing spike damage.
 
 ---
@@ -13,6 +18,11 @@ Make the game pass the "girlfriend test":
 - Normal mode should feel challenging but survivable — chip damage should not silently end runs before the boss.
 
 ---
+
+## Status Note
+
+- This file is a historical implementation record for an earlier slice.
+- It is not the current runtime source of truth.
 
 ## Patch 11A — Wave Composition Rebalance
 

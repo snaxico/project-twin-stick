@@ -1,5 +1,16 @@
 # Game Direction v2
 
+## Status
+
+- This file is a historical design document.
+- It captures an earlier direction that fed into `v2/core-refactor`.
+- Do not use it as the source of truth for the current runtime.
+- Use these instead for active work:
+  - `docs/development/current-state.md`
+  - `docs/development/start-of-day.md`
+  - `docs/design/roadmap.md`
+  - `docs/process/architecture.md`
+
 ## One-Line Pitch
 
 Co-op arena roguelite where your weapon visibly mutates every room and each room gives you a different job to do while surviving.

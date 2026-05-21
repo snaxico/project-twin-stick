@@ -2,6 +2,7 @@ extends Node
 
 const PlayerInventoryData = preload("res://scripts/game/PlayerInventory.gd")
 const WEAPONS_DATA_PATH := "res://data/weapons.json"
+const MODIFIERS_DATA_PATH := "res://data/modifiers.json"
 const RUN_LENGTH_MIN := 5
 const RUN_LENGTH_MAX := 7
 const MAP_COLUMN_COUNT := 5
@@ -25,14 +26,19 @@ var player_inventories: Array = []
 var _random := RandomNumberGenerator.new()
 var _node_lookup: Dictionary = {}
 var _weapons_by_id: Dictionary = {}
+var _modifiers_by_id: Dictionary = {}
+var _valid_combat_modifier_combinations: Array = []
+var _valid_elite_modifier_combinations: Array = []
 
 func _ready() -> void:
 	_random.randomize()
 	_load_weapons()
+	_load_modifiers()
 
 func start_new_run(configs: Array, debug_options: Dictionary = {}) -> void:
 	_random.randomize()
 	_load_weapons()
+	_load_modifiers()
 	debug_run_setup = _build_default_debug_run_setup()
 	debug_run_setup.merge(debug_options, true)
 	player_configs = configs.duplicate()
@@ -204,7 +210,7 @@ func get_player_runtime_loadout_for(player_index: int) -> Dictionary:
 		"primary_skill_name": str(primary_skill.get("name", "Shockwave")),
 		"primary_skill_stats": (primary_skill.get("stats", {}) as Dictionary).duplicate(true),
 		"mutations": get_mutations(player_index),
-		"move_speed": 390.0,
+		"move_speed": 487.5,
 	}
 
 func _load_weapons() -> void:
@@ -241,8 +247,6 @@ func _build_default_player_inventories(player_count: int) -> Array:
 
 func _build_single_room_map() -> Array:
 	var room_type := str(debug_run_setup.get("room_type", "combat"))
-	if room_type == "elite":
-		room_type = "combat"
 	var node := {
 		"id": "single_room",
 		"row": 0,
@@ -251,8 +255,10 @@ func _build_single_room_map() -> Array:
 		"title": "Encounter Builder",
 		"description": "Single-room debug encounter.",
 		"objective": str(debug_run_setup.get("room_objective", "survive")),
+		"side_objective": "hold_zone" if room_type == "combat" or room_type == "elite" else "",
 		"depth": max(int(debug_run_setup.get("step_index", 0)) + 1, 1),
 		"enemy_mix": str(debug_run_setup.get("enemy_mix", "mixed")),
+		"modifiers": (debug_run_setup.get("modifiers", []) as Array).duplicate(),
 		"next_node_ids": [],
 	}
 	return [[node]]
@@ -273,6 +279,7 @@ func _generate_node_map() -> Array:
 		rows.append(nodes_in_row)
 	rows.append([_build_map_node(pre_boss_rows, 2, "boss", pre_boss_rows + 1)])
 	_link_rows(rows)
+	_assign_modifiers_to_map(rows)
 	return rows
 
 func _pick_room_type(row_index: int, total_rows: int, rest_row: int, shop_row: int) -> String:
@@ -307,8 +314,10 @@ func _build_map_node(row_index: int, column: int, room_type: String, depth: int)
 		"title": _build_room_title(room_type, depth),
 		"description": _build_room_description(room_type),
 		"objective": "survive",
+		"side_objective": "hold_zone" if room_type == "combat" or room_type == "elite" else "",
 		"depth": depth,
 		"enemy_mix": "charger_heavy" if room_type == "elite" else "mixed",
+		"modifiers": [],
 		"next_node_ids": [],
 	}
 
@@ -356,6 +365,23 @@ func _link_rows(rows: Array) -> void:
 			current_row[node_index] = node
 		rows[row_index] = current_row
 
+func _assign_modifiers_to_map(rows: Array) -> void:
+	for row_index in range(rows.size()):
+		var row: Array = rows[row_index]
+		for node_index in range(row.size()):
+			if not (row[node_index] is Dictionary):
+				continue
+			var node: Dictionary = row[node_index]
+			var room_type := str(node.get("room_type", "combat"))
+			var modifiers: Array = []
+			if room_type == "combat" and not _valid_combat_modifier_combinations.is_empty():
+				modifiers = (_valid_combat_modifier_combinations[_random.randi_range(0, _valid_combat_modifier_combinations.size() - 1)] as Array).duplicate()
+			elif room_type == "elite" and not _valid_elite_modifier_combinations.is_empty():
+				modifiers = (_valid_elite_modifier_combinations[_random.randi_range(0, _valid_elite_modifier_combinations.size() - 1)] as Array).duplicate()
+			node["modifiers"] = modifiers
+			row[node_index] = node
+		rows[row_index] = row
+
 func _rebuild_node_lookup() -> void:
 	_node_lookup.clear()
 	for row in node_map:
@@ -402,6 +428,7 @@ func _build_default_debug_run_setup() -> Dictionary:
 		"room_type": "combat",
 		"room_objective": "survive",
 		"enemy_mix": "mixed",
+		"modifiers": [],
 		"starting_mutations": [],
 		"step_index": 0,
 	}
@@ -428,3 +455,28 @@ func _build_outcome(title: String, summary: String, post_action: String, button_
 
 func _format_objective(_objective: String) -> String:
 	return "Survive"
+
+func _load_modifiers() -> void:
+	_modifiers_by_id.clear()
+	_valid_combat_modifier_combinations.clear()
+	_valid_elite_modifier_combinations.clear()
+	if not FileAccess.file_exists(MODIFIERS_DATA_PATH):
+		return
+	var file := FileAccess.open(MODIFIERS_DATA_PATH, FileAccess.READ)
+	if file == null:
+		return
+	var parsed = JSON.parse_string(file.get_as_text())
+	if not (parsed is Dictionary):
+		return
+	var root := parsed as Dictionary
+	var modifiers: Array = root.get("modifiers", []) as Array
+	for entry in modifiers:
+		if not (entry is Dictionary):
+			continue
+		var modifier: Dictionary = (entry as Dictionary).duplicate(true)
+		var modifier_id := str(modifier.get("id", ""))
+		if modifier_id.is_empty():
+			continue
+		_modifiers_by_id[modifier_id] = modifier
+	_valid_combat_modifier_combinations = (root.get("valid_combat_combinations", []) as Array).duplicate(true)
+	_valid_elite_modifier_combinations = (root.get("valid_elite_combinations", []) as Array).duplicate(true)

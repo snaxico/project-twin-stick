@@ -1,5 +1,10 @@
 # Patch 12 — Icon-First UI Pass
 
+## Status Note
+
+- This file is a historical implementation record for an earlier slice.
+- It is not the current runtime source of truth.
+
 Hard scope lock: no new gameplay systems, weapons, enemies, or progression mechanics. This patch replaces text-heavy UI with icon-driven presentation across the HUD, loot screen, shop, and weapon replacement flow.
 
 ---

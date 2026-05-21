@@ -74,6 +74,15 @@ var _weapon_impact_weight := 1.0
 var _primary_skill_feedback_profile := "shockwave"
 var _primary_skill_impact_weight := 1.9
 var _mutation_ids: Array = []
+var _base_move_speed: float = 390.0
+var _base_weapon_fire_interval: float = 0.33
+var _base_projectile_damage: int = 14
+var _modifier_move_speed_sources: Dictionary = {}
+var _modifier_attack_speed_sources: Dictionary = {}
+var _modifier_damage_sources: Dictionary = {}
+var _buff_move_speed: float = 1.0
+var _buff_attack_speed: float = 1.0
+var _buff_damage: float = 1.0
 var _dash_damage_enabled := false
 var _dash_damage_multiplier := 0.0
 var _dash_hit_targets: Array = []
@@ -174,7 +183,7 @@ func set_input_locked(locked: bool) -> void:
 	_primary_skill_pressed_last_frame = false
 
 func apply_loadout(loadout: Dictionary) -> void:
-	move_speed = float(loadout.get("move_speed", move_speed))
+	_base_move_speed = float(loadout.get("move_speed", move_speed))
 	_weapon_id = str(loadout.get("weapon_id", "rifle"))
 	_weapon_profile_name = str(loadout.get("weapon_name", "Rifle"))
 	_primary_skill_id = str(loadout.get("primary_skill_id", "shockwave"))
@@ -182,8 +191,8 @@ func apply_loadout(loadout: Dictionary) -> void:
 	_mutation_ids = (loadout.get("mutations", []) as Array).duplicate()
 	var weapon_stats: Dictionary = (loadout.get("weapon_stats", {}) as Dictionary).duplicate(true)
 	var skill_stats: Dictionary = (loadout.get("primary_skill_stats", {}) as Dictionary).duplicate(true)
-	projectile_damage = int(round(float(weapon_stats.get("damage", projectile_damage))))
-	weapon_fire_interval = 1.0 / max(float(weapon_stats.get("fire_rate", 3.0)), 0.01)
+	_base_projectile_damage = int(round(float(weapon_stats.get("damage", projectile_damage))))
+	_base_weapon_fire_interval = 1.0 / max(float(weapon_stats.get("fire_rate", 3.0)), 0.01)
 	projectile_speed = float(weapon_stats.get("projectile_speed", projectile_speed))
 	_weapon_range = float(weapon_stats.get("range", _weapon_range))
 	_weapon_area = float(weapon_stats.get("area", _weapon_area))
@@ -197,6 +206,36 @@ func apply_loadout(loadout: Dictionary) -> void:
 	_primary_skill_cooldown_until = 0.0
 	_dash_damage_multiplier = float(loadout.get("dash_damage_multiplier", 0.0))
 	_dash_damage_enabled = _dash_damage_multiplier > 0.0
+	_recompute_effective_stats()
+
+func apply_zone_modifier(source: String, move_mult: float, attack_mult: float, damage_mult: float = 1.0) -> void:
+	_modifier_move_speed_sources[source] = move_mult
+	_modifier_attack_speed_sources[source] = attack_mult
+	if damage_mult != 1.0:
+		_modifier_damage_sources[source] = damage_mult
+	_recompute_effective_stats()
+
+func clear_zone_modifier(source: String) -> void:
+	_modifier_move_speed_sources.erase(source)
+	_modifier_attack_speed_sources.erase(source)
+	_modifier_damage_sources.erase(source)
+	_recompute_effective_stats()
+
+func apply_temp_buff(buff_type: String, value: float) -> void:
+	match buff_type:
+		"speed":
+			_buff_move_speed = 1.0 + value
+		"damage":
+			_buff_damage = 1.0 + value
+		"attack_speed":
+			_buff_attack_speed = 1.0 + value
+	_recompute_effective_stats()
+
+func clear_temp_buffs() -> void:
+	_buff_move_speed = 1.0
+	_buff_attack_speed = 1.0
+	_buff_damage = 1.0
+	_recompute_effective_stats()
 
 func set_health_state(state: Dictionary) -> void:
 	max_health = int(state.get("max", max_health))
@@ -214,6 +253,13 @@ func revive(health_amount: int) -> void:
 	set_physics_process(true)
 	revived.emit(self)
 	health_changed.emit(current_health, max_health)
+
+func heal(amount: int) -> bool:
+	if amount <= 0 or _is_downed or current_health >= max_health:
+		return false
+	current_health = clampi(current_health + amount, 0, max_health)
+	health_changed.emit(current_health, max_health)
+	return true
 
 func apply_damage(amount: int) -> void:
 	if _is_downed:
@@ -411,3 +457,14 @@ func _get_flash_material(target: CanvasItem) -> ShaderMaterial:
 
 func _current_time_seconds() -> float:
 	return Time.get_ticks_msec() / 1000.0
+
+func _combined_modifier(sources: Dictionary) -> float:
+	var result := 1.0
+	for value in sources.values():
+		result *= float(value)
+	return result
+
+func _recompute_effective_stats() -> void:
+	move_speed = _base_move_speed * _combined_modifier(_modifier_move_speed_sources) * _buff_move_speed
+	weapon_fire_interval = _base_weapon_fire_interval / (_combined_modifier(_modifier_attack_speed_sources) * _buff_attack_speed)
+	projectile_damage = int(round(float(_base_projectile_damage) * _combined_modifier(_modifier_damage_sources) * _buff_damage))

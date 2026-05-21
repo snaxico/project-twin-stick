@@ -165,9 +165,9 @@ static func _build_mutation_icon(mutation_id: String) -> Texture2D:
 			_draw_line_thick(image, Vector2(18.0, 22.0), Vector2(46.0, 22.0), 3.0, Color(0.08, 0.1, 0.14, 0.9))
 			_draw_line_thick(image, Vector2(18.0, 32.0), Vector2(46.0, 32.0), 3.0, Color(0.08, 0.1, 0.14, 0.9))
 			_draw_line_thick(image, Vector2(18.0, 42.0), Vector2(46.0, 42.0), 3.0, Color(0.08, 0.1, 0.14, 0.9))
-		"blast_radius", "shockwave_radius":
+		"blast_radius", "shockwave_radius", "skill_range":
 			_draw_ring(image, Vector2(32.0, 32.0), 16.0, 4.0, Color(0.08, 0.1, 0.14, 0.9))
-		"extra_charge", "shockwave_cooldown":
+		"extra_charge", "shockwave_cooldown", "skill_cooldown":
 			_draw_line_thick(image, Vector2(22.0, 20.0), Vector2(22.0, 44.0), 4.0, Color(0.08, 0.1, 0.14, 0.9))
 			_draw_line_thick(image, Vector2(42.0, 20.0), Vector2(42.0, 44.0), 4.0, Color(0.08, 0.1, 0.14, 0.9))
 		"dash_damage":

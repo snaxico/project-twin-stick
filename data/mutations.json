@@ -1,40 +1,91 @@
 {
   "mutations": [
     {
+      "id": "pierce",
+      "name": "Pierce",
+      "description": "Projectiles pass through 1 extra enemy per level.",
+      "icon": "pierce",
+      "target": "primary",
+      "effect_type": "pierce",
+      "rarity": "common",
+      "max_level": 3,
+      "params": { "pierce_count": 1 }
+    },
+    {
+      "id": "rapid_fire",
+      "name": "Rapid Fire",
+      "description": "Fire rate +33.3% per level.",
+      "icon": "rapid_fire",
+      "target": "primary",
+      "effect_type": "rapid_fire",
+      "rarity": "common",
+      "max_level": 3,
+      "params": { "fire_rate_bonus_per_level": 0.333 }
+    },
+    {
+      "id": "big_shot",
+      "name": "Big Shot",
+      "description": "Projectile size +33.3% per level.",
+      "icon": "big_shot",
+      "target": "primary",
+      "effect_type": "big_shot",
+      "rarity": "common",
+      "max_level": 3,
+      "params": { "size_bonus_per_level": 0.333 }
+    },
+    {
+      "id": "split_shot",
+      "name": "Split Shot",
+      "description": "Fire 1 extra projectile per level.",
+      "icon": "split_shot",
+      "target": "primary",
+      "effect_type": "split_shot",
+      "rarity": "common",
+      "max_level": 3,
+      "params": { "extra_count": 1, "spread_degrees": 15 }
+    },
+    {
+      "id": "skill_range",
+      "name": "Wide Pulse",
+      "description": "All primary skills gain +33.3% range per level.",
+      "icon": "skill_range",
+      "target": "secondary",
+      "effect_type": "skill_range",
+      "rarity": "common",
+      "max_level": 3,
+      "params": { "range_bonus_per_level": 0.333 }
+    },
+    {
+      "id": "skill_cooldown",
+      "name": "Quick Reflexes",
+      "description": "All primary skills recharge 33.3% faster per level.",
+      "icon": "skill_cooldown",
+      "target": "secondary",
+      "effect_type": "skill_cooldown",
+      "rarity": "common",
+      "max_level": 3,
+      "params": { "cooldown_reduction_per_level": 0.333 }
+    },
+    {
+      "id": "knockback",
+      "name": "Knockback",
+      "description": "All hits push enemies harder, +33.3% per level.",
+      "icon": "knockback",
+      "target": "general",
+      "effect_type": "knockback",
+      "rarity": "common",
+      "max_level": 3,
+      "params": { "force_bonus_per_level": 0.333 }
+    },
+    {
       "id": "ricochet",
       "name": "Ricochet",
       "description": "Projectiles bounce to a nearby enemy on final hit.",
       "icon": "ricochet",
       "target": "primary",
       "effect_type": "ricochet",
+      "rarity": "rare",
       "params": { "bounce_count": 1, "bounce_range": 200 }
-    },
-    {
-      "id": "pierce",
-      "name": "Pierce",
-      "description": "Projectiles pass through 1 extra enemy.",
-      "icon": "pierce",
-      "target": "primary",
-      "effect_type": "pierce",
-      "params": { "pierce_count": 1 }
-    },
-    {
-      "id": "split_shot",
-      "name": "Split Shot",
-      "description": "Fire 2 extra projectiles in a spread.",
-      "icon": "split_shot",
-      "target": "primary",
-      "effect_type": "split_shot",
-      "params": { "extra_count": 2, "spread_degrees": 15 }
-    },
-    {
-      "id": "big_shot",
-      "name": "Big Shot",
-      "description": "Projectile size doubled, damage +50%.",
-      "icon": "big_shot",
-      "target": "primary",
-      "effect_type": "big_shot",
-      "params": { "size_mult": 2.0, "damage_mult": 1.5 }
     },
     {
       "id": "fire_trail",
@@ -43,34 +94,8 @@
       "icon": "fire_trail",
       "target": "primary",
       "effect_type": "fire_trail",
+      "rarity": "rare",
       "params": { "trail_lifetime": 1.5, "tick_interval": 0.5, "damage_percent": 0.3 }
-    },
-    {
-      "id": "rapid_fire",
-      "name": "Rapid Fire",
-      "description": "Fire rate doubled.",
-      "icon": "rapid_fire",
-      "target": "primary",
-      "effect_type": "rapid_fire",
-      "params": { "fire_rate_mult": 2.0 }
-    },
-    {
-      "id": "shockwave_radius",
-      "name": "Shockwave Radius",
-      "description": "Shockwave radius +50%.",
-      "icon": "shockwave_radius",
-      "target": "secondary",
-      "effect_type": "shockwave_radius",
-      "params": { "radius_mult": 1.5 }
-    },
-    {
-      "id": "shockwave_cooldown",
-      "name": "Quick Pulse",
-      "description": "Shockwave cooldown reduced by 2s.",
-      "icon": "shockwave_cooldown",
-      "target": "secondary",
-      "effect_type": "shockwave_cooldown",
-      "params": { "cooldown_reduction": 2.0 }
     },
     {
       "id": "dash_damage",
@@ -79,16 +104,8 @@
       "icon": "dash_damage",
       "target": "dash",
       "effect_type": "dash_damage",
+      "rarity": "rare",
       "params": { "damage_percent": 1.0 }
-    },
-    {
-      "id": "knockback",
-      "name": "Knockback",
-      "description": "All hits push enemies away.",
-      "icon": "knockback",
-      "target": "general",
-      "effect_type": "knockback",
-      "params": { "force": 300 }
     }
   ]
 }

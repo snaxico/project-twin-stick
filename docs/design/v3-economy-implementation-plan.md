@@ -1,4 +1,11 @@
-# V3 Gold Economy — Implementation Plan
+# V3 Gold Economy — Historical Implementation Plan
+
+## Status
+
+- This file is a historical implementation plan/record for the economy slice.
+- Some parts were implemented, but the live runtime may differ from the exact step-by-step plan below.
+- Do not treat this as the source of truth for current branch behavior.
+- Use `docs/development/current-state.md` and `docs/design/roadmap.md` for active follow-up work.
 
 ## Context
 

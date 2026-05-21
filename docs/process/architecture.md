@@ -1,94 +1,163 @@
 # Architecture
 
+## Scope Note
+
+- This file describes the active runtime on `v2/core-refactor`.
+- Older v1 gameplay is archive/reference material only.
+- If this file conflicts with `docs/development/current-state.md`, update this file to match `current-state.md`.
+
 ## Folder Ownership
 
-- `scenes/`: scene composition for world, player, enemies, weapons, UI, and run/menu flows
+- `scenes/`: scene composition for runtime, UI, player, enemies, pickups, and flow scenes
 - `scripts/`: gameplay and runtime logic
-- `data/`: editable JSON definitions
-- `assets/`: sprites, audio, fonts, and imported content only
+- `data/`: editable JSON definitions for the live runtime
+- `assets/`: runtime art, audio, fonts, and imported content
+- `archive/`: preserved old content that is no longer part of the live runtime
 - `docs/process/`: source of truth for scope, roadmap, and architecture
-- `docs/development/`: current state and session memory
+- `docs/development/`: current runtime truth and session memory
+- `docs/design/`: design direction, roadmap, and implementation history
 
 ## Runtime Boundaries
 
-- Simulation owns movement, aim rules, combat, revive logic, room rules, loot rules, and run progression.
-- Presentation owns visuals, HUD, modifier tinting, hit feedback, particles, and camera feel.
-- Scene files compose nodes but do not become the place where rules are hidden.
-- Placeholder visuals should stay Godot-native through the current prototype slices. The current paused build uses simple placeholder geometry, a faux 3/4 view, and minimal player/enemy color identity for readability rather than any custom art pipeline.
-- Pre-run configuration flows should pass state through scene ownership, not early autoloads. The current menu uses a bootstrap scene with a player-facing front door (`Play`, `Meta`, `Settings`, `Debug`) that hands explicit player configs into the run flow.
+- Simulation owns:
+  - movement
+  - auto-targeting
+  - auto-fire
+  - dash and shockwave runtime
+  - enemy spawning
+  - revive/fail/clear rules
+  - room progression
+  - gold pickup and wallet flow
+  - mutation reward flow
+  - shop spending flow
+- Presentation owns:
+  - arena visuals
+  - HUD
+  - route-map presentation
+  - pause/result/menu surfaces
+  - particles, flashes, and readability effects
+  - camera framing and zoom feel
+- Scene files compose nodes but should not hide rule logic.
+- Placeholder visuals remain acceptable as long as gameplay readability stays high.
 
 ## Singleton Policy
 
-- No autoloads in Patches 0-4.
-- Introduce exactly one autoload in Patch 5: `RunState.gd`.
-- `RunState.gd` owns cross-room run state only: active players, health persistence, run-mode recovery rules, node progression, current node selection, per-player inventories, personal gold wallets, loot/shop resolution data, and run outcome.
-- Patch 9 introduces `ProfileState.gd` for persistent save data, meta currency, and unlock ownership outside individual runs.
+- `RunState.gd` is the live cross-room state owner.
+- It owns:
+  - player configs
+  - node-map generation and progression
+  - current node selection
+  - player health persistence
+  - player inventories
+  - player gold wallets
+  - run outcome
+  - debug launch setup
+- Persistent profile/meta state is not part of the active runtime loop right now.
 
-## Input And Bootstrap Note
+## Input And Bootstrap
 
-- Movement remains action-map driven for `p1_*` through `p4_*`.
-- Aim and some control routing are resolved through a code-side control layer so the prototype can stay clean and playable without premature editor-side input plumbing.
-- Keyboard control currently uses mouse aim, left mouse primary fire, and right mouse secondary fire.
-- Gamepad control currently uses `R2` for primary fire, `L2` for secondary, and a movement-first dash direction with aim fallback.
-- Aim mode and screen-effect settings now live in shared bootstrap and pause-menu UI instead of a debug HUD.
-- Player count, control source, and run-mode selection happen in a dedicated play-setup screen before the run-flow scene starts.
-- Debug-only room/loadout overrides live in a separate debug entry instead of the default first-impression screen.
+- Player setup starts in `Bootstrap.gd`.
+- Current front-door flow is:
+  - `Play`
+  - `Encounter Builder`
+- Player setup currently targets `1-2` players.
+- Default control split is:
+  - `P1` gamepad
+  - `P2` keyboard
+- Live input model is:
+  - movement only as direct aim-independent movement input
+  - weapon fire is automatic
+  - primary skill is shockwave
+  - secondary skill is dash
+- Settings and meta menus are not part of the live front-door flow.
 
-## Run Flow Note
+## Run Flow
 
-- The bootstrap menu hands off to a run-flow scene instead of opening the room directly.
-- `RunFlow` owns connected-map rendering, node inspection, node selection, and room transitions.
-- `GameWorld` remains the room runtime and now covers combat rooms, loot drops, shop rooms, replacement flow, and exit-zone transitions.
-- `RunState` persists health, run-mode recovery behavior, connected-map progression, reachable node state, per-player inventories, personal wallets, and final run outcome across those transitions.
-- `ProfileState` persists unlocks and meta currency across application launches and gates which run upgrades may appear in reward/shop pools.
-- `IconFactory` now owns procedural placeholder icon generation and cached fallback lookup for icon-first HUD, loot, shop, and replacement UI surfaces.
-- Mainline run flow now uses a row-based connected graph:
-  - start row exposes three nodes
-  - non-boss rows expose `2–4` nodes across fixed columns
-  - edges only connect to the next row and only stay in the same column or move by one column
-  - debug single-room flow remains a separate simplified path
-- Combat and elite rooms now resolve in-world:
-  - clear the room
-  - resolve a physical loot drop
-  - open an exit zone
-  - transition only after the exit flow completes
-- Shop rooms now resolve in-world:
-  - enter a safe room with a shop station
-  - each player opens personal offers from their own wallet
-  - ready-up opens the shared exit flow
+- `Bootstrap.gd` starts the run and passes player/debug setup into `RunState`.
+- `RunFlow.gd` owns:
+  - map display
+  - route-node selection
+  - room transitions
+  - noncombat room resolution handoff
+- `CoopManager.gd` owns the in-room runtime.
+- The live map flow is:
+  - `combat`
+  - `elite`
+  - `rest`
+  - `shop`
+  - `boss`
+- Current room objective runtime is `survive` only.
+- Encounter Builder is a separate fast-iteration entry path, not a second source of truth.
+
+## Main Runtime Ownership
+
+- `scripts/game/RunState.gd`:
+  - run graph generation
+  - current node data
+  - room-to-room persistence
+  - inventory and wallet state
+- `scripts/game/CoopManager.gd`:
+  - arena runtime
+  - player spawning
+  - enemy spawning
+  - room clear/fail handling
+  - gold drop flow
+  - mutation pick flow
+  - shop flow
+- `scripts/player/Player.gd`:
+  - movement
+  - auto-fire timing
+  - shockwave cooldown ownership
+  - dash runtime
+- `scripts/player/AutoTarget.gd`:
+  - nearest-enemy targeting
+- `scripts/game/MutationSystem.gd`:
+  - mutation definition loading
+  - mutation compilation
+  - mutation reward rolls
+- `scripts/pickups/GoldPickup.gd`:
+  - room-currency pickup behavior
+- `scripts/weapons/Projectile.gd`:
+  - projectile movement
+  - impact logic
+  - pierce / ricochet / trail behavior
+- `scripts/ui/Bootstrap.gd`:
+  - run launch
+  - encounter builder
+  - player configuration
+- `scripts/ui/MutationPickUI.gd`:
+  - room-end mutation-buy UI
 
 ## Core Data Contracts
 
-- `PlayerConfig`: `player_id`, `control_source`, `tint`, `aim_mode`
-- `weapons.json`: weapon definitions, levels, and balance data
-- `passives.json`: passive item definitions and stat multipliers
-- `docs/design/weapons-passives-balance.xlsx`: design/balance source of truth for primary weapons, secondary weapons, and passive items; keep it updated in the same slice as any content or tuning change to those systems
-- `enemies.json`: enemy archetypes and tuning values
-- `modifiers.json`: room modifier definitions
-- `unlocks.json`: persistent unlock definitions and costs
+- `PlayerConfig`:
+  - `player_id`
+  - `control_source`
+  - `tint`
+- `data/weapons.json`:
+  - live weapon and primary-skill definitions
+- `data/mutations.json`:
+  - live mutation definitions
+- `PlayerInventory`:
+  - `weapon_id`
+  - `primary_skill_id`
+  - `mutations`
+  - `gold`
+- `RunState.get_player_runtime_loadout_for()` returns the runtime loadout contract consumed by `Player.gd`.
 
-## Planned Runtime Signals
+## Archived Content Rule
 
-- `room_cleared`
-- `player_downed`
-- `player_revived`
-- `all_players_dead`
-- `loot_choice_resolved`
-- `run_completed`
+- `archive/v1/` is not part of the live runtime.
+- Archived files may be referenced for recovery or comparison.
+- Archived behavior should not be treated as default design intent for the current branch.
 
-Signals stay local to the systems that own them until cross-room state exists.
+## Current Architecture Risks
 
-## Current State Note
-
-- The current build includes early Patch 8 work:
-  - `1–4` player support
-  - extra room layouts
-  - extra modifiers
-  - light placeholder-only juice
-- The current build also includes an early Patch 9 baseline:
-  - persistent meta profile save data
-  - menu-side unlock purchasing
-  - run-end return-to-menu flow for spending unlock currency
-  - per-player inventory and wallet progression
-  - physical loot drops, replacement UI, and shop rooms
-- Those systems are present in code but still need broader tuning and readability passes before they should be treated as stable.
+- The main risk is no longer large-system ownership confusion.
+- The main risk is gameplay validation:
+  - pacing
+  - reward feel
+  - room pressure
+  - economy balance
+  - shop clarity
+- New systems should be added only after the current loop stays readable and fun in live play.

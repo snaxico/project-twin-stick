@@ -6,6 +6,11 @@ Hard scope lock: no new weapons, enemies, progression systems, map systems, or m
 
 ## Patch 10A — x10 Number Scale — IMPLEMENTED (uncommitted)
 
+## Status Note
+
+- This file is a historical implementation record for an earlier slice.
+- It is not the current runtime source of truth.
+
 **Status:** All code changes applied in the main working tree. Not yet committed. Needs headless parse and live validation before commit.
 
 ### Goal

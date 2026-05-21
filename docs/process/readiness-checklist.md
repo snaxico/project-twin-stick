@@ -1,5 +1,10 @@
 # Readiness Checklist
 
+## Scope Note
+
+- This checklist should be read against the active branch runtime on `v2/core-refactor`.
+- Older v1 gameplay is archived reference only.
+
 ## Vision
 
 - Project name is defined: `Project Placeholder`
@@ -37,16 +42,15 @@
 - `docs/process/` and `docs/development/` are in use
 - Session history format is defined
 - Major decisions will be logged in `docs/process/decisions/`
-- Work is sliced by patch and validated before expansion
+- Work is sliced into validated follow-up slices before expansion
 
 ## Readiness Answers
 
 1. What is the player doing repeatedly?
-   Fight through one room, make one cooperative decision, and repeat.
+   Pick a route, survive a room, grow through gold and mutation/shop choices, and repeat.
 2. What makes that loop interesting?
-   Room modifiers, layout variation, enemy compositions, and shared build choices.
+   Positioning, room pressure, gold pacing, mutation choices, and route decisions.
 3. What is intentionally not being built yet?
-   3-4 player tuning, deep art, meta-progression, and polish systems.
+   `3-4` player support, deep art, meta progression in the live loop, and broader content expansion.
 4. What is the smallest playable slice that proves the concept?
-   A stable bounded-room action prototype that grows into a two-player combat loop by Patch 2 and into a full run by Patch 7.
-
+   A stable `1-2` player full run on the current branch map flow with readable combat, gold, mutation buying, shop pacing, and a boss encounter.

@@ -127,17 +127,22 @@ func _build_map_button(node: Dictionary, button_center: Vector2, is_reachable: b
 	return button
 
 func _build_node_button_text(node: Dictionary) -> String:
+	var label := ""
 	match str(node.get("room_type", "combat")):
 		"rest":
-			return "Rest"
+			label = "Rest"
 		"boss":
-			return "Boss"
+			label = "Boss"
 		"shop":
-			return "Shop"
+			label = "Shop"
 		"elite":
-			return "Elite"
+			label = "Elite"
 		_:
-			return "Survive"
+			label = "Survive"
+	var modifiers: Array = node.get("modifiers", []) as Array
+	if modifiers.is_empty():
+		return label
+	return "%s [%d]" % [label, modifiers.size()]
 
 func _get_node_color(node: Dictionary, is_reachable: bool) -> Color:
 	var node_id := str(node.get("id", ""))
@@ -170,9 +175,17 @@ func _on_map_node_hovered(node_id: String) -> void:
 	if node.is_empty():
 		return
 	map_detail_title_label.text = str(node.get("title", "Room"))
-	map_detail_body_label.text = "%s\nObjective: %s" % [
+	var modifiers: Array = node.get("modifiers", []) as Array
+	var mod_names := ""
+	if not modifiers.is_empty():
+		var names: Array = []
+		for mod_id in modifiers:
+			names.append(_format_modifier_name(str(mod_id)))
+		mod_names = "\nModifiers: %s" % ", ".join(names)
+	map_detail_body_label.text = "%s\nObjective: %s%s" % [
 		str(node.get("description", "")),
 		_format_objective(str(node.get("objective", "survive"))),
+		mod_names,
 	]
 
 func _on_map_node_pressed(node_id: String) -> void:
@@ -250,6 +263,15 @@ func _clear_active_game() -> void:
 
 func _format_objective(_objective: String) -> String:
 	return "Survive"
+
+func _format_modifier_name(mod_id: String) -> String:
+	var words := mod_id.split("_")
+	var parts: Array = []
+	for word in words:
+		if word.is_empty():
+			continue
+		parts.append(word.capitalize())
+	return " ".join(parts)
 
 func _focus_resolution_panel() -> void:
 	resolution_button.grab_focus()

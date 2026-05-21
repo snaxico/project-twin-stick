@@ -3,6 +3,7 @@ extends Control
 const PlayerConfigData = preload("res://scripts/player/PlayerConfig.gd")
 const RUN_FLOW_SCENE = preload("res://scenes/ui/RunFlow.tscn")
 const MUTATIONS_DATA_PATH := "res://data/mutations.json"
+const MODIFIERS_DATA_PATH := "res://data/modifiers.json"
 
 @onready var game_container: Control = $GameContainer
 @onready var sfx_engine = $SfxEngine
@@ -65,10 +66,13 @@ var _player_tints := [
 ]
 var _mutation_definitions: Array = []
 var _debug_mutation_toggles: Array = []
+var _modifier_definitions: Array = []
+var _debug_modifier_toggles: Array = []
 var _setup_mode: String = "play"
 
 func _ready() -> void:
 	_load_mutation_definitions()
+	_load_modifier_definitions()
 	_populate_menu()
 	home_play_button.pressed.connect(_on_home_play_button_pressed)
 	home_debug_button.pressed.connect(_on_home_debug_button_pressed)
@@ -172,6 +176,7 @@ func _refresh_menu_state(_unused: Variant = null) -> void:
 	debug_room_type_row.visible = encounter_builder_mode
 	debug_room_objective_row.visible = encounter_builder_mode and str(debug_room_type_option.get_selected_metadata()) == "combat"
 	debug_step_row.visible = encounter_builder_mode
+	debug_starting_gold_row.visible = encounter_builder_mode
 	debug_modifier_row.visible = encounter_builder_mode
 	debug_layout_row.visible = encounter_builder_mode and str(debug_room_type_option.get_selected_metadata()) == "combat"
 	settings_player_2_row.visible = player_count > 1
@@ -188,6 +193,7 @@ func _refresh_menu_state(_unused: Variant = null) -> void:
 			summary_lines.append("Objective: %s" % debug_room_objective_option.get_item_text(debug_room_objective_option.selected))
 		if debug_layout_row.visible:
 			summary_lines.append("Enemy Mix: %s" % debug_layout_option.get_item_text(debug_layout_option.selected))
+		summary_lines.append("Room Modifiers: %d" % _get_selected_room_modifiers().size())
 		var selected_mutations: Array = _get_selected_starting_mutations()
 		summary_lines.append("Starting Mutations: %d" % selected_mutations.size())
 		summary_lines.append("Depth: %d" % int(debug_step_spinbox.value))
@@ -234,6 +240,7 @@ func _build_debug_start_options() -> Dictionary:
 	options["room_type"] = str(debug_room_type_option.get_selected_metadata())
 	options["room_objective"] = str(debug_room_objective_option.get_selected_metadata())
 	options["enemy_mix"] = str(debug_layout_option.get_selected_metadata())
+	options["modifiers"] = _get_selected_room_modifiers()
 	options["starting_mutations"] = _get_selected_starting_mutations()
 	return options
 
@@ -294,6 +301,14 @@ func _set_panel_state(panel: Control, should_show: bool) -> void:
 
 func _configure_debug_builder_rows() -> void:
 	debug_layout_label.text = "Enemy Mix"
+	debug_starting_gold_row.visible = false
+	var debug_starting_gold_label: Label = debug_starting_gold_row.get_node("DebugStartingGoldLabel") as Label
+	if debug_starting_gold_label != null:
+		debug_starting_gold_label.text = "Room Modifiers"
+	var debug_starting_gold_spinbox: SpinBox = debug_starting_gold_row.get_node("DebugStartingGoldSpinBox") as SpinBox
+	if debug_starting_gold_spinbox != null:
+		debug_starting_gold_spinbox.visible = false
+	_create_modifier_selector()
 	debug_modifier_label.text = "Starting Mutations"
 	debug_modifier_option.visible = false
 	if debug_modifier_row.get_node_or_null("MutationScroll") != null:
@@ -322,6 +337,33 @@ func _configure_debug_builder_rows() -> void:
 		mutation_grid.add_child(toggle)
 		_debug_mutation_toggles.append(toggle)
 
+func _create_modifier_selector() -> void:
+	if debug_starting_gold_row.get_node_or_null("ModifierScroll") != null:
+		return
+	var modifier_scroll := ScrollContainer.new()
+	modifier_scroll.name = "ModifierScroll"
+	modifier_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	modifier_scroll.custom_minimum_size = Vector2(0.0, 128.0)
+	debug_starting_gold_row.add_child(modifier_scroll)
+	var modifier_grid := GridContainer.new()
+	modifier_grid.name = "ModifierGrid"
+	modifier_grid.columns = 2
+	modifier_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	modifier_grid.add_theme_constant_override("h_separation", 10)
+	modifier_grid.add_theme_constant_override("v_separation", 6)
+	modifier_scroll.add_child(modifier_grid)
+	_debug_modifier_toggles.clear()
+	for modifier in _modifier_definitions:
+		var modifier_id := str((modifier as Dictionary).get("id", ""))
+		var modifier_name := str((modifier as Dictionary).get("name", modifier_id.capitalize()))
+		var toggle := CheckBox.new()
+		toggle.text = modifier_name
+		toggle.tooltip_text = str((modifier as Dictionary).get("description", ""))
+		toggle.set_meta("modifier_id", modifier_id)
+		toggle.toggled.connect(_on_debug_modifier_toggled.bind(toggle))
+		modifier_grid.add_child(toggle)
+		_debug_modifier_toggles.append(toggle)
+
 func _load_mutation_definitions() -> void:
 	_mutation_definitions.clear()
 	if not FileAccess.file_exists(MUTATIONS_DATA_PATH):
@@ -337,6 +379,21 @@ func _load_mutation_definitions() -> void:
 		if mutation is Dictionary:
 			_mutation_definitions.append((mutation as Dictionary).duplicate(true))
 
+func _load_modifier_definitions() -> void:
+	_modifier_definitions.clear()
+	if not FileAccess.file_exists(MODIFIERS_DATA_PATH):
+		return
+	var file := FileAccess.open(MODIFIERS_DATA_PATH, FileAccess.READ)
+	if file == null:
+		return
+	var parsed: Variant = JSON.parse_string(file.get_as_text())
+	if not (parsed is Dictionary):
+		return
+	var modifiers: Array = (parsed as Dictionary).get("modifiers", []) as Array
+	for modifier in modifiers:
+		if modifier is Dictionary:
+			_modifier_definitions.append((modifier as Dictionary).duplicate(true))
+
 func _get_selected_starting_mutations() -> Array:
 	var selected: Array = []
 	for toggle in _debug_mutation_toggles:
@@ -346,4 +403,19 @@ func _get_selected_starting_mutations() -> Array:
 	return selected
 
 func _on_debug_mutation_toggled(_pressed: bool) -> void:
+	_refresh_menu_state()
+
+func _get_selected_room_modifiers() -> Array:
+	var selected: Array = []
+	for toggle in _debug_modifier_toggles:
+		if toggle == null or not is_instance_valid(toggle) or not toggle.button_pressed:
+			continue
+		selected.append(str(toggle.get_meta("modifier_id", "")))
+	return selected
+
+func _on_debug_modifier_toggled(_pressed: bool, toggle: CheckBox) -> void:
+	if _get_selected_room_modifiers().size() <= 3:
+		_refresh_menu_state()
+		return
+	toggle.button_pressed = false
 	_refresh_menu_state()

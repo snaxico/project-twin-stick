@@ -1,44 +1,80 @@
 # Prototype Scope
 
-## First Playable Goal
+## Scope Note
 
-Build a same-screen local co-op twin-stick roguelite prototype in Godot where one or two players can complete a full 10-15 minute run through room-based combat, shared loot, node-map choices, and a boss encounter.
+- This scope applies to the active branch runtime on `v2/core-refactor`.
+- Older v1 gameplay is archived reference only.
+
+## Current Prototype Goal
+
+Build a same-screen local co-op roguelite prototype in Godot where one or two players can complete a readable full run through:
+
+- node-map choices
+- combat rooms
+- elite rooms
+- rest and shop pacing beats
+- room-end mutation buying
+- a boss encounter
+
+The immediate success bar is a stable, understandable, `1-2` player run that feels good without explanation.
 
 ## Core Loop
 
-Enter room -> fight under one active modifier -> clear the room -> make one shared loot or route decision -> continue to the next room.
+Pick a node on the map -> enter room -> survive under room pressure -> earn and spend gold through mutation/shop flow -> continue toward boss.
 
-## Locked Decisions Through First-Playable
+## Locked Runtime Assumptions
 
-- Same-screen camera with one fixed room view.
-- No split-screen and no dynamic zoom.
-- Same role for all players.
-- Fully cooperative play with shared loot and shared failure.
-- Godot 4.6.2 stable only during the prototype.
-- GDScript only for gameplay code.
-- JSON-first content definitions.
-- No mid-run save system.
-- No class system.
-- No Skeleton2D rigging before the prototype loop is proven.
+- Same-screen camera only
+- Dynamic zoom is part of the live runtime
+- No split-screen
+- Local co-op only
+- Same role for all players
+- Godot `4.6.2` stable only
+- GDScript gameplay code only
+- JSON-first content definitions
+- No mid-run save system
+- No class system
 
-## Explicit Non-Goals Before First-Playable Signoff
+## Live Runtime Shape
 
-- full `3–4` player tuning
+- `1-2` players only
+- weapon fire is automatic
+- live loadout is:
+  - `Rifle`
+  - `Shockwave`
+  - `Dash`
+- live room types are:
+  - `combat`
+  - `elite`
+  - `rest`
+  - `shop`
+  - `boss`
+- current room objective is:
+  - `survive`
+
+## Explicit Non-Goals Right Now
+
+- `3-4` player gameplay support
+- meta progression as part of the live loop
 - deep art production
-- advanced menus
-- meta-progression
-- export polish
-- expanded content breadth beyond first-playable needs
+- major frontend polish
+- expanded enemy roster before current pacing validates
+- modifier re-expansion before the base loop validates
+- restoring archived v1 systems just because they already exist somewhere in the repo
 
-## Current Pause Note
+## Current Validation Focus
 
-- The paused build has already stepped slightly past the strict Patch 7 boundary with an early Patch 8 baseline.
-- The codebase now includes initial `3–4` player support, more layouts, more modifiers, and light placeholder presentation effects.
-- This does not change the first-playable definition. The real success bar is still a readable, stable, `1–2` player run that lands in the intended `10–15` minute window.
+- full-run pacing
+- gold economy feel
+- mutation-buy flow
+- elite difficulty identity
+- shop usability
+- boss fairness
+- general combat readability under stress
 
-## Prototype Success Criteria
+## Success Criteria
 
 - The game launches quickly and is understandable without explanation.
-- A two-player run can be completed in 10-15 minutes.
-- Shared decisions are readable in the moment.
-- A non-gamer can complete a run without asking for help.
+- A `1P` or `2P` run reaches the boss through the live map flow without structural breakage.
+- Combat, gold, mutation buys, and shop nodes feel like one coherent loop.
+- The run stays readable enough to tune rather than needing another structural rewrite first.

@@ -8,7 +8,7 @@ Implementation plan: [v3-economy-implementation-plan.md](v3-economy-implementati
 
 ## Context
 
-The v3 prototype validated the core auto-attack loop (rifle + shockwave + dash + mutations). First playtest and GF test both approved the baseline feel. This document captures the next layer: economy, encounter structure, progression, and shops.
+The current auto-fire branch validated the core loop (rifle + shockwave + dash + mutations). First playtest and GF test both approved the baseline feel. This document captures the next layer: economy, encounter structure, progression, and shops.
 
 ## Problem Statement
 

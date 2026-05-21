@@ -1,205 +1,88 @@
-# V2 Refactor Summary
+# V2 Branch Summary
 
 ## Purpose
 
-This document summarizes the gameplay and codebase changes made on the `v2/core-refactor` branch after the decision to split away from the preserved v1 game on `main`.
+This document summarizes the current gameplay/runtime direction of `v2/core-refactor`.
 
-The goal of this branch was not to extend the old patch line. It was to build a simpler v2 gameplay base around a more direct `1–2` player combat loop.
+It is not a plan for future migration and it is not a description of archived v1 gameplay.
 
-## Branch Direction
+## Branch Position
 
-- stable v1 gameplay remains preserved on `main`
-- v2 work happens on `v2/core-refactor`
-- current v2 target is `1–2` players only
-- `3–4` player support is deferred until the v2 loop is proven fun
+- `v2/core-refactor` is the active gameplay branch.
+- Older v1 gameplay is preserved as archived reference:
+  - historically on `main`
+  - locally under `archive/v1/`
+- The current branch runtime is the game that should be treated as live today.
 
-## High-Level Result
+## Current Runtime Direction
 
-The branch moved from a large multi-system roguelite prototype toward a smaller, cleaner gameplay core:
+The branch now centers on a simpler `1-2` player loop built around:
 
-- one primary weapon
-- one secondary ability
-- per-player mutation progression
-- larger shared arena
-- zooming same-screen camera
-- limited enemy roster
-- minimal HUD
-- reduced room/map system
+- auto-firing `Rifle`
+- `Shockwave`
+- `Dash`
+- node-map progression
+- gold pickups and personal wallets
+- room-end mutation buying
+- shop rooms
+- elite rooms
+- a shared same-screen zoom-camera arena
 
-This made the codebase simpler, but the gameplay result is still considered unvalidated and may still need another directional reboot.
+## Live Runtime Shape
 
-## Major Runtime Changes
-
-### Combat Loop
-
-- player loadout was reduced to:
-  - `1` primary
-  - `1` secondary
-  - mutation list
-- live starting loadout is now:
-  - `Rifle`
-  - `Grenade`
-- live enemy roster is now:
+- player target:
+  - `1-2` players
+- live enemies:
   - `Chaser`
   - `Charger`
   - `Boss`
-- live room objectives are now:
-  - `survive`
-  - `capture_the_hill`
+- live room types:
+  - `combat`
+  - `elite`
   - `rest`
+  - `shop`
   - `boss`
+- live room objective:
+  - `survive`
 
-### Arena + Camera
+## Important Branch Shifts
 
-- arena size was expanded to `4800 x 2700`
-- shared camera was replaced with a zooming player-fit camera
-- player separation is now hard-clamped to the camera leash distance
-- later follow-up added:
-  - stronger floor grid lines
-  - repeating major guide lines
-  - visible perimeter wall visuals on the arena boundary
+Compared with older branch states, the current runtime:
 
-### Progression
+- removed manual-fire combat from the live loop
+- removed grenade from the live loop
+- removed capture-the-hill from the live loop
+- removed the old settings/meta front-door flow from the live menu
+- removed loot-vote and replacement flow from the live loop
+- reintroduced a live gold/shop economy
+- narrowed the active validation target back to `1-2` players
 
-- per-player post-room mutation picks replaced the old loot/shop/passive progression loop
-- mutation data now comes from `data/mutations.json`
-- mutation categories currently affect:
-  - primary fire behavior
-  - grenade radius / charges
-  - dash damage
-  - knockback
+## Current Systems That Matter Most
 
-### HUD + Front End
-
-- HUD was reduced to:
-  - health
-  - primary icon
-  - secondary icon / cooldown / charges
-  - mutation icons
-- front menu paths are now:
-  - `Play`
-  - `Settings`
-  - `Encounter Builder`
-- meta progression is hidden in the live v2 branch
-
-### Encounter Builder
-
-- builder was adapted away from the old layout/modifier/recipe setup
-- builder now supports:
-  - room type
-  - objective
-  - depth
-  - enemy mix override
-  - starting mutation presets
-- old builder rows were intentionally reused rather than removed entirely
-
-## Core Rewrites
-
-### Rewritten
-
-- `scripts/game/CoopManager.gd`
-- `scripts/game/RunState.gd`
-- `scripts/game/PlayerInventory.gd`
-- `scripts/player/Player.gd`
-- `scripts/ui/Bootstrap.gd`
-- `scripts/ui/RunFlow.gd`
-- `scripts/ui/PlayerInventoryHUD.gd`
-- `scripts/ui/WeaponSlotHUD.gd`
-- `scripts/meta/ProfileState.gd`
-- `scripts/weapons/Projectile.gd`
-- `scripts/weapons/GrenadeProjectile.gd`
-- `data/weapons.json`
-
-### Added
-
-- `scripts/game/ZoomCamera.gd`
-- `scripts/game/MutationSystem.gd`
-- `scripts/ui/MutationPickUI.gd`
-- `scenes/ui/MutationPickUI.tscn`
-- `scripts/weapons/FireTrailZone.gd`
-- `data/mutations.json`
-
-## Systems Removed From Live V2
-
-These systems are no longer part of the live runtime:
-
-- shop runtime
-- loot-drop and vote flow
-- replacement UI flow
-- meta-gold progression loop
-- recipe engine
-- modifier engine
-- hazard systems tied to modifiers
-- generator objective runtime
-- mine secondary path
-- multi-slot loadout runtime
-- alternative primary weapon families in live combat
-- live arena layout / obstacle preset flow
-
-## Archived V1 Content
-
-Obsolete v1 scripts, scenes, and data were moved under `archive/v1/` while preserving folder structure.
-
-Archived categories include:
-
-- recipe/modifier/hazard scripts
-- generator / loot / shop / room pickup scripts
-- old loot/shop/replacement UI scenes and scripts
-- mine projectile scene and script
-- old recipe / modifier / passive / item data
-
-## Follow-Up Fixes After Initial Refactor
-
-After the initial v2 refactor pass, several follow-up fixes landed:
-
-### Combat / Input
-
-- buffered dash-damage application now uses the actual stored dash direction instead of aim direction
-- secondary charge behavior was confirmed and kept as:
-  - spend both charges freely
-  - start one shared cooldown after the final charge
-  - refill the full stock when cooldown completes
-
-### Room Pacing
-
-- spawn pressure was increased significantly from the first v2 refactor pass
-- rooms now begin spawning enemies almost immediately
-- spawn cadence is faster
-- live enemy cap is higher
-- per-wave spawn count is higher
-- survive rooms now clear immediately when the timer ends instead of waiting for the room to empty
-
-### Arena Readability
-
-- floor grid lines were made much more visible
-- major guide lines were added across the arena
-- a visible perimeter wall was added on top of the invisible collision walls
+- `RunState.gd`
+- `CoopManager.gd`
+- `Player.gd`
+- `AutoTarget.gd`
+- `MutationSystem.gd`
+- `Projectile.gd`
+- `GoldPickup.gd`
+- `Bootstrap.gd`
+- `RunFlow.gd`
+- `MutationPickUI.gd`
 
 ## Current Risks
 
-- the codebase is much cleaner than the old branch, but gameplay feel is still not where you want it
-- structural simplification does not guarantee better pacing or better combat feel
-- this branch is now a strong technical base, but not yet a proven gameplay direction
+- The runtime is structurally much cleaner than the old branch state, but gameplay validation is still the main risk.
+- The current unanswered questions are about:
+  - pacing
+  - economy
+  - elite identity
+  - mutation progression feel
+  - boss quality
 
-## Recommended Use Of This Branch
+## How To Use This Branch
 
-Treat this branch as a reusable parts bin and test bed.
-
-High-value reusable pieces:
-
-- player movement / dash shell
-- projectile runtime
-- grenade runtime
-- zoom camera
-- mutation runtime
-- builder shell
-- minimal HUD shell
-
-The systems most likely to change again if v2 restarts:
-
-- room pacing
-- spawn logic
-- overall combat loop flow
-- reward cadence
-- objective rhythm
-- run-state structure
+- Treat this branch as the live game.
+- Treat archived v1 content as reference only.
+- Use `docs/development/current-state.md` for exact runtime truth.
+- Use `docs/design/roadmap.md` for next feature-design decisions.

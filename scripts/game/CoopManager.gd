@@ -4,11 +4,18 @@ const EnemySceneData = preload("res://scenes/enemies/Enemy.tscn")
 const ProjectileSceneData = preload("res://scenes/weapons/Projectile.tscn")
 const GoldPickupSceneData = preload("res://scenes/pickups/GoldPickup.tscn")
 const GoldPickupData = preload("res://scripts/pickups/GoldPickup.gd")
+const HealthPickupData = preload("res://scripts/pickups/HealthPickup.gd")
 const PlayerInventoryHUDData = preload("res://scripts/ui/PlayerInventoryHUD.gd")
 const MutationSystemData = preload("res://scripts/game/MutationSystem.gd")
 const MutationPickUIScene = preload("res://scenes/ui/MutationPickUI.tscn")
+const TempBuffSystemData = preload("res://scripts/buffs/TempBuffSystem.gd")
+const HoldZoneObjectiveData = preload("res://scripts/objectives/HoldZoneObjective.gd")
+const FireFloorModifierData = preload("res://scripts/modifiers/FireFloorModifier.gd")
+const IceZoneModifierData = preload("res://scripts/modifiers/IceZoneModifier.gd")
+const MineFieldModifierData = preload("res://scripts/modifiers/MineFieldModifier.gd")
 
 const ParticleFactoryData = preload("res://scripts/juice/ParticleFactory.gd")
+const MODIFIERS_DATA_PATH := "res://data/modifiers.json"
 
 const ARENA_SIZE := Vector2(4800.0, 2700.0)
 const ARENA_RECT := Rect2(Vector2.ZERO, ARENA_SIZE)
@@ -22,13 +29,12 @@ const EXIT_HOLD_DURATION := 0.8
 const REVIVE_RADIUS := 96.0
 const REVIVE_HOLD_DURATION := 1.2
 const SURVIVE_DURATION := 60.0
-const SURVIVAL_BONUS_GOLD := 20
+const SURVIVAL_BONUS_GOLD := 0
 const MUTATION_PICK_COSTS := [15, 50, 100]
-const GOLD_DROP_VALUES := {
-	"chaser": {"min": 3, "max": 5},
-	"charger": {"min": 8, "max": 12},
-	"boss": {"min": 0, "max": 0},
-}
+const ELITE_RARE_PICK_COST := 50
+const GOLD_DROP_PER_ENEMY := 1
+const HEALTH_DROP_CHANCE := 0.08
+const HEALTH_PICKUP_HEAL := 5
 const SHOP_MUTATION_COST := 80
 const SHOP_HEAL_COST := 40
 const SHOP_REROLL_COST := 20
@@ -107,6 +113,8 @@ var _player_inventory_huds: Array = []
 var _gold_labels: Array = []
 var _timer_label: Label = null
 var _timer_fill: ColorRect = null
+var _modifier_hud: VBoxContainer = null
+var _hold_zone_status_label: Label = null
 var _mutation_pick_ui = null
 var _shop_ui = null
 var _arena_minor_grid_color := Color(0.32, 0.72, 0.86, 0.24)
@@ -119,6 +127,19 @@ var _next_hud_refresh_at := 0.0
 var _active_players_cache: Array = []
 var _active_players_cache_frame := -1
 var _pause_selection_index := 0
+var _active_modifiers: Array = []
+var _modifier_definitions: Dictionary = {}
+var _accelerating_waves_active := false
+var _enemy_faster_active := false
+var _spitter_swarm_active := false
+var _hold_zone = null
+var _temp_buff_system = null
+var _hold_buff_offer: Dictionary = {}
+var _fire_floor_modifier = null
+var _ice_zone_modifier = null
+var _mine_field_modifier = null
+var _aura_buffed_enemies: Array = []
+var _aura_debuffed_players: Array = []
 
 func configure_players(configs: Array) -> void:
 	_player_configs = configs.duplicate()
@@ -132,6 +153,7 @@ func _ready() -> void:
 		player_scene = load("res://scenes/player/Player.tscn")
 	_hide_legacy_ui()
 	_bind_ui()
+	_load_modifier_definitions()
 	_rebuild_arena()
 	_build_hud()
 	_spawn_players()
@@ -158,7 +180,6 @@ func _hide_legacy_ui() -> void:
 		"P2ModeButton",
 		"ConnectionStatus",
 		"RoomStatus",
-		"ModifierStatus",
 		"ModifierIntroPanel",
 	]:
 		var node := ui_layer.get_node_or_null(node_path)
@@ -204,6 +225,20 @@ func _build_hud() -> void:
 	_timer_fill.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_timer_fill.color = Color(0.28, 0.9, 0.82, 0.74)
 	timer_track.add_child(_timer_fill)
+
+	_hold_zone_status_label = Label.new()
+	_hold_zone_status_label.position = Vector2(820.0, 84.0)
+	_hold_zone_status_label.size = Vector2(280.0, 20.0)
+	_hold_zone_status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_hold_zone_status_label.add_theme_font_size_override("font_size", 13)
+	_hold_zone_status_label.add_theme_color_override("font_color", Color(0.84, 0.94, 1.0, 0.9))
+	_hud_root.add_child(_hold_zone_status_label)
+
+	_modifier_hud = VBoxContainer.new()
+	_modifier_hud.position = Vector2(1600.0, 24.0)
+	_modifier_hud.add_theme_constant_override("separation", 6)
+	_modifier_hud.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_hud_root.add_child(_modifier_hud)
 
 	_player_inventory_huds.clear()
 	_gold_labels.clear()
@@ -277,8 +312,9 @@ func _rebuild_player_loadouts() -> void:
 func _build_primary_skill_runtime_stats(player_index: int, base_stats: Dictionary) -> Dictionary:
 	var knockback_force := float(base_stats.get("knockback_force", 950.0))
 	if _mutation_system.has_mutation(player_index, "knockback"):
-		knockback_force += float(_mutation_system.get_mutation_count(player_index, "knockback")) * 60.0
-	var cooldown: float = maxf(0.5, float(base_stats.get("cooldown", 8.0)) - _mutation_system.get_primary_skill_cooldown_reduction(player_index))
+		knockback_force += float(_mutation_system.get_mutation_level(player_index, "knockback")) * 60.0
+	var cooldown_reduction_pct: float = _mutation_system.get_primary_skill_cooldown_reduction(player_index)
+	var cooldown: float = maxf(0.5, float(base_stats.get("cooldown", 8.0)) * (1.0 - cooldown_reduction_pct))
 	return {
 		"kind": str(base_stats.get("kind", "shockwave")),
 		"damage": float(base_stats.get("damage", 30.0)),
@@ -385,6 +421,10 @@ func _start_room() -> void:
 	_room_objective = str(_room_config.get("objective", _room_config.get("room_objective", "survive")))
 	_room_enemy_mix = str(_room_config.get("enemy_mix", "mixed"))
 	_room_depth = max(int(_room_config.get("depth", _room_config.get("step_index", 1))), 1)
+	_active_modifiers = (_room_config.get("modifiers", []) as Array).duplicate()
+	_accelerating_waves_active = _active_modifiers.has("accelerating_waves")
+	_enemy_faster_active = _active_modifiers.has("enemy_faster")
+	_spitter_swarm_active = _active_modifiers.has("spitter_swarm")
 	_apply_arena_color_for_depth(_room_depth)
 	_room_clear_started = false
 	_room_failed = false
@@ -394,7 +434,9 @@ func _start_room() -> void:
 	_room_timer_remaining = SURVIVE_DURATION
 	_boss_spawned = false
 	_pending_clear_summary = ""
-	_room_gold_multiplier = 1.3 if _room_type == "elite" else 1.0
+	_room_gold_multiplier = 1.0
+	for mod_id in _active_modifiers:
+		_room_gold_multiplier += _get_modifier_gold_bonus(str(mod_id))
 	_room_gold_earned = 0
 	_next_hud_refresh_at = 0.0
 	result_panel.visible = false
@@ -403,16 +445,60 @@ func _start_room() -> void:
 	get_tree().paused = false
 	_restore_player_health_states()
 	_lock_player_input(false)
+	_populate_modifier_hud()
+	if (_room_type == "combat" or _room_type == "elite") and str(_room_config.get("side_objective", "")) == "hold_zone":
+		_temp_buff_system = TempBuffSystemData.new()
+		_hold_buff_offer = _temp_buff_system.roll_random_buff()
+		_hold_zone = HoldZoneObjectiveData.new()
+		_hold_zone.setup(ARENA_RECT)
+		_hold_zone.completed.connect(_on_hold_zone_completed)
+		add_child(_hold_zone)
+	if _active_modifiers.has("fire_floor"):
+		_fire_floor_modifier = FireFloorModifierData.new()
+		_fire_floor_modifier.setup(ARENA_RECT, _player_nodes)
+		add_child(_fire_floor_modifier)
+	if _active_modifiers.has("ice_zone"):
+		_ice_zone_modifier = IceZoneModifierData.new()
+		_ice_zone_modifier.setup(ARENA_RECT)
+		add_child(_ice_zone_modifier)
+	if _active_modifiers.has("mine_field"):
+		_mine_field_modifier = MineFieldModifierData.new()
+		_mine_field_modifier.setup(ARENA_RECT, _player_nodes)
+		add_child(_mine_field_modifier)
 	if _room_type == "boss":
 		_spawn_boss()
 	elif _room_type == "rest" or _room_type == "shop":
 		_start_non_combat_room()
+	elif _room_type == "elite":
+		_spawn_elite_miniboss()
 
 func _clear_runtime_nodes() -> void:
 	for group in [projectiles, enemies, effects, pickups]:
 		for child in group.get_children():
 			child.queue_free()
 	_enemy_nodes.clear()
+	if _temp_buff_system != null:
+		_temp_buff_system.clear_all_buffs(_player_nodes)
+	_temp_buff_system = null
+	_hold_buff_offer.clear()
+	for player in _player_nodes:
+		if player != null and is_instance_valid(player):
+			player.clear_zone_modifier("ice_zone")
+			player.clear_zone_modifier("elite_support")
+	if _hold_zone != null and is_instance_valid(_hold_zone):
+		_hold_zone.queue_free()
+	_hold_zone = null
+	for node_ref in [_fire_floor_modifier, _ice_zone_modifier, _mine_field_modifier]:
+		if node_ref != null and is_instance_valid(node_ref):
+			node_ref.queue_free()
+	_fire_floor_modifier = null
+	_ice_zone_modifier = null
+	_mine_field_modifier = null
+	for enemy in _aura_buffed_enemies:
+		if enemy != null and is_instance_valid(enemy) and enemy.has_method("clear_aura"):
+			enemy.clear_aura()
+	_aura_buffed_enemies.clear()
+	_aura_debuffed_players.clear()
 	if _mutation_pick_ui != null and is_instance_valid(_mutation_pick_ui):
 		_mutation_pick_ui.queue_free()
 	_mutation_pick_ui = null
@@ -434,6 +520,7 @@ func _physics_process(delta: float) -> void:
 	_invalidate_runtime_caches()
 	_clamp_players_to_arena()
 	_update_revives(delta)
+	_update_elite_support_auras()
 	_update_room(delta)
 	_update_gold_pickups(delta)
 	_update_exit_zone(delta)
@@ -445,6 +532,10 @@ func _physics_process(delta: float) -> void:
 func _update_room(delta: float) -> void:
 	if _room_clear_started or _room_failed or _room_type == "rest" or _room_type == "shop":
 		return
+	if _hold_zone != null and is_instance_valid(_hold_zone) and not _hold_zone.is_complete():
+		_hold_zone.update_zone(delta, _player_nodes)
+	if _ice_zone_modifier != null and is_instance_valid(_ice_zone_modifier):
+		_apply_ice_zone_modifier()
 	if _room_type == "boss":
 		var boss_alive := false
 		if _boss_spawned:
@@ -462,7 +553,12 @@ func _update_room(delta: float) -> void:
 	_spawn_cooldown_remaining -= delta
 	if _spawn_cooldown_remaining <= 0.0:
 		_spawn_enemy_wave()
-		_spawn_cooldown_remaining = maxf((0.55 - float(_room_depth) * 0.03) * 0.5, 0.09)
+		var base_interval := maxf((0.55 - float(_room_depth) * 0.03) * 0.5, 0.09)
+		if _accelerating_waves_active:
+			var elapsed := SURVIVE_DURATION - _room_timer_remaining
+			var accel_mult := maxf(1.0 - (minf(elapsed, 40.0) / 40.0) * 0.67, 0.33)
+			base_interval *= accel_mult
+		_spawn_cooldown_remaining = base_interval
 	_check_failure()
 
 func _spawn_enemy_wave() -> void:
@@ -477,6 +573,8 @@ func _spawn_enemy_wave() -> void:
 		var enemy = EnemySceneData.instantiate()
 		enemy.global_position = _find_enemy_spawn_position()
 		enemy.setup(enemy_type, self)
+		if _enemy_faster_active:
+			enemy.apply_room_modifier(0, 1.33, 1.0 / 1.33, 0.0, 0, 0)
 		enemy.enemy_died.connect(_on_enemy_died)
 		enemy.fire_requested.connect(_on_enemy_fire_requested)
 		enemy.hit_received.connect(_on_enemy_hit_received)
@@ -484,6 +582,13 @@ func _spawn_enemy_wave() -> void:
 		_enemy_nodes.append(enemy)
 
 func _roll_wave_enemy_type() -> String:
+	if _spitter_swarm_active:
+		var spitter_roll := randf()
+		if spitter_roll < 0.25:
+			return "chaser"
+		if spitter_roll < 0.5:
+			return "charger"
+		return "spitter"
 	match _room_enemy_mix:
 		"chaser_only":
 			return "chaser"
@@ -492,10 +597,16 @@ func _roll_wave_enemy_type() -> String:
 		"charger_heavy":
 			return "charger" if randf() < 0.55 else "chaser"
 	if _room_depth <= 1:
-		return "chaser"
+		return "spitter" if randf() < 0.1 else "chaser"
 	if _room_depth == 2:
-		return "charger" if randf() < 0.22 else "chaser"
-	return "charger" if randf() < 0.35 else "chaser"
+		var depth_two_roll := randf()
+		if depth_two_roll < 0.1:
+			return "spitter"
+		return "charger" if depth_two_roll < 0.32 else "chaser"
+	var mixed_roll := randf()
+	if mixed_roll < 0.1:
+		return "spitter"
+	return "charger" if mixed_roll < 0.45 else "chaser"
 
 func _spawn_boss() -> void:
 	var boss = EnemySceneData.instantiate()
@@ -507,6 +618,20 @@ func _spawn_boss() -> void:
 	enemies.add_child(boss)
 	_enemy_nodes.append(boss)
 	_boss_spawned = true
+
+func _spawn_elite_miniboss() -> void:
+	var miniboss_types := ["elite_charger", "elite_spitter", "elite_support"]
+	var miniboss_type: String = miniboss_types[randi() % miniboss_types.size()]
+	var miniboss = EnemySceneData.instantiate()
+	miniboss.global_position = ARENA_CENTER + Vector2(randf_range(-120.0, 120.0), -320.0)
+	miniboss.setup(miniboss_type, self)
+	if _enemy_faster_active:
+		miniboss.apply_room_modifier(0, 1.33, 1.0 / 1.33, 0.0, 0, 0)
+	miniboss.enemy_died.connect(_on_enemy_died)
+	miniboss.fire_requested.connect(_on_enemy_fire_requested)
+	miniboss.hit_received.connect(_on_enemy_hit_received)
+	enemies.add_child(miniboss)
+	_enemy_nodes.append(miniboss)
 
 func _start_non_combat_room() -> void:
 	if _room_type == "shop":
@@ -579,7 +704,7 @@ func _build_shop_player_panel(player_index: int) -> VBoxContainer:
 	options_container.add_theme_constant_override("separation", 6)
 	panel.add_child(options_container)
 
-	var mutation_options: Array = _mutation_system.roll_mutation_options(player_index, SHOP_MUTATION_COUNT)
+	var mutation_options: Array = _mutation_system.roll_mutation_options(player_index, SHOP_MUTATION_COUNT, "all")
 	for option_index in range(mutation_options.size()):
 		var mutation: Dictionary = mutation_options[option_index]
 		var option_row := _build_shop_option_row(
@@ -756,7 +881,7 @@ func _execute_shop_option(panel: VBoxContainer, option_index: int) -> void:
 
 func _reroll_shop_mutations(panel: VBoxContainer, player_index: int) -> void:
 	var options_container: VBoxContainer = panel.get_node("Options")
-	var new_mutations: Array = _mutation_system.roll_mutation_options(player_index, SHOP_MUTATION_COUNT)
+	var new_mutations: Array = _mutation_system.roll_mutation_options(player_index, SHOP_MUTATION_COUNT, "all")
 	panel.set_meta("mutation_options", new_mutations)
 	for child_index in range(mini(new_mutations.size(), options_container.get_child_count())):
 		var option: PanelContainer = options_container.get_child(child_index) as PanelContainer
@@ -792,6 +917,8 @@ func _all_shop_players_done() -> bool:
 func _close_shop() -> void:
 	get_tree().paused = false
 	_awaiting_mutation_pick = false
+	if _temp_buff_system != null:
+		_temp_buff_system.clear_all_buffs(_player_nodes)
 	if _shop_ui != null and is_instance_valid(_shop_ui):
 		_shop_ui.queue_free()
 	_shop_ui = null
@@ -873,7 +1000,7 @@ func _on_player_fire_requested(origin: Vector2, direction: Vector2, config: Dict
 	var split_extra_count := int(weapon_stats.get("split_extra_count", 0))
 	var spread_step := deg_to_rad(float(weapon_stats.get("split_spread_degrees", 15.0)))
 	var projectile_count := 1 + split_extra_count
-	if projectiles.get_child_count() >= MAX_ACTIVE_PROJECTILES / 2:
+	if projectiles.get_child_count() >= int(MAX_ACTIVE_PROJECTILES / 2.0):
 		projectile_count = 1
 	var directions := _build_spread_directions(direction, projectile_count, spread_step)
 	for projectile_direction in directions:
@@ -992,6 +1119,8 @@ func _on_enemy_died(enemy) -> void:
 	var gold_amount := _get_gold_drop_amount(enemy.get_type_name())
 	if gold_amount > 0:
 		_spawn_gold_pickup(enemy.global_position, gold_amount)
+	if enemy.get_type_name() != "boss" and randf() < HEALTH_DROP_CHANCE:
+		_spawn_health_pickup(enemy.global_position, HEALTH_PICKUP_HEAL)
 
 func _on_enemy_hit_received(_enemy, _damage_amount: int, lethal: bool) -> void:
 	if lethal:
@@ -1052,7 +1181,8 @@ func _handle_room_clear(summary: String) -> void:
 	_room_clear_started = true
 	_auto_collect_all_gold()
 	_award_survival_bonus()
-	var gold_summary := "\nGold earned: %dg (includes %dg survival bonus)" % [_room_gold_earned, SURVIVAL_BONUS_GOLD]
+	_award_modifier_gold_bonus()
+	var gold_summary := "\nGold earned: %dg" % _room_gold_earned
 	_pending_clear_summary = summary + gold_summary
 	_lock_player_input(true)
 	_end_active_encounter()
@@ -1067,11 +1197,18 @@ func _show_mutation_pick() -> void:
 	_mutation_pick_ui.process_mode = Node.PROCESS_MODE_WHEN_PAUSED
 	var options_by_player: Array = []
 	var gold_per_player: Array = []
+	var pick_costs: Array = MUTATION_PICK_COSTS
+	var option_count := 3
+	var rarity_filter := "common"
+	if _room_type == "elite":
+		pick_costs = [ELITE_RARE_PICK_COST]
+		option_count = 1
+		rarity_filter = "rare"
 	for player_index in range(_player_nodes.size()):
-		options_by_player.append(_mutation_system.roll_mutation_options(player_index, 3))
+		options_by_player.append(_mutation_system.roll_mutation_options(player_index, option_count, rarity_filter))
 		gold_per_player.append(RunState.get_player_gold(player_index))
-	_mutation_pick_ui.configure_for_players(_player_configs, options_by_player, gold_per_player, MUTATION_PICK_COSTS)
 	_mutation_pick_ui.selections_confirmed.connect(_on_mutation_selections_confirmed)
+	_mutation_pick_ui.configure_for_players(_player_configs, options_by_player, gold_per_player, pick_costs)
 	ui_layer.add_child(_mutation_pick_ui)
 	get_tree().paused = true
 
@@ -1083,7 +1220,7 @@ func _on_mutation_selections_confirmed(selections_per_player: Array) -> void:
 			var mutation_id := str(selected_ids[pick_index])
 			if mutation_id.is_empty():
 				continue
-			var cost: int = MUTATION_PICK_COSTS[mini(pick_index, MUTATION_PICK_COSTS.size() - 1)]
+			var cost: int = ELITE_RARE_PICK_COST if _room_type == "elite" else MUTATION_PICK_COSTS[mini(pick_index, MUTATION_PICK_COSTS.size() - 1)]
 			if RunState.spend_player_gold(player_index, cost):
 				_mutation_system.apply_mutation(player_index, mutation_id)
 	_rebuild_player_loadouts()
@@ -1097,6 +1234,20 @@ func _end_active_encounter() -> void:
 	_exit_zone_open = false
 	exit_zone.monitoring = false
 	exit_zone_visual.visible = false
+	if _temp_buff_system != null:
+		_temp_buff_system.clear_all_buffs(_player_nodes)
+	if _hold_zone != null and is_instance_valid(_hold_zone):
+		_hold_zone.queue_free()
+	_hold_zone = null
+	if _fire_floor_modifier != null and is_instance_valid(_fire_floor_modifier):
+		_fire_floor_modifier.queue_free()
+	_fire_floor_modifier = null
+	if _ice_zone_modifier != null and is_instance_valid(_ice_zone_modifier):
+		_ice_zone_modifier.queue_free()
+	_ice_zone_modifier = null
+	if _mine_field_modifier != null and is_instance_valid(_mine_field_modifier):
+		_mine_field_modifier.queue_free()
+	_mine_field_modifier = null
 	for child in projectiles.get_children():
 		child.queue_free()
 	for child in effects.get_children():
@@ -1186,6 +1337,14 @@ func _refresh_hud() -> void:
 	var ratio := clampf(_room_timer_remaining / max(max_duration, 0.01), 0.0, 1.0)
 	_timer_label.text = "Survive  %.1fs" % _room_timer_remaining if _room_type != "boss" else "Boss Fight"
 	_timer_fill.scale = Vector2(1.0 if _room_type == "boss" else ratio, 1.0)
+	if _hold_zone_status_label != null:
+		if _hold_zone != null and is_instance_valid(_hold_zone):
+			if _hold_zone.is_complete():
+				_hold_zone_status_label.text = "Buff Active: %s +50%%!" % _format_buff_name(str(_hold_buff_offer.get("type", "")))
+			else:
+				_hold_zone_status_label.text = _hold_zone.get_progress_text()
+		else:
+			_hold_zone_status_label.text = ""
 	for index in range(min(_player_inventory_huds.size(), _player_nodes.size())):
 		_player_inventory_huds[index].update_hud({
 			"header": "P%d" % (index + 1),
@@ -1198,6 +1357,131 @@ func _refresh_hud() -> void:
 		})
 	for index in range(min(_gold_labels.size(), _player_configs.size())):
 		(_gold_labels[index] as Label).text = "%dg" % RunState.get_player_gold(index)
+
+func _load_modifier_definitions() -> void:
+	_modifier_definitions.clear()
+	if not FileAccess.file_exists(MODIFIERS_DATA_PATH):
+		return
+	var file := FileAccess.open(MODIFIERS_DATA_PATH, FileAccess.READ)
+	if file == null:
+		return
+	var parsed: Variant = JSON.parse_string(file.get_as_text())
+	if not (parsed is Dictionary):
+		return
+	for entry in ((parsed as Dictionary).get("modifiers", []) as Array):
+		if not (entry is Dictionary):
+			continue
+		var definition: Dictionary = (entry as Dictionary).duplicate(true)
+		var modifier_id := str(definition.get("id", ""))
+		if modifier_id.is_empty():
+			continue
+		_modifier_definitions[modifier_id] = definition
+
+func _populate_modifier_hud() -> void:
+	if _modifier_hud == null:
+		return
+	for child in _modifier_hud.get_children():
+		child.queue_free()
+	for mod_id_variant in _active_modifiers:
+		var mod_id := str(mod_id_variant)
+		var chip := PanelContainer.new()
+		chip.custom_minimum_size = Vector2(0.0, 28.0)
+		chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var style := StyleBoxFlat.new()
+		style.bg_color = _get_modifier_chip_color(mod_id)
+		style.set_border_width_all(1)
+		style.border_color = _get_modifier_chip_color(mod_id).lightened(0.3)
+		style.corner_radius_top_left = 4
+		style.corner_radius_top_right = 4
+		style.corner_radius_bottom_left = 4
+		style.corner_radius_bottom_right = 4
+		style.set_content_margin_all(6)
+		chip.add_theme_stylebox_override("panel", style)
+		var lbl := Label.new()
+		lbl.text = _format_modifier_display_name(mod_id)
+		lbl.add_theme_font_size_override("font_size", 14)
+		chip.add_child(lbl)
+		_modifier_hud.add_child(chip)
+
+func _get_modifier_gold_bonus(mod_id: String) -> float:
+	return float((_modifier_definitions.get(mod_id, {}) as Dictionary).get("gold_bonus", 0.0))
+
+func _get_modifier_chip_color(mod_id: String) -> Color:
+	var category := str((_modifier_definitions.get(mod_id, {}) as Dictionary).get("category", "minor"))
+	return Color(0.85, 0.25, 0.2, 0.6) if category == "major" else Color(0.85, 0.65, 0.2, 0.6)
+
+func _format_modifier_display_name(mod_id: String) -> String:
+	var definition := _modifier_definitions.get(mod_id, {}) as Dictionary
+	if not definition.is_empty():
+		return str(definition.get("name", mod_id))
+	var parts: Array = []
+	for word in mod_id.split("_"):
+		if not word.is_empty():
+			parts.append(word.capitalize())
+	return " ".join(parts)
+
+func _format_buff_name(buff_type: String) -> String:
+	match buff_type:
+		"attack_speed":
+			return "Attack Speed"
+		"damage":
+			return "Damage"
+		_:
+			return "Speed"
+
+func _apply_ice_zone_modifier() -> void:
+	var affected: Array = []
+	if _ice_zone_modifier != null and is_instance_valid(_ice_zone_modifier):
+		affected = _ice_zone_modifier.get_affected_players(_player_nodes)
+	for player in _player_nodes:
+		if player == null or not is_instance_valid(player):
+			continue
+		if affected.has(player):
+			player.apply_zone_modifier("ice_zone", 0.67, 0.67)
+		else:
+			player.clear_zone_modifier("ice_zone")
+
+func _on_hold_zone_completed() -> void:
+	if _temp_buff_system == null or _hold_buff_offer.is_empty():
+		return
+	_temp_buff_system.apply_buff(_hold_buff_offer, _player_nodes)
+
+func _update_elite_support_auras() -> void:
+	var support_nodes: Array = []
+	for enemy in _enemy_nodes:
+		if enemy == null or not is_instance_valid(enemy) or not enemy.has_method("is_alive") or not enemy.is_alive():
+			continue
+		if enemy.get_type_name() == "elite_support":
+			support_nodes.append(enemy)
+	var buffed_now: Array = []
+	var debuffed_now: Array = []
+	for support in support_nodes:
+		for enemy in _enemy_nodes:
+			if enemy == null or not is_instance_valid(enemy) or enemy == support or not enemy.has_method("is_alive") or not enemy.is_alive():
+				continue
+			if enemy.global_position.distance_to(support.global_position) <= 300.0:
+				enemy.apply_aura(1.33, 1.33)
+				if not buffed_now.has(enemy):
+					buffed_now.append(enemy)
+		for player in _player_nodes:
+			if player == null or not is_instance_valid(player) or not player.has_method("is_alive") or not player.is_alive():
+				continue
+			if player.global_position.distance_to(support.global_position) <= 300.0:
+				player.apply_zone_modifier("elite_support", 0.67, 0.67)
+				if not debuffed_now.has(player):
+					debuffed_now.append(player)
+	for enemy in _aura_buffed_enemies:
+		if buffed_now.has(enemy):
+			continue
+		if enemy != null and is_instance_valid(enemy) and enemy.has_method("clear_aura"):
+			enemy.clear_aura()
+	_aura_buffed_enemies = buffed_now
+	for player in _aura_debuffed_players:
+		if debuffed_now.has(player):
+			continue
+		if player != null and is_instance_valid(player):
+			player.clear_zone_modifier("elite_support")
+	_aura_debuffed_players = debuffed_now
 
 func get_active_players() -> Array:
 	var frame := Engine.get_physics_frames()
@@ -1250,11 +1534,9 @@ func _lock_player_input(locked: bool) -> void:
 			player.set_input_locked(locked)
 
 func _get_gold_drop_amount(enemy_type_name: String) -> int:
-	var entry: Dictionary = GOLD_DROP_VALUES.get(enemy_type_name, {"min": 3, "max": 5})
-	var base := randi_range(int(entry.get("min", 3)), int(entry.get("max", 5)))
-	if base <= 0:
+	if enemy_type_name == "boss":
 		return 0
-	return maxi(1, int(round(float(base) * _room_gold_multiplier)))
+	return GOLD_DROP_PER_ENEMY
 
 func _spawn_gold_pickup(spawn_position: Vector2, amount: int) -> void:
 	var pickup = GoldPickupSceneData.instantiate()
@@ -1262,9 +1544,15 @@ func _spawn_gold_pickup(spawn_position: Vector2, amount: int) -> void:
 	pickup.global_position = spawn_position
 	pickups.add_child(pickup)
 
+func _spawn_health_pickup(spawn_position: Vector2, heal_amount: int) -> void:
+	var pickup = HealthPickupData.new()
+	pickup.heal_amount = heal_amount
+	pickup.global_position = spawn_position
+	pickups.add_child(pickup)
+
 func _update_gold_pickups(delta: float) -> void:
-	var active_players := get_active_players()
-	if active_players.is_empty():
+	var eligible_players := _get_pickup_eligible_players()
+	if eligible_players.is_empty():
 		return
 	var to_remove: Array = []
 	for pickup in pickups.get_children():
@@ -1272,22 +1560,31 @@ func _update_gold_pickups(delta: float) -> void:
 			continue
 		var nearest_player = null
 		var nearest_distance := INF
-		for player in active_players:
+		for player in eligible_players:
 			var dist: float = player.global_position.distance_to(pickup.global_position)
 			if dist < nearest_distance:
 				nearest_distance = dist
 				nearest_player = player
 		if nearest_player == null:
 			continue
-		if nearest_distance < GoldPickupData.MAGNET_RADIUS:
+		var magnet_radius := GoldPickupData.MAGNET_RADIUS if pickup is GoldPickupData else HealthPickupData.MAGNET_RADIUS
+		var magnet_acceleration := GoldPickupData.MAGNET_ACCELERATION if pickup is GoldPickupData else HealthPickupData.MAGNET_ACCELERATION
+		var magnet_max_speed := GoldPickupData.MAGNET_MAX_SPEED if pickup is GoldPickupData else HealthPickupData.MAGNET_MAX_SPEED
+		var collect_radius := GoldPickupData.COLLECT_RADIUS if pickup is GoldPickupData else HealthPickupData.COLLECT_RADIUS
+		if nearest_distance < magnet_radius:
 			var direction: Vector2 = (nearest_player.global_position - pickup.global_position).normalized()
-			pickup.magnet_speed = minf(pickup.magnet_speed + GoldPickupData.MAGNET_ACCELERATION * delta, GoldPickupData.MAGNET_MAX_SPEED)
+			pickup.magnet_speed = minf(pickup.magnet_speed + magnet_acceleration * delta, magnet_max_speed)
 			pickup.global_position += direction * pickup.magnet_speed * delta
 			nearest_distance = nearest_player.global_position.distance_to(pickup.global_position)
-		if nearest_distance < GoldPickupData.COLLECT_RADIUS:
-			RunState.add_gold_to_all_players(pickup.amount)
-			_room_gold_earned += pickup.amount
-			to_remove.append(pickup)
+		if nearest_distance < collect_radius:
+			if pickup is GoldPickupData:
+				RunState.add_gold_to_all_players(pickup.amount)
+				_room_gold_earned += pickup.amount
+				to_remove.append(pickup)
+			elif pickup is HealthPickupData:
+				if nearest_player.heal(int(pickup.heal_amount)):
+					_sync_player_health_state(nearest_player)
+					to_remove.append(pickup)
 	for pickup in to_remove:
 		pickup.queue_free()
 
@@ -1295,13 +1592,42 @@ func _auto_collect_all_gold() -> void:
 	for pickup in pickups.get_children():
 		if not is_instance_valid(pickup):
 			continue
-		RunState.add_gold_to_all_players(pickup.amount)
-		_room_gold_earned += pickup.amount
+		if pickup is GoldPickupData:
+			RunState.add_gold_to_all_players(pickup.amount)
+			_room_gold_earned += pickup.amount
 		pickup.queue_free()
 
 func _award_survival_bonus() -> void:
 	RunState.add_gold_to_all_players(SURVIVAL_BONUS_GOLD)
 	_room_gold_earned += SURVIVAL_BONUS_GOLD
+
+func _award_modifier_gold_bonus() -> void:
+	if _room_gold_multiplier <= 1.0:
+		return
+	var base_gold_earned := _room_gold_earned
+	if base_gold_earned <= 0:
+		return
+	var bonus_gold := int(round(float(base_gold_earned) * (_room_gold_multiplier - 1.0)))
+	if bonus_gold <= 0:
+		return
+	RunState.add_gold_to_all_players(bonus_gold)
+	_room_gold_earned += bonus_gold
+
+func _get_pickup_eligible_players() -> Array:
+	var eligible_players: Array = []
+	for player in _player_nodes:
+		if player == null or not is_instance_valid(player) or not player.has_method("is_alive") or not player.is_alive():
+			continue
+		eligible_players.append(player)
+	return eligible_players
+
+func _sync_player_health_state(player) -> void:
+	if player == null or not is_instance_valid(player):
+		return
+	var player_index := int(player.player_index)
+	if player_index < 0 or player_index >= RunState.player_health_states.size():
+		return
+	RunState.player_health_states[player_index] = player.get_health_state()
 
 func _get_shop_gamepad_device(player_index: int) -> int:
 	if player_index >= 0 and player_index < _player_nodes.size():

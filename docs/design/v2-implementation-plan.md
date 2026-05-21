@@ -1,4 +1,15 @@
-# V2 Implementation Plan — Refactor to New Direction
+# V2 Implementation Plan — Historical Record
+
+## Status
+
+- This file is a historical implementation record.
+- It describes the earlier refactor plan that created `v2/core-refactor`.
+- Do not use this as the source of truth for the current runtime.
+- Use these instead for active work:
+  - `docs/development/current-state.md`
+  - `docs/development/start-of-day.md`
+  - `docs/design/roadmap.md`
+  - `docs/process/architecture.md`
 
 ## Branch Strategy
 

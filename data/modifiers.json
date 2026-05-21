@@ -1,0 +1,84 @@
+{
+  "modifiers": [
+    {
+      "id": "accelerating_waves",
+      "name": "Accelerating Waves",
+      "category": "minor",
+      "gold_bonus": 0.15,
+      "description": "Enemy waves accelerate over time."
+    },
+    {
+      "id": "enemy_faster",
+      "name": "Enemy Speed",
+      "category": "minor",
+      "gold_bonus": 0.15,
+      "description": "Enemies move and attack 33% faster."
+    },
+    {
+      "id": "spitter_swarm",
+      "name": "Spitter Swarm",
+      "category": "minor",
+      "gold_bonus": 0.15,
+      "description": "Ranged enemies dominate the spawn pool."
+    },
+    {
+      "id": "fire_floor",
+      "name": "Fire Floor",
+      "category": "major",
+      "gold_bonus": 0.3,
+      "description": "Arena quadrants periodically ignite."
+    },
+    {
+      "id": "ice_zone",
+      "name": "Ice Zone",
+      "category": "major",
+      "gold_bonus": 0.3,
+      "description": "Arena quadrants periodically freeze."
+    },
+    {
+      "id": "mine_field",
+      "name": "Mine Field",
+      "category": "major",
+      "gold_bonus": 0.3,
+      "description": "Mines spawn in rotating quadrants."
+    }
+  ],
+  "valid_combat_combinations": [
+    [],
+    ["accelerating_waves"],
+    ["enemy_faster"],
+    ["spitter_swarm"],
+    ["fire_floor"],
+    ["ice_zone"],
+    ["mine_field"],
+    ["accelerating_waves", "fire_floor"],
+    ["accelerating_waves", "ice_zone"],
+    ["accelerating_waves", "mine_field"],
+    ["enemy_faster", "fire_floor"],
+    ["enemy_faster", "ice_zone"],
+    ["enemy_faster", "mine_field"],
+    ["spitter_swarm", "fire_floor"],
+    ["spitter_swarm", "ice_zone"],
+    ["spitter_swarm", "mine_field"]
+  ],
+  "valid_elite_combinations": [
+    ["accelerating_waves", "fire_floor"],
+    ["accelerating_waves", "ice_zone"],
+    ["accelerating_waves", "mine_field"],
+    ["enemy_faster", "fire_floor"],
+    ["enemy_faster", "ice_zone"],
+    ["enemy_faster", "mine_field"],
+    ["spitter_swarm", "fire_floor"],
+    ["spitter_swarm", "ice_zone"],
+    ["spitter_swarm", "mine_field"],
+    ["accelerating_waves", "enemy_faster", "fire_floor"],
+    ["accelerating_waves", "enemy_faster", "ice_zone"],
+    ["accelerating_waves", "enemy_faster", "mine_field"],
+    ["accelerating_waves", "spitter_swarm", "fire_floor"],
+    ["accelerating_waves", "spitter_swarm", "ice_zone"],
+    ["accelerating_waves", "spitter_swarm", "mine_field"],
+    ["enemy_faster", "spitter_swarm", "fire_floor"],
+    ["enemy_faster", "spitter_swarm", "ice_zone"],
+    ["enemy_faster", "spitter_swarm", "mine_field"]
+  ]
+}

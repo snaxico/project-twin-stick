@@ -4,12 +4,15 @@
 
 Godot `4.6.2` prototype for a same-screen local co-op neon roguelite.
 
-This branch is now the v3 gameplay line:
+Active gameplay work happens on `v2/core-refactor`:
 
-- stable pre-rework gameplay is preserved separately on `main`
-- active rework continues on `v2/core-refactor`
+- this is the current working branch
+- older v1 gameplay is preserved as archived reference:
+  - historically on `main`
+  - locally under `archive/v1/`
 - current target is strictly `1–2` players
-- `3–4` player support is deferred until the v3 loop validates
+- `3–4` player support is deferred until the current loop validates
+- the live runtime on this branch currently follows the later auto-fire / shockwave / dash direction from the newer design docs
 
 ## Current Runtime
 
@@ -23,7 +26,7 @@ This branch is now the v3 gameplay line:
   - `Easy`
 - run flow now uses the full node map:
   - `combat`
-  - `elite` (harder encounters, 1.3x gold multiplier, charger-heavy mix)
+  - `elite` (harder encounters, rare reward flow, mini-boss spawn)
   - `rest`
   - `shop` (buy mutations, healing, rerolls with gold)
   - `boss`
@@ -32,10 +35,14 @@ This branch is now the v3 gameplay line:
 - meta progression remains out of the live runtime
 - gold economy is now live:
   - enemies drop gold pickups on death
+  - non-boss enemies also have an `8%` chance to drop a `5 HP` healing pickup
   - pickups magnet to the nearest living player
   - gold is shared on collection and copied into every player's personal wallet
-  - room clear auto-collects leftovers and adds a flat survival bonus
+  - room clear auto-collects leftovers
+  - survival bonus is now `0`
   - latest pickup tuning doubled the gold orb size and doubled pickup reach
+- combat and elite nodes now also roll room modifiers from `data/modifiers.json`
+- combat and elite nodes now also carry the `hold_zone` side objective in the run-state map data
 
 ## Active Combat State
 
@@ -55,6 +62,7 @@ This branch is now the v3 gameplay line:
   - weapon: `Rifle`
   - primary skill: `Shockwave`
   - secondary skill: `Dash`
+- base player move speed is now tuned up to `487.5` (`+25%` over the earlier `390`)
 - weapon fire is automatic:
   - no fire trigger input
   - baseline rifle cadence is `3.0` shots per second
@@ -74,14 +82,36 @@ This branch is now the v3 gameplay line:
 - only these enemy roles are currently live:
   - `Chaser`
   - `Charger`
+  - `Spitter`
   - `Boss`
-- room objective: `survive` only (capture_the_hill removed)
+- base `Spitter` pressure is now tuned down from the earlier rapid-fire version:
+  - `1` projectile burst
+  - `1.0s` fire interval
+- elite mini-boss variants are now live:
+  - `Elite Charger`
+  - `Elite Spitter`
+  - `Elite Support`
+- room objective is still `survive`, but combat and elite rooms now also run the `hold_zone` side objective in parallel
 - map node types: `combat`, `elite`, `rest`, `shop`, `boss`
-- mutation rewards are no longer free:
-  - each room-end pick screen shows `3` rolled mutations
-  - each player can buy `0–3` picks from that set
-  - current placeholder costs are `15 / 50 / 100`
+- mutation rewards are now rarity-split:
+  - combat room-end picks roll commons only
+  - each player can buy `0–3` common picks from that set
+  - current placeholder common-pick costs are `15 / 50 / 100`
+  - elite room-end picks roll exactly `1` rare mutation per player (buy or skip)
+  - elite rare pick cost is currently `50`
   - unspent gold carries forward between rooms
+- common mutations are now upgradable to `Lv3`; rares are binary one-offs
+- active room modifiers currently include:
+  - `Accelerating Waves`
+  - `Enemy Speed`
+  - `Spitter Swarm`
+  - `Fire Floor`
+  - `Ice Zone`
+  - `Mine Field`
+- hold-zone completion now grants a room-limited temporary buff:
+  - `Speed`
+  - `Damage`
+  - `Attack Speed`
 
 ## Active Systems
 
@@ -90,7 +120,9 @@ This branch is now the v3 gameplay line:
   - per-player health persistence
   - per-player `1 weapon + 1 primary skill + 1 secondary skill + mutations` inventory state
   - per-player gold wallet state
-- `CoopManager` now drives the v3 room loop:
+  - node modifier assignment
+  - combat / elite hold-zone side-objective tagging
+- `CoopManager` now drives the live room loop:
   - larger arena setup
   - depth-based arena color shifts
   - auto-attack projectile spawning
@@ -98,12 +130,22 @@ This branch is now the v3 gameplay line:
   - enemy gold drop spawning and room-end gold payout
   - revive / fail / clear handling
   - mutation pick handoff
+  - elite rare reward flow
+  - modifier runtime orchestration
+  - hold-zone buff orchestration
+  - elite support aura orchestration
+  - elite mini-boss spawning
   - automatic room progression after mutation picks
 - `GoldPickup.gd` is now the live room-currency pickup path:
   - procedural neon coin/orb visual
   - magnet pull to nearest player
   - no collision-shape dependency; `CoopManager` owns collection checks
   - script warning cleanup completed so the pickup path is parse-clean without unused-signal / unused-field noise
+- `HealthPickup.gd` is now the live sustain pickup path:
+  - procedural green health orb / cross visual
+  - `5 HP` per pickup
+  - dropped from non-boss enemies at `8%`
+  - magnets to the nearest eligible living player and updates persisted run health state on collect
 - `Player.gd` now implements:
   - movement-facing + auto-attack runtime
   - automatic weapon fire
@@ -111,9 +153,13 @@ This branch is now the v3 gameplay line:
   - chevron-only player visual
   - secondary skill (dash) damage mutation support
 - `AutoTarget.gd` replaced the old aim-assist path for auto-attack targeting
-- `MutationSystem` still compiles weapon mutations, and now also handles:
-  - `shockwave_radius` (primary skill radius)
-  - `shockwave_cooldown` (primary skill cooldown)
+- `MutationSystem` now handles:
+  - common vs rare mutation pools
+  - upgradable common levels
+  - rare exhaustion handling
+  - compiled weapon scaling for the new linear roadmap formulas
+  - `skill_range` (primary skill radius)
+  - `skill_cooldown` (primary skill cooldown)
 - `Projectile.gd` is now the live glowing-orb projectile path
 - `PlayerInventoryHUD` and `WeaponSlotHUD` remain the minimal HUD:
   - health
@@ -122,7 +168,11 @@ This branch is now the v3 gameplay line:
   - secondary skill (dash) cooldown
   - mutation icons
 - live combat HUD now also shows per-player gold
+- live combat HUD now also shows:
+  - active room modifiers
+  - hold-zone progress / active buff state
 - map route UI now also shows per-player gold totals
+- map route UI now also shows modifier counts on nodes and modifier names on hover
 - mutation pick UI now reuses each player's live input bindings instead of separate hardcoded menu keys
 - shop UI now also follows the live per-player bindings and actual assigned gamepad device IDs
 - pause menu now also follows the live per-player bindings and actual assigned gamepad device IDs
@@ -131,9 +181,10 @@ This branch is now the v3 gameplay line:
   - objective (`survive` only)
   - depth
   - enemy mix override
+  - room modifier injection (`0–3`)
   - starting mutation presets
 
-## Removed From Live V3
+## Removed From Live Runtime
 
 - no manual fire input
 - no grenade runtime
@@ -145,25 +196,24 @@ This branch is now the v3 gameplay line:
 - no weapon replacement UI
 - no meta progression loop
 - no recipe engine
-- no modifier engine
 - no generator objective
 - no alternative primary families in live combat
 - no `3–4` player support target for the current validation phase
 
-Obsolete v1 / v2 systems remain preserved under `archive/v1/`.
+Obsolete v1 systems remain preserved under `archive/v1/` as archive/reference content only.
 
 ## Known Gaps
 
-- v3 now matches the new control model structurally, but still has not had a full feel-validation pass
+- the current branch runtime now matches the new control model structurally, but still has not had a full feel-validation pass
 - primary skill (shockwave), weapon cadence, and mutation payoff still need live tuning
-- boss behavior is still the older fight shape and has not yet had the separate v3 redesign
+- boss behavior is still the older fight shape and has not yet had its current-branch redesign
 - builder mutation presets are for testing, not polished end-user UX
 - glow / neon presentation is improved, but this is still a gameplay-first pass rather than a final art pass
 - full-screen effects are forced on for now and are no longer user-configurable
-- the economy loop is now implemented structurally, but gold values, survival bonus, and mutation costs are still placeholder and too cheap
+- the economy loop is now implemented structurally, but gold values and mutation costs are still placeholder and need pacing validation
 - shop nodes are now live but shop UI is basic (list-based, not polished)
-- elite rooms are functional but have no unique anchor enemies (mini-bosses) yet
-- mutation rarity split (common/rare), upgradable commons, side objectives, and temp buffs are designed and locked in `docs/design/roadmap.md` but not yet implemented
+- elite support aura, room modifiers, and hold-zone buff rewards still need real gameplay tuning
+- upgradable commons still render as duplicate mutation chips in the HUD instead of a single leveled badge
 - heavy projectile scenes now have first-pass runtime guard rails:
   - HUD refresh is throttled instead of updating every physics frame
   - dense projectile trails are suppressed under load
@@ -175,21 +225,21 @@ Obsolete v1 / v2 systems remain preserved under `archive/v1/`.
 
 ## Next Step
 
-If work continues on v3, the next priority is play validation:
+If work continues on `v2/core-refactor`, the next priority is play validation:
 
 - validate the full encounter restructure across several runs:
   - combat, elite, rest, shop, boss node types visible and reachable on the map
-  - elite rooms should feel noticeably harder and reward more gold
+  - elite rooms should feel noticeably harder and the rare reward flow should feel worth the risk
   - shop should be usable (buy mutations, heal, reroll, done)
   - gold economy pacing across a complete run
   - passive survival should fall behind gradually, not instantly
   - aggressive rooms should fund multiple picks reliably
-  - `15 / 50 / 100` mutation pricing should feel fair in both `1P` and `2P`
+  - `15 / 50 / 100` common pricing and `50` elite-rare pricing should feel fair in both `1P` and `2P`
   - the shared-pickup / personal-wallet model should feel natural in couch co-op
+  - modifier combinations should stay readable and not overwhelm the base room loop
+  - hold-zone buffs should be noticeable without becoming mandatory
 - tune weapon cadence, primary skill feel, and room pressure
 - future additions beyond this validation:
-  - modifier system reintroduction (fire floor, ice zones, directional spawns)
-  - mini-boss / elite enemy archetypes (3-4 minimum)
   - side challenges (optional bonus objectives for extra gold)
-  - boss redesign for v3
+  - boss redesign for the current branch runtime
   - `3-4` player support

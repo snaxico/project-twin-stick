@@ -19,7 +19,11 @@ void fragment() {
 enum EnemyType {
 	CHASER,
 	CHARGER,
+	SPITTER,
 	BOSS,
+	ELITE_CHARGER,
+	ELITE_SPITTER,
+	ELITE_SUPPORT,
 }
 
 @export var move_speed: float = 120.0
@@ -87,6 +91,14 @@ var _cached_right_penalty := 0.0
 var _next_feeler_refresh_at := 0.0
 var _feeler_excludes_cache: Array = []
 var _feeler_excludes_frame := -1
+var _circle_sign := 1.0
+var _elite_charger_use_slam := false
+var _elite_support_next_pulse_at := 0.0
+var _elite_spitter_next_pulse_at := 0.0
+var _base_move_speed: float = 0.0
+var _base_fire_interval: float = 0.0
+var _aura_speed_modifier: float = 1.0
+var _aura_attack_modifier: float = 1.0
 
 func setup(type_name: String, combat_owner) -> void:
 	_combat_owner = combat_owner
@@ -103,6 +115,18 @@ func setup(type_name: String, combat_owner) -> void:
 			_projectile_burst_count = 0
 			_projectile_spread_radians = 0.0
 			_projectile_visual_scale = 1.0
+		"spitter":
+			enemy_type = EnemyType.SPITTER
+			max_health = 30
+			move_speed = 312.0
+			fire_interval = 1.0
+			projectile_speed = 340.0
+			projectile_damage = 10
+			contact_damage = 8
+			preferred_distance = 350.0
+			_projectile_burst_count = 1
+			_projectile_spread_radians = 0.0
+			_projectile_visual_scale = 0.8
 		"boss":
 			enemy_type = EnemyType.BOSS
 			max_health = 180
@@ -115,6 +139,42 @@ func setup(type_name: String, combat_owner) -> void:
 			_projectile_burst_count = 5
 			_projectile_spread_radians = 0.14
 			_projectile_visual_scale = 1.0
+		"elite_charger":
+			enemy_type = EnemyType.ELITE_CHARGER
+			max_health = 1440
+			move_speed = 371.25
+			fire_interval = 0.0
+			projectile_speed = 0.0
+			projectile_damage = 0
+			contact_damage = 15
+			preferred_distance = 0.0
+			_projectile_burst_count = 0
+			_projectile_spread_radians = 0.0
+			_projectile_visual_scale = 1.0
+		"elite_spitter":
+			enemy_type = EnemyType.ELITE_SPITTER
+			max_health = 576
+			move_speed = 312.0
+			fire_interval = 0.33
+			projectile_speed = 340.0
+			projectile_damage = 10
+			contact_damage = 8
+			preferred_distance = 400.0
+			_projectile_burst_count = 3
+			_projectile_spread_radians = 0.18
+			_projectile_visual_scale = 0.9
+		"elite_support":
+			enemy_type = EnemyType.ELITE_SUPPORT
+			max_health = 900
+			move_speed = 280.0
+			fire_interval = 2.0
+			projectile_speed = 0.0
+			projectile_damage = 0
+			contact_damage = 5
+			preferred_distance = 250.0
+			_projectile_burst_count = 0
+			_projectile_spread_radians = 0.0
+			_projectile_visual_scale = 1.0
 		_:
 			enemy_type = EnemyType.CHASER
 			max_health = 21
@@ -122,11 +182,14 @@ func setup(type_name: String, combat_owner) -> void:
 			fire_interval = 1.3
 			projectile_speed = 340.0
 			projectile_damage = 10
+			contact_damage = 10
 			preferred_distance = 190.0
 			_projectile_burst_count = 1
 			_projectile_spread_radians = 0.0
 			_projectile_visual_scale = 1.0
 	current_health = max_health
+	_base_move_speed = move_speed
+	_base_fire_interval = fire_interval
 	_reset_behavior_state()
 	_apply_type_visual()
 
@@ -134,21 +197,43 @@ func apply_room_modifier(enemy_bonus_health: int, enemy_speed_multiplier: float,
 	if enemy_type == EnemyType.BOSS:
 		return
 	max_health = max(max_health + enemy_bonus_health, 10)
-	current_health = max_health
+	current_health = max(current_health, max_health)
 	move_speed *= enemy_speed_multiplier
 	fire_interval *= enemy_fire_interval_multiplier
 	contact_damage += enemy_contact_damage_bonus
 	_death_explosion_radius = death_explosion_radius
 	_death_explosion_damage = death_explosion_damage
+	_base_move_speed = move_speed
+	_base_fire_interval = fire_interval
+	clear_aura()
+
+func apply_aura(speed_mult: float, attack_mult: float) -> void:
+	_aura_speed_modifier = speed_mult
+	_aura_attack_modifier = attack_mult
+	move_speed = _base_move_speed * _aura_speed_modifier
+	if _base_fire_interval > 0.0:
+		fire_interval = _base_fire_interval / max(_aura_attack_modifier, 0.01)
+
+func clear_aura() -> void:
+	_aura_speed_modifier = 1.0
+	_aura_attack_modifier = 1.0
+	move_speed = _base_move_speed
+	fire_interval = _base_fire_interval
 
 func apply_boss_scale(player_count: int) -> void:
 	if enemy_type != EnemyType.BOSS:
 		return
-
 	var health_scale: float = 1.0 + float(maxi(player_count - 1, 0)) * 0.6
 	max_health = int(round(max_health * health_scale))
 	current_health = max_health
 	projectile_damage += maxi(player_count - 1, 0) * 10
+	_base_move_speed = move_speed
+	_base_fire_interval = fire_interval
+
+func heal(amount: int) -> void:
+	if amount <= 0 or _is_dead:
+		return
+	current_health = mini(current_health + amount, max_health)
 
 func _ready() -> void:
 	if current_health <= 0:
@@ -161,6 +246,7 @@ func _ready() -> void:
 	_idle_phase = float(get_instance_id() % 17) * 0.43
 	_last_position = global_position
 	_detour_sign = -1.0 if int(get_instance_id() % 2) == 0 else 1.0
+	_circle_sign = -1.0 if int(get_instance_id() % 2) == 0 else 1.0
 	_apply_type_visual()
 	_play_spawn_in_animation()
 
@@ -185,8 +271,16 @@ func get_feedback_weight() -> float:
 	match enemy_type:
 		EnemyType.CHARGER:
 			return 1.35
+		EnemyType.SPITTER:
+			return 1.1
 		EnemyType.BOSS:
 			return 1.9
+		EnemyType.ELITE_CHARGER:
+			return 2.2
+		EnemyType.ELITE_SPITTER:
+			return 1.55
+		EnemyType.ELITE_SUPPORT:
+			return 1.75
 		_:
 			return 0.9
 
@@ -194,8 +288,16 @@ func get_type_name() -> String:
 	match enemy_type:
 		EnemyType.CHARGER:
 			return "charger"
+		EnemyType.SPITTER:
+			return "spitter"
 		EnemyType.BOSS:
 			return "boss"
+		EnemyType.ELITE_CHARGER:
+			return "elite_charger"
+		EnemyType.ELITE_SPITTER:
+			return "elite_spitter"
+		EnemyType.ELITE_SUPPORT:
+			return "elite_support"
 		_:
 			return "chaser"
 
@@ -205,7 +307,6 @@ func get_feedback_color() -> Color:
 func apply_damage(amount: int) -> void:
 	if _is_dead:
 		return
-
 	current_health = max(current_health - amount, 0)
 	_play_flash(Color.WHITE, 0.12)
 	hit_received.emit(self, amount, current_health == 0)
@@ -220,17 +321,17 @@ func apply_knockback(direction: Vector2, force: float) -> void:
 		return
 	_knockback_velocity += normalized_direction * force
 
-func _physics_process(_delta: float) -> void:
+func _physics_process(delta: float) -> void:
 	if _is_dead:
 		return
 
 	var now := _current_time_seconds()
 	var target = _get_closest_player(now)
 	if target == null:
-		_knockback_velocity = _knockback_velocity.move_toward(Vector2.ZERO, 900.0 * _delta)
+		_knockback_velocity = _knockback_velocity.move_toward(Vector2.ZERO, 900.0 * delta)
 		velocity = _knockback_velocity
 		move_and_slide()
-		_apply_motion_polish(now, _delta)
+		_apply_motion_polish(now, delta)
 		return
 
 	var offset: Vector2 = target.global_position - global_position
@@ -243,19 +344,30 @@ func _physics_process(_delta: float) -> void:
 			base_velocity = _update_chaser_behavior(direction, distance, now)
 		EnemyType.CHARGER:
 			base_velocity = _update_charger_behavior(direction, distance, now)
+		EnemyType.SPITTER:
+			base_velocity = _update_spitter_behavior(direction, distance, now)
 		EnemyType.BOSS:
 			base_velocity = _update_boss_behavior(direction, distance, now)
+		EnemyType.ELITE_CHARGER:
+			base_velocity = _update_elite_charger_behavior(direction, distance, now)
+		EnemyType.ELITE_SPITTER:
+			base_velocity = _update_elite_spitter_behavior(direction, distance, now)
+		EnemyType.ELITE_SUPPORT:
+			base_velocity = _update_elite_support_behavior(direction, distance, now)
 
-	var charger_committed_dash: bool = enemy_type == EnemyType.CHARGER and now < _charge_dash_ends_at
-	if not charger_committed_dash:
+	var dash_locked := (
+		(enemy_type == EnemyType.CHARGER and now < _charge_dash_ends_at)
+		or (enemy_type == EnemyType.ELITE_CHARGER and now < _charge_dash_ends_at)
+	)
+	if not dash_locked:
 		base_velocity += _compute_separation_force(now)
 		base_velocity = _apply_obstacle_detour(base_velocity, direction, now)
-	_knockback_velocity = _knockback_velocity.move_toward(Vector2.ZERO, 900.0 * _delta)
+	_knockback_velocity = _knockback_velocity.move_toward(Vector2.ZERO, 900.0 * delta)
 	velocity = base_velocity + _knockback_velocity
 	move_and_slide()
-	_update_blocked_state(base_velocity, direction, _delta)
+	_update_blocked_state(base_velocity, direction, delta)
 	_maybe_emit_attack_trail(now)
-	_apply_motion_polish(now, _delta)
+	_apply_motion_polish(now, delta)
 
 	var contact_range: float = maxf(_contact_range, _get_combined_contact_range(target))
 	if distance <= contact_range and now >= _next_contact_at:
@@ -377,7 +489,7 @@ func _maybe_emit_attack_trail(now: float) -> void:
 	var weight: float = 0.0
 	if enemy_type == EnemyType.CHASER and now < _lunge_ends_at:
 		weight = 0.95
-	elif enemy_type == EnemyType.CHARGER and now < _charge_dash_ends_at:
+	elif (enemy_type == EnemyType.CHARGER or enemy_type == EnemyType.ELITE_CHARGER) and now < _charge_dash_ends_at:
 		weight = 1.25
 	elif enemy_type == EnemyType.BOSS and now < _next_projectile_at and velocity.length() > move_speed * 0.8:
 		weight = 1.2
@@ -397,7 +509,7 @@ func _update_chaser_behavior(direction: Vector2, distance: float, now: float) ->
 		_lunge_ends_at = _lunge_windup_ends_at + 0.24
 		_next_lunge_at = now + 0.55
 		return Vector2.ZERO
-	return direction * move_speed * 1.0
+	return direction * move_speed
 
 func _update_charger_behavior(direction: Vector2, distance: float, now: float) -> Vector2:
 	if now < _charge_windup_ends_at:
@@ -416,6 +528,16 @@ func _update_charger_behavior(direction: Vector2, distance: float, now: float) -
 		return Vector2.ZERO
 	return direction * move_speed * 1.05
 
+func _update_spitter_behavior(direction: Vector2, distance: float, now: float) -> Vector2:
+	if distance > 0.0 and now >= _next_projectile_at:
+		_next_projectile_at = now + fire_interval
+		_emit_projectile_burst(direction)
+	if distance < 180.0:
+		return -direction * move_speed
+	if distance > preferred_distance + 50.0:
+		return direction * move_speed * 0.92
+	return Vector2(-direction.y, direction.x) * move_speed * _circle_sign * 0.8
+
 func _update_boss_behavior(direction: Vector2, distance: float, now: float) -> Vector2:
 	var base_velocity := Vector2.ZERO
 	if distance > preferred_distance + 35.0:
@@ -424,17 +546,60 @@ func _update_boss_behavior(direction: Vector2, distance: float, now: float) -> V
 		base_velocity = -direction * move_speed * 0.4
 	else:
 		base_velocity = Vector2(-direction.y, direction.x) * move_speed * 0.28
-
 	if distance > 0.0 and now >= _next_projectile_at:
 		_next_projectile_at = now + fire_interval
 		_emit_projectile_burst(direction)
 	return base_velocity
 
+func _update_elite_charger_behavior(direction: Vector2, distance: float, now: float) -> Vector2:
+	if now < _charge_windup_ends_at:
+		return Vector2.ZERO
+	if now < _charge_recovery_ends_at:
+		return direction * move_speed * 0.45
+	if now < _charge_dash_ends_at:
+		return _charge_direction * move_speed * 5.8
+	if _elite_charger_use_slam and distance <= 140.0 and now >= _next_charge_at:
+		_elite_charger_use_slam = false
+		_next_charge_at = now + 1.2
+		_emit_small_slam(180.0, 15, 950.0)
+		return direction * move_speed * 0.5
+	if distance > 80.0 and distance < 840.0 and now >= _next_charge_at:
+		_charge_direction = direction
+		_charge_windup_ends_at = now + 0.12
+		_charge_dash_ends_at = _charge_windup_ends_at + 0.4
+		_charge_recovery_ends_at = _charge_dash_ends_at + 0.35
+		_next_charge_at = _charge_recovery_ends_at + 0.2
+		_elite_charger_use_slam = true
+		_play_charger_windup_telegraph()
+		return Vector2.ZERO
+	return direction * move_speed
+
+func _update_elite_spitter_behavior(direction: Vector2, distance: float, now: float) -> Vector2:
+	var velocity_out := _update_spitter_behavior(direction, distance, now)
+	if now >= _elite_spitter_next_pulse_at:
+		_elite_spitter_next_pulse_at = now + 4.0
+		_emit_player_pulse(200.0, 10, 950.0)
+	return velocity_out
+
+func _update_elite_support_behavior(direction: Vector2, distance: float, now: float) -> Vector2:
+	if now >= _elite_support_next_pulse_at:
+		_elite_support_next_pulse_at = now + 2.0
+		_emit_player_pulse(400.0, 15, 760.0)
+		_heal_allies_in_radius(400.0, 20)
+	if distance > 400.0:
+		return direction * move_speed
+	if distance < 100.0:
+		return -direction * move_speed
+	if distance > preferred_distance + 50.0:
+		return direction * move_speed * 0.75
+	if distance < preferred_distance - 50.0:
+		return -direction * move_speed * 0.55
+	return Vector2(-direction.y, direction.x) * move_speed * _circle_sign * 0.62
+
 func _emit_projectile_burst(base_direction: Vector2) -> void:
 	var normalized_direction := base_direction.normalized()
 	if normalized_direction.length() <= 0.0:
 		return
-
 	for projectile_direction in _build_spread_directions(normalized_direction, _projectile_burst_count, _projectile_spread_radians):
 		fire_requested.emit(
 			global_position + projectile_direction * 20.0,
@@ -451,7 +616,6 @@ func _build_spread_directions(base_direction: Vector2, projectile_count: int, sp
 	if projectile_count <= 1 or spread_radians <= 0.0:
 		directions.append(base_direction)
 		return directions
-
 	var center_offset := (projectile_count - 1) * 0.5
 	for index in range(projectile_count):
 		var offset := (float(index) - center_offset) * spread_radians
@@ -463,20 +627,16 @@ func _get_closest_player(now: float):
 		return null
 	if _should_throttle_crowd_queries() and is_instance_valid(_cached_target) and _cached_target.is_alive() and now < _next_target_refresh_at:
 		return _cached_target
-
 	var players: Array = _combat_owner.get_active_players()
 	var best_player = null
 	var best_distance := INF
-
 	for player in players:
 		if not is_instance_valid(player):
 			continue
-
 		var distance := global_position.distance_to(player.global_position)
 		if distance < best_distance:
 			best_distance = distance
 			best_player = player
-
 	_cached_target = best_player
 	if _should_throttle_crowd_queries():
 		_next_target_refresh_at = now + TARGET_REFRESH_INTERVAL + float(get_instance_id() % 3) * 0.01
@@ -492,50 +652,50 @@ func _should_throttle_crowd_queries() -> bool:
 func _apply_type_visual() -> void:
 	if visual == null:
 		return
-
 	match enemy_type:
 		EnemyType.CHARGER:
 			visual.color = Color(1.0, 0.54, 0.12, 1.0)
-			visual.polygon = PackedVector2Array([
-				Vector2(0, -28),
-				Vector2(24, -10),
-				Vector2(18, 24),
-				Vector2(-18, 24),
-				Vector2(-24, -10),
-			])
+			visual.polygon = PackedVector2Array([Vector2(0, -28), Vector2(24, -10), Vector2(18, 24), Vector2(-18, 24), Vector2(-24, -10)])
 			visual.scale = Vector2(1.28, 1.28)
 			_set_collision_radius(28.0)
 			_contact_range = 38.0
+		EnemyType.SPITTER:
+			visual.color = Color(0.85, 0.35, 0.85, 1.0)
+			visual.polygon = _build_regular_polygon(6, 22.0)
+			visual.scale = Vector2.ONE
+			_set_collision_radius(22.0)
+			_contact_range = 30.0
 		EnemyType.BOSS:
 			visual.color = Color(0.92, 0.12, 0.16, 1.0)
 			visual.polygon = PackedVector2Array([
-				Vector2(0, -42),
-				Vector2(14, -34),
-				Vector2(24, -46),
-				Vector2(34, -28),
-				Vector2(48, -12),
-				Vector2(44, 22),
-				Vector2(26, 44),
-				Vector2(8, 50),
-				Vector2(-8, 50),
-				Vector2(-26, 44),
-				Vector2(-44, 22),
-				Vector2(-48, -12),
-				Vector2(-34, -28),
-				Vector2(-24, -46),
-				Vector2(-14, -34),
+				Vector2(0, -42), Vector2(14, -34), Vector2(24, -46), Vector2(34, -28), Vector2(48, -12),
+				Vector2(44, 22), Vector2(26, 44), Vector2(8, 50), Vector2(-8, 50), Vector2(-26, 44),
+				Vector2(-44, 22), Vector2(-48, -12), Vector2(-34, -28), Vector2(-24, -46), Vector2(-14, -34),
 			])
 			visual.scale = Vector2(1.5, 1.5)
 			_set_collision_radius(44.0)
 			_contact_range = 54.0
+		EnemyType.ELITE_CHARGER:
+			visual.color = Color(1.0, 0.85, 0.15, 1.0)
+			visual.polygon = _build_regular_polygon(6, 28.0)
+			visual.scale = Vector2(2.5, 2.5)
+			_set_collision_radius(65.0)
+			_contact_range = 78.0
+		EnemyType.ELITE_SPITTER:
+			visual.color = Color(0.2, 0.85, 0.95, 1.0)
+			visual.polygon = _build_regular_polygon(6, 22.0)
+			visual.scale = Vector2(1.6, 1.6)
+			_set_collision_radius(35.0)
+			_contact_range = 42.0
+		EnemyType.ELITE_SUPPORT:
+			visual.color = Color(0.7, 0.25, 0.9, 1.0)
+			visual.polygon = _build_regular_polygon(6, 24.0)
+			visual.scale = Vector2(1.8, 1.8)
+			_set_collision_radius(42.0)
+			_contact_range = 46.0
 		_:
 			visual.color = Color(1.0, 0.24, 0.2, 1.0)
-			visual.polygon = PackedVector2Array([
-				Vector2(0, -30),
-				Vector2(20, 12),
-				Vector2(0, 22),
-				Vector2(-20, 12),
-			])
+			visual.polygon = PackedVector2Array([Vector2(0, -30), Vector2(20, 12), Vector2(0, 22), Vector2(-20, 12)])
 			visual.scale = Vector2(0.78, 0.78)
 			_set_collision_radius(15.0)
 			_contact_range = 24.0
@@ -543,6 +703,13 @@ func _apply_type_visual() -> void:
 		outline.polygon = visual.polygon
 		outline.scale = visual.scale * 1.28
 		outline.color = Color(0.12, 0.02, 0.02, 0.94) if enemy_type == EnemyType.BOSS else Color(0.04, 0.06, 0.08, 0.92)
+
+func _build_regular_polygon(point_count: int, radius: float) -> PackedVector2Array:
+	var points := PackedVector2Array()
+	for index in range(point_count):
+		var angle := -PI * 0.5 + TAU * float(index) / float(point_count)
+		points.append(Vector2.RIGHT.rotated(angle) * radius)
+	return points
 
 func _set_collision_radius(radius: float) -> void:
 	if collision_shape == null:
@@ -574,6 +741,7 @@ func _current_time_seconds() -> float:
 
 func _die() -> void:
 	_is_dead = true
+	clear_aura()
 	velocity = Vector2.ZERO
 	_knockback_velocity = Vector2.ZERO
 	collision_layer = 0
@@ -597,7 +765,7 @@ func _play_flash(color: Color, duration: float) -> void:
 	_flash_tween.tween_property(flash_material, "shader_parameter/flash_intensity", 0.0, duration)
 
 func _play_charger_windup_telegraph() -> void:
-	_play_flash(Color(1.0, 1.0, 1.0, 1.0), 0.22)
+	_play_flash(Color.WHITE, 0.22)
 	_outline_pulse = 1.45
 	if body_root != null:
 		body_root.modulate = Color(1.18, 1.18, 1.18, 1.0)
@@ -633,21 +801,27 @@ func _apply_motion_polish(now: float, delta: float = 0.0) -> void:
 		EnemyType.CHASER:
 			bob_amount = 3.8
 			bob_frequency = 5.3
-		EnemyType.CHARGER:
+		EnemyType.CHARGER, EnemyType.ELITE_CHARGER:
 			bob_amount = 2.2
 			bob_frequency = 1.9
 		EnemyType.BOSS:
 			bob_amount = 5.8
 			bob_frequency = 1.6
+		EnemyType.SPITTER, EnemyType.ELITE_SPITTER:
+			bob_amount = 2.8
+			bob_frequency = 3.2
+		EnemyType.ELITE_SUPPORT:
+			bob_amount = 2.6
+			bob_frequency = 2.2
 	var bob := sin(now * bob_frequency + _idle_phase) * bob_amount
 	var squash_scale := Vector2.ONE
 	if enemy_type == EnemyType.CHASER and now < _lunge_windup_ends_at:
 		squash_scale = Vector2(1.18, 0.82)
 	elif enemy_type == EnemyType.CHASER and now < _lunge_ends_at:
 		squash_scale = Vector2(0.88, 1.24)
-	elif enemy_type == EnemyType.CHARGER and now < _charge_windup_ends_at:
+	elif (enemy_type == EnemyType.CHARGER or enemy_type == EnemyType.ELITE_CHARGER) and now < _charge_windup_ends_at:
 		squash_scale = Vector2(1.26, 0.76)
-	elif enemy_type == EnemyType.CHARGER and now < _charge_dash_ends_at:
+	elif (enemy_type == EnemyType.CHARGER or enemy_type == EnemyType.ELITE_CHARGER) and now < _charge_dash_ends_at:
 		squash_scale = Vector2(0.84, 1.30)
 	body_root.position = _base_body_root_position + Vector2(0.0, bob)
 	body_root.rotation = lerp_angle(body_root.rotation, clamp(velocity.x / max(move_speed, 1.0), -1.0, 1.0) * 0.08, 0.12)
@@ -687,4 +861,35 @@ func _reset_behavior_state() -> void:
 	_blocked_time = 0.0
 	_last_position = global_position
 	_detour_sign = -1.0 if int(get_instance_id() % 2) == 0 else 1.0
+	_circle_sign = -1.0 if int(get_instance_id() % 2) == 0 else 1.0
 	_next_attack_trail_at = 0.0
+	_elite_support_next_pulse_at = 0.0
+	_elite_spitter_next_pulse_at = 0.0
+	_elite_charger_use_slam = false
+
+func _emit_player_pulse(radius: float, damage: int, knockback_force: float) -> void:
+	if _combat_owner == null:
+		return
+	for player in _combat_owner.get_active_players():
+		if player == null or not is_instance_valid(player):
+			continue
+		var offset: Vector2 = player.global_position - global_position
+		if offset.length() > radius:
+			continue
+		player.apply_damage(damage)
+		if player.has_method("apply_knockback"):
+			player.apply_knockback(offset.normalized(), knockback_force)
+
+func _heal_allies_in_radius(radius: float, amount: int) -> void:
+	if _combat_owner == null or not _combat_owner.has_method("get_enemy_target_nodes"):
+		return
+	for enemy in _combat_owner.get_enemy_target_nodes():
+		if enemy == self or enemy == null or not is_instance_valid(enemy):
+			continue
+		if enemy.global_position.distance_to(global_position) > radius:
+			continue
+		if enemy.has_method("heal"):
+			enemy.heal(amount)
+
+func _emit_small_slam(radius: float, damage: int, knockback_force: float) -> void:
+	_emit_player_pulse(radius, damage, knockback_force)

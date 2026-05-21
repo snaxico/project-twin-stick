@@ -1,8 +1,19 @@
-# v3 Implementation Plan — Neon Auto-Attack Roguelite
+# v3 Implementation Plan — Historical Record
+
+## Status
+
+- This file is a historical implementation record.
+- It documents the migration into the auto-fire / shockwave / dash runtime direction.
+- Parts of it were implemented, but it is no longer the source of truth for current branch state.
+- Use these instead for active work:
+  - `docs/development/current-state.md`
+  - `docs/development/start-of-day.md`
+  - `docs/design/roadmap.md`
+  - `docs/process/architecture.md`
 
 ## Context
 
-Converting the live v2 branch to the v3 design described in `game-direction-v3.md`.
+Converting the live v2 branch to the design now summarized in `game-direction-current.md`.
 The v2 codebase is already simplified (1 weapon + 1 primary skill + 1 secondary skill, zoom camera, bigger arena, mutation system, hold zone objective). The v3 changes are mechanical (auto-attack, shockwave, dash) and visual (neon geometric), not architectural.
 
 ## Resolved Decisions

@@ -1,50 +1,91 @@
 # Prototype Roadmap
 
+## Scope Note
+
+- This roadmap tracks the active branch runtime on `v2/core-refactor`.
+- Older numbered patch docs are historical implementation records, not the current roadmap.
+- Feature-design sequencing lives in `docs/design/roadmap.md`.
+
+## Current Stage
+
+The project is past the old early patch sequence and is now in the validation-and-follow-up stage for the current branch runtime.
+
+What is already live:
+
+- node-map flow
+- combat / elite / rest / shop / boss structure
+- gold pickup economy
+- room-end mutation buying
+- auto-fire rifle combat
+- shockwave + dash skill loop
+- encounter builder entry path
+
+## Active Roadmap Order
+
+### 1. Validation And Balance
+Status: Active
+
+- validate complete runs in `1P` and `2P`
+- tune gold pacing
+- tune mutation-buy costs
+- tune elite difficulty and payout
+- tune rifle / shockwave / dash feel
+- validate shop usability and readability
+
+### 2. Mutation Rarity Split
+Status: Designed, not implemented
+
+- room-end picks become common-only
+- common mutations become upgradable
+- rare mutations move to elite/shop delivery
+
+Source of truth:
+- `docs/design/roadmap.md`
+
+### 3. Elite Reward Identity
+Status: Open design question
+
+- decide how elite rooms deliver rare mutations
+- keep elite rooms meaningfully distinct from normal combat rooms
+
+### 4. Side Objectives And Temporary Buffs
+Status: Designed, not implemented
+
+- optional room challenge layer
+- room-end temporary shared buffs
+- must improve positioning decisions without replacing combat
+
+### 5. Encounter Depth Reintroduction
+Status: Future
+
+- modifiers
+- better elite anchor threats
+- boss redesign
+
+### 6. Scale And Expansion
+Status: Deferred
+
+- `3-4` player support
+- broader content expansion
+- deeper meta systems
+
 ## Delivery Rule
 
-One patch equals one validated subsystem. Do not start the next patch until the current slice runs, is readable enough to judge, and is documented.
+One meaningful slice at a time:
 
-## Patch Order
+- design locked first
+- code implemented second
+- parse clean
+- live validated
+- docs updated in the same slice
 
-| Patch | Goal | Current Status |
-| --- | --- | --- |
-| Phase 0 | Project structure, docs, standards alignment, Git, readiness artifacts | Completed |
-| Patch 0 | Bounded room and Player 1 movement baseline | Implemented and interactively validated during development |
-| Patch 1 | Two players, aim, dash, aim assist, hot-plug tolerance | Implemented and interactively validated during development |
-| Patch 2 | Primary combat loop and first enemies | Implemented and interactively validated during development |
-| Patch 3 | Secondary slot and cooldown feedback | Implemented and interactively validated during development |
-| Patch 4 | Modifier engine and room telegraphing | Implemented and interactively validated during development |
-| Patch 5 | Node map, room flow, reward preview, `RunState` | Implemented and interactively validated during development |
-| Patch 6 | Shared loot and build differentiation | Implemented and interactively validated during development |
-| Patch 7 | Boss, revive flow, full run, first-playable validation | Implemented and interactively validated during development |
-| Patch 8 | Juice, audio, 3-4 player tuning, broader content | Implemented as an early baseline, broader validation and tuning still pending |
-| Patch 9 | Meta-progression and distribution | Meta-progression baseline implemented, export/distribution work still pending |
-| Patch 10 | Number scale, combat feel, loot presentation, and flow validation | Implemented in code; headless validation passes; follow-up remains live tuning and run-level readability checks |
-| Patch 11 | Melee-first enemy balance and survivability | Implemented in code; headless validation passes; follow-up remains live `Normal` run validation and sustain tuning |
-| Patch 12 | Icon-first UI pass | Implemented and interactively validated during development |
-| Patch 13 | Encounter identity through Bruiser, modifier tiers, obstacles, recipes, and telegraphed hazard rooms | Implemented in code through Patch 13B plus reliability/debug follow-ups; headless validation passes; follow-up remains live encounter-variety, telegraph readability, and anti-stuck validation |
+## Current Stop Condition
 
-## Validation Gate Per Patch
+Do not widen scope casually.
 
-- The project launches.
-- The changed behavior can be exercised directly.
-- Readability is good enough to judge.
-- Godot output is clean or any remaining noise is written down.
-- `docs/development/current-state.md` and the session history are updated.
-- Commit only after the slice passes its done-when condition.
+The next meaningful work should come from one of these:
 
-## Current Validation Note
+- live validation findings from the current loop
+- Tier 1 to Tier 4 items in `docs/design/roadmap.md`
 
-- The project was exercised interactively through these slices while development was in progress.
-- Headless Godot validation passes when launched through `Godot_v4.6.2-stable_win64_console.exe` inside the extracted Godot folder.
-- The strongest remaining runtime risk at pause is tuning and readability rather than basic flow breakage:
-  - meta-progression usability and unlock pacing
-  - `3–4` player pressure and HUD readability
-  - grenade readability and general combat clarity under stress
-  - boss pacing and revive fairness
-  - full-run duration tuning toward the intended `10–15` minute target
-- Patch 9 now has a persistence baseline, but export and distribution flow are still not implemented.
-- Patch 10 landed the base-10 combat scale, stronger hit/kill feedback, and loot presentation polish without widening system scope.
-- Patch 11 shifted wave composition and sustain toward melee-first pressure with rarer `Spitter` presence and combat food drops.
-- Patch 12 replaced text-heavy combat/reward UI surfaces with icon-first presentation using procedural placeholder icons plus real-sprite fallback.
-- Patch 13 adds a new melee tank, progression-gated modifier pools, obstacle layouts, recipe-driven room generation, telegraphed encounter hazards, stronger Swarm pacing, generator-safe obstacle placement, and broader debug coverage to make rooms feel more designed and testable.
+Anything outside that should be treated as deliberate expansion, not background maintenance.
