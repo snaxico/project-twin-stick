@@ -30,6 +30,15 @@ var trail_lifetime: float = 1.5
 var trail_tick_interval: float = 0.5
 var trail_damage_percent: float = 0.3
 var knockback_force: float = 0.0
+var explosion_radius: float = 0.0
+var explosion_damage_percent: float = 0.0
+var slow_multiplier: float = 1.0
+var slow_duration: float = 0.0
+var poison_dps: float = 0.0
+var poison_duration: float = 0.0
+var rapid_fire_level: int = 0
+var velocity_level: int = 0
+var knockback_level: int = 0
 var source_type: String = "projectile"
 var weapon_id: String = ""
 var weapon_tags: Array = []
@@ -69,6 +78,15 @@ func setup(projectile_team: String, projectile_direction: Vector2, projectile_sp
 	trail_tick_interval = 0.5
 	trail_damage_percent = 0.3
 	knockback_force = 0.0
+	explosion_radius = 0.0
+	explosion_damage_percent = 0.0
+	slow_multiplier = 1.0
+	slow_duration = 0.0
+	poison_dps = 0.0
+	poison_duration = 0.0
+	rapid_fire_level = 0
+	velocity_level = 0
+	knockback_level = 0
 	source_type = "projectile"
 	weapon_id = ""
 	weapon_tags = []
@@ -98,6 +116,15 @@ func setup_from_config(projectile_team: String, projectile_direction: Vector2, c
 	trail_tick_interval = max(0.1, float(config.get("trail_tick_interval", trail_tick_interval)))
 	trail_damage_percent = max(0.0, float(config.get("trail_damage_percent", trail_damage_percent)))
 	knockback_force = max(0.0, float(config.get("knockback_force", knockback_force)))
+	explosion_radius = max(0.0, float(config.get("explosion_radius", explosion_radius)))
+	explosion_damage_percent = max(0.0, float(config.get("explosion_damage_percent", explosion_damage_percent)))
+	slow_multiplier = clampf(float(config.get("slow_multiplier", slow_multiplier)), 0.1, 1.0)
+	slow_duration = max(0.0, float(config.get("slow_duration", slow_duration)))
+	poison_dps = max(0.0, float(config.get("poison_dps", poison_dps)))
+	poison_duration = max(0.0, float(config.get("poison_duration", poison_duration)))
+	rapid_fire_level = max(0, int(config.get("rapid_fire_level", rapid_fire_level)))
+	velocity_level = max(0, int(config.get("velocity_level", velocity_level)))
+	knockback_level = max(0, int(config.get("knockback_level", knockback_level)))
 	source_type = str(config.get("source_type", source_type))
 	weapon_id = str(config.get("weapon_id", weapon_id))
 	weapon_tags = (config.get("weapon_tags", []) as Array).duplicate(true)
@@ -172,6 +199,10 @@ func _attempt_hit_target(target: Node) -> void:
 	elif target.has_method("apply_knockback"):
 		target.apply_knockback(direction, 180.0 + impact_weight * 90.0)
 	target.apply_damage(damage)
+	if slow_duration > 0.0 and target.has_method("apply_slow"):
+		target.apply_slow(slow_multiplier, slow_duration)
+	if poison_duration > 0.0 and poison_dps > 0.0 and target.has_method("apply_poison"):
+		target.apply_poison(poison_dps, poison_duration)
 	_hit_targets.append(target)
 	impact_requested.emit(global_position, -direction, team, _get_projectile_color(), feedback_profile, impact_weight, target, _build_combat_context(target))
 	if pierce_remaining > 0:
@@ -215,18 +246,19 @@ func _apply_visual_state() -> void:
 	var projectile_color: Color = _get_projectile_color()
 	var enemy_shot: bool = team == "enemy"
 	var size_scale: float = maxf(collision_half_width / BASE_COLLISION_HALF_WIDTH, 0.25)
+	var streak_scale: float = 1.0 + 0.18 * float(max(rapid_fire_level - 1, 0)) + 0.22 * float(max(velocity_level - 1, 0))
 	if enemy_shot:
 		visual.color = projectile_color.lightened(0.18)
-		visual.scale = _base_visual_scale * 1.36 * size_scale
+		visual.scale = Vector2(_base_visual_scale.x * 1.36 * size_scale * streak_scale, _base_visual_scale.y * 1.36 * size_scale)
 		visual.polygon = _build_orb_polygon(8.0)
 	else:
 		visual.color = projectile_color.lightened(0.05)
-		visual.scale = _base_visual_scale * 1.18 * size_scale
+		visual.scale = Vector2(_base_visual_scale.x * 1.18 * size_scale * streak_scale, _base_visual_scale.y * 1.18 * size_scale)
 		visual.polygon = _build_orb_polygon(6.0)
 	if outline != null:
 		outline.visible = true
 		outline.color = Color(1.0, 0.94, 0.88, 0.92) if enemy_shot else projectile_color.lightened(0.26)
-		outline.scale = visual.scale * 1.24
+		outline.scale = Vector2(visual.scale.x * 1.16, visual.scale.y * 1.24)
 		outline.polygon = visual.polygon
 	if collision_shape != null and collision_shape.shape is CircleShape2D:
 		(collision_shape.shape as CircleShape2D).radius = _base_collision_radius * size_scale
@@ -235,6 +267,8 @@ func _get_projectile_color() -> Color:
 	return tint_color
 
 func _should_spawn_trail_particles() -> bool:
+	if rapid_fire_level < 2 and velocity_level < 2:
+		return false
 	var parent_node := get_parent()
 	if parent_node == null:
 		return false
@@ -267,4 +301,13 @@ func _build_combat_context(target: Node) -> Dictionary:
 		"is_tick": false,
 		"source_type": source_type,
 		"trigger_passives": trigger_passives,
+		"rapid_fire_level": rapid_fire_level,
+		"velocity_level": velocity_level,
+		"knockback_level": knockback_level,
+		"explosion_radius": explosion_radius,
+		"explosion_damage": int(round(float(damage) * explosion_damage_percent)),
+		"slow_multiplier": slow_multiplier,
+		"slow_duration": slow_duration,
+		"poison_dps": poison_dps,
+		"poison_duration": poison_duration,
 	}

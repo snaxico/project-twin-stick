@@ -4,81 +4,71 @@
       "id": "accelerating_waves",
       "name": "Accelerating Waves",
       "category": "minor",
-      "gold_bonus": 0.15,
-      "description": "Enemy waves accelerate over time."
+      "delivery_type": "passive",
+      "description": "Wave pressure ramps hard over the first 20-25 seconds."
     },
     {
-      "id": "enemy_faster",
+      "id": "enemy_speed",
       "name": "Enemy Speed",
       "category": "minor",
-      "gold_bonus": 0.15,
+      "delivery_type": "passive",
       "description": "Enemies move and attack 33% faster."
     },
     {
-      "id": "spitter_swarm",
-      "name": "Spitter Swarm",
+      "id": "swarm",
+      "name": "Swarm",
       "category": "minor",
-      "gold_bonus": 0.15,
-      "description": "Ranged enemies dominate the spawn pool."
+      "delivery_type": "passive",
+      "description": "Double enemy count, half enemy HP."
+    },
+    {
+      "id": "shielded",
+      "name": "Shielded",
+      "category": "minor",
+      "delivery_type": "passive",
+      "description": "Enemies spawn with a one-hit shield bubble."
+    },
+    {
+      "id": "explosive_death",
+      "name": "Explosive Death",
+      "category": "minor",
+      "delivery_type": "passive",
+      "description": "Enemies explode when they die."
     },
     {
       "id": "fire_floor",
       "name": "Fire Floor",
       "category": "major",
-      "gold_bonus": 0.3,
-      "description": "Arena quadrants periodically ignite."
+      "delivery_type": "random_zones",
+      "description": "Random fire patches ignite after a short warning."
     },
     {
       "id": "ice_zone",
       "name": "Ice Zone",
       "category": "major",
-      "gold_bonus": 0.3,
-      "description": "Arena quadrants periodically freeze."
+      "delivery_type": "kill_triggered",
+      "description": "Enemy deaths leave slowing ice patches."
     },
     {
       "id": "mine_field",
       "name": "Mine Field",
       "category": "major",
-      "gold_bonus": 0.3,
-      "description": "Mines spawn in rotating quadrants."
+      "delivery_type": "sweep",
+      "description": "Telegraphed mine lanes sweep across the arena."
+    },
+    {
+      "id": "gravity_wells",
+      "name": "Gravity Wells",
+      "category": "major",
+      "delivery_type": "random_placement",
+      "description": "Gravity wells pull players and enemies toward their centers."
+    },
+    {
+      "id": "shrinking_arena",
+      "name": "Shrinking Arena",
+      "category": "major",
+      "delivery_type": "progressive",
+      "description": "Arena walls slowly close in over time."
     }
-  ],
-  "valid_combat_combinations": [
-    [],
-    ["accelerating_waves"],
-    ["enemy_faster"],
-    ["spitter_swarm"],
-    ["fire_floor"],
-    ["ice_zone"],
-    ["mine_field"],
-    ["accelerating_waves", "fire_floor"],
-    ["accelerating_waves", "ice_zone"],
-    ["accelerating_waves", "mine_field"],
-    ["enemy_faster", "fire_floor"],
-    ["enemy_faster", "ice_zone"],
-    ["enemy_faster", "mine_field"],
-    ["spitter_swarm", "fire_floor"],
-    ["spitter_swarm", "ice_zone"],
-    ["spitter_swarm", "mine_field"]
-  ],
-  "valid_elite_combinations": [
-    ["accelerating_waves", "fire_floor"],
-    ["accelerating_waves", "ice_zone"],
-    ["accelerating_waves", "mine_field"],
-    ["enemy_faster", "fire_floor"],
-    ["enemy_faster", "ice_zone"],
-    ["enemy_faster", "mine_field"],
-    ["spitter_swarm", "fire_floor"],
-    ["spitter_swarm", "ice_zone"],
-    ["spitter_swarm", "mine_field"],
-    ["accelerating_waves", "enemy_faster", "fire_floor"],
-    ["accelerating_waves", "enemy_faster", "ice_zone"],
-    ["accelerating_waves", "enemy_faster", "mine_field"],
-    ["accelerating_waves", "spitter_swarm", "fire_floor"],
-    ["accelerating_waves", "spitter_swarm", "ice_zone"],
-    ["accelerating_waves", "spitter_swarm", "mine_field"],
-    ["enemy_faster", "spitter_swarm", "fire_floor"],
-    ["enemy_faster", "spitter_swarm", "ice_zone"],
-    ["enemy_faster", "spitter_swarm", "mine_field"]
   ]
 }

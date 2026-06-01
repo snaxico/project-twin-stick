@@ -19,12 +19,12 @@ var _max_health: int = 1
 var _health_ratio: float = 1.0
 var _is_downed := false
 var _low_health_phase := 0.0
-var _shockwave_cooldown_remaining := 0.0
-var _shockwave_cooldown_duration := 1.0
-var _dash_cooldown_remaining := 0.0
-var _dash_cooldown_duration := 1.0
-var _shockwave_ready_pulse := 0.0
-var _dash_ready_pulse := 0.0
+var _slot_1_cooldown_remaining := 0.0
+var _slot_1_cooldown_duration := 1.0
+var _slot_2_cooldown_remaining := 0.0
+var _slot_2_cooldown_duration := 1.0
+var _slot_1_ready_pulse := 0.0
+var _slot_2_ready_pulse := 0.0
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -36,40 +36,40 @@ func configure_player(tint: Color) -> void:
 	set_process(false)
 	queue_redraw()
 
-func update_state(current_health: int, max_health: int, is_downed: bool, shockwave_cooldown_remaining: float, shockwave_cooldown_duration: float, dash_cooldown_remaining: float, dash_cooldown_duration: float) -> void:
-	var previous_shockwave_remaining := _shockwave_cooldown_remaining
-	var previous_dash_remaining := _dash_cooldown_remaining
+func update_state(current_health: int, max_health: int, is_downed: bool, slot_1_cooldown_remaining: float, slot_1_cooldown_duration: float, slot_2_cooldown_remaining: float, slot_2_cooldown_duration: float) -> void:
+	var previous_slot_1_remaining := _slot_1_cooldown_remaining
+	var previous_slot_2_remaining := _slot_2_cooldown_remaining
 	_current_health = max(current_health, 0)
 	_max_health = max(max_health, 1)
 	_is_downed = is_downed
 	_health_ratio = clampf(float(_current_health) / float(_max_health), 0.0, 1.0)
-	_shockwave_cooldown_duration = maxf(shockwave_cooldown_duration, 0.01)
-	_shockwave_cooldown_remaining = clampf(shockwave_cooldown_remaining, 0.0, _shockwave_cooldown_duration)
-	_dash_cooldown_duration = maxf(dash_cooldown_duration, 0.01)
-	_dash_cooldown_remaining = clampf(dash_cooldown_remaining, 0.0, _dash_cooldown_duration)
-	if previous_shockwave_remaining > 0.0 and _shockwave_cooldown_remaining <= 0.0:
-		_shockwave_ready_pulse = READY_PULSE_DURATION
-	if previous_dash_remaining > 0.0 and _dash_cooldown_remaining <= 0.0:
-		_dash_ready_pulse = READY_PULSE_DURATION
-	visible = _is_downed or _current_health < _max_health or _shockwave_cooldown_remaining > 0.0 or _dash_cooldown_remaining > 0.0 or _shockwave_ready_pulse > 0.0 or _dash_ready_pulse > 0.0
-	set_process(visible and (_is_downed or _health_ratio <= LOW_HEALTH_THRESHOLD or _shockwave_ready_pulse > 0.0 or _dash_ready_pulse > 0.0))
+	_slot_1_cooldown_duration = maxf(slot_1_cooldown_duration, 0.01)
+	_slot_1_cooldown_remaining = clampf(slot_1_cooldown_remaining, 0.0, _slot_1_cooldown_duration)
+	_slot_2_cooldown_duration = maxf(slot_2_cooldown_duration, 0.01)
+	_slot_2_cooldown_remaining = clampf(slot_2_cooldown_remaining, 0.0, _slot_2_cooldown_duration)
+	if previous_slot_1_remaining > 0.0 and _slot_1_cooldown_remaining <= 0.0:
+		_slot_1_ready_pulse = READY_PULSE_DURATION
+	if previous_slot_2_remaining > 0.0 and _slot_2_cooldown_remaining <= 0.0:
+		_slot_2_ready_pulse = READY_PULSE_DURATION
+	visible = _is_downed or _current_health < _max_health or _slot_1_cooldown_remaining > 0.0 or _slot_2_cooldown_remaining > 0.0 or _slot_1_ready_pulse > 0.0 or _slot_2_ready_pulse > 0.0
+	set_process(visible and (_is_downed or _health_ratio <= LOW_HEALTH_THRESHOLD or _slot_1_ready_pulse > 0.0 or _slot_2_ready_pulse > 0.0))
 	queue_redraw()
 
 func _process(delta: float) -> void:
 	if _is_downed or _health_ratio <= LOW_HEALTH_THRESHOLD:
 		_low_health_phase += delta * 5.0
-	if _shockwave_ready_pulse > 0.0:
-		_shockwave_ready_pulse = maxf(0.0, _shockwave_ready_pulse - delta)
-	if _dash_ready_pulse > 0.0:
-		_dash_ready_pulse = maxf(0.0, _dash_ready_pulse - delta)
-	visible = _is_downed or _current_health < _max_health or _shockwave_cooldown_remaining > 0.0 or _dash_cooldown_remaining > 0.0 or _shockwave_ready_pulse > 0.0 or _dash_ready_pulse > 0.0
-	set_process(_is_downed or _health_ratio <= LOW_HEALTH_THRESHOLD or _shockwave_ready_pulse > 0.0 or _dash_ready_pulse > 0.0)
+	if _slot_1_ready_pulse > 0.0:
+		_slot_1_ready_pulse = maxf(0.0, _slot_1_ready_pulse - delta)
+	if _slot_2_ready_pulse > 0.0:
+		_slot_2_ready_pulse = maxf(0.0, _slot_2_ready_pulse - delta)
+	visible = _is_downed or _current_health < _max_health or _slot_1_cooldown_remaining > 0.0 or _slot_2_cooldown_remaining > 0.0 or _slot_1_ready_pulse > 0.0 or _slot_2_ready_pulse > 0.0
+	set_process(_is_downed or _health_ratio <= LOW_HEALTH_THRESHOLD or _slot_1_ready_pulse > 0.0 or _slot_2_ready_pulse > 0.0)
 	if visible:
 		queue_redraw()
 
 func _draw() -> void:
-	if _shockwave_cooldown_remaining > 0.0:
-		var ready_ratio := clampf((_shockwave_cooldown_duration - _shockwave_cooldown_remaining) / _shockwave_cooldown_duration, 0.0, 1.0)
+	if _slot_1_cooldown_remaining > 0.0:
+		var ready_ratio := clampf((_slot_1_cooldown_duration - _slot_1_cooldown_remaining) / _slot_1_cooldown_duration, 0.0, 1.0)
 		var end_angle := -PI * 0.5 + TAU * ready_ratio
 		draw_arc(
 			COOLDOWN_ARC_CENTER,
@@ -80,8 +80,8 @@ func _draw() -> void:
 			Color(_tint.r, _tint.g, _tint.b, 0.42),
 			COOLDOWN_ARC_WIDTH
 		)
-	elif _shockwave_ready_pulse > 0.0:
-		var pulse_alpha := clampf(_shockwave_ready_pulse / READY_PULSE_DURATION, 0.0, 1.0)
+	elif _slot_1_ready_pulse > 0.0:
+		var pulse_alpha := clampf(_slot_1_ready_pulse / READY_PULSE_DURATION, 0.0, 1.0)
 		draw_arc(
 			COOLDOWN_ARC_CENTER,
 			COOLDOWN_ARC_RADIUS,
@@ -92,8 +92,8 @@ func _draw() -> void:
 			COOLDOWN_ARC_WIDTH + 1.0
 		)
 
-	if _dash_cooldown_remaining > 0.0:
-		var dash_ready_ratio := clampf((_dash_cooldown_duration - _dash_cooldown_remaining) / _dash_cooldown_duration, 0.0, 1.0)
+	if _slot_2_cooldown_remaining > 0.0:
+		var dash_ready_ratio := clampf((_slot_2_cooldown_duration - _slot_2_cooldown_remaining) / _slot_2_cooldown_duration, 0.0, 1.0)
 		var dash_start := PI * 0.12
 		var dash_end := dash_start + PI * 0.76 * dash_ready_ratio
 		draw_arc(
@@ -102,11 +102,11 @@ func _draw() -> void:
 			dash_start,
 			dash_end,
 			14,
-			Color(1.0, 0.48, 0.82, 0.36),
+			Color(1.0, 0.48, 0.82, 0.42),
 			DASH_ARC_WIDTH
 		)
-	elif _dash_ready_pulse > 0.0:
-		var dash_pulse_alpha := clampf(_dash_ready_pulse / READY_PULSE_DURATION, 0.0, 1.0)
+	elif _slot_2_ready_pulse > 0.0:
+		var dash_pulse_alpha := clampf(_slot_2_ready_pulse / READY_PULSE_DURATION, 0.0, 1.0)
 		draw_arc(
 			COOLDOWN_ARC_CENTER,
 			DASH_ARC_RADIUS,

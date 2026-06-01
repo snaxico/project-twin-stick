@@ -7,7 +7,7 @@ const MAX_MUTATION_CHIPS := 6
 
 var _style: StyleBoxFlat = null
 var _player_label: Label = null
-var _gold_label: Label = null
+var _summary_label: Label = null
 var _weapon_icon: TextureRect = null
 var _primary_icon: TextureRect = null
 var _dash_icon: TextureRect = null
@@ -28,7 +28,7 @@ func configure_player(player_label: String, tint: Color) -> void:
 func update_row(data: Dictionary) -> void:
 	if _player_label == null:
 		_build()
-	_gold_label.text = "%dg" % int(data.get("gold", 0))
+	_summary_label.text = str(data.get("summary_text", ""))
 	_weapon_icon.texture = IconFactoryData.get_weapon_icon(str(data.get("weapon_id", "rifle")))
 	_primary_icon.texture = IconFactoryData.get_weapon_icon(str(data.get("primary_skill_id", "shockwave")))
 	_dash_icon.texture = IconFactoryData.get_weapon_icon("dash")
@@ -56,10 +56,10 @@ func _build() -> void:
 	_player_label.add_theme_font_size_override("font_size", 13)
 	row.add_child(_player_label)
 
-	_gold_label = Label.new()
-	_gold_label.add_theme_font_size_override("font_size", 14)
-	_gold_label.add_theme_color_override("font_color", Color(1.0, 0.85, 0.2, 0.95))
-	row.add_child(_gold_label)
+	_summary_label = Label.new()
+	_summary_label.add_theme_font_size_override("font_size", 14)
+	_summary_label.add_theme_color_override("font_color", Color(0.76, 0.9, 1.0, 0.95))
+	row.add_child(_summary_label)
 
 	_weapon_icon = _build_icon(18.0)
 	row.add_child(_weapon_icon)

@@ -114,7 +114,7 @@ static func _build_weapon_icon(weapon_id: String) -> Texture2D:
 	image.fill(Color(0.0, 0.0, 0.0, 0.0))
 	if weapon_id.contains("mine"):
 		_draw_secondary_icon(image, weapon_id)
-	elif weapon_id.contains("shockwave") or weapon_id == "dash":
+	elif weapon_id.contains("shockwave") or weapon_id == "dash" or weapon_id == "blink" or weapon_id == "shield" or weapon_id == "decoy" or weapon_id == "orbit":
 		_draw_secondary_icon(image, weapon_id)
 	else:
 		_draw_primary_icon(image, weapon_id)
@@ -165,18 +165,39 @@ static func _build_mutation_icon(mutation_id: String) -> Texture2D:
 			_draw_line_thick(image, Vector2(18.0, 22.0), Vector2(46.0, 22.0), 3.0, Color(0.08, 0.1, 0.14, 0.9))
 			_draw_line_thick(image, Vector2(18.0, 32.0), Vector2(46.0, 32.0), 3.0, Color(0.08, 0.1, 0.14, 0.9))
 			_draw_line_thick(image, Vector2(18.0, 42.0), Vector2(46.0, 42.0), 3.0, Color(0.08, 0.1, 0.14, 0.9))
-		"blast_radius", "shockwave_radius", "skill_range":
+		"blast_radius", "shockwave_radius", "skill_range", "wide_pulse":
 			_draw_ring(image, Vector2(32.0, 32.0), 16.0, 4.0, Color(0.08, 0.1, 0.14, 0.9))
-		"extra_charge", "shockwave_cooldown", "skill_cooldown":
+		"extra_charge", "shockwave_cooldown", "skill_cooldown", "quick_reflexes":
 			_draw_line_thick(image, Vector2(22.0, 20.0), Vector2(22.0, 44.0), 4.0, Color(0.08, 0.1, 0.14, 0.9))
 			_draw_line_thick(image, Vector2(42.0, 20.0), Vector2(42.0, 44.0), 4.0, Color(0.08, 0.1, 0.14, 0.9))
-		"dash_damage":
-			_draw_line_thick(image, Vector2(18.0, 44.0), Vector2(34.0, 20.0), 4.0, Color(0.08, 0.1, 0.14, 0.9))
-			_draw_line_thick(image, Vector2(34.0, 20.0), Vector2(46.0, 28.0), 4.0, Color(0.08, 0.1, 0.14, 0.9))
+		"velocity":
+			_draw_line_thick(image, Vector2(16.0, 36.0), Vector2(48.0, 20.0), 4.0, Color(0.08, 0.1, 0.14, 0.9))
+			_draw_line_thick(image, Vector2(22.0, 44.0), Vector2(52.0, 28.0), 3.0, Color(0.08, 0.1, 0.14, 0.78))
 		"knockback":
 			_draw_line_thick(image, Vector2(22.0, 32.0), Vector2(42.0, 32.0), 4.0, Color(0.08, 0.1, 0.14, 0.9))
 			_draw_line_thick(image, Vector2(22.0, 24.0), Vector2(14.0, 32.0), 4.0, Color(0.08, 0.1, 0.14, 0.9))
 			_draw_line_thick(image, Vector2(22.0, 40.0), Vector2(14.0, 32.0), 4.0, Color(0.08, 0.1, 0.14, 0.9))
+		"duration":
+			_draw_ring(image, Vector2(32.0, 32.0), 14.0, 3.0, Color(0.08, 0.1, 0.14, 0.9))
+			_draw_line_thick(image, Vector2(32.0, 18.0), Vector2(32.0, 32.0), 3.0, Color(0.08, 0.1, 0.14, 0.9))
+			_draw_line_thick(image, Vector2(32.0, 32.0), Vector2(42.0, 40.0), 3.0, Color(0.08, 0.1, 0.14, 0.9))
+		"move_speed":
+			_draw_line_thick(image, Vector2(18.0, 42.0), Vector2(44.0, 22.0), 4.0, Color(0.08, 0.1, 0.14, 0.9))
+			_draw_line_thick(image, Vector2(28.0, 42.0), Vector2(54.0, 22.0), 3.0, Color(0.08, 0.1, 0.14, 0.72))
+		"tough":
+			_draw_triangle(image, Vector2(32.0, 18.0), Vector2(44.0, 40.0), Vector2(20.0, 40.0), Color(0.08, 0.1, 0.14, 0.92))
+		"explosive_rounds":
+			_draw_ring(image, Vector2(32.0, 32.0), 10.0, 3.0, Color(0.08, 0.1, 0.14, 0.9))
+			_draw_line_thick(image, Vector2(32.0, 16.0), Vector2(32.0, 48.0), 3.0, Color(0.08, 0.1, 0.14, 0.9))
+			_draw_line_thick(image, Vector2(16.0, 32.0), Vector2(48.0, 32.0), 3.0, Color(0.08, 0.1, 0.14, 0.9))
+		"freeze_shot":
+			_draw_line_thick(image, Vector2(32.0, 14.0), Vector2(32.0, 50.0), 3.0, Color(0.08, 0.1, 0.14, 0.9))
+			_draw_line_thick(image, Vector2(16.0, 32.0), Vector2(48.0, 32.0), 3.0, Color(0.08, 0.1, 0.14, 0.9))
+			_draw_line_thick(image, Vector2(20.0, 20.0), Vector2(44.0, 44.0), 3.0, Color(0.08, 0.1, 0.14, 0.9))
+			_draw_line_thick(image, Vector2(44.0, 20.0), Vector2(20.0, 44.0), 3.0, Color(0.08, 0.1, 0.14, 0.9))
+		"poison":
+			_draw_triangle(image, Vector2(32.0, 18.0), Vector2(44.0, 40.0), Vector2(20.0, 40.0), Color(0.08, 0.1, 0.14, 0.9))
+			_draw_filled_circle(image, Vector2(32.0, 44.0), 5.0, Color(0.08, 0.1, 0.14, 0.9))
 		_:
 			_draw_filled_circle(image, Vector2(32.0, 32.0), 8.0, Color(0.08, 0.1, 0.14, 0.9))
 	return ImageTexture.create_from_image(image)
@@ -184,6 +205,10 @@ static func _build_mutation_icon(mutation_id: String) -> Texture2D:
 static func _draw_primary_icon(image: Image, weapon_id: String) -> void:
 	var base_color: Color = Color(0.56, 0.7, 0.92, 1.0)
 	match weapon_id:
+		"overcharge":
+			base_color = Color(1.0, 0.78, 0.26, 1.0)
+		"turret":
+			base_color = Color(0.62, 0.9, 1.0, 1.0)
 		"incinerator":
 			base_color = Color(0.96, 0.55, 0.15, 1.0)
 		"beam_lance":
@@ -193,6 +218,12 @@ static func _draw_primary_icon(image: Image, weapon_id: String) -> void:
 	_draw_rounded_rect(image, Rect2(10.0, 16.0, 44.0, 32.0), 8.0, base_color)
 	_draw_rounded_rect_outline(image, Rect2(10.0, 16.0, 44.0, 32.0), 8.0, Color(0.08, 0.1, 0.14, 0.9), 2.0)
 	match weapon_id:
+		"overcharge":
+			_draw_line_thick(image, Vector2(18.0, 32.0), Vector2(46.0, 32.0), 3.0, Color(1.0, 0.96, 0.8, 0.92))
+			_draw_line_thick(image, Vector2(26.0, 18.0), Vector2(34.0, 46.0), 3.0, Color(1.0, 0.96, 0.8, 0.92))
+		"turret":
+			_draw_ring(image, Vector2(28.0, 32.0), 8.0, 3.0, Color(0.98, 1.0, 1.0, 0.92))
+			_draw_line_thick(image, Vector2(28.0, 32.0), Vector2(48.0, 24.0), 3.0, Color(0.98, 1.0, 1.0, 0.92))
 		"incinerator":
 			_draw_triangle(image, Vector2(26.0, 17.0), Vector2(32.0, 8.0), Vector2(38.0, 17.0), Color(1.0, 0.84, 0.35, 0.95))
 		"beam_lance":
@@ -215,6 +246,14 @@ static func _draw_secondary_icon(image: Image, weapon_id: String) -> void:
 	match weapon_id:
 		"dash":
 			base_color = Color(1.0, 0.48, 0.82, 1.0)
+		"blink":
+			base_color = Color(0.62, 0.84, 1.0, 1.0)
+		"shield":
+			base_color = Color(0.4, 0.96, 0.9, 1.0)
+		"decoy":
+			base_color = Color(0.82, 0.82, 1.0, 1.0)
+		"orbit":
+			base_color = Color(0.54, 0.88, 1.0, 1.0)
 		"shockwave":
 			base_color = Color(0.38, 0.86, 1.0, 1.0)
 		"mine":
@@ -230,6 +269,20 @@ static func _draw_secondary_icon(image: Image, weapon_id: String) -> void:
 			_draw_line_thick(image, Vector2(18.0, 40.0), Vector2(30.0, 26.0), 4.0, Color(0.08, 0.1, 0.14, 0.92))
 			_draw_line_thick(image, Vector2(30.0, 26.0), Vector2(44.0, 20.0), 4.0, Color(0.08, 0.1, 0.14, 0.92))
 			_draw_line_thick(image, Vector2(30.0, 26.0), Vector2(38.0, 42.0), 4.0, Color(0.08, 0.1, 0.14, 0.88))
+		"blink":
+			_draw_line_thick(image, Vector2(18.0, 42.0), Vector2(32.0, 18.0), 4.0, Color(0.08, 0.1, 0.14, 0.92))
+			_draw_line_thick(image, Vector2(32.0, 18.0), Vector2(46.0, 42.0), 3.0, Color(0.08, 0.1, 0.14, 0.82))
+		"shield":
+			_draw_ring(image, Vector2(32.0, 34.0), 18.0, 3.0, Color(0.08, 0.1, 0.14, 0.92))
+			_draw_triangle(image, Vector2(24.0, 26.0), Vector2(40.0, 26.0), Vector2(32.0, 42.0), Color(0.08, 0.1, 0.14, 0.9))
+		"decoy":
+			_draw_line_thick(image, Vector2(24.0, 20.0), Vector2(24.0, 46.0), 3.0, Color(0.08, 0.1, 0.14, 0.9))
+			_draw_line_thick(image, Vector2(40.0, 20.0), Vector2(40.0, 46.0), 3.0, Color(0.08, 0.1, 0.14, 0.54))
+		"orbit":
+			_draw_ring(image, Vector2(32.0, 34.0), 14.0, 2.0, Color(0.08, 0.1, 0.14, 0.9))
+			_draw_filled_circle(image, Vector2(32.0, 18.0), 4.0, Color(0.08, 0.1, 0.14, 0.9))
+			_draw_filled_circle(image, Vector2(20.0, 42.0), 4.0, Color(0.08, 0.1, 0.14, 0.9))
+			_draw_filled_circle(image, Vector2(44.0, 42.0), 4.0, Color(0.08, 0.1, 0.14, 0.9))
 		"shockwave":
 			_draw_ring(image, Vector2(32.0, 34.0), 18.0, 3.0, Color(0.08, 0.1, 0.14, 0.92))
 			_draw_ring(image, Vector2(32.0, 34.0), 10.0, 3.0, Color(0.08, 0.1, 0.14, 0.86))

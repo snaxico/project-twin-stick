@@ -1,0 +1,118 @@
+{
+  "abilities": [
+    {
+      "id": "shockwave",
+      "name": "Shockwave",
+      "description": "AOE blast around the player that pushes enemies back and destroys enemy projectiles.",
+      "type": "instant",
+      "cooldown": 5.0,
+      "duration": 0.0,
+      "stats": {
+        "damage": 30.0,
+        "radius": 250.0,
+        "knockback_force": 950.0,
+        "expand_duration": 0.15
+      }
+    },
+    {
+      "id": "dash",
+      "name": "Dash",
+      "description": "Quick directional dodge with i-frames.",
+      "type": "movement",
+      "cooldown": 3.0,
+      "duration": 0.2,
+      "stats": {
+        "dash_speed": 1180.0,
+        "invulnerability_duration": 0.2,
+        "trail_weight": 1.0
+      }
+    },
+    {
+      "id": "overcharge",
+      "name": "Overcharge",
+      "description": "Weapon fires at double rate and double projectiles for a short burst.",
+      "type": "sustained",
+      "cooldown": 15.0,
+      "duration": 4.0,
+      "stats": {
+        "fire_rate_multiplier": 2.0,
+        "projectile_multiplier": 2
+      }
+    },
+    {
+      "id": "blink",
+      "name": "Blink",
+      "description": "Instant short-range teleport in your movement direction.",
+      "type": "movement",
+      "cooldown": 4.0,
+      "duration": 0.0,
+      "stats": {
+        "distance": 240.0
+      }
+    },
+    {
+      "id": "shield",
+      "name": "Shield",
+      "description": "Blocks all damage for a short duration but prevents attacking.",
+      "type": "sustained",
+      "cooldown": 12.0,
+      "duration": 3.0,
+      "stats": {
+        "radius": 78.0
+      }
+    },
+    {
+      "id": "decoy",
+      "name": "Decoy",
+      "description": "Drop a copy that distracts enemies while you briefly vanish.",
+      "type": "sustained",
+      "cooldown": 10.0,
+      "duration": 5.0,
+      "stats": {
+        "invisibility_duration": 1.2,
+        "decoy_health": 120
+      }
+    },
+    {
+      "id": "turret",
+      "name": "Turret",
+      "description": "Place an auto-firing turret that tracks nearby enemies.",
+      "type": "sustained",
+      "cooldown": 12.0,
+      "duration": 6.0,
+      "stats": {
+        "damage": 12,
+        "fire_rate": 3.2,
+        "range": 780.0,
+        "projectile_speed": 760.0
+      }
+    },
+    {
+      "id": "minefield",
+      "name": "Minefield",
+      "description": "Drop a spread of mines that detonate on enemy contact.",
+      "type": "sustained",
+      "cooldown": 10.0,
+      "duration": 8.0,
+      "stats": {
+        "mine_count": 5,
+        "radius": 100.0,
+        "damage": 42
+      }
+    },
+    {
+      "id": "orbit",
+      "name": "Orbit",
+      "description": "Summon orbiting projectiles that damage enemies on contact.",
+      "type": "sustained",
+      "cooldown": 12.0,
+      "duration": 5.0,
+      "stats": {
+        "orb_count": 3,
+        "orbit_radius": 84.0,
+        "damage": 18,
+        "rotation_speed": 2.6
+      }
+    }
+  ]
+}

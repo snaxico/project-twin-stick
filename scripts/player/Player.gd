@@ -3,8 +3,8 @@ extends CharacterBody2D
 const PlayerConfigData = preload("res://scripts/player/PlayerConfig.gd")
 const AutoTargetData = preload("res://scripts/player/AutoTarget.gd")
 const DashData = preload("res://scripts/player/Dash.gd")
+const ParticleFactoryData = preload("res://scripts/juice/ParticleFactory.gd")
 
-const DASH_SHIELD_DURATION := 0.5
 const FLASH_SHADER_CODE := """
 shader_type canvas_item;
 
@@ -18,13 +18,11 @@ void fragment() {
 """
 
 signal fire_requested(origin, direction, config)
-signal primary_skill_requested(origin, direction, stats)
+signal ability_activated(player, slot_index, ability_id, origin, direction, stats)
 signal health_changed(current_health, max_health)
 signal downed(player)
 signal revived(player)
 signal muzzle_flash_requested(origin, direction, color, feedback_profile, impact_weight)
-signal secondary_skill_trail_requested(origin, color)
-signal secondary_skill_started(origin, color, shield_duration)
 signal damage_taken(player, amount, current_health)
 
 @export_range(1, 4, 1) var player_id: int = 1
@@ -32,7 +30,7 @@ signal damage_taken(player, amount, current_health)
 @export var max_health: int = 50
 @export var weapon_fire_interval: float = 0.33
 @export var projectile_speed: float = 850.0
-@export var projectile_damage: int = 14
+@export var projectile_damage: int = 16
 
 @onready var shadow: Polygon2D = $Shadow
 @onready var dash_shield_ring: Line2D = $DashShieldRing
@@ -47,49 +45,41 @@ var gamepad_device_id: int = -1
 var current_health: int = 0
 
 var _auto_targeter = AutoTargetData.new()
-var _dash = DashData.new()
-var _secondary_skill_pressed_last_frame := false
-var _primary_skill_pressed_last_frame := false
-var _is_downed := false
 var _input_locked := false
+var _is_downed := false
 var _move_facing := Vector2.RIGHT
 var _auto_attack_direction := Vector2.RIGHT
 var _auto_target: Node2D = null
 var _next_weapon_fire_at := 0.0
-var _dash_cooldown := 5.0
-var _primary_skill_cooldown_until := 0.0
-var _primary_skill_cooldown := 5.0
-var _primary_skill_radius := 250.0
-var _primary_skill_damage := 30
-var _primary_skill_knockback := 950.0
-var _primary_skill_expand_duration := 0.15
 var _weapon_id := "rifle"
 var _weapon_profile_name := "Rifle"
-var _primary_skill_id := "shockwave"
-var _primary_skill_profile_name := "Shockwave"
 var _weapon_range := 950.0
 var _weapon_area := 4.0
 var _weapon_feedback_profile := "rifle"
 var _weapon_impact_weight := 1.0
-var _primary_skill_feedback_profile := "shockwave"
-var _primary_skill_impact_weight := 1.9
+var _weapon_stats: Dictionary = {}
+var _ability_slots: Array = []
+var _ability_pressed_last_frame := [false, false]
+var _dash_states: Dictionary = {}
+var _active_dash_slot_index := -1
+var _shield_until := 0.0
+var _invisible_until := 0.0
+var _external_impulse := Vector2.ZERO
 var _mutation_ids: Array = []
 var _base_move_speed: float = 390.0
+var _base_max_health: int = 50
 var _base_weapon_fire_interval: float = 0.33
-var _base_projectile_damage: int = 14
+var _base_projectile_damage: int = 16
 var _modifier_move_speed_sources: Dictionary = {}
 var _modifier_attack_speed_sources: Dictionary = {}
 var _modifier_damage_sources: Dictionary = {}
 var _buff_move_speed: float = 1.0
 var _buff_attack_speed: float = 1.0
 var _buff_damage: float = 1.0
-var _dash_damage_enabled := false
-var _dash_damage_multiplier := 0.0
-var _dash_hit_targets: Array = []
-var _shield_until := 0.0
-var _next_dash_trail_at := 0.0
 var _base_visual_scale := Vector2.ONE
 var _base_shadow_scale := Vector2.ONE
+var _next_speed_line_at := 0.0
+var _next_reflex_particle_at := 0.0
 var _chevron_polygon := PackedVector2Array([
 	Vector2(16, 0),
 	Vector2(-12, -14),
@@ -115,15 +105,6 @@ func setup(config, assigned_gamepad_device_id: int) -> void:
 	player_id = config.player_id
 	gamepad_device_id = assigned_gamepad_device_id
 
-func is_secondary_skill_active() -> bool:
-	return _dash.is_active(_current_time_seconds())
-
-func is_secondary_skill_shield_active() -> bool:
-	return _current_time_seconds() < _shield_until
-
-func get_secondary_skill_cooldown_remaining() -> float:
-	return _dash.get_cooldown_remaining(_current_time_seconds())
-
 func get_team() -> String:
 	return "player"
 
@@ -133,11 +114,11 @@ func is_alive() -> bool:
 func is_downed() -> bool:
 	return _is_downed
 
+func is_targetable() -> bool:
+	return is_alive() and _current_time_seconds() >= _invisible_until
+
 func get_health_ratio_text() -> String:
 	return "DOWN" if _is_downed else "%d/%d" % [current_health, max_health]
-
-func get_primary_skill_cooldown_remaining() -> float:
-	return max(_primary_skill_cooldown_until - _current_time_seconds(), 0.0)
 
 func get_health_state() -> Dictionary:
 	return {"current": current_health, "max": max_health}
@@ -146,7 +127,8 @@ func get_weapon_profile_name() -> String:
 	return _weapon_profile_name
 
 func get_primary_skill_profile_name() -> String:
-	return _primary_skill_profile_name
+	var ability_data := get_ability_hud_data(0)
+	return str(ability_data.get("name", "Ability"))
 
 func get_weapon_hud_data() -> Dictionary:
 	return {
@@ -155,19 +137,18 @@ func get_weapon_hud_data() -> Dictionary:
 	}
 
 func get_primary_skill_hud_data() -> Dictionary:
-	return {
-		"skill_id": _primary_skill_id,
-		"name": _primary_skill_profile_name,
-		"cooldown_remaining": get_primary_skill_cooldown_remaining(),
-		"cooldown_duration": _primary_skill_cooldown,
-	}
+	return get_ability_hud_data(0)
 
 func get_secondary_skill_hud_data() -> Dictionary:
+	return get_ability_hud_data(1)
+
+func get_ability_hud_data(slot_index: int) -> Dictionary:
+	var slot := _get_ability_slot(slot_index)
 	return {
-		"skill_id": "dash",
-		"name": "Dash",
-		"cooldown_remaining": get_secondary_skill_cooldown_remaining(),
-		"cooldown_duration": _dash_cooldown,
+		"skill_id": str(slot.get("id", "")),
+		"name": str(slot.get("name", "Ability")),
+		"cooldown_remaining": get_ability_cooldown_remaining(slot_index),
+		"cooldown_duration": float(slot.get("cooldown", 1.0)),
 	}
 
 func get_mutation_ids() -> Array:
@@ -176,37 +157,49 @@ func get_mutation_ids() -> Array:
 func set_input_locked(locked: bool) -> void:
 	_input_locked = locked
 	if locked:
-		_dash.clear_buffer()
+		for dash_state in _dash_states.values():
+			(dash_state as DashData).clear_buffer()
 		velocity = Vector2.ZERO
 	_auto_target = null
-	_secondary_skill_pressed_last_frame = false
-	_primary_skill_pressed_last_frame = false
+	_ability_pressed_last_frame = [false, false]
 
 func apply_loadout(loadout: Dictionary) -> void:
+	_mutation_ids = (loadout.get("mutations", []) as Array).duplicate()
 	_base_move_speed = float(loadout.get("move_speed", move_speed))
+	_base_max_health = max(1, int(loadout.get("max_health", max_health)))
+	max_health = _base_max_health
+	current_health = clampi(current_health, 0, max_health)
+	if current_health <= 0 and not _is_downed:
+		current_health = max_health
 	_weapon_id = str(loadout.get("weapon_id", "rifle"))
 	_weapon_profile_name = str(loadout.get("weapon_name", "Rifle"))
-	_primary_skill_id = str(loadout.get("primary_skill_id", "shockwave"))
-	_primary_skill_profile_name = str(loadout.get("primary_skill_name", "Shockwave"))
-	_mutation_ids = (loadout.get("mutations", []) as Array).duplicate()
-	var weapon_stats: Dictionary = (loadout.get("weapon_stats", {}) as Dictionary).duplicate(true)
-	var skill_stats: Dictionary = (loadout.get("primary_skill_stats", {}) as Dictionary).duplicate(true)
-	_base_projectile_damage = int(round(float(weapon_stats.get("damage", projectile_damage))))
-	_base_weapon_fire_interval = 1.0 / max(float(weapon_stats.get("fire_rate", 3.0)), 0.01)
-	projectile_speed = float(weapon_stats.get("projectile_speed", projectile_speed))
-	_weapon_range = float(weapon_stats.get("range", _weapon_range))
-	_weapon_area = float(weapon_stats.get("area", _weapon_area))
-	_dash_cooldown = max(0.25, float(skill_stats.get("dash_cooldown", skill_stats.get("cooldown", _dash_cooldown))))
-	_primary_skill_cooldown = max(0.25, float(skill_stats.get("cooldown", _primary_skill_cooldown)))
-	_primary_skill_radius = float(skill_stats.get("radius", _primary_skill_radius))
-	_primary_skill_damage = int(round(float(skill_stats.get("damage", _primary_skill_damage))))
-	_primary_skill_knockback = float(skill_stats.get("knockback_force", _primary_skill_knockback))
-	_primary_skill_expand_duration = max(0.05, float(skill_stats.get("expand_duration", _primary_skill_expand_duration)))
-	_dash.cooldown_duration = _dash_cooldown
-	_primary_skill_cooldown_until = 0.0
-	_dash_damage_multiplier = float(loadout.get("dash_damage_multiplier", 0.0))
-	_dash_damage_enabled = _dash_damage_multiplier > 0.0
+	_weapon_stats = (loadout.get("weapon_stats", {}) as Dictionary).duplicate(true)
+	_base_projectile_damage = int(round(float(_weapon_stats.get("damage", projectile_damage))))
+	_base_weapon_fire_interval = 1.0 / max(float(_weapon_stats.get("fire_rate", 3.0)), 0.01)
+	projectile_speed = float(_weapon_stats.get("projectile_speed", projectile_speed))
+	_weapon_range = float(_weapon_stats.get("range", _weapon_range))
+	_weapon_area = float(_weapon_stats.get("area", _weapon_area))
+	_ability_slots = [
+		_build_runtime_ability((loadout.get("ability_slot_1", {}) as Dictionary).duplicate(true), str(loadout.get("ability_slot_1_id", "shockwave"))),
+		_build_runtime_ability((loadout.get("ability_slot_2", {}) as Dictionary).duplicate(true), str(loadout.get("ability_slot_2_id", "dash")))
+	]
+	_dash_states.clear()
+	for slot_index in range(_ability_slots.size()):
+		var slot: Dictionary = _ability_slots[slot_index]
+		if str(slot.get("id", "")) == "dash":
+			var dash_state := DashData.new()
+			dash_state.dash_duration = max(0.05, float((slot.get("stats", {}) as Dictionary).get("duration", slot.get("duration", 0.2))))
+			dash_state.cooldown_duration = max(0.1, float(slot.get("cooldown", 3.0)))
+			dash_state.dash_speed = float((slot.get("stats", {}) as Dictionary).get("dash_speed", 1180.0))
+			_dash_states[slot_index] = dash_state
+	_ability_pressed_last_frame = [false, false]
+	_shield_until = 0.0
+	_invisible_until = 0.0
+	_external_impulse = Vector2.ZERO
+	_next_speed_line_at = 0.0
+	_next_reflex_particle_at = 0.0
 	_recompute_effective_stats()
+	health_changed.emit(current_health, max_health)
 
 func apply_zone_modifier(source: String, move_mult: float, attack_mult: float, damage_mult: float = 1.0) -> void:
 	_modifier_move_speed_sources[source] = move_mult
@@ -262,9 +255,9 @@ func heal(amount: int) -> bool:
 	return true
 
 func apply_damage(amount: int) -> void:
-	if _is_downed:
+	if _is_downed or amount <= 0:
 		return
-	if is_secondary_skill_shield_active():
+	if _is_damage_immune(_current_time_seconds()):
 		return
 	current_health = max(current_health - amount, 0)
 	health_changed.emit(current_health, max_health)
@@ -273,8 +266,38 @@ func apply_damage(amount: int) -> void:
 	if current_health <= 0:
 		_enter_downed_state()
 
+func apply_knockback(direction: Vector2, force: float) -> void:
+	apply_impulse(direction, force)
+
+func apply_impulse(direction: Vector2, force: float) -> void:
+	if force <= 0.0:
+		return
+	var normalized := direction.normalized() if direction.length() > 0.0 else Vector2.RIGHT
+	_external_impulse += normalized * force * 0.0022
+
+func get_primary_skill_cooldown_remaining() -> float:
+	return get_ability_cooldown_remaining(0)
+
+func get_secondary_skill_cooldown_remaining() -> float:
+	return get_ability_cooldown_remaining(1)
+
+func get_ability_cooldown_remaining(slot_index: int) -> float:
+	var slot := _get_ability_slot(slot_index)
+	var ability_id := str(slot.get("id", ""))
+	var now := _current_time_seconds()
+	if ability_id == "dash" and _dash_states.has(slot_index):
+		return (_dash_states[slot_index] as DashData).get_cooldown_remaining(now)
+	return max(float(slot.get("cooldown_until", 0.0)) - now, 0.0)
+
+func is_secondary_skill_active() -> bool:
+	return _is_slot_active(1, _current_time_seconds())
+
+func is_secondary_skill_shield_active() -> bool:
+	return _is_damage_immune(_current_time_seconds())
+
 func _physics_process(delta: float) -> void:
 	var now := _current_time_seconds()
+	_update_buffered_dashes(now)
 	if _input_locked or _is_downed:
 		velocity = Vector2.ZERO
 		move_and_slide()
@@ -284,99 +307,213 @@ func _physics_process(delta: float) -> void:
 	var move_input := _get_move_input()
 	if move_input.length() > 0.0:
 		_move_facing = move_input.normalized()
+	if _external_impulse.length() > 0.0:
+		_external_impulse = _external_impulse.move_toward(Vector2.ZERO, delta * 12.0)
 
 	_auto_target = _find_auto_target()
 	if _auto_target != null:
 		_auto_attack_direction = (_auto_target.global_position - global_position).normalized()
-		if now >= _next_weapon_fire_at:
-			_fire_weapon(now, _auto_attack_direction)
+	if _can_attack(now) and _auto_target != null and now >= _next_weapon_fire_at:
+		_fire_weapon(now, _auto_attack_direction)
 
-	var dash_pressed := _is_secondary_skill_pressed()
-	if dash_pressed and not _secondary_skill_pressed_last_frame:
-		if _dash.try_trigger(_move_facing, now):
-			_activate_dash_shield(now, _dash.get_direction())
-	_secondary_skill_pressed_last_frame = dash_pressed
-	if _dash.consume_buffer_if_ready(now):
-		_activate_dash_shield(now, _dash.get_direction())
+	for slot_index in range(2):
+		var slot_pressed := _is_ability_pressed(slot_index)
+		if slot_pressed and not bool(_ability_pressed_last_frame[slot_index]):
+			_try_activate_ability(slot_index, now)
+		_ability_pressed_last_frame[slot_index] = slot_pressed
 
-	var primary_skill_pressed := _is_primary_skill_pressed()
-	if primary_skill_pressed and not _primary_skill_pressed_last_frame and _can_activate_primary_skill(now):
-		_fire_primary_skill(now)
-	_primary_skill_pressed_last_frame = primary_skill_pressed
-
-	if is_secondary_skill_active() and now >= _next_dash_trail_at:
-		_next_dash_trail_at = now + 0.045
-		secondary_skill_trail_requested.emit(global_position + Vector2(0.0, -10.0), player_config.tint)
-
-	velocity = _dash.get_velocity(move_input, _move_facing, move_speed, now)
+	velocity = _get_current_velocity(move_input, now)
 	move_and_slide()
+	_emit_movement_feedback(now, move_input)
+	_emit_reflex_feedback(now)
 	_apply_visual_state(now, delta)
 
 func _find_auto_target() -> Node2D:
 	return _auto_targeter.find_nearest(self, _weapon_range)
 
-func _activate_dash_shield(now: float, dash_direction: Vector2) -> void:
-	_shield_until = now + DASH_SHIELD_DURATION
-	_dash_hit_targets.clear()
-	if _dash_damage_enabled:
-		_apply_dash_damage(dash_direction)
-	secondary_skill_started.emit(global_position, player_config.tint, DASH_SHIELD_DURATION)
+func _build_runtime_ability(definition: Dictionary, fallback_id: String) -> Dictionary:
+	var ability_id := str(definition.get("id", fallback_id))
+	var stats: Dictionary = (definition.get("stats", {}) as Dictionary).duplicate(true)
+	stats["duration"] = float(definition.get("duration", 0.0))
+	return {
+		"id": ability_id,
+		"name": str(definition.get("name", ability_id.capitalize())),
+		"type": str(definition.get("type", "instant")),
+		"cooldown": float(definition.get("cooldown", 1.0)),
+		"duration": float(definition.get("duration", 0.0)),
+		"cooldown_until": 0.0,
+		"active_until": 0.0,
+		"stats": stats,
+	}
 
-func _apply_dash_damage(dash_direction: Vector2) -> void:
-	var normalized_direction: Vector2 = dash_direction.normalized() if dash_direction.length() > 0.0 else Vector2.RIGHT
-	var dash_end: Vector2 = global_position + normalized_direction * _dash.dash_speed * _dash.dash_duration
-	var damage_amount: int = maxi(1, int(round(float(projectile_damage) * _dash_damage_multiplier)))
-	for candidate in get_tree().get_nodes_in_group("aim_target"):
-		if candidate == null or not is_instance_valid(candidate) or not candidate.has_method("apply_damage"):
-			continue
-		if _dash_hit_targets.has(candidate):
-			continue
-		if _distance_to_segment((candidate as Node2D).global_position, global_position, dash_end) > 42.0:
-			continue
-		candidate.apply_damage(damage_amount)
-		_dash_hit_targets.append(candidate)
+func _get_ability_slot(slot_index: int) -> Dictionary:
+	if slot_index < 0 or slot_index >= _ability_slots.size():
+		return {}
+	return _ability_slots[slot_index]
 
-func _distance_to_segment(point: Vector2, from_point: Vector2, to_point: Vector2) -> float:
-	var segment := to_point - from_point
-	if segment.length_squared() <= 0.001:
-		return point.distance_to(from_point)
-	var weight := clampf((point - from_point).dot(segment) / segment.length_squared(), 0.0, 1.0)
-	return point.distance_to(from_point + segment * weight)
+func _set_ability_slot(slot_index: int, slot: Dictionary) -> void:
+	if slot_index < 0 or slot_index >= _ability_slots.size():
+		return
+	_ability_slots[slot_index] = slot
+
+func _update_buffered_dashes(now: float) -> void:
+	for slot_index_variant in _dash_states.keys():
+		var slot_index := int(slot_index_variant)
+		var dash_state := _dash_states[slot_index] as DashData
+		if dash_state.consume_buffer_if_ready(now):
+			_on_dash_started(slot_index, now)
+
+func _get_current_velocity(move_input: Vector2, now: float) -> Vector2:
+	for slot_index_variant in _dash_states.keys():
+		var slot_index := int(slot_index_variant)
+		var dash_state := _dash_states[slot_index] as DashData
+		if dash_state.is_active(now):
+			_active_dash_slot_index = slot_index
+			return dash_state.get_velocity(move_input, _move_facing, move_speed, now) + _external_impulse
+	_active_dash_slot_index = -1
+	return move_input * move_speed + _external_impulse
+
+func _is_damage_immune(now: float) -> bool:
+	if now < _shield_until:
+		return true
+	for dash_state in _dash_states.values():
+		if (dash_state as DashData).is_active(now):
+			return true
+	return false
+
+func _can_attack(now: float) -> bool:
+	return not _is_slot_active_by_id("shield", now) and not _is_downed
 
 func _fire_weapon(now: float, fire_direction: Vector2) -> void:
-	_next_weapon_fire_at = now + weapon_fire_interval
+	var rapid_fire_level := _get_mutation_level("rapid_fire")
+	var velocity_level := _get_mutation_level("velocity")
+	var knockback_level := _get_mutation_level("knockback")
+	var muzzle_weight := _weapon_impact_weight
+	if rapid_fire_level >= 3:
+		muzzle_weight += 0.28
+	if _is_slot_active_by_id("overcharge", now):
+		muzzle_weight += 0.2
+	_next_weapon_fire_at = now + _get_current_weapon_fire_interval()
 	_play_fire_recoil()
-	muzzle_flash_requested.emit(global_position + fire_direction * 24.0, fire_direction, player_config.tint, _weapon_feedback_profile, _weapon_impact_weight)
-	var projectile_config := {
-		"weapon_id": _weapon_id,
-		"speed": projectile_speed,
-		"damage": projectile_damage,
-		"team": get_team(),
-		"color": player_config.tint,
-		"shooter": self,
-		"feedback_profile": _weapon_feedback_profile,
-		"impact_weight": _weapon_impact_weight,
-		"max_distance": _weapon_range,
-		"collision_half_width": _weapon_area,
-	}
+	muzzle_flash_requested.emit(global_position + fire_direction * 24.0, fire_direction, player_config.tint, _weapon_feedback_profile, muzzle_weight)
+	var projectile_config := _weapon_stats.duplicate(true)
+	projectile_config["weapon_id"] = _weapon_id
+	projectile_config["speed"] = float(projectile_config.get("projectile_speed", projectile_speed))
+	projectile_config["damage"] = projectile_damage
+	projectile_config["team"] = get_team()
+	projectile_config["color"] = player_config.tint
+	projectile_config["shooter"] = self
+	projectile_config["feedback_profile"] = _weapon_feedback_profile
+	projectile_config["impact_weight"] = _weapon_impact_weight
+	projectile_config["max_distance"] = float(projectile_config.get("range", _weapon_range))
+	projectile_config["collision_half_width"] = float(projectile_config.get("area", _weapon_area))
+	projectile_config["projectile_multiplier"] = 2 if _is_slot_active_by_id("overcharge", now) else 1
+	projectile_config["rapid_fire_level"] = rapid_fire_level
+	projectile_config["velocity_level"] = velocity_level
+	projectile_config["knockback_level"] = knockback_level
+	projectile_config["source_type"] = "weapon"
 	fire_requested.emit(global_position + fire_direction * 24.0, fire_direction, projectile_config)
 
-func _can_activate_primary_skill(now: float) -> bool:
-	return now >= _primary_skill_cooldown_until
+func _get_current_weapon_fire_interval() -> float:
+	var interval := weapon_fire_interval
+	if _is_slot_active_by_id("overcharge", _current_time_seconds()):
+		interval *= 0.5
+	return max(interval, 0.05)
 
-func _fire_primary_skill(now: float) -> void:
-	_primary_skill_cooldown_until = now + _primary_skill_cooldown
-	primary_skill_requested.emit(global_position, Vector2.ZERO, {
-		"skill_id": _primary_skill_id,
-		"damage": _primary_skill_damage,
-		"radius": _primary_skill_radius,
-		"knockback_force": _primary_skill_knockback,
-		"expand_duration": _primary_skill_expand_duration,
-		"color": player_config.tint,
-		"feedback_profile": _primary_skill_feedback_profile,
-		"impact_weight": _primary_skill_impact_weight,
-		"shooter": self,
-	})
+func _try_activate_ability(slot_index: int, now: float) -> void:
+	var slot := _get_ability_slot(slot_index)
+	if slot.is_empty():
+		return
+	var ability_id := str(slot.get("id", ""))
+	if ability_id.is_empty():
+		return
+	var direction := _move_facing if _move_facing.length() > 0.0 else Vector2.RIGHT
+	if _auto_target != null:
+		direction = _auto_attack_direction
+	match ability_id:
+		"dash":
+			var dash_state := _dash_states.get(slot_index, null) as DashData
+			if dash_state == null:
+				return
+			if dash_state.try_trigger(_move_facing, now):
+				_on_dash_started(slot_index, now)
+		"blink":
+			if not _is_slot_ready(slot_index, now):
+				return
+			var blink_distance := float((slot.get("stats", {}) as Dictionary).get("distance", 240.0))
+			global_position += (direction if direction.length() > 0.0 else Vector2.RIGHT).normalized() * blink_distance
+			_set_slot_cooldown(slot_index, now)
+			_emit_ability(slot_index, direction)
+		"shield":
+			if not _is_slot_ready(slot_index, now):
+				return
+			_shield_until = max(_shield_until, now + float(slot.get("duration", 3.0)))
+			_set_slot_active(slot_index, now)
+			_set_slot_cooldown(slot_index, now)
+			_emit_ability(slot_index, direction)
+		"decoy":
+			if not _is_slot_ready(slot_index, now):
+				return
+			var invis_duration := float((slot.get("stats", {}) as Dictionary).get("invisibility_duration", 1.2))
+			_invisible_until = max(_invisible_until, now + invis_duration)
+			_set_slot_active(slot_index, now)
+			_set_slot_cooldown(slot_index, now)
+			_emit_ability(slot_index, direction)
+		"overcharge", "turret", "minefield", "orbit":
+			if not _is_slot_ready(slot_index, now):
+				return
+			_set_slot_active(slot_index, now)
+			_set_slot_cooldown(slot_index, now)
+			_emit_ability(slot_index, direction)
+		_:
+			if not _is_slot_ready(slot_index, now):
+				return
+			_set_slot_cooldown(slot_index, now)
+			_emit_ability(slot_index, direction)
+
+func _on_dash_started(slot_index: int, now: float) -> void:
+	_shield_until = max(_shield_until, now + float((_get_ability_slot(slot_index).get("stats", {}) as Dictionary).get("invulnerability_duration", 0.2)))
+	_emit_ability(slot_index, (_dash_states[slot_index] as DashData).get_direction())
+
+func _emit_ability(slot_index: int, direction: Vector2) -> void:
+	var slot := _get_ability_slot(slot_index)
+	var payload: Dictionary = (slot.get("stats", {}) as Dictionary).duplicate(true)
+	payload["ability_id"] = str(slot.get("id", ""))
+	payload["cooldown"] = float(slot.get("cooldown", 0.0))
+	payload["duration"] = float(slot.get("duration", 0.0))
+	payload["color"] = player_config.tint
+	payload["slot_index"] = slot_index
+	payload["owner"] = self
+	ability_activated.emit(self, slot_index, str(slot.get("id", "")), global_position, direction.normalized() if direction.length() > 0.0 else Vector2.RIGHT, payload)
+
+func _is_slot_ready(slot_index: int, now: float) -> bool:
+	return get_ability_cooldown_remaining(slot_index) <= 0.0 and not _is_slot_active(slot_index, now)
+
+func _set_slot_cooldown(slot_index: int, now: float) -> void:
+	var slot := _get_ability_slot(slot_index)
+	slot["cooldown_until"] = now + float(slot.get("cooldown", 0.0))
+	_set_ability_slot(slot_index, slot)
+
+func _set_slot_active(slot_index: int, now: float) -> void:
+	var slot := _get_ability_slot(slot_index)
+	slot["active_until"] = now + float(slot.get("duration", 0.0))
+	_set_ability_slot(slot_index, slot)
+
+func _is_slot_active(slot_index: int, now: float) -> bool:
+	var slot := _get_ability_slot(slot_index)
+	if slot.is_empty():
+		return false
+	var ability_id := str(slot.get("id", ""))
+	if ability_id == "dash" and _dash_states.has(slot_index):
+		return (_dash_states[slot_index] as DashData).is_active(now)
+	return now < float(slot.get("active_until", 0.0))
+
+func _is_slot_active_by_id(ability_id: String, now: float) -> bool:
+	for slot_index in range(_ability_slots.size()):
+		var slot: Dictionary = _ability_slots[slot_index]
+		if str(slot.get("id", "")) == ability_id and _is_slot_active(slot_index, now):
+			return true
+	return false
 
 func _get_move_input() -> Vector2:
 	var keyboard_vector := Input.get_vector("p%d_move_left" % player_id, "p%d_move_right" % player_id, "p%d_move_up" % player_id, "p%d_move_down" % player_id)
@@ -389,17 +526,14 @@ func _get_gamepad_stick_vector(axis_x: JoyAxis, axis_y: JoyAxis) -> Vector2:
 	var vector := Vector2(Input.get_joy_axis(gamepad_device_id, axis_x), Input.get_joy_axis(gamepad_device_id, axis_y))
 	return vector if vector.length() >= 0.2 else Vector2.ZERO
 
-func _is_secondary_skill_pressed() -> bool:
+func _is_ability_pressed(slot_index: int) -> bool:
 	if player_config.control_source == "gamepad":
 		if gamepad_device_id < 0:
 			return false
+		if slot_index == 0:
+			return Input.get_joy_axis(gamepad_device_id, JOY_AXIS_TRIGGER_RIGHT) >= 0.5 or Input.is_joy_button_pressed(gamepad_device_id, JOY_BUTTON_X)
 		return Input.get_joy_axis(gamepad_device_id, JOY_AXIS_TRIGGER_LEFT) >= 0.5 or Input.is_joy_button_pressed(gamepad_device_id, JOY_BUTTON_B)
-	return Input.is_action_pressed("p%d_dash" % player_id)
-
-func _is_primary_skill_pressed() -> bool:
-	if player_config.control_source == "gamepad":
-		return gamepad_device_id >= 0 and Input.get_joy_axis(gamepad_device_id, JOY_AXIS_TRIGGER_RIGHT) >= 0.5
-	return Input.is_action_pressed("p%d_secondary" % player_id)
+	return Input.is_action_pressed("p%d_secondary" % player_id) if slot_index == 0 else Input.is_action_pressed("p%d_dash" % player_id)
 
 func _enter_downed_state() -> void:
 	_is_downed = true
@@ -410,29 +544,60 @@ func _enter_downed_state() -> void:
 	collision_mask = 0
 	downed.emit(self)
 
-func _apply_visual_state(_now: float, delta: float = 0.0) -> void:
+func _apply_visual_state(now: float, delta: float = 0.0) -> void:
 	if visual == null or body_root == null:
 		return
-	var dash_active := is_secondary_skill_active()
+	var dash_active := _active_dash_slot_index >= 0 and _is_slot_active(_active_dash_slot_index, now)
+	var shield_active := now < _shield_until
+	var overcharge_active := _is_slot_active_by_id("overcharge", now)
+	var tough_level := _get_mutation_level("tough")
+	var mutation_glow := clampf(float(_mutation_ids.size()) / 18.0, 0.0, 0.5)
+	var bonus_glow := float(max(tough_level - 1, 0)) * 0.1 + (0.18 if overcharge_active else 0.0)
 	var dash_scale := 1.14 if dash_active else 1.0
 	var squash_x := 1.0 + _turn_squash * 0.18
 	var squash_y := 1.0 - _turn_squash * 0.12
 	if visual.polygon != _chevron_polygon:
 		visual.polygon = _chevron_polygon
-	visual.color = player_config.tint if not _is_downed else player_config.tint.darkened(0.55)
+	visual.color = player_config.tint.lightened(mutation_glow + bonus_glow) if not _is_downed else player_config.tint.darkened(0.55)
+	visual.modulate.a = 0.45 if now < _invisible_until else 1.0
 	visual.scale = Vector2(_base_visual_scale.x * dash_scale * squash_x, _base_visual_scale.y * dash_scale * squash_y)
 	if outline != null and outline.polygon != _chevron_polygon:
 		outline.polygon = _chevron_polygon
 	if outline != null:
 		outline.scale = visual.scale * 1.28
-		outline.color = Color(0.04, 0.06, 0.08, 0.92)
+		outline.color = player_config.tint.lightened(0.2 + mutation_glow * 0.4 + bonus_glow * 0.5) if shield_active or overcharge_active else Color(0.04, 0.06, 0.08, 0.92)
+		outline.modulate.a = 0.65 if now < _invisible_until else 1.0
 	if shadow != null:
-		shadow.scale = _base_shadow_scale
+		shadow.scale = _base_shadow_scale * (1.08 if tough_level >= 2 else 1.0)
+		shadow.modulate.a = 0.18 if now < _invisible_until else 1.0
 	if dash_shield_ring != null:
-		dash_shield_ring.visible = is_secondary_skill_shield_active() and not _is_downed
-		dash_shield_ring.default_color = player_config.tint.lerp(Color(0.92, 1.0, 1.0, 1.0), 0.38)
+		dash_shield_ring.visible = (shield_active or dash_active) and not _is_downed
+		dash_shield_ring.default_color = player_config.tint.lerp(Color(0.92, 1.0, 1.0, 1.0), 0.42 if shield_active else 0.18)
+		dash_shield_ring.width = 5.0 if tough_level >= 2 else 4.0
 	body_root.rotation = lerp_angle(body_root.rotation, _move_facing.angle(), 0.22)
 	_turn_squash = move_toward(_turn_squash, 0.0, delta * 4.0)
+
+func _emit_movement_feedback(now: float, move_input: Vector2) -> void:
+	if _is_downed or move_input.length() < 0.45:
+		return
+	var move_speed_level := _get_mutation_level("move_speed")
+	if move_speed_level < 2 or now < _next_speed_line_at or get_parent() == null:
+		return
+	_next_speed_line_at = now + 0.12
+	var trail := ParticleFactoryData.create_dash_trail(player_config.tint.lightened(0.18), 0.55 + float(move_speed_level - 1) * 0.2)
+	trail.global_position = global_position - _move_facing * 14.0
+	get_parent().add_child(trail)
+
+func _emit_reflex_feedback(now: float) -> void:
+	if _get_mutation_level("quick_reflexes") < 2 or now < _next_reflex_particle_at or get_parent() == null:
+		return
+	if get_ability_cooldown_remaining(0) <= 0.0 and get_ability_cooldown_remaining(1) <= 0.0:
+		return
+	_next_reflex_particle_at = now + 0.42
+	var crackle_direction := _move_facing.orthogonal().normalized() if _move_facing.length() > 0.0 else Vector2.UP
+	var crackle := ParticleFactoryData.create_attack_trail(player_config.tint.lightened(0.28), crackle_direction, 0.7)
+	crackle.global_position = global_position
+	get_parent().add_child(crackle)
 
 func _play_fire_recoil() -> void:
 	_turn_squash = max(_turn_squash, 0.28)
@@ -457,6 +622,13 @@ func _get_flash_material(target: CanvasItem) -> ShaderMaterial:
 
 func _current_time_seconds() -> float:
 	return Time.get_ticks_msec() / 1000.0
+
+func _get_mutation_level(mutation_id: String) -> int:
+	var count := 0
+	for entry in _mutation_ids:
+		if str(entry) == mutation_id:
+			count += 1
+	return count
 
 func _combined_modifier(sources: Dictionary) -> float:
 	var result := 1.0

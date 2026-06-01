@@ -1,6 +1,7 @@
 extends Control
 
 const GAME_WORLD_SCENE = preload("res://scenes/game/GameWorld.tscn")
+const IconFactoryData = preload("res://scripts/ui/IconFactory.gd")
 
 signal return_to_menu_requested(open_meta_menu: bool)
 
@@ -22,7 +23,7 @@ signal return_to_menu_requested(open_meta_menu: bool)
 var _active_game = null
 var _post_resolution_action: String = "next"
 var _map_buttons: Dictionary = {}
-var _map_button_size := Vector2(96.0, 60.0)
+var _map_button_size := Vector2(72.0, 36.0)
 
 func _ready() -> void:
 	run_summary_panel.visible = false
@@ -30,6 +31,9 @@ func _ready() -> void:
 	map_graph_area.resized.connect(_refresh_map_panel)
 	if RunState.is_debug_single_room_mode():
 		call_deferred("_launch_single_debug_room")
+		return
+	if RunState.is_endless_mode():
+		call_deferred("_launch_first_endless_room")
 		return
 	_show_map()
 
@@ -44,11 +48,16 @@ func _show_map() -> void:
 	_clear_active_game()
 	var map_rows: Array = RunState.get_map_rows()
 	var current_floor: int = min(RunState.current_step_index + 1, max(map_rows.size(), 1))
+	var xp_progress: Dictionary = RunState.get_xp_progress()
 	map_title_label.text = "Choose Route"
-	var gold_text := ""
-	for player_index in range(RunState.player_configs.size()):
-		gold_text += "  P%d: %dg" % [player_index + 1, RunState.get_player_gold(player_index)]
-	map_status_label.text = "Floor %d of %d.%s" % [current_floor, map_rows.size(), gold_text]
+	map_status_label.text = "Floor %d of %d  |  Lv %d  |  XP %d/%d  |  Pending Picks %d" % [
+		current_floor,
+		map_rows.size(),
+		int(xp_progress.get("level", 0)),
+		int(xp_progress.get("current", 0)),
+		int(xp_progress.get("needed", 80)),
+		int(xp_progress.get("pending", 0)),
+	]
 	map_detail_title_label.text = "Path Preview"
 	map_detail_body_label.text = "Focus a node to inspect its objective and route."
 	call_deferred("_refresh_map_panel")
@@ -100,9 +109,30 @@ func _get_node_graph_position(node: Dictionary, row_count: int) -> Vector2:
 	var height := maxf(map_graph_area.size.y, 280.0)
 	var row := int(node.get("row", 0))
 	var column := int(node.get("column", 0))
-	var x := 52.0 if row_count <= 1 else 52.0 + (width - 104.0) * float(row) / float(row_count - 1)
-	var y := 34.0 + (height - 68.0) * float(column) / float(max(RunState.MAP_COLUMN_COUNT - 1, 1))
+	var margin_x := 48.0
+	var margin_y := 24.0
+	var x := margin_x if row_count <= 1 else margin_x + (width - margin_x * 2.0) * float(row) / float(max(row_count - 1, 1))
+	var column_count_in_row := _count_columns_in_row(node, RunState.get_map_rows())
+	var column_rank := _get_column_rank(node, RunState.get_map_rows())
+	var y := height * 0.5 if column_count_in_row <= 1 else margin_y + (height - margin_y * 2.0) * float(column_rank) / float(max(column_count_in_row - 1, 1))
 	return Vector2(x, y)
+
+func _count_columns_in_row(node: Dictionary, map_rows: Array) -> int:
+	var row_index := int(node.get("row", 0))
+	if row_index < 0 or row_index >= map_rows.size():
+		return 1
+	return max((map_rows[row_index] as Array).size(), 1)
+
+func _get_column_rank(node: Dictionary, map_rows: Array) -> int:
+	var row_index := int(node.get("row", 0))
+	if row_index < 0 or row_index >= map_rows.size():
+		return 0
+	var row: Array = map_rows[row_index]
+	var node_id := str(node.get("id", ""))
+	for index in range(row.size()):
+		if str((row[index] as Dictionary).get("id", "")) == node_id:
+			return index
+	return 0
 
 func _add_connection_line(from_position: Vector2, to_position: Vector2, color: Color) -> void:
 	var line := Line2D.new()
@@ -118,8 +148,8 @@ func _build_map_button(node: Dictionary, button_center: Vector2, is_reachable: b
 	button.size = _map_button_size
 	button.position = button_center - _map_button_size * 0.5
 	button.focus_mode = Control.FOCUS_ALL if is_reachable else Control.FOCUS_NONE
-	button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	button.text = _build_node_button_text(node)
+	button.add_theme_font_size_override("font_size", 11)
 	button.modulate = _get_node_color(node, is_reachable)
 	button.mouse_entered.connect(_on_map_node_hovered.bind(str(node.get("id", ""))))
 	button.focus_entered.connect(_on_map_node_hovered.bind(str(node.get("id", ""))))
@@ -127,22 +157,48 @@ func _build_map_button(node: Dictionary, button_center: Vector2, is_reachable: b
 	return button
 
 func _build_node_button_text(node: Dictionary) -> String:
-	var label := ""
-	match str(node.get("room_type", "combat")):
-		"rest":
-			label = "Rest"
+	var room_type := str(node.get("room_type", "combat"))
+	match room_type:
 		"boss":
-			label = "Boss"
-		"shop":
-			label = "Shop"
+			return str(node.get("boss_type", "Boss")).capitalize()
 		"elite":
-			label = "Elite"
+			var modifiers: Array = node.get("modifiers", []) as Array
+			return "Elite %s" % _build_modifier_badge_text(modifiers) if not modifiers.is_empty() else "Elite"
 		_:
-			label = "Survive"
-	var modifiers: Array = node.get("modifiers", []) as Array
-	if modifiers.is_empty():
-		return label
-	return "%s [%d]" % [label, modifiers.size()]
+			var modifiers: Array = node.get("modifiers", []) as Array
+			return _build_modifier_badge_text(modifiers) if not modifiers.is_empty() else "Fight"
+
+func _build_modifier_badge_text(modifiers: Array) -> String:
+	var badges: Array = []
+	for mod_id_variant in modifiers:
+		var mod_id := str(mod_id_variant)
+		badges.append(_modifier_abbreviation(mod_id))
+	return " ".join(badges)
+
+func _modifier_abbreviation(mod_id: String) -> String:
+	match mod_id:
+		"accelerating_waves":
+			return "AW"
+		"enemy_speed":
+			return "ES"
+		"swarm":
+			return "SW"
+		"shielded":
+			return "SH"
+		"explosive_death":
+			return "XD"
+		"fire_floor":
+			return "FF"
+		"ice_zone":
+			return "IZ"
+		"mine_field":
+			return "MF"
+		"gravity_wells":
+			return "GW"
+		"shrinking_arena":
+			return "SA"
+		_:
+			return mod_id.substr(0, mini(mod_id.length(), 2)).to_upper()
 
 func _get_node_color(node: Dictionary, is_reachable: bool) -> Color:
 	var node_id := str(node.get("id", ""))
@@ -153,10 +209,6 @@ func _get_node_color(node: Dictionary, is_reachable: bool) -> Color:
 		return Color(0.86, 0.22, 0.26, 1.0) if is_reachable else Color(0.42, 0.16, 0.18, 0.92)
 	if room_type == "elite":
 		return Color(0.92, 0.48, 0.16, 1.0) if is_reachable else Color(0.46, 0.26, 0.12, 0.92)
-	if room_type == "shop":
-		return Color(0.28, 0.86, 0.56, 1.0) if is_reachable else Color(0.16, 0.44, 0.3, 0.92)
-	if room_type == "rest":
-		return Color(0.48, 0.78, 1.0, 1.0) if is_reachable else Color(0.28, 0.42, 0.56, 0.92)
 	if is_reachable:
 		return Color(0.92, 0.94, 1.0, 1.0)
 	if RunState.visited_node_ids.has(node_id):
@@ -182,9 +234,13 @@ func _on_map_node_hovered(node_id: String) -> void:
 		for mod_id in modifiers:
 			names.append(_format_modifier_name(str(mod_id)))
 		mod_names = "\nModifiers: %s" % ", ".join(names)
-	map_detail_body_label.text = "%s\nObjective: %s%s" % [
+	var boss_text := ""
+	if str(node.get("room_type", "combat")) == "boss":
+		boss_text = "\nBoss: %s" % str(node.get("boss_type", "")).capitalize()
+	map_detail_body_label.text = "Act %d\n%s%s%s" % [
+		int(node.get("act", 1)),
 		str(node.get("description", "")),
-		_format_objective(str(node.get("objective", "survive"))),
+		boss_text,
 		mod_names,
 	]
 
@@ -193,7 +249,7 @@ func _on_map_node_pressed(node_id: String) -> void:
 		return
 	var node: Dictionary = RunState.get_map_node(node_id)
 	match str(node.get("room_type", "combat")):
-		"combat", "elite", "boss", "shop":
+		"combat", "elite", "boss":
 			_launch_room(node)
 		_:
 			_show_outcome(RunState.resolve_current_noncombat_node())
@@ -211,7 +267,11 @@ func _launch_room(node: Dictionary) -> void:
 	_active_game.return_to_menu_requested.connect(_on_game_return_to_menu_requested)
 
 func _on_room_cleared(health_states: Array, clear_context: Dictionary = {}) -> void:
-	_show_outcome(RunState.resolve_current_combat_victory(health_states, clear_context))
+	var outcome := RunState.resolve_current_combat_victory(health_states, clear_context)
+	if str(outcome.get("post_action", "")) == "endless_next":
+		_launch_endless_room()
+		return
+	_show_outcome(outcome)
 
 func _on_room_failed() -> void:
 	RunState.run_outcome = "failed"
@@ -256,13 +316,29 @@ func _launch_single_debug_room() -> void:
 		return
 	_launch_room(node)
 
+func _launch_first_endless_room() -> void:
+	_launch_endless_room()
+
+func _launch_endless_room() -> void:
+	var options: Array = RunState.get_current_options()
+	if options.is_empty():
+		_show_resolution("Endless Complete", RunState.get_run_summary_text(), "Return to Menu")
+		_post_resolution_action = "return_to_menu"
+		return
+	var node: Dictionary = options[0]
+	if not RunState.select_map_node(str(node.get("id", ""))):
+		_show_resolution("Endless Error", "The next endless room could not be selected.", "Return to Menu")
+		_post_resolution_action = "return_to_menu"
+		return
+	_launch_room(node)
+
 func _clear_active_game() -> void:
 	if _active_game != null and is_instance_valid(_active_game):
 		_active_game.queue_free()
 	_active_game = null
 
 func _format_objective(_objective: String) -> String:
-	return "Survive"
+	return "Kill All"
 
 func _format_modifier_name(mod_id: String) -> String:
 	var words := mod_id.split("_")

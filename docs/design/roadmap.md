@@ -1,10 +1,13 @@
 # Feature Roadmap
 
-Design decisions locked during brainstorm sessions. Use this as the source of truth before starting implementation of any new feature.
+> **⚠ This file contains the old V2 roadmap. V3 has been fully implemented as of 2026-06-01.**
+> The live runtime state is documented in `docs/development/current-state.md`.
+> The V3 design decisions and implementation guide are in the session plan archive.
+> The old V2 content below is kept for reference only.
 
 ---
 
-## Status Key
+## Status Key (V2 — SUPERSEDED)
 
 - **Locked** — Design agreed. Ready for implementation planning.
 - **In Progress** — Currently being designed or implemented.

@@ -267,17 +267,17 @@ text = "Starting Secondary"
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="DebugStartingGoldRow" type="HBoxContainer" parent="MenuPanel/MarginContainer/MenuScroll/MenuLayout"]
+[node name="DebugRoomModifiersRow" type="HBoxContainer" parent="MenuPanel/MarginContainer/MenuScroll/MenuLayout"]
 visible = false
 layout_mode = 2
 theme_override_constants/separation = 12
 
-[node name="DebugStartingGoldLabel" type="Label" parent="MenuPanel/MarginContainer/MenuScroll/MenuLayout/DebugStartingGoldRow"]
+[node name="DebugRoomModifiersLabel" type="Label" parent="MenuPanel/MarginContainer/MenuScroll/MenuLayout/DebugRoomModifiersRow"]
 layout_mode = 2
 size_flags_horizontal = 3
-text = "Starting Gold"
+text = "Room Modifiers"
 
-[node name="DebugStartingGoldSpinBox" type="SpinBox" parent="MenuPanel/MarginContainer/MenuScroll/MenuLayout/DebugStartingGoldRow"]
+[node name="DebugRoomModifiersSpinBox" type="SpinBox" parent="MenuPanel/MarginContainer/MenuScroll/MenuLayout/DebugRoomModifiersRow"]
 layout_mode = 2
 size_flags_horizontal = 3
 

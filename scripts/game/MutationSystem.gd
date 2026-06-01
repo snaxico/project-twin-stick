@@ -76,8 +76,13 @@ func get_compiled_weapon_stats(player_index: int, base_stats: Dictionary) -> Dic
 		var size_mult := 1.0 + float(big_shot_count) * float(_get_param("big_shot", "size_bonus_per_level", 0.333))
 		compiled["area"] = float(compiled.get("area", 4.0)) * size_mult
 	var rapid_fire_count := get_mutation_level(player_index, "rapid_fire")
+	compiled["rapid_fire_level"] = rapid_fire_count
 	if rapid_fire_count > 0:
 		compiled["fire_rate"] = float(compiled.get("fire_rate", 1.0)) * (1.0 + float(rapid_fire_count) * float(_get_param("rapid_fire", "fire_rate_bonus_per_level", 0.333)))
+	var velocity_count := get_mutation_level(player_index, "velocity")
+	compiled["velocity_level"] = velocity_count
+	if velocity_count > 0:
+		compiled["projectile_speed"] = float(compiled.get("projectile_speed", 850.0)) * (1.0 + float(velocity_count) * float(_get_param("velocity", "speed_bonus_per_level", 0.333)))
 	var pierce_count := get_mutation_level(player_index, "pierce")
 	if pierce_count > 0:
 		compiled["pierce_count"] = pierce_count * int(_get_param("pierce", "pierce_count", 1))
@@ -90,36 +95,90 @@ func get_compiled_weapon_stats(player_index: int, base_stats: Dictionary) -> Dic
 		compiled["trail_lifetime"] = float(_get_param("fire_trail", "trail_lifetime", 1.5))
 		compiled["trail_tick_interval"] = float(_get_param("fire_trail", "tick_interval", 0.5))
 		compiled["trail_damage_percent"] = float(_get_param("fire_trail", "damage_percent", 0.3))
+	if has_mutation(player_index, "explosive_rounds"):
+		compiled["explosion_radius"] = float(_get_param("explosive_rounds", "explosion_radius", 82.0))
+		compiled["explosion_damage_percent"] = float(_get_param("explosive_rounds", "damage_percent", 0.65))
+	if has_mutation(player_index, "freeze_shot"):
+		compiled["slow_multiplier"] = float(_get_param("freeze_shot", "slow_multiplier", 0.5))
+		compiled["slow_duration"] = float(_get_param("freeze_shot", "slow_duration", 1.0))
+	if has_mutation(player_index, "poison"):
+		compiled["poison_dps"] = float(_get_param("poison", "poison_dps", 8.0))
+		compiled["poison_duration"] = float(_get_param("poison", "poison_duration", 2.5))
 	var knockback_count := get_mutation_level(player_index, "knockback")
+	compiled["knockback_level"] = knockback_count
 	if knockback_count > 0:
 		compiled["knockback_force"] = 300.0 * (1.0 + float(knockback_count) * float(_get_param("knockback", "force_bonus_per_level", 0.333)))
 	return compiled
 
-func get_primary_skill_radius_multiplier(player_index: int) -> float:
-	return 1.0 + float(get_mutation_level(player_index, "skill_range")) * float(_get_param("skill_range", "range_bonus_per_level", 0.333))
+func get_ability_area_multiplier(player_index: int) -> float:
+	return 1.0 + float(get_mutation_level(player_index, "wide_pulse")) * float(_get_param("wide_pulse", "area_bonus_per_level", 0.333))
 
-func get_primary_skill_cooldown_reduction(player_index: int) -> float:
-	return float(get_mutation_level(player_index, "skill_cooldown")) * float(_get_param("skill_cooldown", "cooldown_reduction_per_level", 0.333))
+func get_ability_cooldown_reduction(player_index: int) -> float:
+	var level := get_mutation_level(player_index, "quick_reflexes")
+	if level <= 0:
+		return 0.0
+	var values: Array = _get_param("quick_reflexes", "cooldown_values", [0.2, 0.35, 0.5]) as Array
+	if values.is_empty():
+		return 0.0
+	return float(values[mini(level - 1, values.size() - 1)])
 
-func get_dash_damage_multiplier(player_index: int) -> float:
-	return float(_get_param("dash_damage", "damage_percent", 1.0)) if has_mutation(player_index, "dash_damage") else 0.0
+func get_ability_duration_multiplier(player_index: int) -> float:
+	return 1.0 + float(get_mutation_level(player_index, "duration")) * float(_get_param("duration", "duration_bonus_per_level", 0.333))
 
-func roll_mutation_options(player_index: int, count: int, rarity_filter: String = "all") -> Array:
-	var valid_pool: Array = []
+func get_move_speed_multiplier(player_index: int) -> float:
+	var level := get_mutation_level(player_index, "move_speed")
+	if level <= 0:
+		return 1.0
+	var values: Array = _get_param("move_speed", "move_speed_values", [0.15, 0.3, 0.45]) as Array
+	return 1.0 + float(values[mini(level - 1, values.size() - 1)])
+
+func get_max_health_multiplier(player_index: int) -> float:
+	var level := get_mutation_level(player_index, "tough")
+	if level <= 0:
+		return 1.0
+	var values: Array = _get_param("tough", "max_health_values", [0.2, 0.4, 0.6]) as Array
+	return 1.0 + float(values[mini(level - 1, values.size() - 1)])
+
+func get_knockback_multiplier(player_index: int) -> float:
+	var level := get_mutation_level(player_index, "knockback")
+	if level <= 0:
+		return 1.0
+	return 1.0 + float(level) * float(_get_param("knockback", "force_bonus_per_level", 0.333))
+
+func roll_mutation_options(player_index: int, count: int, rare_chance: float = 0.0, force_rare: bool = false) -> Array:
+	var common_pool: Array = []
+	var rare_pool: Array = []
 	for mutation in _definitions:
 		var mutation_dict: Dictionary = mutation as Dictionary
 		var mutation_id := str(mutation_dict.get("id", ""))
 		if mutation_id.is_empty():
 			continue
-		if rarity_filter != "all" and _get_rarity(mutation_id) != rarity_filter:
-			continue
 		if not _can_still_pick(player_index, mutation_id):
 			continue
-		valid_pool.append(mutation_dict.duplicate(true))
-	valid_pool.shuffle()
-	if valid_pool.size() <= count:
-		return valid_pool
-	return valid_pool.slice(0, count)
+		if _get_rarity(mutation_id) == "rare":
+			rare_pool.append(mutation_dict.duplicate(true))
+		else:
+			common_pool.append(mutation_dict.duplicate(true))
+	common_pool.shuffle()
+	rare_pool.shuffle()
+	var selected: Array = []
+	var clamped_rare_chance := clampf(rare_chance, 0.0, 1.0)
+	if force_rare and not rare_pool.is_empty():
+		selected.append(_pop_option(rare_pool))
+	while selected.size() < count:
+		var use_rare := false
+		if not rare_pool.is_empty():
+			use_rare = common_pool.is_empty() or _random.randf() < clamped_rare_chance
+		if use_rare:
+			selected.append(_pop_option(rare_pool))
+		elif not common_pool.is_empty():
+			selected.append(_pop_option(common_pool))
+		elif not rare_pool.is_empty():
+			selected.append(_pop_option(rare_pool))
+		else:
+			break
+	selected.shuffle()
+	return selected
 
 func reset(player_index: int) -> void:
 	var inventory = RunState.get_player_inventory(player_index)
@@ -150,3 +209,10 @@ func _get_param(mutation_id: String, param_name: String, default_value: Variant)
 		return default_value
 	var params: Dictionary = (_definition_map[mutation_id] as Dictionary).get("params", {})
 	return params.get(param_name, default_value)
+
+func _pop_option(pool: Array) -> Dictionary:
+	if pool.is_empty():
+		return {}
+	var option: Dictionary = pool[0] as Dictionary
+	pool.remove_at(0)
+	return option

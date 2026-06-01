@@ -3,9 +3,9 @@ extends RefCounted
 
 var player_index: int = 0
 var weapon_id: String = "rifle"
-var primary_skill_id: String = "shockwave"
+var ability_slot_1: String = "shockwave"
+var ability_slot_2: String = "dash"
 var mutations: Array = []
-var gold: int = 0
 
 func get_selected_weapon() -> Dictionary:
 	return {
@@ -14,5 +14,5 @@ func get_selected_weapon() -> Dictionary:
 
 func get_selected_primary_skill() -> Dictionary:
 	return {
-		"skill_id": primary_skill_id,
+		"skill_id": ability_slot_1,
 	}

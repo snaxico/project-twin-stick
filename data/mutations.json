@@ -1,111 +1,159 @@
 {
   "mutations": [
     {
+      "id": "split_shot",
+      "name": "Split Shot",
+      "description": "Fire 1 extra projectile per level.",
+      "icon": "split_shot",
+      "category": "weapon",
+      "rarity": "common",
+      "max_level": 3,
+      "params": { "extra_count": 1, "spread_degrees": 15.0 }
+    },
+    {
       "id": "pierce",
       "name": "Pierce",
       "description": "Projectiles pass through 1 extra enemy per level.",
       "icon": "pierce",
-      "target": "primary",
-      "effect_type": "pierce",
+      "category": "weapon",
       "rarity": "common",
       "max_level": 3,
       "params": { "pierce_count": 1 }
     },
     {
-      "id": "rapid_fire",
-      "name": "Rapid Fire",
-      "description": "Fire rate +33.3% per level.",
-      "icon": "rapid_fire",
-      "target": "primary",
-      "effect_type": "rapid_fire",
-      "rarity": "common",
-      "max_level": 3,
-      "params": { "fire_rate_bonus_per_level": 0.333 }
-    },
-    {
       "id": "big_shot",
       "name": "Big Shot",
-      "description": "Projectile size +33.3% per level.",
+      "description": "Projectile size grows by 33% per level.",
       "icon": "big_shot",
-      "target": "primary",
-      "effect_type": "big_shot",
+      "category": "weapon",
       "rarity": "common",
       "max_level": 3,
       "params": { "size_bonus_per_level": 0.333 }
     },
     {
-      "id": "split_shot",
-      "name": "Split Shot",
-      "description": "Fire 1 extra projectile per level.",
-      "icon": "split_shot",
-      "target": "primary",
-      "effect_type": "split_shot",
+      "id": "rapid_fire",
+      "name": "Rapid Fire",
+      "description": "Fire rate increases by 33% per level.",
+      "icon": "rapid_fire",
+      "category": "weapon",
       "rarity": "common",
       "max_level": 3,
-      "params": { "extra_count": 1, "spread_degrees": 15 }
-    },
-    {
-      "id": "skill_range",
-      "name": "Wide Pulse",
-      "description": "All primary skills gain +33.3% range per level.",
-      "icon": "skill_range",
-      "target": "secondary",
-      "effect_type": "skill_range",
-      "rarity": "common",
-      "max_level": 3,
-      "params": { "range_bonus_per_level": 0.333 }
-    },
-    {
-      "id": "skill_cooldown",
-      "name": "Quick Reflexes",
-      "description": "All primary skills recharge 33.3% faster per level.",
-      "icon": "skill_cooldown",
-      "target": "secondary",
-      "effect_type": "skill_cooldown",
-      "rarity": "common",
-      "max_level": 3,
-      "params": { "cooldown_reduction_per_level": 0.333 }
+      "params": { "fire_rate_bonus_per_level": 0.333 }
     },
     {
       "id": "knockback",
       "name": "Knockback",
-      "description": "All hits push enemies harder, +33.3% per level.",
+      "description": "Weapon and pulse hits push 33% harder per level.",
       "icon": "knockback",
-      "target": "general",
-      "effect_type": "knockback",
+      "category": "weapon",
       "rarity": "common",
       "max_level": 3,
       "params": { "force_bonus_per_level": 0.333 }
     },
     {
+      "id": "velocity",
+      "name": "Velocity",
+      "description": "Projectile speed increases by 33% per level.",
+      "icon": "velocity",
+      "category": "weapon",
+      "rarity": "common",
+      "max_level": 3,
+      "params": { "speed_bonus_per_level": 0.333 }
+    },
+    {
+      "id": "quick_reflexes",
+      "name": "Quick Reflexes",
+      "description": "Ability cooldowns recharge 20%, 35%, then 50% faster.",
+      "icon": "quick_reflexes",
+      "category": "ability",
+      "rarity": "common",
+      "max_level": 3,
+      "params": { "cooldown_values": [0.2, 0.35, 0.5] }
+    },
+    {
+      "id": "wide_pulse",
+      "name": "Wide Pulse",
+      "description": "Ability area and range increase by 33% per level.",
+      "icon": "wide_pulse",
+      "category": "ability",
+      "rarity": "common",
+      "max_level": 3,
+      "params": { "area_bonus_per_level": 0.333 }
+    },
+    {
+      "id": "duration",
+      "name": "Duration",
+      "description": "Active ability uptime increases by 33% per level.",
+      "icon": "duration",
+      "category": "ability",
+      "rarity": "common",
+      "max_level": 3,
+      "params": { "duration_bonus_per_level": 0.333 }
+    },
+    {
+      "id": "move_speed",
+      "name": "Move Speed",
+      "description": "Move 15%, 30%, then 45% faster.",
+      "icon": "move_speed",
+      "category": "survival",
+      "rarity": "common",
+      "max_level": 3,
+      "params": { "move_speed_values": [0.15, 0.3, 0.45] }
+    },
+    {
+      "id": "tough",
+      "name": "Tough",
+      "description": "Max HP increases by 20%, 40%, then 60%.",
+      "icon": "tough",
+      "category": "survival",
+      "rarity": "common",
+      "max_level": 3,
+      "params": { "max_health_values": [0.2, 0.4, 0.6] }
+    },
+    {
       "id": "ricochet",
       "name": "Ricochet",
-      "description": "Projectiles bounce to a nearby enemy on final hit.",
+      "description": "Projectiles bounce to a nearby enemy after impact.",
       "icon": "ricochet",
-      "target": "primary",
-      "effect_type": "ricochet",
+      "category": "weapon",
       "rarity": "rare",
-      "params": { "bounce_count": 1, "bounce_range": 200 }
+      "params": { "bounce_count": 1, "bounce_range": 220.0 }
     },
     {
       "id": "fire_trail",
       "name": "Fire Trail",
-      "description": "Projectiles leave a short burning trail.",
+      "description": "Projectiles leave a burning trail behind them.",
       "icon": "fire_trail",
-      "target": "primary",
-      "effect_type": "fire_trail",
+      "category": "weapon",
       "rarity": "rare",
       "params": { "trail_lifetime": 1.5, "tick_interval": 0.5, "damage_percent": 0.3 }
     },
     {
-      "id": "dash_damage",
-      "name": "Impact Dash",
-      "description": "Dash damages enemies you pass through.",
-      "icon": "dash_damage",
-      "target": "dash",
-      "effect_type": "dash_damage",
+      "id": "explosive_rounds",
+      "name": "Explosive Rounds",
+      "description": "Projectiles explode on hit for a small area burst.",
+      "icon": "explosive_rounds",
+      "category": "weapon",
       "rarity": "rare",
-      "params": { "damage_percent": 1.0 }
+      "params": { "explosion_radius": 82.0, "damage_percent": 0.65 }
+    },
+    {
+      "id": "freeze_shot",
+      "name": "Freeze Shot",
+      "description": "Projectiles slow enemies by 50% for 1 second.",
+      "icon": "freeze_shot",
+      "category": "weapon",
+      "rarity": "rare",
+      "params": { "slow_multiplier": 0.5, "slow_duration": 1.0 }
+    },
+    {
+      "id": "poison",
+      "name": "Poison",
+      "description": "Projectiles apply a stacking damage-over-time effect.",
+      "icon": "poison",
+      "category": "weapon",
+      "rarity": "rare",
+      "params": { "poison_dps": 8.0, "poison_duration": 2.5 }
     }
   ]
 }
