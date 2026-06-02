@@ -70,7 +70,7 @@ static func create_explosion_burst(color: Color, weight: float = 1.0) -> GPUPart
 
 static func create_death_burst(color: Color, weight: float = 1.0) -> GPUParticles2D:
 	var particles := _create_particles()
-	particles.amount = 16 + int(round(weight * 14.0))
+	particles.amount = 32 + int(round(weight * 28.0))
 	particles.lifetime = 0.18 + weight * 0.06 + (0.04 if weight >= 1.35 else 0.0)
 	particles.one_shot = true
 	particles.explosiveness = 1.0
@@ -89,6 +89,23 @@ static func create_death_burst(color: Color, weight: float = 1.0) -> GPUParticle
 	particles.process_material = material
 	_configure_one_shot(particles)
 	return particles
+
+static func create_debris_ring(color: Color, radius: float = 84.0, spoke_count: int = 12, duration: float = 0.22) -> Node2D:
+	var node := Node2D.new()
+	for index in range(maxi(spoke_count, 1)):
+		var direction := Vector2.RIGHT.rotated(TAU * float(index) / float(maxi(spoke_count, 1)))
+		var spoke := Line2D.new()
+		spoke.width = 2.0
+		spoke.default_color = color
+		spoke.points = PackedVector2Array([direction * radius * 0.22, direction * radius])
+		node.add_child(spoke)
+	var tween := node.create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(node, "scale", Vector2.ONE * 1.2, duration)
+	tween.tween_property(node, "modulate:a", 0.0, duration)
+	tween.set_parallel(false)
+	tween.tween_callback(node.queue_free)
+	return node
 
 static func create_dash_trail(color: Color, weight: float = 1.0) -> GPUParticles2D:
 	var particles := _create_particles()

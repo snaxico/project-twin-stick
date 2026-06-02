@@ -1,5 +1,7 @@
 extends Node
 
+signal level_up(new_level: int)
+
 const PlayerInventoryData = preload("res://scripts/game/PlayerInventory.gd")
 const AbilityRegistryData = preload("res://scripts/game/AbilityRegistry.gd")
 
@@ -241,6 +243,7 @@ func add_xp(amount: int) -> void:
 		xp_level += 1
 		xp_pending_levelups += 1
 		xp_to_next_level = 200 + (xp_level * 150)
+		level_up.emit(xp_level)
 
 func get_pending_levelups() -> int:
 	return xp_pending_levelups

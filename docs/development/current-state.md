@@ -24,6 +24,7 @@ The live runtime is now aligned to the `Feature Roadmap V3` redesign:
 - structured runs use a `2-act` branching map:
   - Act 1 combat rows + optional elites + mid-boss
   - Act 2 combat rows + optional elites + final boss
+- boss rooms spawn players below the center boss spawn with horizontal co-op spread
 - endless runs use sequential rooms with:
   - no map
   - boss every 5 rooms
@@ -44,7 +45,7 @@ The live runtime is now aligned to the `Feature Roadmap V3` redesign:
 ## Loadout / Combat
 
 - every player always has:
-  - `Rifle`
+  - faster starter `Rifle` (`~4 shots/sec`)
   - `2` equal ability slots
   - mutation inventory
 - live ability roster:
@@ -104,13 +105,18 @@ The live runtime is now aligned to the `Feature Roadmap V3` redesign:
 ## Encounter Systems
 
 - rooms use continuous time-based spawning:
-  - enemies spawn one at a time on a timer throughout the room duration
+  - combat / elite rooms begin with a 6-8 enemy opening burst
+  - enemies spawn on a timer throughout the room duration
   - Act 1 rooms: `~35s`, Act 2 rooms: `~45s`, elite rooms: `+10s`
-  - spawn interval starts at `~1.8s` (Act 1) / `~1.3s` (Act 2), tightens with depth
+  - spawn interval starts at `~1.8s` (Act 1) / `~1.3s` (Act 2), tightens with depth, and now ramps down to `~55%` over the first `45s`
   - when the timer expires spawning stops; room clears when all remaining enemies are dead
-  - `Accelerating Waves` modifier ramps spawn interval from 100% to 33% over time
+  - `Accelerating Waves` modifier stacks an additional aggressive ramp on top of the base ramp
   - `Swarm` modifier spawns 2 at a time with half HP
-- enemies spawn at random arena edges inside the wall boundaries
+- multi-enemy spawn pulses now distribute enemies across multiple arena edges instead of clumping on one edge
+- enemies apply soft local separation to reduce blob stacking while pursuing players
+  - separation uses a per-frame spatial grid lookup instead of each enemy scanning the full enemy list
+- high-count combat target lookups now use the same nearby-enemy grid for player auto-targeting, turret targeting, orbit hits, ability mine checks, ricochets, and player AOE explosions where applicable
+- nonessential combat hit VFX are throttled during very dense fights to reduce particle/ring allocation spikes
 - HP pickups now drop from non-boss enemy kills:
   - `~10%` chance
   - `5 HP` heal
@@ -127,6 +133,7 @@ The live runtime is now aligned to the `Feature Roadmap V3` redesign:
   - minors: `Accelerating Waves`, `Enemy Speed`, `Swarm`, `Shielded`, `Explosive Death`
   - majors: `Fire Floor`, `Ice Zone`, `Mine Field`, `Shrinking Arena`
   - `Gravity Wells` was removed after playtesting because its effect was not readable enough
+- `Mine Field` sweeps now use softened damage with a per-sweep/per-player hit cooldown to prevent frame-stacked one-shots
 
 ## UI / Presentation
 
@@ -134,14 +141,17 @@ The live runtime is now aligned to the `Feature Roadmap V3` redesign:
   - top-center XP bar + level + pending picks
   - near-player cooldown arcs
   - persistent near-player health bars
-  - bottom loadout overview cards with health, ability cooldowns, ability names, and mutation count
+  - bottom loadout overview cards with green health, slot-colored ability cooldowns, ability names, and mutation count
+  - slot 1 cooldown color uses the player tint, slot 2 cooldown color is purple, and near-player cooldown rings match those bottom-HUD slot colors
   - side objective progress
   - active modifier chips
   - endless room score label when applicable
 - pause screen now shows:
+  - full-screen dimmed backdrop with centered menu
   - per-player build summary
   - equipped abilities
   - current mutations with levels
+  - disabled `Settings` placeholder (`Coming soon`)
 - mutation pick UI now shows:
   - simultaneous per-player picks
   - rare highlighting
@@ -158,8 +168,11 @@ The live runtime is now aligned to the `Feature Roadmap V3` redesign:
   - pure black floor
   - neon grid
   - act-colored border treatment
-  - enemy hit / death particles
-  - ability-specific effect bursts
+  - stronger enemy hit / death particles, including elite/boss debris rings
+  - ability-specific activation flashes and hit sparks
+  - level-up, boss-entrance, and major-modifier screen/ring feedback
+  - enemy projectiles are rendered bright red for readability
+  - Fire Floor hazard zones are larger than the first round-2 implementation
 
 ## Active Systems
 
@@ -173,6 +186,7 @@ The live runtime is now aligned to the `Feature Roadmap V3` redesign:
 - `CoopManager.gd`
   - room runtime
   - continuous time-based spawning
+  - deferred enemy spawn pipeline for physics-safe child spawns
   - ability dispatch
   - reward sequencing
   - boss helper attacks
@@ -208,11 +222,12 @@ The live runtime is now aligned to the `Feature Roadmap V3` redesign:
 ## Known Risks
 
 - full live playtesting and balance validation still have not been run after the full V3 integration
+- round-2 tuning has passed headless validation but still needs live playtesting
 - boss behavior is implemented, but still likely needs feel tuning against real runs
 - modifier stacking and endless pressure have not been manually stress-tested yet
-- the new vertical map and bottom HUD have passed parse validation but still need controller/manual readability testing
+- the rebuilt pause menu, new VFX density, swarm performance optimization, and slot-colored HUD have passed parse validation but still need controller/manual readability testing
 - Pulsar teleport and Elite Support minion spawning need live feel validation
-- spawn timing values (`_room_duration`, `_spawn_interval`) are first-pass and need playtesting
+- spawn timing values, opening burst size, base ramp, and anti-clump separation are first-pass and need playtesting
 - the map UI is functional but compact — may need further polish for controller navigation
 - `GoldPickup.gd` remains deleted; gold stub functions in `RunState.gd` remain (no-ops)
 - `wave_count` fields in RunState node data are now unused dead data (harmless)
@@ -222,7 +237,8 @@ The live runtime is now aligned to the `Feature Roadmap V3` redesign:
 Run manual validation across:
 
 - continuous spawn pacing in `1P` and `2P` — does `35-45s` room duration feel right?
-- spawn interval feel — is `1.3-1.8s` per enemy enough pressure or too slow?
+- first `30s` pressure — do the opening burst, faster rifle, spawn ramp, and multi-edge spawns feel active without overwhelming?
+- minefield survivability — no sweep/mine one-shot behavior
 - endless difficulty scaling past room 20
 - elite reward value
 - boss escalation feel

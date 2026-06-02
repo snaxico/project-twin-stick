@@ -3,6 +3,8 @@ extends CharacterBody2D
 const ParticleFactoryData = preload("res://scripts/juice/ParticleFactory.gd")
 const PULSAR_ARENA_MARGIN := 260.0
 const PULSAR_TELEPORT_MIN_DISTANCE := 400.0
+const SEPARATION_RADIUS := 64.0
+const SEPARATION_STRENGTH := 120.0
 
 signal enemy_died(enemy)
 signal fire_requested(origin, direction, speed, damage, team, color, projectile_scale)
@@ -404,9 +406,38 @@ func _physics_process(delta: float) -> void:
 		_attempt_contact_damage(now)
 	if _external_velocity.length() > 0.0:
 		_external_velocity = _external_velocity.move_toward(Vector2.ZERO, delta * 14.0)
+	desired_velocity += _apply_separation()
 	velocity = desired_velocity + _external_velocity
 	move_and_slide()
 	_update_visual_state()
+
+func _apply_separation() -> Vector2:
+	if is_boss() or _combat_owner == null:
+		return Vector2.ZERO
+	var enemy_nodes: Array = []
+	if _combat_owner.has_method("get_nearby_enemy_target_nodes"):
+		enemy_nodes = _combat_owner.get_nearby_enemy_target_nodes(global_position, SEPARATION_RADIUS)
+	elif _combat_owner.has_method("get_enemy_target_nodes"):
+		enemy_nodes = _combat_owner.get_enemy_target_nodes()
+	if enemy_nodes.size() < 3:
+		return Vector2.ZERO
+	var push := Vector2.ZERO
+	for neighbor in enemy_nodes:
+		if neighbor == self or neighbor == null or not is_instance_valid(neighbor) or not (neighbor is Node2D):
+			continue
+		if neighbor.has_method("is_boss") and neighbor.is_boss():
+			continue
+		if neighbor.has_method("is_alive") and not neighbor.is_alive():
+			continue
+		var offset := global_position - (neighbor as Node2D).global_position
+		var distance := offset.length()
+		if distance <= 0.0 or distance >= SEPARATION_RADIUS:
+			continue
+		push += offset.normalized() * (1.0 - distance / SEPARATION_RADIUS) * SEPARATION_STRENGTH
+	var max_push := _get_effective_move_speed() * 0.8
+	if push.length() > max_push:
+		push = push.normalized() * max_push
+	return push
 
 func _update_status_effects(now: float) -> void:
 	if now >= _slow_until:
@@ -747,13 +778,22 @@ func _spawn_death_particles() -> void:
 	var parent_node := get_parent()
 	if parent_node == null:
 		return
-	var burst := ParticleFactoryData.create_death_burst(_feedback_color, 1.8 if is_boss() else _feedback_weight)
+	var death_weight := 2.2 if is_boss() else _feedback_weight * 1.25
+	var burst := ParticleFactoryData.create_death_burst(_feedback_color.lightened(0.08), death_weight)
 	burst.global_position = global_position
 	parent_node.add_child(burst)
 	if is_boss() or get_type_name().begins_with("elite_"):
-		var ring := ParticleFactoryData.create_explosion_ring(_feedback_color, 120.0 if is_boss() else 84.0, 4.0)
+		var ring_radius := 150.0 if is_boss() else 96.0
+		var ring := ParticleFactoryData.create_explosion_ring(_feedback_color, ring_radius, 4.0)
 		ring.global_position = global_position
 		parent_node.add_child(ring)
+		var debris := ParticleFactoryData.create_debris_ring(_feedback_color.lightened(0.18), ring_radius * 0.9, 18 if is_boss() else 12, 0.34 if is_boss() else 0.24)
+		debris.global_position = global_position
+		parent_node.add_child(debris)
+	else:
+		var pop := ParticleFactoryData.create_impact_ring(_feedback_color.lightened(0.16), 32.0, 2.5)
+		pop.global_position = global_position
+		parent_node.add_child(pop)
 
 func _update_visual_state() -> void:
 	if visual == null:

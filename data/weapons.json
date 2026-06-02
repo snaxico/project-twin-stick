@@ -6,7 +6,7 @@
       "type": "weapon",
       "stats": {
         "damage": 16.0,
-        "fire_rate": 3.0,
+        "fire_rate": 4.0,
         "projectile_speed": 850.0,
         "range": 950.0,
         "area": 4.0

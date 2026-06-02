@@ -28,7 +28,7 @@ signal damage_taken(player, amount, current_health)
 @export_range(1, 4, 1) var player_id: int = 1
 @export var move_speed: float = 390.0
 @export var max_health: int = 50
-@export var weapon_fire_interval: float = 0.33
+@export var weapon_fire_interval: float = 0.25
 @export var projectile_speed: float = 850.0
 @export var projectile_damage: int = 16
 
@@ -68,7 +68,7 @@ var _external_impulse := Vector2.ZERO
 var _mutation_ids: Array = []
 var _base_move_speed: float = 390.0
 var _base_max_health: int = 50
-var _base_weapon_fire_interval: float = 0.33
+var _base_weapon_fire_interval: float = 0.25
 var _base_projectile_damage: int = 16
 var _modifier_move_speed_sources: Dictionary = {}
 var _modifier_attack_speed_sources: Dictionary = {}
@@ -175,7 +175,7 @@ func apply_loadout(loadout: Dictionary) -> void:
 	_weapon_profile_name = str(loadout.get("weapon_name", "Rifle"))
 	_weapon_stats = (loadout.get("weapon_stats", {}) as Dictionary).duplicate(true)
 	_base_projectile_damage = int(round(float(_weapon_stats.get("damage", projectile_damage))))
-	_base_weapon_fire_interval = 1.0 / max(float(_weapon_stats.get("fire_rate", 3.0)), 0.01)
+	_base_weapon_fire_interval = 1.0 / max(float(_weapon_stats.get("fire_rate", 4.0)), 0.01)
 	projectile_speed = float(_weapon_stats.get("projectile_speed", projectile_speed))
 	_weapon_range = float(_weapon_stats.get("range", _weapon_range))
 	_weapon_area = float(_weapon_stats.get("area", _weapon_area))

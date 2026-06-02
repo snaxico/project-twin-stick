@@ -1,6 +1,8 @@
 class_name OrbitNode
 extends Node2D
 
+const ParticleFactoryData = preload("res://scripts/juice/ParticleFactory.gd")
+
 var owner_node: Node2D = null
 var lifetime := 5.0
 var orb_count := 3
@@ -33,7 +35,7 @@ func _physics_process(delta: float) -> void:
 	global_position = owner_node.global_position
 	_angle = fmod(_angle + rotation_speed * delta, TAU)
 	var now := Time.get_ticks_msec() / 1000.0
-	for enemy in get_tree().get_nodes_in_group("aim_target"):
+	for enemy in _get_candidate_enemies(orbit_radius + 32.0):
 		if enemy == null or not is_instance_valid(enemy) or not enemy.has_method("is_alive") or not enemy.is_alive():
 			continue
 		for orb_position in _get_orb_positions():
@@ -42,6 +44,7 @@ func _physics_process(delta: float) -> void:
 					break
 				_hit_cooldowns[enemy] = now + 0.22
 				enemy.apply_damage(damage)
+				_spawn_hit_sparks(enemy.global_position, enemy.global_position - orb_position)
 				if enemy.has_method("apply_knockback"):
 					enemy.apply_knockback((enemy.global_position - global_position).normalized(), 180.0)
 				break
@@ -59,3 +62,20 @@ func _draw() -> void:
 		var local_position: Vector2 = orb_position - global_position
 		draw_circle(local_position, 10.0, Color(tint.r, tint.g, tint.b, 0.34))
 		draw_arc(local_position, 12.0, 0.0, TAU, 16, Color(tint.r, tint.g, tint.b, 0.92), 3.0)
+
+func _get_candidate_enemies(radius: float) -> Array:
+	var tree := get_tree()
+	if tree == null:
+		return []
+	var combat_owner := tree.current_scene
+	if combat_owner != null and combat_owner.has_method("get_nearby_enemy_target_nodes"):
+		return combat_owner.get_nearby_enemy_target_nodes(global_position, radius)
+	return tree.get_nodes_in_group("aim_target")
+
+func _spawn_hit_sparks(hit_position: Vector2, direction: Vector2) -> void:
+	var parent_node := get_parent()
+	if parent_node == null:
+		return
+	var sparks := ParticleFactoryData.create_impact_sparks(tint.lightened(0.18), direction.normalized() if direction.length() > 0.0 else Vector2.UP, 0.72)
+	sparks.global_position = hit_position
+	parent_node.add_child(sparks)

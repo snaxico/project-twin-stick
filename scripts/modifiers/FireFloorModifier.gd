@@ -6,7 +6,7 @@ const ACTIVE_DURATION := 4.0
 const SPAWN_INTERVAL := 2.8
 const DAMAGE_INTERVAL := 0.5
 const DAMAGE_AMOUNT := 5
-const ZONE_RADIUS := 180.0
+const ZONE_RADIUS := 240.0
 
 var _arena_rect := Rect2()
 var _player_nodes: Array = []
@@ -37,7 +37,7 @@ func _physics_process(delta: float) -> void:
 			for player in _player_nodes:
 				if player == null or not is_instance_valid(player) or not player.has_method("is_alive") or not player.is_alive():
 					continue
-				if player.global_position.distance_to(zone["position"] as Vector2) <= ZONE_RADIUS:
+				if player.global_position.distance_squared_to(zone["position"] as Vector2) <= ZONE_RADIUS * ZONE_RADIUS:
 					player.apply_damage(DAMAGE_AMOUNT)
 		if float(zone.get("time", 0.0)) >= WARNING_DURATION + ACTIVE_DURATION:
 			expired.append(zone)

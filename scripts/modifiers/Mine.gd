@@ -6,7 +6,7 @@ const ExplosionEffectData = preload("res://scripts/modifiers/MineExplosionEffect
 const TRIGGER_RADIUS := 84.0
 const EXPLOSION_RADIUS := 86.0
 const DETONATE_DELAY := 0.2
-const DAMAGE := 10
+const DAMAGE := 8
 
 var _detonating := false
 var _detonate_timer := 0.0

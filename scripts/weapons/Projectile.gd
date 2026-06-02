@@ -218,18 +218,25 @@ func _redirect_to_ricochet_target(previous_target: Node) -> bool:
 	if tree == null:
 		return false
 	var best_target: Node2D = null
-	var best_distance := INF
-	for candidate in tree.get_nodes_in_group("aim_target"):
+	var best_distance_sq := INF
+	var range_sq := ricochet_range * ricochet_range
+	var candidates: Array = []
+	var combat_owner := tree.current_scene
+	if combat_owner != null and combat_owner.has_method("get_nearby_enemy_target_nodes"):
+		candidates = combat_owner.get_nearby_enemy_target_nodes(global_position, ricochet_range)
+	else:
+		candidates = tree.get_nodes_in_group("aim_target")
+	for candidate in candidates:
 		if candidate == null or not is_instance_valid(candidate) or candidate == previous_target:
 			continue
 		if _hit_targets.has(candidate):
 			continue
 		if not (candidate is Node2D):
 			continue
-		var distance := global_position.distance_to((candidate as Node2D).global_position)
-		if distance > ricochet_range or distance >= best_distance:
+		var distance_sq := global_position.distance_squared_to((candidate as Node2D).global_position)
+		if distance_sq > range_sq or distance_sq >= best_distance_sq:
 			continue
-		best_distance = distance
+		best_distance_sq = distance_sq
 		best_target = candidate as Node2D
 	if best_target == null:
 		return false

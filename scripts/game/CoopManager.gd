@@ -27,6 +27,7 @@ const ARENA_SIZE := Vector2(4800.0, 2700.0)
 const ARENA_RECT := Rect2(Vector2.ZERO, ARENA_SIZE)
 const ARENA_CENTER := Vector2(ARENA_SIZE.x * 0.5, ARENA_SIZE.y * 0.5)
 const ARENA_MARGIN := 72.0
+const BOSS_PLAYER_SPAWN_DISTANCE := 720.0
 const FLOOR_GRID_SPACING := 160.0
 const FLOOR_GRID_MAJOR_INTERVAL := 4
 const ARENA_WALL_VISUAL_WIDTH := 18.0
@@ -38,6 +39,12 @@ const COLLECTOR_TARGET := 8
 const COLLECTOR_TOTAL_SPAWN := 12
 const COLLECTOR_SPAWN_INTERVAL := 2.5
 const HEALTH_DROP_CHANCE := 0.10
+const BASE_RAMP_DURATION := 45.0
+const ENEMY_SEPARATION_CELL_SIZE := 96.0
+const HUD_HEALTH_COLOR := Color(0.24, 0.92, 0.34, 1.0)
+const HUD_SLOT_2_COLOR := Color(0.72, 0.36, 1.0, 1.0)
+const ENEMY_PROJECTILE_COLOR := Color(1.0, 0.0, 0.0, 1.0)
+const COMBAT_VFX_LOAD_THRESHOLD := 150
 
 const XP_PER_ENEMY_TYPE := {
 	"chaser": 10,
@@ -78,9 +85,10 @@ signal return_to_menu_requested
 @onready var right_wall: CollisionShape2D = $ArenaBounds/RightWall
 @onready var ui_layer: CanvasLayer = $UI
 @onready var pause_panel: Panel = $UI/PausePanel
-@onready var resume_button: Button = $UI/PausePanel/MarginContainer/PauseLayout/ResumeButton
-@onready var pause_retry_button: Button = $UI/PausePanel/MarginContainer/PauseLayout/PauseRetryButton
-@onready var pause_main_menu_button: Button = $UI/PausePanel/MarginContainer/PauseLayout/PauseMainMenuButton
+@onready var resume_button: Button = $UI/PausePanel/CenterContainer/PauseLayout/ResumeButton
+@onready var pause_settings_button: Button = $UI/PausePanel/CenterContainer/PauseLayout/PauseSettingsButton
+@onready var pause_retry_button: Button = $UI/PausePanel/CenterContainer/PauseLayout/PauseRetryButton
+@onready var pause_main_menu_button: Button = $UI/PausePanel/CenterContainer/PauseLayout/PauseMainMenuButton
 
 var _player_configs: Array = []
 var _player_nodes: Array = []
@@ -100,6 +108,7 @@ var _spawn_interval := 1.6
 var _next_spawn_at := 0.0
 var _enemies_spawned := 0
 var _enemies_killed := 0
+var _pending_enemy_spawns := 0
 var _spawning_done := false
 var _burst_interval := 10.0
 var _next_burst_at := 0.0
@@ -149,6 +158,8 @@ var _active_hazards: Array = []
 var _active_mines: Array = []
 var _next_hud_refresh_at := 0.0
 var _scheduled_enemy_shockwaves: Array = []
+var _enemy_separation_grid: Dictionary = {}
+var _enemy_separation_grid_frame := -1
 var _game_paused := false
 var _pause_input_proxy = null
 
@@ -161,6 +172,9 @@ func configure_room(room_config: Dictionary) -> void:
 func _ready() -> void:
 	if player_scene == null:
 		player_scene = load("res://scenes/player/Player.tscn")
+	var level_up_callable := Callable(self, "_on_level_up")
+	if not RunState.level_up.is_connected(level_up_callable):
+		RunState.level_up.connect(level_up_callable)
 	_hide_legacy_ui()
 	_bind_ui()
 	_load_modifier_definitions()
@@ -173,9 +187,23 @@ func _bind_ui() -> void:
 	resume_button.pressed.connect(_on_resume_pressed)
 	pause_retry_button.pressed.connect(_on_retry_pressed)
 	pause_main_menu_button.pressed.connect(_on_main_menu_pressed)
+	pause_settings_button.disabled = true
+	pause_settings_button.tooltip_text = "Coming soon"
+	_configure_pause_focus()
 	_pause_input_proxy = PauseInputProxyData.new()
 	pause_panel.add_child(_pause_input_proxy)
 	_pause_input_proxy.pause_pressed.connect(_on_pause_proxy_pressed)
+
+func _configure_pause_focus() -> void:
+	var buttons := [resume_button, pause_retry_button, pause_main_menu_button]
+	for index in range(buttons.size()):
+		var button := buttons[index] as Button
+		button.focus_mode = Control.FOCUS_ALL
+		var previous_button := buttons[(index - 1 + buttons.size()) % buttons.size()] as Button
+		var next_button := buttons[(index + 1) % buttons.size()] as Button
+		button.focus_neighbor_top = button.get_path_to(previous_button)
+		button.focus_neighbor_bottom = button.get_path_to(next_button)
+	pause_settings_button.focus_mode = Control.FOCUS_NONE
 
 func _hide_legacy_ui() -> void:
 	for node_path in [
@@ -276,11 +304,13 @@ func _build_hud() -> void:
 	_bottom_player_hud_cards.clear()
 	for index in range(_player_configs.size()):
 		var indicator := PlayerCombatIndicatorData.new()
-		indicator.configure_player(_player_configs[index].tint)
+		var tint: Color = _player_configs[index].tint
+		var slot_1_color := _get_slot_color(tint, 0)
+		var slot_2_color := _get_slot_color(tint, 1)
+		indicator.configure_player(tint, slot_1_color, slot_2_color)
 		_hud_root.add_child(indicator)
 		_player_combat_indicators.append(indicator)
 
-		var tint: Color = _player_configs[index].tint
 		var card := PanelContainer.new()
 		card.custom_minimum_size = Vector2(260.0, 72.0)
 		var card_style := StyleBoxFlat.new()
@@ -319,6 +349,7 @@ func _build_hud() -> void:
 		mutation_badge.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		mutation_badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		mutation_badge.add_theme_font_size_override("font_size", 10)
+		mutation_badge.add_theme_color_override("font_color", tint.lightened(0.3))
 		top_row.add_child(mutation_badge)
 
 		var health_bar := ProgressBar.new()
@@ -327,6 +358,7 @@ func _build_hud() -> void:
 		health_bar.max_value = 100.0
 		health_bar.value = 100.0
 		health_bar.custom_minimum_size = Vector2(120.0, 10.0)
+		_apply_progress_bar_tint(health_bar, HUD_HEALTH_COLOR, 0.92)
 		card_layout.add_child(health_bar)
 
 		var ability_row := HBoxContainer.new()
@@ -339,6 +371,7 @@ func _build_hud() -> void:
 		ability_row.add_child(slot_1_box)
 		var slot_1_label := Label.new()
 		slot_1_label.add_theme_font_size_override("font_size", 10)
+		slot_1_label.add_theme_color_override("font_color", slot_1_color)
 		slot_1_box.add_child(slot_1_label)
 		var slot_1_bar := ProgressBar.new()
 		slot_1_bar.show_percentage = false
@@ -346,6 +379,7 @@ func _build_hud() -> void:
 		slot_1_bar.max_value = 100.0
 		slot_1_bar.value = 100.0
 		slot_1_bar.custom_minimum_size = Vector2(96.0, 8.0)
+		_apply_progress_bar_tint(slot_1_bar, slot_1_color, 0.82)
 		slot_1_box.add_child(slot_1_bar)
 
 		var slot_2_box := VBoxContainer.new()
@@ -354,6 +388,7 @@ func _build_hud() -> void:
 		ability_row.add_child(slot_2_box)
 		var slot_2_label := Label.new()
 		slot_2_label.add_theme_font_size_override("font_size", 10)
+		slot_2_label.add_theme_color_override("font_color", slot_2_color)
 		slot_2_box.add_child(slot_2_label)
 		var slot_2_bar := ProgressBar.new()
 		slot_2_bar.show_percentage = false
@@ -361,6 +396,7 @@ func _build_hud() -> void:
 		slot_2_bar.max_value = 100.0
 		slot_2_bar.value = 100.0
 		slot_2_bar.custom_minimum_size = Vector2(96.0, 8.0)
+		_apply_progress_bar_tint(slot_2_bar, slot_2_color, 0.78)
 		slot_2_box.add_child(slot_2_bar)
 
 		_bottom_player_hud_cards.append({
@@ -371,6 +407,27 @@ func _build_hud() -> void:
 			"slot_2_label": slot_2_label,
 			"slot_2_bar": slot_2_bar,
 		})
+
+func _get_slot_color(player_tint: Color, slot_index: int) -> Color:
+	if slot_index == 0:
+		return player_tint.lightened(0.12)
+	return HUD_SLOT_2_COLOR
+
+func _apply_progress_bar_tint(bar: ProgressBar, tint: Color, alpha: float) -> void:
+	var background := StyleBoxFlat.new()
+	background.bg_color = Color(0.04, 0.06, 0.09, 0.72)
+	background.corner_radius_top_left = 3
+	background.corner_radius_top_right = 3
+	background.corner_radius_bottom_left = 3
+	background.corner_radius_bottom_right = 3
+	bar.add_theme_stylebox_override("background", background)
+	var fill := StyleBoxFlat.new()
+	fill.bg_color = Color(tint.r, tint.g, tint.b, alpha)
+	fill.corner_radius_top_left = 3
+	fill.corner_radius_top_right = 3
+	fill.corner_radius_bottom_left = 3
+	fill.corner_radius_bottom_right = 3
+	bar.add_theme_stylebox_override("fill", fill)
 
 func _spawn_players() -> void:
 	for child in players.get_children():
@@ -545,6 +602,7 @@ func _start_room() -> void:
 	_next_spawn_at = 0.4
 	_enemies_spawned = 0
 	_enemies_killed = 0
+	_pending_enemy_spawns = 0
 	_spawning_done = false
 	_burst_interval = 10.0 if RunState.get_current_act() <= 1 else 8.0
 	_next_burst_at = _burst_interval
@@ -575,6 +633,8 @@ func _start_room() -> void:
 		_spawn_boss()
 	elif _room_type == "elite":
 		_spawn_elite_miniboss()
+	if _room_type != "boss":
+		_spawn_opening_burst()
 	_refresh_hud()
 
 func _clear_runtime_nodes() -> void:
@@ -594,6 +654,8 @@ func _clear_runtime_nodes() -> void:
 	_mine_field_modifier = null
 	_shrinking_arena_modifier = null
 	_scheduled_enemy_shockwaves.clear()
+	_enemy_separation_grid.clear()
+	_enemy_separation_grid_frame = -1
 	_hold_buff_offer.clear()
 	_invalidate_runtime_caches()
 
@@ -624,18 +686,22 @@ func _apply_active_modifiers() -> void:
 		_fire_floor_modifier = FireFloorModifierData.new()
 		_fire_floor_modifier.setup(ARENA_RECT, _player_nodes)
 		effects.add_child(_fire_floor_modifier)
+		_spawn_modifier_activation_vfx("fire_floor", Color(1.0, 0.44, 0.18, 0.72))
 	if _active_modifiers.has("ice_zone"):
 		_ice_zone_modifier = IceZoneModifierData.new()
 		_ice_zone_modifier.setup(ARENA_RECT, _player_nodes)
 		effects.add_child(_ice_zone_modifier)
+		_spawn_modifier_activation_vfx("ice_zone", Color(0.42, 0.82, 1.0, 0.72))
 	if _active_modifiers.has("mine_field"):
 		_mine_field_modifier = MineFieldModifierData.new()
 		_mine_field_modifier.setup(ARENA_RECT, _player_nodes)
 		effects.add_child(_mine_field_modifier)
+		_spawn_modifier_activation_vfx("mine_field", Color(1.0, 0.78, 0.24, 0.72))
 	if _active_modifiers.has("shrinking_arena"):
 		_shrinking_arena_modifier = ShrinkingArenaModifierData.new()
 		_shrinking_arena_modifier.setup(ARENA_RECT)
 		effects.add_child(_shrinking_arena_modifier)
+		_spawn_modifier_activation_vfx("shrinking_arena", Color(0.96, 0.32, 0.28, 0.72))
 	_populate_modifier_hud()
 
 func _physics_process(delta: float) -> void:
@@ -689,12 +755,12 @@ func _check_wave_progress() -> void:
 	if _room_clear_started:
 		return
 	if _room_type == "boss":
-		if _enemy_nodes.is_empty():
+		if _enemy_nodes.is_empty() and _pending_enemy_spawns <= 0:
 			_handle_room_clear()
 		return
 	if not _spawning_done:
 		_continuous_spawn()
-	if _spawning_done and _enemy_nodes.is_empty():
+	if _spawning_done and _enemy_nodes.is_empty() and _pending_enemy_spawns <= 0:
 		_handle_room_clear()
 
 func _continuous_spawn() -> void:
@@ -704,26 +770,42 @@ func _continuous_spawn() -> void:
 	var health_multiplier := 0.5 if bool(_minor_modifier_flags["swarm"]) else 1.0
 	if _room_elapsed >= _next_spawn_at:
 		var current_interval := _spawn_interval
+		var base_ramp := clampf(_room_elapsed / BASE_RAMP_DURATION, 0.0, 1.0)
+		current_interval = lerpf(_spawn_interval, _spawn_interval * 0.55, base_ramp)
 		if bool(_minor_modifier_flags["accelerating_waves"]):
 			var ramp := clampf(_room_elapsed / min(_room_duration, 25.0), 0.0, 1.0)
-			current_interval = lerpf(_spawn_interval, _spawn_interval * 0.33, ramp)
+			current_interval = lerpf(current_interval, current_interval * 0.6, ramp)
 		_next_spawn_at = _room_elapsed + current_interval
 		var batch := 2 if bool(_minor_modifier_flags["swarm"]) else 1
-		for _index in range(batch):
+		var stream_start_edge := randi() % 4 if batch > 1 else 0
+		for index in range(batch):
 			var enemy_type := _roll_wave_enemy_type(_room_enemy_pool)
-			var spawn_position := _get_enemy_spawn_position()
-			_spawn_enemy_instance(enemy_type, spawn_position, health_multiplier)
+			var spawn_position := _get_enemy_spawn_position() if batch == 1 else _get_enemy_spawn_position_for_index(index, stream_start_edge)
+			_queue_enemy_spawn(enemy_type, spawn_position, health_multiplier)
 			_enemies_spawned += 1
 	if _room_elapsed >= _next_burst_at:
 		_next_burst_at = _room_elapsed + _burst_interval
 		var burst_size := randi_range(4, 6) if RunState.get_current_act() <= 1 else randi_range(6, 8)
 		if bool(_minor_modifier_flags["swarm"]):
 			burst_size *= 2
-		for _index in range(burst_size):
+		var burst_start_edge := randi() % 4
+		for index in range(burst_size):
 			var enemy_type := _roll_wave_enemy_type(_room_enemy_pool)
-			var spawn_position := _get_enemy_spawn_position()
-			_spawn_enemy_instance(enemy_type, spawn_position, health_multiplier)
+			var spawn_position := _get_enemy_spawn_position_for_index(index, burst_start_edge)
+			_queue_enemy_spawn(enemy_type, spawn_position, health_multiplier)
 			_enemies_spawned += 1
+
+func _spawn_opening_burst() -> void:
+	var burst_size := 6 if RunState.get_current_act() <= 1 else 8
+	if bool(_minor_modifier_flags["swarm"]):
+		burst_size *= 2
+	var health_multiplier := 0.5 if bool(_minor_modifier_flags["swarm"]) else 1.0
+	var start_edge := randi() % 4
+	for index in range(burst_size):
+		var enemy_type := _roll_wave_enemy_type(_room_enemy_pool)
+		var spawn_position := _get_enemy_spawn_position_for_index(index, start_edge)
+		_queue_enemy_spawn(enemy_type, spawn_position, health_multiplier)
+		_enemies_spawned += 1
 
 func _spawn_enemy_instance(enemy_type: String, spawn_position: Vector2, health_multiplier: float = 1.0) -> Node2D:
 	var enemy = EnemySceneData.instantiate()
@@ -744,6 +826,16 @@ func _spawn_enemy_instance(enemy_type: String, spawn_position: Vector2, health_m
 	_enemy_nodes.append(enemy)
 	return enemy
 
+func _queue_enemy_spawn(enemy_type: String, spawn_position: Vector2, health_multiplier: float = 1.0) -> void:
+	_pending_enemy_spawns += 1
+	call_deferred("_spawn_queued_enemy_instance", enemy_type, spawn_position, health_multiplier)
+
+func _spawn_queued_enemy_instance(enemy_type: String, spawn_position: Vector2, health_multiplier: float) -> void:
+	_pending_enemy_spawns = max(_pending_enemy_spawns - 1, 0)
+	if _room_clear_started or not is_inside_tree():
+		return
+	_spawn_enemy_instance(enemy_type, spawn_position, health_multiplier)
+
 func _spawn_elite_miniboss() -> void:
 	var elite_pool := ["elite_charger", "elite_spitter", "elite_support"]
 	var elite_type := str(elite_pool[randi() % elite_pool.size()])
@@ -761,6 +853,7 @@ func _spawn_boss() -> void:
 		if RunState.is_endless_mode():
 			var room_scale := 1.0 + float(max(_room_depth - 1, 0)) * 0.1
 			boss.apply_room_modifier({"health_multiplier": room_scale})
+	_spawn_boss_entrance_vfx()
 
 func _roll_wave_enemy_type(pool: Array) -> String:
 	if pool.is_empty():
@@ -882,25 +975,27 @@ func _on_player_fire_requested(origin: Vector2, direction: Vector2, projectile_c
 		projectiles.add_child(projectile)
 
 func _on_player_ability_activated(player, _slot_index: int, ability_id: String, origin: Vector2, direction: Vector2, stats: Dictionary) -> void:
+	var tint: Color = stats.get("color", Color.WHITE)
+	_spawn_ability_activation_flash(origin, tint, ability_id)
 	match ability_id:
 		"shockwave":
 			_spawn_player_shockwave(origin, stats)
 		"dash":
-			_spawn_dash_effect(origin, direction, stats.get("color", Color.WHITE))
+			_spawn_dash_effect(origin, direction, tint)
 		"blink":
-			_spawn_blink_effect(origin, stats.get("color", Color.WHITE))
+			_spawn_blink_effect(origin, tint)
 		"shield":
-			_spawn_shield_effect(origin, float(stats.get("radius", 78.0)), stats.get("color", Color.WHITE))
+			_spawn_shield_effect(origin, float(stats.get("radius", 78.0)), tint)
 		"decoy":
 			var decoy := DecoyNodeData.new()
 			decoy.global_position = origin
-			decoy.configure(float(stats.get("duration", 5.0)), stats.get("color", Color.WHITE), int(stats.get("decoy_health", 120)))
+			decoy.configure(float(stats.get("duration", 5.0)), tint, int(stats.get("decoy_health", 120)))
 			players.add_child(decoy)
 			_active_decoys.append(decoy)
 		"turret":
 			var turret := TurretNodeData.new()
 			turret.global_position = origin
-			turret.configure(float(stats.get("duration", 6.0)), stats, stats.get("color", Color.WHITE))
+			turret.configure(float(stats.get("duration", 6.0)), stats, tint)
 			turret.fire_requested.connect(_on_player_fire_requested)
 			effects.add_child(turret)
 			_active_turrets.append(turret)
@@ -908,11 +1003,11 @@ func _on_player_ability_activated(player, _slot_index: int, ability_id: String, 
 			_spawn_ability_mines(origin, stats)
 		"orbit":
 			var orbit := OrbitNodeData.new()
-			orbit.configure(player, float(stats.get("duration", 5.0)), stats, stats.get("color", Color.WHITE))
+			orbit.configure(player, float(stats.get("duration", 5.0)), stats, tint)
 			effects.add_child(orbit)
 			_active_orbits.append(orbit)
 		"overcharge":
-			var burst := ParticleFactoryData.create_explosion_burst(stats.get("color", Color.WHITE), 0.9)
+			var burst := ParticleFactoryData.create_explosion_burst(tint, 1.15)
 			burst.global_position = origin
 			effects.add_child(burst)
 
@@ -920,7 +1015,7 @@ func _spawn_player_shockwave(origin: Vector2, stats: Dictionary) -> void:
 	var radius := float(stats.get("radius", 250.0))
 	var damage := int(round(float(stats.get("damage", 30.0))))
 	var knockback_force := float(stats.get("knockback_force", 950.0))
-	for enemy in _enemy_nodes:
+	for enemy in get_nearby_enemy_target_nodes(origin, radius):
 		if enemy == null or not is_instance_valid(enemy) or not enemy.is_alive():
 			continue
 		var offset: Vector2 = enemy.global_position - origin
@@ -928,6 +1023,7 @@ func _spawn_player_shockwave(origin: Vector2, stats: Dictionary) -> void:
 		if distance > radius:
 			continue
 		enemy.apply_damage(damage)
+		_spawn_target_hit_spark(enemy.global_position, offset.normalized() if distance > 0.0 else Vector2.UP, stats.get("color", Color.WHITE), 1.0)
 		if enemy.has_method("apply_knockback"):
 			var radial_direction: Vector2 = offset.normalized() if distance > 0.0 else Vector2.RIGHT
 			var distance_ratio := 1.0 - clampf(distance / max(radius, 0.01), 0.0, 1.0)
@@ -986,15 +1082,80 @@ func _spawn_shockwave_visual(center: Vector2, radius: float, color: Color, _dura
 	pulse.global_position = center
 	effects.add_child(pulse)
 
-func _on_enemy_fire_requested(origin: Vector2, direction: Vector2, speed: float, damage: int, team: String, color: Color, projectile_scale: float) -> void:
+func _spawn_ability_activation_flash(origin: Vector2, color: Color, ability_id: String) -> void:
+	var weight := 1.0
+	if ability_id == "shockwave" or ability_id == "overcharge":
+		weight = 1.25
+	var burst := ParticleFactoryData.create_explosion_burst(color.lightened(0.12), weight)
+	burst.global_position = origin
+	effects.add_child(burst)
+	var ring := ParticleFactoryData.create_impact_ring(color, 46.0 if ability_id != "shield" else 78.0, 3.0)
+	ring.global_position = origin
+	effects.add_child(ring)
+
+func _spawn_target_hit_spark(hit_position: Vector2, direction: Vector2, color: Color, weight: float) -> void:
+	if _should_suppress_combat_vfx():
+		return
+	var sparks := ParticleFactoryData.create_impact_sparks(color.lightened(0.18), direction, weight)
+	sparks.global_position = hit_position
+	effects.add_child(sparks)
+
+func _spawn_modifier_activation_vfx(_modifier_id: String, color: Color) -> void:
+	var ring := ParticleFactoryData.create_explosion_ring(color, max(ARENA_SIZE.x, ARENA_SIZE.y) * 0.32, 6.0)
+	ring.global_position = ARENA_CENTER
+	effects.add_child(ring)
+	_spawn_screen_flash(Color(color.r, color.g, color.b, 0.16), 0.28)
+
+func _spawn_boss_entrance_vfx() -> void:
+	if screen_shake != null and screen_shake.has_method("add_trauma"):
+		screen_shake.add_trauma(0.55)
+	_spawn_screen_flash(Color(0.82, 0.06, 0.04, 0.24), 0.5)
+	var ring := ParticleFactoryData.create_explosion_ring(Color(1.0, 0.14, 0.08, 0.78), 260.0, 6.0)
+	ring.global_position = ARENA_CENTER
+	effects.add_child(ring)
+
+func _spawn_enemy_death_global_vfx(enemy_type_name: String) -> void:
+	if enemy_type_name.begins_with("boss_"):
+		if screen_shake != null and screen_shake.has_method("add_trauma"):
+			screen_shake.add_trauma(0.6)
+		_spawn_screen_flash(Color(1.0, 1.0, 1.0, 0.18), 0.2)
+	elif enemy_type_name.begins_with("elite_"):
+		if screen_shake != null and screen_shake.has_method("add_trauma"):
+			screen_shake.add_trauma(0.25)
+
+func _spawn_screen_flash(color: Color, duration: float) -> void:
+	var flash := ColorRect.new()
+	flash.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	flash.color = color
+	ui_layer.add_child(flash)
+	var tween := flash.create_tween()
+	tween.tween_property(flash, "modulate:a", 0.0, maxf(duration, 0.01))
+	tween.tween_callback(flash.queue_free)
+
+func _on_level_up(_new_level: int) -> void:
+	for player in _player_nodes:
+		if player == null or not is_instance_valid(player):
+			continue
+		var tint: Color = _player_configs[int(player.player_index)].tint
+		var ring := ParticleFactoryData.create_explosion_ring(tint.lightened(0.22), 150.0, 4.5)
+		ring.global_position = player.global_position
+		effects.add_child(ring)
+		var burst := ParticleFactoryData.create_explosion_burst(tint.lightened(0.18), 1.0)
+		burst.global_position = player.global_position
+		effects.add_child(burst)
+	_spawn_screen_flash(Color(1.0, 0.94, 0.54, 0.18), 0.3)
+
+func _on_enemy_fire_requested(origin: Vector2, direction: Vector2, speed: float, damage: int, team: String, _color: Color, projectile_scale: float) -> void:
 	if projectiles.get_child_count() >= MAX_ACTIVE_PROJECTILES:
 		return
 	var projectile = ProjectileSceneData.instantiate()
 	projectile.global_position = origin
+	var projectile_color := ENEMY_PROJECTILE_COLOR
 	projectile.setup_from_config(team, direction, {
 		"speed": speed,
 		"damage": damage,
-		"color": color,
+		"color": projectile_color,
 		"feedback_profile": "enemy",
 		"impact_weight": projectile_scale,
 		"collision_half_width": 6.0 * projectile_scale,
@@ -1004,8 +1165,10 @@ func _on_enemy_fire_requested(origin: Vector2, direction: Vector2, speed: float,
 	projectiles.add_child(projectile)
 
 func _on_projectile_impact(origin: Vector2, direction: Vector2, team: String, color: Color, _feedback_profile: String, impact_weight: float, target: Node, combat_context: Dictionary) -> void:
-	_spawn_projectile_hit_effect(origin, direction, color, impact_weight, target)
-	if int(combat_context.get("knockback_level", 0)) >= 2:
+	var suppress_vfx := _should_suppress_combat_vfx()
+	if not suppress_vfx:
+		_spawn_projectile_hit_effect(origin, direction, color, impact_weight, target)
+	if not suppress_vfx and int(combat_context.get("knockback_level", 0)) >= 2:
 		var knockback_burst := ParticleFactoryData.create_impact_sparks(color.lightened(0.24), -direction.normalized() if direction.length() > 0.0 else Vector2.UP, impact_weight + 0.35)
 		knockback_burst.global_position = origin
 		effects.add_child(knockback_burst)
@@ -1013,12 +1176,12 @@ func _on_projectile_impact(origin: Vector2, direction: Vector2, team: String, co
 	var explosion_damage := int(combat_context.get("explosion_damage", 0))
 	if explosion_radius > 0.0 and explosion_damage > 0:
 		if team == "player":
-			for enemy in _enemy_nodes:
+			for enemy in get_nearby_enemy_target_nodes(origin, explosion_radius):
 				if enemy == null or not is_instance_valid(enemy) or not enemy.is_alive():
 					continue
 				if enemy == target:
 					continue
-				if enemy.global_position.distance_to(origin) <= explosion_radius:
+				if enemy.global_position.distance_squared_to(origin) <= explosion_radius * explosion_radius:
 					enemy.apply_damage(explosion_damage)
 		else:
 			for player in _player_nodes:
@@ -1026,9 +1189,10 @@ func _on_projectile_impact(origin: Vector2, direction: Vector2, team: String, co
 					continue
 				if player.global_position.distance_to(origin) <= explosion_radius:
 					player.apply_damage(explosion_damage)
-		var ring := ParticleFactoryData.create_explosion_ring(color, explosion_radius, 3.0)
-		ring.global_position = origin
-		effects.add_child(ring)
+		if not suppress_vfx:
+			var ring := ParticleFactoryData.create_explosion_ring(color, explosion_radius, 3.0)
+			ring.global_position = origin
+			effects.add_child(ring)
 
 func _spawn_projectile_hit_effect(origin: Vector2, direction: Vector2, color: Color, impact_weight: float, target: Node) -> void:
 	var effect_color := color.lightened(0.2)
@@ -1043,22 +1207,24 @@ func _spawn_projectile_hit_effect(origin: Vector2, direction: Vector2, color: Co
 		ring.global_position = origin
 		effects.add_child(ring)
 
+func _should_suppress_combat_vfx() -> bool:
+	return _enemy_nodes.size() + projectiles.get_child_count() >= COMBAT_VFX_LOAD_THRESHOLD
+
 func _on_enemy_died(enemy) -> void:
 	_enemy_nodes.erase(enemy)
 	_enemies_killed += 1
 	var enemy_type_name := str(enemy.get_type_name())
+	_spawn_enemy_death_global_vfx(enemy_type_name)
 	if enemy_type_name.begins_with("boss_"):
 		RunState.add_xp(0)
 	else:
 		RunState.add_xp(int(XP_PER_ENEMY_TYPE.get(enemy_type_name, 10)))
 	if not enemy_type_name.begins_with("boss_") and randf() < HEALTH_DROP_CHANCE:
-		var hp_pickup := HealthPickupData.new()
-		hp_pickup.global_position = enemy.global_position
-		pickups.add_child(hp_pickup)
+		call_deferred("_spawn_health_pickup", enemy.global_position)
 	if enemy_type_name == "splitter":
 		for mini_index in range(3):
 			var angle := TAU * float(mini_index) / 3.0
-			_spawn_enemy_instance("splitter_mini", enemy.global_position + Vector2.RIGHT.rotated(angle) * 36.0)
+			_queue_enemy_spawn("splitter_mini", enemy.global_position + Vector2.RIGHT.rotated(angle) * 36.0)
 	if _ice_zone_modifier != null and is_instance_valid(_ice_zone_modifier):
 		_ice_zone_modifier.spawn_patch(enemy.global_position)
 	if _side_objective_id == "kill_streak" and not _side_objective_completed:
@@ -1068,6 +1234,13 @@ func _on_enemy_died(enemy) -> void:
 
 func _on_enemy_hit_received(_enemy, _damage_amount: int, _lethal: bool) -> void:
 	pass
+
+func _spawn_health_pickup(spawn_position: Vector2) -> void:
+	if _room_clear_started or not is_inside_tree():
+		return
+	var hp_pickup := HealthPickupData.new()
+	hp_pickup.global_position = spawn_position
+	pickups.add_child(hp_pickup)
 
 func _on_player_downed(player) -> void:
 	_revive_progress_by_player_id[player.player_id] = 0.0
@@ -1447,7 +1620,7 @@ func spawn_enemy_minions(origin: Vector2, count: int, phase: float, forced_type:
 			if phase >= 0.55 and randf() < phase * 0.7:
 				enemy_type = "spitter"
 		var angle := TAU * float(index) / float(max(count, 1))
-		_spawn_enemy_instance(enemy_type, origin + Vector2.RIGHT.rotated(angle) * 96.0)
+		_queue_enemy_spawn(enemy_type, origin + Vector2.RIGHT.rotated(angle) * 96.0)
 
 func spawn_enemy_burst(origin: Vector2, count: int, phase: float) -> void:
 	for index in range(count):
@@ -1457,7 +1630,7 @@ func spawn_enemy_burst(origin: Vector2, count: int, phase: float) -> void:
 		if phase >= 0.66 and index % 4 == 0:
 			enemy_type = "spitter"
 		var angle := TAU * float(index) / float(max(count, 1))
-		_spawn_enemy_instance(enemy_type, origin + Vector2.RIGHT.rotated(angle) * 160.0)
+		_queue_enemy_spawn(enemy_type, origin + Vector2.RIGHT.rotated(angle) * 160.0)
 
 func handle_enemy_charge_windup(origin: Vector2) -> void:
 	var ring := ParticleFactoryData.create_impact_ring(Color(1.0, 0.76, 0.48, 0.82), 64.0, 3.0)
@@ -1498,12 +1671,65 @@ func get_player_target_nodes() -> Array:
 func get_enemy_target_nodes() -> Array:
 	return _enemy_nodes
 
+func get_nearby_enemy_target_nodes(world_position: Vector2, radius: float) -> Array:
+	_rebuild_enemy_separation_grid_if_needed()
+	var results: Array = []
+	var center_cell := _get_enemy_separation_cell(world_position)
+	var cell_radius := int(ceil(radius / ENEMY_SEPARATION_CELL_SIZE))
+	for cell_x in range(center_cell.x - cell_radius, center_cell.x + cell_radius + 1):
+		for cell_y in range(center_cell.y - cell_radius, center_cell.y + cell_radius + 1):
+			var key := Vector2i(cell_x, cell_y)
+			if _enemy_separation_grid.has(key):
+				results.append_array(_enemy_separation_grid[key] as Array)
+	return results
+
+func _rebuild_enemy_separation_grid_if_needed() -> void:
+	var current_frame := Engine.get_physics_frames()
+	if _enemy_separation_grid_frame == current_frame:
+		return
+	_enemy_separation_grid_frame = current_frame
+	_enemy_separation_grid.clear()
+	for enemy in _enemy_nodes:
+		if enemy == null or not is_instance_valid(enemy) or not (enemy is Node2D):
+			continue
+		if enemy.has_method("is_alive") and not enemy.is_alive():
+			continue
+		var key := _get_enemy_separation_cell((enemy as Node2D).global_position)
+		if not _enemy_separation_grid.has(key):
+			_enemy_separation_grid[key] = []
+		(_enemy_separation_grid[key] as Array).append(enemy)
+
+func _get_enemy_separation_cell(world_position: Vector2) -> Vector2i:
+	return Vector2i(
+		int(floor(world_position.x / ENEMY_SEPARATION_CELL_SIZE)),
+		int(floor(world_position.y / ENEMY_SEPARATION_CELL_SIZE))
+	)
+
 func _get_player_spawn_position(index: int) -> Vector2:
+	if _room_type == "boss":
+		return _get_boss_room_player_spawn_position(index)
 	return ARENA_CENTER + Vector2((index % 2) * 160.0 - 80.0, floor(index / 2.0) * 120.0 - 60.0)
+
+func _get_boss_room_player_spawn_position(index: int) -> Vector2:
+	var player_count := maxi(_player_nodes.size(), _player_configs.size())
+	var horizontal_spacing := 180.0
+	var center_offset := (float(index) - (float(maxi(player_count, 1)) - 1.0) * 0.5) * horizontal_spacing
+	return Vector2(
+		clampf(ARENA_CENTER.x + center_offset, ARENA_RECT.position.x + 220.0, ARENA_RECT.end.x - 220.0),
+		clampf(ARENA_CENTER.y + BOSS_PLAYER_SPAWN_DISTANCE, ARENA_RECT.position.y + 220.0, ARENA_RECT.end.y - 220.0)
+	)
 
 func _get_enemy_spawn_position() -> Vector2:
 	var inner_margin := ARENA_MARGIN + 48.0
 	var edge := randi() % 4
+	return _get_enemy_spawn_position_for_edge(edge, inner_margin)
+
+func _get_enemy_spawn_position_for_index(spawn_index: int, start_edge: int) -> Vector2:
+	var inner_margin := ARENA_MARGIN + 48.0
+	var edge := (start_edge + spawn_index) % 4
+	return _get_enemy_spawn_position_for_edge(edge, inner_margin)
+
+func _get_enemy_spawn_position_for_edge(edge: int, inner_margin: float) -> Vector2:
 	match edge:
 		0:
 			return Vector2(randf_range(inner_margin, ARENA_SIZE.x - inner_margin), inner_margin + randf_range(0.0, 60.0))
@@ -1538,6 +1764,7 @@ func _set_game_paused(paused: bool) -> void:
 	_set_runtime_pause_state(paused)
 	get_tree().paused = paused
 	if paused:
+		resume_button.grab_focus()
 		_populate_pause_build_overlay()
 
 func _set_runtime_pause_state(paused: bool) -> void:
@@ -1597,7 +1824,7 @@ func _on_pause_proxy_pressed() -> void:
 		_on_resume_pressed()
 
 func _populate_pause_build_overlay() -> void:
-	var pause_layout := pause_panel.get_node_or_null("MarginContainer/PauseLayout")
+	var pause_layout := pause_panel.get_node_or_null("CenterContainer/PauseLayout")
 	if pause_layout == null:
 		return
 	var existing := pause_layout.get_node_or_null("BuildOverlay")

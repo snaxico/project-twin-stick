@@ -12,8 +12,11 @@ const COOLDOWN_ARC_STEPS := 28
 const DASH_ARC_RADIUS := 10.0
 const DASH_ARC_WIDTH := 1.5
 const READY_PULSE_DURATION := 0.22
+const HEALTH_BAR_COLOR := Color(0.24, 0.92, 0.34, 1.0)
 
 var _tint: Color = Color(0.28, 0.9, 0.82, 1.0)
+var _slot_1_color: Color = Color(0.28, 0.9, 0.82, 1.0)
+var _slot_2_color: Color = Color(0.7, 0.96, 0.92, 1.0)
 var _current_health: int = 0
 var _max_health: int = 1
 var _health_ratio: float = 1.0
@@ -34,8 +37,10 @@ func _ready() -> void:
 	custom_minimum_size = INDICATOR_SIZE
 	visible = false
 
-func configure_player(tint: Color) -> void:
+func configure_player(tint: Color, slot_1_color: Color, slot_2_color: Color) -> void:
 	_tint = tint
+	_slot_1_color = slot_1_color
+	_slot_2_color = slot_2_color
 	set_process(false)
 	queue_redraw()
 
@@ -83,7 +88,7 @@ func _draw() -> void:
 			-PI * 0.5,
 			end_angle,
 			COOLDOWN_ARC_STEPS,
-			Color(_tint.r, _tint.g, _tint.b, 0.42),
+			Color(_slot_1_color.r, _slot_1_color.g, _slot_1_color.b, 0.42),
 			COOLDOWN_ARC_WIDTH
 		)
 	elif _slot_1_ready_pulse > 0.0:
@@ -94,7 +99,7 @@ func _draw() -> void:
 			-PI * 0.5,
 			-PI * 0.5 + TAU,
 			COOLDOWN_ARC_STEPS,
-			Color(_tint.r, _tint.g, _tint.b, 0.2 + pulse_alpha * 0.55),
+			Color(_slot_1_color.r, _slot_1_color.g, _slot_1_color.b, 0.2 + pulse_alpha * 0.55),
 			COOLDOWN_ARC_WIDTH + 1.0
 		)
 
@@ -108,7 +113,7 @@ func _draw() -> void:
 			dash_start,
 			dash_end,
 			14,
-			Color(1.0, 0.48, 0.82, 0.42),
+			Color(_slot_2_color.r, _slot_2_color.g, _slot_2_color.b, 0.42),
 			DASH_ARC_WIDTH
 		)
 	elif _slot_2_ready_pulse > 0.0:
@@ -119,7 +124,7 @@ func _draw() -> void:
 			PI * 0.12,
 			PI * 0.88,
 			14,
-			Color(1.0, 0.62, 0.9, 0.18 + dash_pulse_alpha * 0.45),
+			Color(_slot_2_color.r, _slot_2_color.g, _slot_2_color.b, 0.18 + dash_pulse_alpha * 0.45),
 			DASH_ARC_WIDTH + 0.8
 		)
 
@@ -127,7 +132,7 @@ func _draw() -> void:
 	draw_rect(track_rect, Color(0.04, 0.06, 0.09, 0.68), true)
 	draw_rect(track_rect, Color(0.78, 0.9, 1.0, 0.12), false, 1.0)
 
-	var fill_color := _tint
+	var fill_color := HEALTH_BAR_COLOR
 	var alpha := 0.66
 	if _is_downed:
 		var pulse := 0.55 + 0.45 * (0.5 + 0.5 * sin(_low_health_phase))
@@ -135,7 +140,7 @@ func _draw() -> void:
 		alpha = 0.55 + pulse * 0.35
 	elif _health_ratio <= LOW_HEALTH_THRESHOLD:
 		var pulse := 0.65 + 0.35 * (0.5 + 0.5 * sin(_low_health_phase))
-		fill_color = _tint.lerp(Color(1.0, 0.34, 0.3, 1.0), 0.5)
+		fill_color = HEALTH_BAR_COLOR.lerp(Color(1.0, 0.34, 0.3, 1.0), 0.5)
 		alpha = 0.58 + pulse * 0.28
 	elif _health_ratio >= 0.99:
 		alpha = 0.34

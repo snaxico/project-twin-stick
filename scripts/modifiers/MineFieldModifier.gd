@@ -4,8 +4,9 @@ extends Node2D
 const MINE_SPACING := 100.0
 const SWEEP_SPEED := 200.0
 const TELEGRAPH_DURATION := 1.0
-const DAMAGE := 15
+const DAMAGE := 12
 const TRIGGER_RADIUS := 34.0
+const PLAYER_HIT_COOLDOWN := 0.6
 
 var _arena_rect := Rect2()
 var _player_nodes: Array = []
@@ -46,17 +47,26 @@ func _spawn_sweep() -> void:
 		"time": 0.0,
 		"offset": 0.0,
 		"travel_limit": _arena_rect.size.x if dir == "left" or dir == "right" else _arena_rect.size.y,
+		"player_hit_times": {},
 	}
 	_sweeps.append(sweep)
 
 func _apply_sweep_damage(sweep: Dictionary) -> void:
+	var hit_times: Dictionary = sweep.get("player_hit_times", {}) as Dictionary
+	var current_time := Time.get_ticks_msec() / 1000.0
 	for player in _player_nodes:
 		if player == null or not is_instance_valid(player) or not player.has_method("is_alive") or not player.is_alive():
+			continue
+		var player_id: int = player.get_instance_id()
+		var last_hit_time := float(hit_times.get(player_id, -INF))
+		if current_time - last_hit_time < PLAYER_HIT_COOLDOWN:
 			continue
 		for mine_position in _get_mine_positions(sweep):
 			if player.global_position.distance_to(mine_position) <= TRIGGER_RADIUS:
 				player.apply_damage(DAMAGE)
+				hit_times[player_id] = current_time
 				break
+	sweep["player_hit_times"] = hit_times
 
 func _get_mine_positions(sweep: Dictionary) -> Array:
 	var positions: Array = []

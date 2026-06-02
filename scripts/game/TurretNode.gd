@@ -51,16 +51,23 @@ func _find_target() -> Node2D:
 	if tree == null:
 		return null
 	var best_target: Node2D = null
-	var best_distance := INF
-	for candidate in tree.get_nodes_in_group("aim_target"):
+	var best_distance_sq := INF
+	var range_sq := attack_range * attack_range
+	var candidates: Array = []
+	var combat_owner := tree.current_scene
+	if combat_owner != null and combat_owner.has_method("get_nearby_enemy_target_nodes"):
+		candidates = combat_owner.get_nearby_enemy_target_nodes(global_position, attack_range)
+	else:
+		candidates = tree.get_nodes_in_group("aim_target")
+	for candidate in candidates:
 		if candidate == null or not is_instance_valid(candidate) or not (candidate is Node2D):
 			continue
 		if candidate.has_method("is_alive") and not candidate.is_alive():
 			continue
-		var distance := global_position.distance_to((candidate as Node2D).global_position)
-		if distance > attack_range or distance >= best_distance:
+		var distance_sq := global_position.distance_squared_to((candidate as Node2D).global_position)
+		if distance_sq > range_sq or distance_sq >= best_distance_sq:
 			continue
-		best_distance = distance
+		best_distance_sq = distance_sq
 		best_target = candidate as Node2D
 	return best_target
 
