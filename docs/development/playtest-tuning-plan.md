@@ -154,35 +154,55 @@ func _estimate_room_total_enemies() -> int:
 
 **Goal**: 12-18 mutation picks per full structured run (~10 rooms). Banking stays unchanged.
 
+### XP budget analysis
+
+**Total XP per run estimate** (with Task 1 enemy counts):
+
+| Phase | Rooms | Enemies/room | Avg XP/enemy | XP |
+|---|---|---|---|---|
+| Act 1 (chasers + chargers) | 3-4 | ~65 | ~12 | 2,340-3,120 |
+| Act 2 early (+ spitters) | 2 | ~125 | ~13 | 3,250 |
+| Act 2 mid (+ splitters + minis) | 2 | ~130 | ~14.5 | 3,770 |
+| Act 2 late (+ bombers, all types) | 2-3 | ~145 | ~15 | 4,350-6,525 |
+| Elites (~1 room) | 0-1 | +1 elite (50 XP) | — | 0-50 |
+| **Total** | | | | **~13,700-16,700** |
+
+Bosses give 0 XP. Splitter minis (5 XP each, 3 per splitter) are included in the per-enemy average for rooms that have splitters.
+
 ### New formula
 
 Old: `xp_to_next_level = 80 + (level * 15)`
-New: `xp_to_next_level = 100 + (level * 30)`
+New: `xp_to_next_level = 150 + (level * 100)`
 
-| Level | Old XP needed | New XP needed |
+Simplified cumulative: `N levels = 150N + 100 * N*(N-1)/2 = 150N + 50N²`
+
+| Level | Per-level XP | Cumulative |
 |---|---|---|
-| 1 | 80 | 100 |
-| 5 | 155 | 250 |
-| 10 | 230 | 400 |
-| 15 | 305 | 550 |
+| 1 | 150 | 150 |
+| 5 | 550 | 2,000 |
+| 10 | 1,050 | 6,500 |
+| 12 | 1,250 | 8,400 |
+| 15 | 1,550 | 12,750 |
+| 17 | 1,750 | 16,150 |
+| 18 | 1,850 | 18,000 |
 
-With ~55 enemies in Act 1 averaging ~12 XP → ~660 XP/room → ~4-5 levels in Act 1 (4 rooms).
-With ~100 enemies in Act 2 averaging ~14 XP → ~1400 XP/room → ~3-4 levels/room.
-Total across a full run: roughly 14-18 picks. Lands in target range.
+**Result**: ~13,700-16,700 total run XP → **15-17 picks**. Squarely in the 12-18 target.
+
+First level (150 XP) is reachable after killing ~12-15 chasers — fast enough to feel rewarding in the first room.
 
 ### File: `scripts/game/RunState.gd`
 
 #### 2a. Update initial value (line 31)
 
-Change `var xp_to_next_level: int = 80` to `var xp_to_next_level: int = 100`
+Change `var xp_to_next_level: int = 80` to `var xp_to_next_level: int = 150`
 
 #### 2b. Update reset in `start_new_run()` (line 67)
 
-Change `xp_to_next_level = 80` to `xp_to_next_level = 100`
+Change `xp_to_next_level = 80` to `xp_to_next_level = 150`
 
 #### 2c. Update formula in `add_xp()` (line 243)
 
-Change `xp_to_next_level = 80 + (xp_level * 15)` to `xp_to_next_level = 100 + (xp_level * 30)`
+Change `xp_to_next_level = 80 + (xp_level * 15)` to `xp_to_next_level = 150 + (xp_level * 100)`
 
 ---
 
@@ -234,7 +254,7 @@ Result pattern:
 
 > **Design amendment**: V3 explicitly removed health pickups. This is an intentional override based on playtesting — rooms felt unforgiving without any within-room sustain. Health still resets each room as per V3.
 
-**Goal**: ~10% drop chance per non-boss enemy kill. 5 HP heal. Magnet pickup behavior.
+**Goal**: ~10% drop chance per enemy kill (bosses excluded, elites CAN drop). 5 HP heal. Magnet pickup behavior.
 
 ### File: `scripts/pickups/HealthPickup.gd`
 
@@ -343,7 +363,7 @@ const HEALTH_DROP_CHANCE := 0.10
 In `_on_enemy_died()` (line 917), after the XP grant block (after line 924) and before the splitter handling (line 925), add:
 
 ```gdscript
-if not enemy_type_name.begins_with("boss_") and not enemy_type_name.begins_with("elite_") and randf() < HEALTH_DROP_CHANCE:
+if not enemy_type_name.begins_with("boss_") and randf() < HEALTH_DROP_CHANCE:
     var hp_pickup := HealthPickupData.new()
     hp_pickup.global_position = enemy.global_position
     pickups.add_child(hp_pickup)
@@ -474,7 +494,7 @@ _populate_pause_build_overlay()
 
 #### 6b. Add `_populate_pause_build_overlay()` function
 
-Add a new function that dynamically adds a build summary to the pause panel. It finds or creates a VBoxContainer child inside the pause panel's layout, then populates it with per-player mutation lists:
+Add a new function that dynamically adds a build summary to the pause panel. The overlay is inserted **before the first button** (ResumeButton) so the information hierarchy is: title → build summary → action buttons.
 
 ```gdscript
 func _populate_pause_build_overlay() -> void:
@@ -488,6 +508,9 @@ func _populate_pause_build_overlay() -> void:
     overlay.name = "BuildOverlay"
     overlay.add_theme_constant_override("separation", 10)
     pause_layout.add_child(overlay)
+    var resume := pause_layout.get_node_or_null("ResumeButton")
+    if resume != null:
+        pause_layout.move_child(overlay, resume.get_index())
     for player_index in range(_player_nodes.size()):
         var player = _player_nodes[player_index]
         var header := Label.new()
