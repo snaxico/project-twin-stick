@@ -39,7 +39,7 @@ The live runtime is now aligned to the `Feature Roadmap V3` redesign:
   - Act 2: `20%`
 - elite rooms grant one additional free pick round after XP picks resolve
 - elite bonus rounds force at least one rare option per player if any legal rare remains
-- gold, shops, rest nodes, healing pickups, and the old purchase loop are removed from the live runtime
+- gold, shops, rest nodes, and the old purchase loop are removed from the live runtime
 
 ## Loadout / Combat
 
@@ -111,6 +111,10 @@ The live runtime is now aligned to the `Feature Roadmap V3` redesign:
   - `Accelerating Waves` modifier ramps spawn interval from 100% to 33% over time
   - `Swarm` modifier spawns 2 at a time with half HP
 - enemies spawn at random arena edges inside the wall boundaries
+- HP pickups now drop from non-boss enemy kills:
+  - `~10%` chance
+  - `5 HP` heal
+  - magnet pickup behavior
 - side objectives now use the roadmap set:
   - `Hold Zone`
   - `Kill Streak`
@@ -128,18 +132,24 @@ The live runtime is now aligned to the `Feature Roadmap V3` redesign:
 - combat HUD now shows:
   - top-center XP bar + level + pending picks
   - near-player cooldown arcs
+  - ability name labels on the cooldown indicators
   - near-player health bars when relevant
   - side objective progress
   - active modifier chips
   - endless room score label when applicable
+- pause screen now shows:
+  - per-player build summary
+  - equipped abilities
+  - current mutations with levels
 - mutation pick UI now shows:
   - simultaneous per-player picks
   - rare highlighting
   - current mutation inventory per player
   - leveled common progression (`Lv X -> Lv Y`)
 - map UI now shows:
-  - branching paths with compact `72x36` node buttons
-  - text-only labels: `Fight`, `Elite`, boss name, modifier abbreviations
+  - branching paths with compact `110x30` node buttons
+  - text-only labels: `Fight`, `Elite`, boss name
+  - colored modifier dots on nodes
   - per-node modifier shorthand on hover detail panel
   - nodes positioned by actual row membership (not fixed 5-column grid)
 - pre-run UI now shows compact text-only ability selection (no large icons)
@@ -200,7 +210,7 @@ The live runtime is now aligned to the `Feature Roadmap V3` redesign:
 - modifier stacking and endless pressure have not been manually stress-tested yet
 - spawn timing values (`_room_duration`, `_spawn_interval`) are first-pass and need playtesting
 - the map UI is functional but compact — may need further polish for controller navigation
-- `GoldPickup.gd`, `HealthPickup.gd` deleted; gold stub functions in `RunState.gd` remain (no-ops)
+- `GoldPickup.gd` remains deleted; gold stub functions in `RunState.gd` remain (no-ops)
 - `wave_count` fields in RunState node data are now unused dead data (harmless)
 
 ## Next Step

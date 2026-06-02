@@ -2,7 +2,7 @@
 
 ## Scope Note
 
-- This file describes the active runtime on `v2/core-refactor`.
+- This file describes the active runtime on `v3/main`.
 - If this file conflicts with `docs/development/current-state.md`, update this file to match `current-state.md`.
 
 ## Folder Ownership

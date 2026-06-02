@@ -2,7 +2,7 @@
 
 ## Scope Note
 
-- This roadmap tracks the active branch runtime on `v2/core-refactor`.
+- This roadmap tracks the active branch runtime on `v3/main`.
 - Older numbered patch docs are historical implementation records, not the current roadmap.
 - Feature-design sequencing lives in `docs/design/roadmap.md`.
 

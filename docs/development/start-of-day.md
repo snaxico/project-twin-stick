@@ -4,15 +4,15 @@ Read this first to restore project context quickly, then read `current-state.md`
 
 ## Working Branch
 
-- Active gameplay work happens on `v2/core-refactor`.
+- Active gameplay work happens on `v3/main`.
 - Treat this branch as the current game.
-- `v2/core-refactor` is now also the GitHub default branch / mainline.
+- `v3/main` is now also the GitHub default branch / mainline.
 - Treat the repo as the current game only.
 - Old v1 branch/archive content was intentionally removed and should not shape live runtime decisions.
 
 ## Source Of Truth
 
-- `docs/development/current-state.md` is the compact source of truth for the active runtime on `v2/core-refactor`.
+- `docs/development/current-state.md` is the compact source of truth for the active runtime on `v3/main`.
 - `docs/design/roadmap.md` is the source of truth for locked feature design and open design questions.
 - `history/` records what changed, why, and what remains open.
 - If `start-of-day.md` and `current-state.md` ever disagree, treat `current-state.md` as correct and update this file.
@@ -75,7 +75,7 @@ Read this first to restore project context quickly, then read `current-state.md`
 
 - The active branch runtime is ahead of the old v2 refactor baseline and should not be read as "v1 plus patches."
 - Roadmap work should assume:
-  - the working branch is `v2/core-refactor`
+  - the working branch is `v3/main`
   - the live game is the runtime described in `current-state.md`
 - Current roadmap discussion areas are the post-economy follow-ups:
   - modifier / economy pacing

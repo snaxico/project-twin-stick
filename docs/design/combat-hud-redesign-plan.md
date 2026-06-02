@@ -2,7 +2,7 @@
 
 ## Scope Note
 
-- This file describes the active combat HUD redesign direction on `v2/core-refactor`.
+- This file describes the active combat HUD redesign direction on `v3/main`.
 - This is a design and implementation plan only. It does not change the live runtime by itself.
 
 ## Problem

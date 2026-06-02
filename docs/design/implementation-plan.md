@@ -2,7 +2,7 @@
 
 This plan is ordered by dependency chain. Each slice is self-contained, testable, and should pass `--headless --quit` before moving to the next.
 
-**Branch:** `v2/core-refactor`
+**Branch:** `v3/main`
 **Working directory:** `D:\GameDev\Project_Twin_stick`
 **Godot version:** 4.6.2 stable
 **Language:** GDScript only

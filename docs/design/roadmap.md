@@ -2,6 +2,7 @@
 
 > **⚠ This file contains the old V2 roadmap. V3 has been fully implemented as of 2026-06-01.**
 > The live runtime state is documented in `docs/development/current-state.md`.
+> V3 playtest amendments now in effect: health pickups are restored within rooms, and the pause screen includes a build overlay.
 > The V3 design decisions and implementation guide are in the session plan archive.
 > The old V2 content below is kept for reference only.
 

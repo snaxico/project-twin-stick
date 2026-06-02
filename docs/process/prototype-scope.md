@@ -2,7 +2,7 @@
 
 ## Scope Note
 
-- This scope applies to the active branch runtime on `v2/core-refactor`.
+- This scope applies to the active branch runtime on `v3/main`.
 
 ## Current Prototype Goal
 

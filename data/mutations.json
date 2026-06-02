@@ -8,7 +8,7 @@
       "category": "weapon",
       "rarity": "common",
       "max_level": 3,
-      "params": { "extra_count": 1, "spread_degrees": 15.0 }
+      "params": { "extra_count": 1, "spread_degrees": 10.0 }
     },
     {
       "id": "pierce",

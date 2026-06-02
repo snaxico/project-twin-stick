@@ -25,6 +25,8 @@ var _slot_2_cooldown_remaining := 0.0
 var _slot_2_cooldown_duration := 1.0
 var _slot_1_ready_pulse := 0.0
 var _slot_2_ready_pulse := 0.0
+var _slot_1_name := ""
+var _slot_2_name := ""
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -36,7 +38,7 @@ func configure_player(tint: Color) -> void:
 	set_process(false)
 	queue_redraw()
 
-func update_state(current_health: int, max_health: int, is_downed: bool, slot_1_cooldown_remaining: float, slot_1_cooldown_duration: float, slot_2_cooldown_remaining: float, slot_2_cooldown_duration: float) -> void:
+func update_state(current_health: int, max_health: int, is_downed: bool, slot_1_cooldown_remaining: float, slot_1_cooldown_duration: float, slot_2_cooldown_remaining: float, slot_2_cooldown_duration: float, slot_1_name: String = "", slot_2_name: String = "") -> void:
 	var previous_slot_1_remaining := _slot_1_cooldown_remaining
 	var previous_slot_2_remaining := _slot_2_cooldown_remaining
 	_current_health = max(current_health, 0)
@@ -47,6 +49,8 @@ func update_state(current_health: int, max_health: int, is_downed: bool, slot_1_
 	_slot_1_cooldown_remaining = clampf(slot_1_cooldown_remaining, 0.0, _slot_1_cooldown_duration)
 	_slot_2_cooldown_duration = maxf(slot_2_cooldown_duration, 0.01)
 	_slot_2_cooldown_remaining = clampf(slot_2_cooldown_remaining, 0.0, _slot_2_cooldown_duration)
+	_slot_1_name = slot_1_name
+	_slot_2_name = slot_2_name
 	if previous_slot_1_remaining > 0.0 and _slot_1_cooldown_remaining <= 0.0:
 		_slot_1_ready_pulse = READY_PULSE_DURATION
 	if previous_slot_2_remaining > 0.0 and _slot_2_cooldown_remaining <= 0.0:
@@ -140,3 +144,7 @@ func _draw() -> void:
 	var fill_width := BAR_WIDTH * _health_ratio
 	if fill_width > 0.0:
 		draw_rect(Rect2(track_rect.position.x, track_rect.position.y, fill_width, BAR_HEIGHT), Color(fill_color.r, fill_color.g, fill_color.b, alpha), true)
+	if not _slot_1_name.is_empty():
+		draw_string(ThemeDB.fallback_font, Vector2(COOLDOWN_ARC_CENTER.x - 20.0, 8.0), _slot_1_name, HORIZONTAL_ALIGNMENT_CENTER, 40, 8, Color(_tint.r, _tint.g, _tint.b, 0.62))
+	if not _slot_2_name.is_empty():
+		draw_string(ThemeDB.fallback_font, Vector2(COOLDOWN_ARC_CENTER.x - 20.0, 36.0), _slot_2_name, HORIZONTAL_ALIGNMENT_CENTER, 40, 8, Color(1.0, 0.48, 0.82, 0.62))

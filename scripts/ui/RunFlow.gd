@@ -23,7 +23,7 @@ signal return_to_menu_requested(open_meta_menu: bool)
 var _active_game = null
 var _post_resolution_action: String = "next"
 var _map_buttons: Dictionary = {}
-var _map_button_size := Vector2(72.0, 36.0)
+var _map_button_size := Vector2(110.0, 30.0)
 
 func _ready() -> void:
 	run_summary_panel.visible = false
@@ -108,13 +108,12 @@ func _get_node_graph_position(node: Dictionary, row_count: int) -> Vector2:
 	var width := maxf(map_graph_area.size.x, 320.0)
 	var height := maxf(map_graph_area.size.y, 280.0)
 	var row := int(node.get("row", 0))
-	var column := int(node.get("column", 0))
-	var margin_x := 48.0
-	var margin_y := 24.0
-	var x := margin_x if row_count <= 1 else margin_x + (width - margin_x * 2.0) * float(row) / float(max(row_count - 1, 1))
+	var margin_x := 60.0
+	var margin_y := 22.0
+	var y := margin_y if row_count <= 1 else margin_y + (height - margin_y * 2.0) * float(row) / float(max(row_count - 1, 1))
 	var column_count_in_row := _count_columns_in_row(node, RunState.get_map_rows())
 	var column_rank := _get_column_rank(node, RunState.get_map_rows())
-	var y := height * 0.5 if column_count_in_row <= 1 else margin_y + (height - margin_y * 2.0) * float(column_rank) / float(max(column_count_in_row - 1, 1))
+	var x := width * 0.5 if column_count_in_row <= 1 else margin_x + (width - margin_x * 2.0) * float(column_rank) / float(max(column_count_in_row - 1, 1))
 	return Vector2(x, y)
 
 func _count_columns_in_row(node: Dictionary, map_rows: Array) -> int:
@@ -136,7 +135,7 @@ func _get_column_rank(node: Dictionary, map_rows: Array) -> int:
 
 func _add_connection_line(from_position: Vector2, to_position: Vector2, color: Color) -> void:
 	var line := Line2D.new()
-	line.width = 4.0
+	line.width = 2.0
 	line.default_color = color
 	line.antialiased = true
 	line.points = PackedVector2Array([from_position, to_position])
@@ -149,24 +148,47 @@ func _build_map_button(node: Dictionary, button_center: Vector2, is_reachable: b
 	button.position = button_center - _map_button_size * 0.5
 	button.focus_mode = Control.FOCUS_ALL if is_reachable else Control.FOCUS_NONE
 	button.text = _build_node_button_text(node)
-	button.add_theme_font_size_override("font_size", 11)
+	button.add_theme_font_size_override("font_size", 12)
+	button.alignment = HORIZONTAL_ALIGNMENT_CENTER
 	button.modulate = _get_node_color(node, is_reachable)
 	button.mouse_entered.connect(_on_map_node_hovered.bind(str(node.get("id", ""))))
 	button.focus_entered.connect(_on_map_node_hovered.bind(str(node.get("id", ""))))
 	button.pressed.connect(_on_map_node_pressed.bind(str(node.get("id", ""))))
+	var modifiers: Array = node.get("modifiers", []) as Array
+	if not modifiers.is_empty():
+		var dot_row := HBoxContainer.new()
+		dot_row.anchor_left = 1.0
+		dot_row.anchor_right = 1.0
+		dot_row.anchor_top = 0.0
+		dot_row.anchor_bottom = 0.0
+		dot_row.offset_left = -6.0 - float(modifiers.size()) * 10.0
+		dot_row.offset_top = 2.0
+		dot_row.offset_right = -4.0
+		dot_row.add_theme_constant_override("separation", 3)
+		dot_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		for mod_id_variant in modifiers:
+			var dot := ColorRect.new()
+			dot.custom_minimum_size = Vector2(7.0, 7.0)
+			dot.color = _get_modifier_dot_color(str(mod_id_variant))
+			dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			dot_row.add_child(dot)
+		button.add_child(dot_row)
 	return button
 
 func _build_node_button_text(node: Dictionary) -> String:
-	var room_type := str(node.get("room_type", "combat"))
-	match room_type:
+	match str(node.get("room_type", "combat")):
 		"boss":
 			return str(node.get("boss_type", "Boss")).capitalize()
 		"elite":
-			var modifiers: Array = node.get("modifiers", []) as Array
-			return "Elite %s" % _build_modifier_badge_text(modifiers) if not modifiers.is_empty() else "Elite"
+			return "Elite"
 		_:
-			var modifiers: Array = node.get("modifiers", []) as Array
-			return _build_modifier_badge_text(modifiers) if not modifiers.is_empty() else "Fight"
+			return "Fight"
+
+func _get_modifier_dot_color(mod_id: String) -> Color:
+	var minor_ids := ["accelerating_waves", "enemy_speed", "swarm", "shielded", "explosive_death"]
+	if minor_ids.has(mod_id):
+		return Color(1.0, 0.82, 0.28, 0.92)
+	return Color(0.92, 0.28, 0.22, 0.92)
 
 func _build_modifier_badge_text(modifiers: Array) -> String:
 	var badges: Array = []

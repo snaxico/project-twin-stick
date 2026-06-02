@@ -2,13 +2,13 @@
 
 ## Purpose
 
-This document summarizes the current gameplay/runtime direction of `v2/core-refactor`.
+This document summarizes the current gameplay/runtime direction of `v3/main`.
 
 It is not a plan for future migration.
 
 ## Branch Position
 
-- `v2/core-refactor` is the active gameplay branch.
+- `v3/main` is the active gameplay branch.
 - This branch is also the GitHub default branch / mainline.
 - The current branch runtime is the game that should be treated as live today.
 

@@ -2,7 +2,7 @@
 
 ## Scope Note
 
-- This checklist should be read against the active branch runtime on `v2/core-refactor`.
+- This checklist should be read against the active branch runtime on `v3/main`.
 - Older v1 gameplay is archived reference only.
 
 ## Vision

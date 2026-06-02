@@ -2,7 +2,7 @@
 
 ## Scope Note
 
-- This file describes the active direction on `v2/core-refactor`.
+- This file describes the active direction on `v3/main`.
 
 ## One-Line Pitch
 

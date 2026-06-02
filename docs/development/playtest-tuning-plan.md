@@ -38,7 +38,7 @@ Tasks 3, 5, 6, 7 are independent of each other and of the chain above.
 & 'D:\GameDev\Godot_v4.6.2-stable_win64.exe\Godot_v4.6.2-stable_win64_console.exe' --headless --path 'D:\GameDev\Project_Twin_stick' --quit
 ```
 
-**Working branch**: `v2/core-refactor` (renamed to `v3/main` in Task 7)
+**Working branch**: `v3/main`
 
 ---
 
@@ -615,7 +615,7 @@ _player_combat_indicators[index].update_state(
 
 ## Task 7: Branch Rename + Doc Updates
 
-**Problem**: Branch is `v2/core-refactor` but we're building V3. Confusing.
+**Problem**: Branch was `v2/core-refactor` even though the runtime had moved to V3. Confusing.
 
 ### 7a. Rename branch
 

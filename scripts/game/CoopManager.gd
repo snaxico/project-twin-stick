@@ -16,6 +16,7 @@ const DecoyNodeData = preload("res://scripts/game/DecoyNode.gd")
 const TurretNodeData = preload("res://scripts/game/TurretNode.gd")
 const OrbitNodeData = preload("res://scripts/game/OrbitNode.gd")
 const CollectorOrbData = preload("res://scripts/game/CollectorOrb.gd")
+const HealthPickupData = preload("res://scripts/pickups/HealthPickup.gd")
 const HazardZoneData = preload("res://scripts/game/HazardZone.gd")
 const AbilityMineData = preload("res://scripts/game/AbilityMine.gd")
 const ParticleFactoryData = preload("res://scripts/juice/ParticleFactory.gd")
@@ -36,6 +37,7 @@ const HUD_REFRESH_INTERVAL := 0.08
 const COLLECTOR_TARGET := 8
 const COLLECTOR_TOTAL_SPAWN := 12
 const COLLECTOR_SPAWN_INTERVAL := 2.5
+const HEALTH_DROP_CHANCE := 0.10
 
 const XP_PER_ENEMY_TYPE := {
 	"chaser": 10,
@@ -99,6 +101,8 @@ var _next_spawn_at := 0.0
 var _enemies_spawned := 0
 var _enemies_killed := 0
 var _spawning_done := false
+var _burst_interval := 10.0
+var _next_burst_at := 0.0
 var _pending_pick_consumes_levelup := false
 var _pending_elite_bonus_pick := false
 var _pending_clear_summary := ""
@@ -429,6 +433,8 @@ func _start_room() -> void:
 	_enemies_spawned = 0
 	_enemies_killed = 0
 	_spawning_done = false
+	_burst_interval = 10.0 if RunState.get_current_act() <= 1 else 8.0
+	_next_burst_at = _burst_interval
 	_side_objective_id = str(_room_config.get("side_objective", ""))
 	_side_objective_completed = false
 	_kill_streak_progress = 0
@@ -587,22 +593,29 @@ func _continuous_spawn() -> void:
 	if _room_elapsed >= _room_duration:
 		_spawning_done = true
 		return
-	if _room_elapsed < _next_spawn_at:
-		return
-	var current_interval := _spawn_interval
-	if bool(_minor_modifier_flags["accelerating_waves"]):
-		var ramp := clampf(_room_elapsed / min(_room_duration, 25.0), 0.0, 1.0)
-		current_interval = lerpf(_spawn_interval, _spawn_interval * 0.33, ramp)
-	_next_spawn_at = _room_elapsed + current_interval
-	var batch := 1
-	if bool(_minor_modifier_flags["swarm"]):
-		batch = 2
 	var health_multiplier := 0.5 if bool(_minor_modifier_flags["swarm"]) else 1.0
-	for _index in range(batch):
-		var enemy_type := _roll_wave_enemy_type(_room_enemy_pool)
-		var spawn_position := _get_enemy_spawn_position()
-		_spawn_enemy_instance(enemy_type, spawn_position, health_multiplier)
-		_enemies_spawned += 1
+	if _room_elapsed >= _next_spawn_at:
+		var current_interval := _spawn_interval
+		if bool(_minor_modifier_flags["accelerating_waves"]):
+			var ramp := clampf(_room_elapsed / min(_room_duration, 25.0), 0.0, 1.0)
+			current_interval = lerpf(_spawn_interval, _spawn_interval * 0.33, ramp)
+		_next_spawn_at = _room_elapsed + current_interval
+		var batch := 2 if bool(_minor_modifier_flags["swarm"]) else 1
+		for _index in range(batch):
+			var enemy_type := _roll_wave_enemy_type(_room_enemy_pool)
+			var spawn_position := _get_enemy_spawn_position()
+			_spawn_enemy_instance(enemy_type, spawn_position, health_multiplier)
+			_enemies_spawned += 1
+	if _room_elapsed >= _next_burst_at:
+		_next_burst_at = _room_elapsed + _burst_interval
+		var burst_size := randi_range(4, 6) if RunState.get_current_act() <= 1 else randi_range(6, 8)
+		if bool(_minor_modifier_flags["swarm"]):
+			burst_size *= 2
+		for _index in range(burst_size):
+			var enemy_type := _roll_wave_enemy_type(_room_enemy_pool)
+			var spawn_position := _get_enemy_spawn_position()
+			_spawn_enemy_instance(enemy_type, spawn_position, health_multiplier)
+			_enemies_spawned += 1
 
 func _spawn_enemy_instance(enemy_type: String, spawn_position: Vector2, health_multiplier: float = 1.0) -> Node2D:
 	var enemy = EnemySceneData.instantiate()
@@ -657,16 +670,16 @@ func _get_room_duration() -> float:
 	return base
 
 func _get_spawn_interval() -> float:
-	var base := 1.8
+	var base := 0.7
 	if RunState.get_current_act() >= 2:
-		base = 1.3
+		base = 0.5
 	if _room_type == "elite":
-		base -= 0.2
+		base -= 0.1
 	if _room_depth >= 10:
-		base -= 0.2
+		base -= 0.05
 	if _room_depth >= 20:
-		base -= 0.2
-	return maxf(base, 0.5)
+		base -= 0.05
+	return maxf(base, 0.25)
 
 func _handle_room_clear() -> void:
 	if _room_clear_started:
@@ -922,6 +935,10 @@ func _on_enemy_died(enemy) -> void:
 		RunState.add_xp(0)
 	else:
 		RunState.add_xp(int(XP_PER_ENEMY_TYPE.get(enemy_type_name, 10)))
+	if not enemy_type_name.begins_with("boss_") and randf() < HEALTH_DROP_CHANCE:
+		var hp_pickup := HealthPickupData.new()
+		hp_pickup.global_position = enemy.global_position
+		pickups.add_child(hp_pickup)
 	if enemy_type_name == "splitter":
 		for mini_index in range(3):
 			var angle := TAU * float(mini_index) / 3.0
@@ -1072,7 +1089,9 @@ func _update_player_combat_indicators() -> void:
 			float(slot_1_hud_data.get("cooldown_remaining", 0.0)),
 			float(slot_1_hud_data.get("cooldown_duration", 1.0)),
 			float(slot_2_hud_data.get("cooldown_remaining", 0.0)),
-			float(slot_2_hud_data.get("cooldown_duration", 1.0))
+			float(slot_2_hud_data.get("cooldown_duration", 1.0)),
+			str(slot_1_hud_data.get("name", "")),
+			str(slot_2_hud_data.get("name", ""))
 		)
 
 func _update_player_combat_indicator_positions() -> void:
@@ -1171,12 +1190,15 @@ func _clamp_runtime_nodes() -> void:
 		enemy.global_position.y = clampf(enemy.global_position.y, clamp_rect.position.y + 36.0, clamp_rect.end.y - 36.0)
 
 func _estimate_room_total_enemies() -> int:
-	var estimated := int(ceil(_room_duration / max(_spawn_interval, 0.5)))
+	var stream := int(ceil(_room_duration / max(_spawn_interval, 0.25)))
+	var burst_count := int(floor(_room_duration / max(_burst_interval, 1.0)))
+	var avg_burst := 5 if RunState.get_current_act() <= 1 else 7
+	var total := stream + burst_count * avg_burst
 	if bool(_minor_modifier_flags["swarm"]):
-		estimated *= 2
+		total *= 2
 	if _room_type == "elite":
-		estimated += 1
-	return max(estimated, 4)
+		total += 1
+	return max(total, 8)
 
 func _load_modifier_definitions() -> void:
 	_modifier_definitions.clear()
@@ -1337,13 +1359,15 @@ func _get_enemy_spawn_position() -> Vector2:
 			return Vector2(ARENA_SIZE.x - inner_margin - randf_range(0.0, 60.0), randf_range(inner_margin, ARENA_SIZE.y - inner_margin))
 
 func _build_spread_directions(base_direction: Vector2, projectile_count: int, spread_step: float) -> Array:
-	var directions: Array = []
+	var normalized := base_direction.normalized() if base_direction.length() > 0.0 else Vector2.RIGHT
 	if projectile_count <= 1 or spread_step <= 0.0:
-		return [base_direction.normalized()]
-	var center_offset := float(projectile_count - 1) * 0.5
-	for index in range(projectile_count):
-		var offset := (float(index) - center_offset) * spread_step
-		directions.append(base_direction.normalized().rotated(offset))
+		return [normalized]
+	var directions: Array = [normalized]
+	var extras := projectile_count - 1
+	for index in range(1, extras + 1):
+		var side := 1 if index % 2 == 1 else -1
+		var rank := int(ceil(float(index) / 2.0))
+		directions.append(normalized.rotated(spread_step * float(rank) * float(side)))
 	return directions
 
 func _lock_player_input(locked: bool) -> void:
@@ -1381,7 +1405,70 @@ func _unhandled_input(event: InputEvent) -> void:
 		else:
 			pause_panel.visible = true
 			get_tree().paused = true
+			_populate_pause_build_overlay()
 		get_viewport().set_input_as_handled()
+
+func _populate_pause_build_overlay() -> void:
+	var pause_layout := pause_panel.get_node_or_null("MarginContainer/PauseLayout")
+	if pause_layout == null:
+		return
+	var existing := pause_layout.get_node_or_null("BuildOverlay")
+	if existing != null:
+		pause_layout.remove_child(existing)
+		existing.queue_free()
+	var overlay := VBoxContainer.new()
+	overlay.name = "BuildOverlay"
+	overlay.add_theme_constant_override("separation", 10)
+	pause_layout.add_child(overlay)
+	var resume := pause_layout.get_node_or_null("ResumeButton")
+	if resume != null:
+		pause_layout.move_child(overlay, resume.get_index())
+	for player_index in range(_player_nodes.size()):
+		var player = _player_nodes[player_index]
+		var header := Label.new()
+		header.text = "P%d Build" % (player_index + 1)
+		header.add_theme_font_size_override("font_size", 15)
+		header.add_theme_color_override("font_color", _player_configs[player_index].tint.lightened(0.2))
+		overlay.add_child(header)
+		var ability_text := "Abilities: %s / %s" % [
+			str(player.get_ability_hud_data(0).get("name", "?")),
+			str(player.get_ability_hud_data(1).get("name", "?")),
+		]
+		var ability_label := Label.new()
+		ability_label.text = ability_text
+		ability_label.add_theme_font_size_override("font_size", 12)
+		overlay.add_child(ability_label)
+		var mutations: Array = _mutation_system.get_active_mutations(player_index)
+		var counts: Dictionary = {}
+		for mutation in mutations:
+			var mutation_dict: Dictionary = mutation as Dictionary
+			var mutation_id := str(mutation_dict.get("id", ""))
+			if mutation_id.is_empty():
+				continue
+			counts[mutation_id] = {
+				"name": str(mutation_dict.get("name", mutation_id)),
+				"count": int(counts.get(mutation_id, {}).get("count", 0)) + 1,
+				"rarity": str(mutation_dict.get("rarity", "common")),
+			}
+		if counts.is_empty():
+			var empty_label := Label.new()
+			empty_label.text = "  No mutations yet"
+			empty_label.add_theme_font_size_override("font_size", 11)
+			empty_label.modulate = Color(0.7, 0.78, 0.88, 0.7)
+			overlay.add_child(empty_label)
+		else:
+			var chip_flow := FlowContainer.new()
+			chip_flow.add_theme_constant_override("h_separation", 6)
+			chip_flow.add_theme_constant_override("v_separation", 4)
+			overlay.add_child(chip_flow)
+			for mutation_id in counts.keys():
+				var entry: Dictionary = counts[mutation_id]
+				var chip := Label.new()
+				var level_text := " Lv%d" % int(entry["count"]) if int(entry["count"]) > 1 and str(entry["rarity"]) != "rare" else ""
+				chip.text = "%s%s" % [str(entry["name"]), level_text]
+				chip.add_theme_font_size_override("font_size", 11)
+				chip.modulate = Color(1.0, 0.86, 0.34, 0.96) if str(entry["rarity"]) == "rare" else Color(0.88, 0.94, 1.0, 0.88)
+				chip_flow.add_child(chip)
 
 func _current_time_seconds() -> float:
 	return Time.get_ticks_msec() / 1000.0
