@@ -266,6 +266,9 @@ func apply_damage(amount: int) -> void:
 	if current_health <= 0:
 		_enter_downed_state()
 
+func can_receive_damage() -> bool:
+	return not _is_downed and not _is_damage_immune(_current_time_seconds())
+
 func apply_knockback(direction: Vector2, force: float) -> void:
 	apply_impulse(direction, force)
 

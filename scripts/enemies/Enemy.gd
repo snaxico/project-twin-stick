@@ -1,6 +1,8 @@
 extends CharacterBody2D
 
 const ParticleFactoryData = preload("res://scripts/juice/ParticleFactory.gd")
+const PULSAR_ARENA_MARGIN := 260.0
+const PULSAR_TELEPORT_MIN_DISTANCE := 400.0
 
 signal enemy_died(enemy)
 signal fire_requested(origin, direction, speed, damage, team, color, projectile_scale)
@@ -74,6 +76,8 @@ var _alive := true
 var _base_visual_scale := Vector2.ONE
 var _base_shadow_scale := Vector2.ONE
 var _base_collision_radius := 19.0
+var _pulsar_teleport_at := 0.0
+var _pulsar_telegraph_until := 0.0
 
 func _ready() -> void:
 	_random.randomize()
@@ -105,6 +109,8 @@ func setup(type_name: String, combat_owner: Node) -> void:
 	_next_trail_at = 0.0
 	_charge_chain_remaining = 0
 	_boss_scale = 1.0
+	_pulsar_teleport_at = 0.0
+	_pulsar_telegraph_until = 0.0
 	_configure_type(type_name)
 	current_health = max_health
 	_update_visual_state()
@@ -194,7 +200,7 @@ func _configure_type(type_name: String) -> void:
 		"elite_support":
 			enemy_type = EnemyType.ELITE_SUPPORT
 			max_health = 900.0
-			move_speed = 140.0
+			move_speed = 160.0
 			fire_interval = 99.0
 			projectile_damage = 0
 			projectile_speed = 0.0
@@ -233,7 +239,7 @@ func _configure_type(type_name: String) -> void:
 			_feedback_weight = 2.0
 		"boss_pulsar":
 			enemy_type = EnemyType.BOSS_PULSAR
-			max_health = 650.0
+			max_health = 1000.0
 			move_speed = 0.0
 			fire_interval = 0.9
 			projectile_damage = 8
@@ -278,7 +284,7 @@ func apply_boss_scale(player_count: int) -> void:
 	elif enemy_type == EnemyType.BOSS_HIVE:
 		max_health = 700.0 * _boss_scale
 	elif enemy_type == EnemyType.BOSS_PULSAR:
-		max_health = 650.0 * _boss_scale
+		max_health = 1000.0 * _boss_scale
 	current_health = max_health
 
 func apply_aura(speed_mult: float, attack_mult: float) -> void:
@@ -437,7 +443,15 @@ func _attempt_contact_damage(now: float) -> void:
 	if global_position.distance_to(_target.global_position) > _get_contact_range():
 		return
 	if _target.has_method("apply_damage"):
+		var can_apply_hit_feedback := true
+		if _target.has_method("can_receive_damage"):
+			can_apply_hit_feedback = bool(_target.can_receive_damage())
 		_target.apply_damage(contact_damage)
+		if can_apply_hit_feedback and _target.has_method("apply_knockback"):
+			var knockback_direction := (_target.global_position - global_position).normalized()
+			if knockback_direction.length() <= 0.0:
+				knockback_direction = Vector2.RIGHT
+			_target.apply_knockback(knockback_direction, _get_contact_knockback_force())
 		_next_contact_at = now + (0.65 if is_boss() else 0.45)
 
 func _get_contact_range() -> float:
@@ -483,14 +497,14 @@ func _update_bomber_behavior(direction: Vector2, distance: float, now: float) ->
 		return Vector2.ZERO
 	return direction * _get_effective_move_speed()
 
-func _update_support_behavior(direction: Vector2, distance: float, now: float) -> Vector2:
+func _update_support_behavior(direction: Vector2, _distance: float, now: float) -> Vector2:
 	var perpendicular := direction.orthogonal().normalized()
 	var orbit_bias := perpendicular if int(now * 2.0) % 2 == 0 else -perpendicular
 	if now >= _next_ability_at:
-		_next_ability_at = now + 2.0
-		if _combat_owner != null and _combat_owner.has_method("spawn_enemy_shockwave"):
-			_combat_owner.spawn_enemy_shockwave(global_position, 150.0, 8, 240.0, _feedback_color, false)
-	return (direction * 0.3 + orbit_bias * 0.7).normalized() * _get_effective_move_speed()
+		_next_ability_at = now + 3.5
+		if _combat_owner != null and _combat_owner.has_method("spawn_enemy_minions"):
+			_combat_owner.spawn_enemy_minions(global_position, _random.randi_range(1, 2), 0.0, "splitter_mini")
+	return (direction * 0.45 + orbit_bias * 0.55).normalized() * _get_effective_move_speed()
 
 func _update_warden_behavior(direction: Vector2, distance: float, now: float) -> Vector2:
 	var phase := _get_phase_ratio()
@@ -567,6 +581,16 @@ func _update_hive_behavior(direction: Vector2, distance: float, now: float) -> V
 
 func _update_pulsar_behavior(direction: Vector2, _distance: float, now: float) -> Vector2:
 	var phase := _get_phase_ratio()
+	if _pulsar_teleport_at <= 0.0:
+		_pulsar_teleport_at = now + _get_pulsar_teleport_interval(phase)
+	if _pulsar_telegraph_until > now:
+		return Vector2.ZERO
+	if now >= _pulsar_teleport_at:
+		_start_pulsar_telegraph(now)
+		return Vector2.ZERO
+	if _pulsar_telegraph_until > 0.0 and now >= _pulsar_telegraph_until:
+		_finish_pulsar_teleport(now, phase)
+		return Vector2.ZERO
 	if now >= _next_ability_at:
 		_next_ability_at = now + (4.0 if phase < 0.25 else 3.0 if phase < 0.5 else 2.4 if phase < 0.75 else 2.0)
 		if _combat_owner != null and _combat_owner.has_method("spawn_enemy_shockwave"):
@@ -588,8 +612,58 @@ func _update_pulsar_behavior(direction: Vector2, _distance: float, now: float) -
 			_emit_projectiles_at(player_direction, 3 if phase < 0.5 else 5, 0.09, 0.95)
 	return Vector2.ZERO
 
-func _emit_projectiles_at(direction: Vector2, projectile_count: int, spread: float, scale: float) -> void:
-	_emit_projectile_burst(direction.normalized() if direction.length() > 0.0 else Vector2.RIGHT, projectile_count, spread, scale)
+func _get_contact_knockback_force() -> float:
+	if is_boss():
+		return 500.0
+	if get_type_name().begins_with("elite_"):
+		return 350.0
+	return 200.0
+
+func _get_pulsar_teleport_interval(phase: float) -> float:
+	return lerpf(6.0, 4.0, clampf(phase, 0.0, 1.0))
+
+func _start_pulsar_telegraph(now: float) -> void:
+	_pulsar_teleport_at = INF
+	_pulsar_telegraph_until = now + 0.3
+	_spawn_hit_particles(1.25)
+	var parent_node := get_parent()
+	if parent_node == null:
+		return
+	var ring := ParticleFactoryData.create_impact_ring(_feedback_color.lightened(0.3), 72.0, 3.2)
+	ring.global_position = global_position
+	parent_node.add_child(ring)
+
+func _finish_pulsar_teleport(now: float, phase: float) -> void:
+	_pulsar_telegraph_until = 0.0
+	global_position = _find_pulsar_teleport_position()
+	if _combat_owner != null and _combat_owner.has_method("spawn_enemy_shockwave"):
+		_combat_owner.spawn_enemy_shockwave(global_position, 180.0 + phase * 60.0, 0, 780.0, _feedback_color, false)
+	var parent_node := get_parent()
+	if parent_node != null:
+		var burst := ParticleFactoryData.create_explosion_burst(_feedback_color, 0.95)
+		burst.global_position = global_position
+		parent_node.add_child(burst)
+	_pulsar_teleport_at = now + _get_pulsar_teleport_interval(phase)
+	_next_ability_at = maxf(_next_ability_at, now + 0.45)
+
+func _find_pulsar_teleport_position() -> Vector2:
+	var arena_rect := Rect2(Vector2.ZERO, Vector2(4800.0, 2700.0))
+	if _combat_owner != null and _combat_owner.has_method("get_arena_rect"):
+		arena_rect = _combat_owner.get_arena_rect()
+	for _attempt in range(8):
+		var candidate := Vector2(
+			_random.randf_range(arena_rect.position.x + PULSAR_ARENA_MARGIN, arena_rect.end.x - PULSAR_ARENA_MARGIN),
+			_random.randf_range(arena_rect.position.y + PULSAR_ARENA_MARGIN, arena_rect.end.y - PULSAR_ARENA_MARGIN)
+		)
+		if candidate.distance_to(global_position) >= PULSAR_TELEPORT_MIN_DISTANCE:
+			return candidate
+	return Vector2(
+		clampf(global_position.x + _random.randf_range(-700.0, 700.0), arena_rect.position.x + PULSAR_ARENA_MARGIN, arena_rect.end.x - PULSAR_ARENA_MARGIN),
+		clampf(global_position.y + _random.randf_range(-500.0, 500.0), arena_rect.position.y + PULSAR_ARENA_MARGIN, arena_rect.end.y - PULSAR_ARENA_MARGIN)
+	)
+
+func _emit_projectiles_at(direction: Vector2, projectile_count: int, spread: float, projectile_scale: float) -> void:
+	_emit_projectile_burst(direction.normalized() if direction.length() > 0.0 else Vector2.RIGHT, projectile_count, spread, projectile_scale)
 
 func _emit_projectile_burst(base_direction: Vector2, projectile_count: int, spread_radians: float, projectile_scale: float) -> void:
 	if _combat_owner != null and _combat_owner.has_method("spawn_enemy_attack_trail"):

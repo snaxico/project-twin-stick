@@ -13,9 +13,9 @@ func setup(_arena_rect: Rect2, player_nodes: Array) -> void:
 	set_physics_process(true)
 	queue_redraw()
 
-func spawn_patch(position: Vector2) -> void:
+func spawn_patch(patch_position: Vector2) -> void:
 	_patches.append({
-		"position": position,
+		"position": patch_position,
 		"time": 0.0,
 		"id": "ice_%d" % Time.get_ticks_usec(),
 	})

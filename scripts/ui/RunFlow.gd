@@ -1,7 +1,7 @@
 extends Control
 
 const GAME_WORLD_SCENE = preload("res://scenes/game/GameWorld.tscn")
-const IconFactoryData = preload("res://scripts/ui/IconFactory.gd")
+const MapNodeButtonData = preload("res://scripts/ui/MapNodeButton.gd")
 
 signal return_to_menu_requested(open_meta_menu: bool)
 
@@ -23,7 +23,9 @@ signal return_to_menu_requested(open_meta_menu: bool)
 var _active_game = null
 var _post_resolution_action: String = "next"
 var _map_buttons: Dictionary = {}
-var _map_button_size := Vector2(110.0, 30.0)
+var _map_button_size := Vector2(92.0, 88.0)
+var _virtual_graph_height := 0.0
+var _graph_scroll_offset := 0.0
 
 func _ready() -> void:
 	run_summary_panel.visible = false
@@ -74,11 +76,13 @@ func _rebuild_map_graph() -> void:
 	var map_rows: Array = RunState.get_map_rows()
 	if map_rows.is_empty():
 		return
+	_virtual_graph_height = _get_virtual_graph_height(map_rows)
+	_graph_scroll_offset = _get_graph_scroll_offset(map_rows, _virtual_graph_height)
 	var node_positions: Dictionary = {}
 	for row in map_rows:
 		for node in row:
 			if node is Dictionary:
-				node_positions[str(node.get("id", ""))] = _get_node_graph_position(node, map_rows.size())
+				node_positions[str(node.get("id", ""))] = _get_node_graph_position(node, map_rows)
 	for row in map_rows:
 		for node in row:
 			if not (node is Dictionary):
@@ -104,17 +108,40 @@ func _clear_map_graph() -> void:
 	for child in map_button_layer.get_children():
 		child.queue_free()
 
-func _get_node_graph_position(node: Dictionary, row_count: int) -> Vector2:
-	var width := maxf(map_graph_area.size.x, 320.0)
-	var height := maxf(map_graph_area.size.y, 280.0)
+func _get_node_graph_position(node: Dictionary, map_rows: Array) -> Vector2:
+	var width: float = maxf(map_graph_area.size.x, 320.0)
 	var row := int(node.get("row", 0))
-	var margin_x := 60.0
-	var margin_y := 22.0
-	var y := margin_y if row_count <= 1 else margin_y + (height - margin_y * 2.0) * float(row) / float(max(row_count - 1, 1))
-	var column_count_in_row := _count_columns_in_row(node, RunState.get_map_rows())
-	var column_rank := _get_column_rank(node, RunState.get_map_rows())
-	var x := width * 0.5 if column_count_in_row <= 1 else margin_x + (width - margin_x * 2.0) * float(column_rank) / float(max(column_count_in_row - 1, 1))
+	var margin_x: float = 84.0
+	var margin_y: float = 42.0
+	var row_spacing: float = 132.0
+	var base_y: float = _virtual_graph_height - margin_y - float(row) * row_spacing
+	var y: float = base_y - _graph_scroll_offset
+	var column_count_in_row: int = _count_columns_in_row(node, map_rows)
+	var column_rank: int = _get_column_rank(node, map_rows)
+	var x: float = width * 0.5 if column_count_in_row <= 1 else margin_x + (width - margin_x * 2.0) * float(column_rank) / float(max(column_count_in_row - 1, 1))
+	if column_count_in_row > 1 and row % 2 == 1:
+		x += 18.0 if column_rank % 2 == 0 else -18.0
 	return Vector2(x, y)
+
+func _get_virtual_graph_height(map_rows: Array) -> float:
+	return maxf(map_graph_area.size.y, 120.0 + float(max(map_rows.size() - 1, 0)) * 132.0)
+
+func _get_graph_scroll_offset(_map_rows: Array, virtual_height: float) -> float:
+	var viewport_height := maxf(map_graph_area.size.y, 280.0)
+	if virtual_height <= viewport_height:
+		return 0.0
+	var focus_row := 0
+	if not RunState.current_node_id.is_empty():
+		focus_row = int(RunState.get_map_node(RunState.current_node_id).get("row", 0))
+	else:
+		var reachable_ids: Array = RunState.get_reachable_node_ids()
+		if not reachable_ids.is_empty():
+			focus_row = int(RunState.get_map_node(str(reachable_ids[0])).get("row", 0))
+	var row_spacing := 132.0
+	var margin_y := 42.0
+	var focus_virtual_y := virtual_height - margin_y - float(focus_row) * row_spacing
+	var desired_screen_y := viewport_height * 0.72
+	return clampf(focus_virtual_y - desired_screen_y, 0.0, virtual_height - viewport_height)
 
 func _count_columns_in_row(node: Dictionary, map_rows: Array) -> int:
 	var row_index := int(node.get("row", 0))
@@ -135,54 +162,40 @@ func _get_column_rank(node: Dictionary, map_rows: Array) -> int:
 
 func _add_connection_line(from_position: Vector2, to_position: Vector2, color: Color) -> void:
 	var line := Line2D.new()
-	line.width = 2.0
+	line.width = 3.0
 	line.default_color = color
 	line.antialiased = true
-	line.points = PackedVector2Array([from_position, to_position])
+	line.begin_cap_mode = Line2D.LINE_CAP_ROUND
+	line.end_cap_mode = Line2D.LINE_CAP_ROUND
+	var mid_y := lerpf(from_position.y, to_position.y, 0.5)
+	line.points = PackedVector2Array([
+		from_position,
+		Vector2(from_position.x, mid_y),
+		Vector2(to_position.x, mid_y),
+		to_position,
+	])
 	map_line_layer.add_child(line)
 
 func _build_map_button(node: Dictionary, button_center: Vector2, is_reachable: bool) -> Button:
-	var button := Button.new()
+	var button := MapNodeButtonData.new()
 	button.custom_minimum_size = _map_button_size
 	button.size = _map_button_size
 	button.position = button_center - _map_button_size * 0.5
 	button.focus_mode = Control.FOCUS_ALL if is_reachable else Control.FOCUS_NONE
-	button.text = _build_node_button_text(node)
-	button.add_theme_font_size_override("font_size", 12)
-	button.alignment = HORIZONTAL_ALIGNMENT_CENTER
-	button.modulate = _get_node_color(node, is_reachable)
 	button.mouse_entered.connect(_on_map_node_hovered.bind(str(node.get("id", ""))))
 	button.focus_entered.connect(_on_map_node_hovered.bind(str(node.get("id", ""))))
 	button.pressed.connect(_on_map_node_pressed.bind(str(node.get("id", ""))))
-	var modifiers: Array = node.get("modifiers", []) as Array
-	if not modifiers.is_empty():
-		var dot_row := HBoxContainer.new()
-		dot_row.anchor_left = 1.0
-		dot_row.anchor_right = 1.0
-		dot_row.anchor_top = 0.0
-		dot_row.anchor_bottom = 0.0
-		dot_row.offset_left = -6.0 - float(modifiers.size()) * 10.0
-		dot_row.offset_top = 2.0
-		dot_row.offset_right = -4.0
-		dot_row.add_theme_constant_override("separation", 3)
-		dot_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		for mod_id_variant in modifiers:
-			var dot := ColorRect.new()
-			dot.custom_minimum_size = Vector2(7.0, 7.0)
-			dot.color = _get_modifier_dot_color(str(mod_id_variant))
-			dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			dot_row.add_child(dot)
-		button.add_child(dot_row)
+	var modifier_colors: Array = []
+	for mod_id_variant in (node.get("modifiers", []) as Array):
+		modifier_colors.append(_get_modifier_dot_color(str(mod_id_variant)))
+	button.configure(
+		node,
+		is_reachable,
+		RunState.visited_node_ids.has(str(node.get("id", ""))),
+		str(node.get("id", "")) == RunState.current_node_id,
+		modifier_colors
+	)
 	return button
-
-func _build_node_button_text(node: Dictionary) -> String:
-	match str(node.get("room_type", "combat")):
-		"boss":
-			return str(node.get("boss_type", "Boss")).capitalize()
-		"elite":
-			return "Elite"
-		_:
-			return "Fight"
 
 func _get_modifier_dot_color(mod_id: String) -> Color:
 	var minor_ids := ["accelerating_waves", "enemy_speed", "swarm", "shielded", "explosive_death"]
@@ -215,27 +228,10 @@ func _modifier_abbreviation(mod_id: String) -> String:
 			return "IZ"
 		"mine_field":
 			return "MF"
-		"gravity_wells":
-			return "GW"
 		"shrinking_arena":
 			return "SA"
 		_:
 			return mod_id.substr(0, mini(mod_id.length(), 2)).to_upper()
-
-func _get_node_color(node: Dictionary, is_reachable: bool) -> Color:
-	var node_id := str(node.get("id", ""))
-	var room_type := str(node.get("room_type", "combat"))
-	if node_id == RunState.current_node_id:
-		return Color(1.0, 0.84, 0.32, 1.0)
-	if room_type == "boss":
-		return Color(0.86, 0.22, 0.26, 1.0) if is_reachable else Color(0.42, 0.16, 0.18, 0.92)
-	if room_type == "elite":
-		return Color(0.92, 0.48, 0.16, 1.0) if is_reachable else Color(0.46, 0.26, 0.12, 0.92)
-	if is_reachable:
-		return Color(0.92, 0.94, 1.0, 1.0)
-	if RunState.visited_node_ids.has(node_id):
-		return Color(0.48, 0.58, 0.68, 0.96)
-	return Color(0.22, 0.25, 0.3, 0.94)
 
 func _get_connection_color(from_id: String, to_id: String) -> Color:
 	if RunState.get_reachable_node_ids().has(to_id):

@@ -10,7 +10,6 @@ const HoldZoneObjectiveData = preload("res://scripts/objectives/HoldZoneObjectiv
 const FireFloorModifierData = preload("res://scripts/modifiers/FireFloorModifier.gd")
 const IceZoneModifierData = preload("res://scripts/modifiers/IceZoneModifier.gd")
 const MineFieldModifierData = preload("res://scripts/modifiers/MineFieldModifier.gd")
-const GravityWellModifierData = preload("res://scripts/modifiers/GravityWellModifier.gd")
 const ShrinkingArenaModifierData = preload("res://scripts/modifiers/ShrinkingArenaModifier.gd")
 const DecoyNodeData = preload("res://scripts/game/DecoyNode.gd")
 const TurretNodeData = preload("res://scripts/game/TurretNode.gd")
@@ -20,6 +19,7 @@ const HealthPickupData = preload("res://scripts/pickups/HealthPickup.gd")
 const HazardZoneData = preload("res://scripts/game/HazardZone.gd")
 const AbilityMineData = preload("res://scripts/game/AbilityMine.gd")
 const ParticleFactoryData = preload("res://scripts/juice/ParticleFactory.gd")
+const PauseInputProxyData = preload("res://scripts/ui/PauseInputProxy.gd")
 
 const MODIFIERS_DATA_PATH := "res://data/modifiers.json"
 
@@ -109,6 +109,8 @@ var _pending_clear_summary := ""
 var _revive_progress_by_player_id: Dictionary = {}
 var _hud_root: Control = null
 var _player_combat_indicators: Array = []
+var _bottom_hud: HBoxContainer = null
+var _bottom_player_hud_cards: Array = []
 var _objective_label: Label = null
 var _room_label: Label = null
 var _xp_label: Label = null
@@ -139,7 +141,6 @@ var _collector_orbs: Array = []
 var _fire_floor_modifier = null
 var _ice_zone_modifier = null
 var _mine_field_modifier = null
-var _gravity_well_modifier = null
 var _shrinking_arena_modifier = null
 var _active_decoys: Array = []
 var _active_turrets: Array = []
@@ -147,6 +148,9 @@ var _active_orbits: Array = []
 var _active_hazards: Array = []
 var _active_mines: Array = []
 var _next_hud_refresh_at := 0.0
+var _scheduled_enemy_shockwaves: Array = []
+var _game_paused := false
+var _pause_input_proxy = null
 
 func configure_players(configs: Array) -> void:
 	_player_configs = configs.duplicate()
@@ -155,7 +159,6 @@ func configure_room(room_config: Dictionary) -> void:
 	_room_config = room_config.duplicate(true)
 
 func _ready() -> void:
-	process_mode = Node.PROCESS_MODE_ALWAYS
 	if player_scene == null:
 		player_scene = load("res://scenes/player/Player.tscn")
 	_hide_legacy_ui()
@@ -170,6 +173,9 @@ func _bind_ui() -> void:
 	resume_button.pressed.connect(_on_resume_pressed)
 	pause_retry_button.pressed.connect(_on_retry_pressed)
 	pause_main_menu_button.pressed.connect(_on_main_menu_pressed)
+	_pause_input_proxy = PauseInputProxyData.new()
+	pause_panel.add_child(_pause_input_proxy)
+	_pause_input_proxy.pause_pressed.connect(_on_pause_proxy_pressed)
 
 func _hide_legacy_ui() -> void:
 	for node_path in [
@@ -253,12 +259,118 @@ func _build_hud() -> void:
 	_modifier_hud.add_theme_constant_override("separation", 6)
 	_hud_root.add_child(_modifier_hud)
 
+	_bottom_hud = HBoxContainer.new()
+	_bottom_hud.anchor_left = 0.0
+	_bottom_hud.anchor_right = 1.0
+	_bottom_hud.anchor_top = 1.0
+	_bottom_hud.anchor_bottom = 1.0
+	_bottom_hud.offset_left = 36.0
+	_bottom_hud.offset_top = -104.0
+	_bottom_hud.offset_right = -36.0
+	_bottom_hud.offset_bottom = -20.0
+	_bottom_hud.alignment = BoxContainer.ALIGNMENT_CENTER
+	_bottom_hud.add_theme_constant_override("separation", 14)
+	_hud_root.add_child(_bottom_hud)
+
 	_player_combat_indicators.clear()
+	_bottom_player_hud_cards.clear()
 	for index in range(_player_configs.size()):
 		var indicator := PlayerCombatIndicatorData.new()
 		indicator.configure_player(_player_configs[index].tint)
 		_hud_root.add_child(indicator)
 		_player_combat_indicators.append(indicator)
+
+		var tint: Color = _player_configs[index].tint
+		var card := PanelContainer.new()
+		card.custom_minimum_size = Vector2(260.0, 72.0)
+		var card_style := StyleBoxFlat.new()
+		card_style.bg_color = Color(tint.r * 0.14, tint.g * 0.14, tint.b * 0.14, 0.84)
+		card_style.border_color = tint.lightened(0.18)
+		card_style.set_border_width_all(1)
+		card_style.corner_radius_top_left = 8
+		card_style.corner_radius_top_right = 8
+		card_style.corner_radius_bottom_left = 8
+		card_style.corner_radius_bottom_right = 8
+		card.add_theme_stylebox_override("panel", card_style)
+		_bottom_hud.add_child(card)
+
+		var card_margin := MarginContainer.new()
+		card_margin.add_theme_constant_override("margin_left", 10)
+		card_margin.add_theme_constant_override("margin_top", 8)
+		card_margin.add_theme_constant_override("margin_right", 10)
+		card_margin.add_theme_constant_override("margin_bottom", 8)
+		card.add_child(card_margin)
+
+		var card_layout := VBoxContainer.new()
+		card_layout.add_theme_constant_override("separation", 4)
+		card_margin.add_child(card_layout)
+
+		var top_row := HBoxContainer.new()
+		top_row.add_theme_constant_override("separation", 8)
+		card_layout.add_child(top_row)
+
+		var header := Label.new()
+		header.text = "P%d" % (index + 1)
+		header.add_theme_font_size_override("font_size", 12)
+		header.add_theme_color_override("font_color", tint.lightened(0.18))
+		top_row.add_child(header)
+
+		var mutation_badge := Label.new()
+		mutation_badge.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		mutation_badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		mutation_badge.add_theme_font_size_override("font_size", 10)
+		top_row.add_child(mutation_badge)
+
+		var health_bar := ProgressBar.new()
+		health_bar.show_percentage = false
+		health_bar.min_value = 0.0
+		health_bar.max_value = 100.0
+		health_bar.value = 100.0
+		health_bar.custom_minimum_size = Vector2(120.0, 10.0)
+		card_layout.add_child(health_bar)
+
+		var ability_row := HBoxContainer.new()
+		ability_row.add_theme_constant_override("separation", 8)
+		card_layout.add_child(ability_row)
+
+		var slot_1_box := VBoxContainer.new()
+		slot_1_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		slot_1_box.add_theme_constant_override("separation", 2)
+		ability_row.add_child(slot_1_box)
+		var slot_1_label := Label.new()
+		slot_1_label.add_theme_font_size_override("font_size", 10)
+		slot_1_box.add_child(slot_1_label)
+		var slot_1_bar := ProgressBar.new()
+		slot_1_bar.show_percentage = false
+		slot_1_bar.min_value = 0.0
+		slot_1_bar.max_value = 100.0
+		slot_1_bar.value = 100.0
+		slot_1_bar.custom_minimum_size = Vector2(96.0, 8.0)
+		slot_1_box.add_child(slot_1_bar)
+
+		var slot_2_box := VBoxContainer.new()
+		slot_2_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		slot_2_box.add_theme_constant_override("separation", 2)
+		ability_row.add_child(slot_2_box)
+		var slot_2_label := Label.new()
+		slot_2_label.add_theme_font_size_override("font_size", 10)
+		slot_2_box.add_child(slot_2_label)
+		var slot_2_bar := ProgressBar.new()
+		slot_2_bar.show_percentage = false
+		slot_2_bar.min_value = 0.0
+		slot_2_bar.max_value = 100.0
+		slot_2_bar.value = 100.0
+		slot_2_bar.custom_minimum_size = Vector2(96.0, 8.0)
+		slot_2_box.add_child(slot_2_bar)
+
+		_bottom_player_hud_cards.append({
+			"health_bar": health_bar,
+			"mutation_badge": mutation_badge,
+			"slot_1_label": slot_1_label,
+			"slot_1_bar": slot_1_bar,
+			"slot_2_label": slot_2_label,
+			"slot_2_bar": slot_2_bar,
+		})
 
 func _spawn_players() -> void:
 	for child in players.get_children():
@@ -418,6 +530,7 @@ func _set_wall_rect(node: CollisionShape2D, wall_position: Vector2, size: Vector
 
 func _start_room() -> void:
 	_clear_runtime_nodes()
+	_set_game_paused(false)
 	_rebuild_player_loadouts()
 	_room_clear_started = false
 	_awaiting_mutation_pick = false
@@ -479,8 +592,8 @@ func _clear_runtime_nodes() -> void:
 	_fire_floor_modifier = null
 	_ice_zone_modifier = null
 	_mine_field_modifier = null
-	_gravity_well_modifier = null
 	_shrinking_arena_modifier = null
+	_scheduled_enemy_shockwaves.clear()
 	_hold_buff_offer.clear()
 	_invalidate_runtime_caches()
 
@@ -519,10 +632,6 @@ func _apply_active_modifiers() -> void:
 		_mine_field_modifier = MineFieldModifierData.new()
 		_mine_field_modifier.setup(ARENA_RECT, _player_nodes)
 		effects.add_child(_mine_field_modifier)
-	if _active_modifiers.has("gravity_wells"):
-		_gravity_well_modifier = GravityWellModifierData.new()
-		_gravity_well_modifier.setup(ARENA_RECT)
-		effects.add_child(_gravity_well_modifier)
 	if _active_modifiers.has("shrinking_arena"):
 		_shrinking_arena_modifier = ShrinkingArenaModifierData.new()
 		_shrinking_arena_modifier.setup(ARENA_RECT)
@@ -532,9 +641,10 @@ func _apply_active_modifiers() -> void:
 func _physics_process(delta: float) -> void:
 	if _awaiting_mutation_pick:
 		return
-	if pause_panel.visible or get_tree().paused:
+	if _game_paused or pause_panel.visible or get_tree().paused:
 		return
 	_room_elapsed += delta
+	_update_scheduled_enemy_shockwaves()
 	_update_side_objectives(delta)
 	_update_hazards(delta)
 	_update_revives(delta)
@@ -570,8 +680,6 @@ func _update_side_objectives(delta: float) -> void:
 				_complete_side_objective()
 
 func _update_hazards(delta: float) -> void:
-	if _gravity_well_modifier != null and is_instance_valid(_gravity_well_modifier):
-		_gravity_well_modifier.apply_pull(_player_nodes, _enemy_nodes, delta)
 	for hazard in _active_hazards:
 		if hazard != null and is_instance_valid(hazard):
 			hazard.update_zone(delta, _player_nodes)
@@ -830,6 +938,14 @@ func _spawn_player_shockwave(origin: Vector2, stats: Dictionary) -> void:
 		if not ("team" in projectile) or str(projectile.team) != "enemy":
 			continue
 		if projectile.global_position.distance_to(origin) <= radius:
+			var projectile_direction: Vector2 = projectile.global_position - origin
+			var sparks := ParticleFactoryData.create_impact_sparks(
+				(stats.get("color", Color.WHITE) as Color).lightened(0.1),
+				projectile_direction.normalized() if projectile_direction.length() > 0.0 else Vector2.UP,
+				0.75
+			)
+			sparks.global_position = projectile.global_position
+			effects.add_child(sparks)
 			projectile.queue_free()
 	_spawn_shockwave_visual(origin, radius, stats.get("color", Color.WHITE), float(stats.get("expand_duration", 0.15)))
 
@@ -862,7 +978,7 @@ func _spawn_ability_mines(origin: Vector2, stats: Dictionary) -> void:
 		effects.add_child(mine)
 		_active_mines.append(mine)
 
-func _spawn_shockwave_visual(center: Vector2, radius: float, color: Color, duration: float) -> void:
+func _spawn_shockwave_visual(center: Vector2, radius: float, color: Color, _duration: float) -> void:
 	var ring := ParticleFactoryData.create_explosion_ring(color, radius, 4.0)
 	ring.global_position = center
 	effects.add_child(ring)
@@ -1017,6 +1133,7 @@ func _refresh_hud() -> void:
 	_objective_label.text = _build_side_objective_text()
 	_score_label.text = "Room %d" % max(_room_depth, RunState.get_current_score() + 1) if RunState.is_endless_mode() else ""
 	_update_player_combat_indicators()
+	_refresh_bottom_hud()
 
 func _build_room_status_text() -> String:
 	if RunState.is_endless_mode():
@@ -1093,6 +1210,27 @@ func _update_player_combat_indicators() -> void:
 			str(slot_1_hud_data.get("name", "")),
 			str(slot_2_hud_data.get("name", ""))
 		)
+
+func _refresh_bottom_hud() -> void:
+	for index in range(min(_bottom_player_hud_cards.size(), _player_nodes.size())):
+		var card: Dictionary = _bottom_player_hud_cards[index]
+		var player = _player_nodes[index]
+		var health_state: Dictionary = player.get_health_state()
+		var slot_1_hud_data: Dictionary = player.get_ability_hud_data(0)
+		var slot_2_hud_data: Dictionary = player.get_ability_hud_data(1)
+		var health_ratio := clampf(float(health_state.get("current", 0)) / maxf(float(health_state.get("max", 1)), 1.0), 0.0, 1.0)
+		var slot_1_ratio := 1.0
+		var slot_2_ratio := 1.0
+		var slot_1_duration := maxf(float(slot_1_hud_data.get("cooldown_duration", 1.0)), 0.01)
+		var slot_2_duration := maxf(float(slot_2_hud_data.get("cooldown_duration", 1.0)), 0.01)
+		slot_1_ratio = 1.0 - clampf(float(slot_1_hud_data.get("cooldown_remaining", 0.0)) / slot_1_duration, 0.0, 1.0)
+		slot_2_ratio = 1.0 - clampf(float(slot_2_hud_data.get("cooldown_remaining", 0.0)) / slot_2_duration, 0.0, 1.0)
+		(card.get("health_bar") as ProgressBar).value = health_ratio * 100.0
+		(card.get("mutation_badge") as Label).text = "%d mut" % _mutation_system.get_active_mutations(index).size()
+		(card.get("slot_1_label") as Label).text = str(slot_1_hud_data.get("name", "Ability 1"))
+		(card.get("slot_1_bar") as ProgressBar).value = slot_1_ratio * 100.0
+		(card.get("slot_2_label") as Label).text = str(slot_2_hud_data.get("name", "Ability 2"))
+		(card.get("slot_2_bar") as ProgressBar).value = slot_2_ratio * 100.0
 
 func _update_player_combat_indicator_positions() -> void:
 	if _player_combat_indicators.is_empty():
@@ -1263,13 +1401,34 @@ func schedule_enemy_shockwave(origin: Vector2, radius: float, damage: int, knock
 	if delay <= 0.0:
 		spawn_enemy_shockwave(origin, radius, damage, knockback_force, color, destroy_projectiles)
 		return
-	var timer := get_tree().create_timer(delay)
-	timer.timeout.connect(_on_scheduled_enemy_shockwave.bind(origin, radius, damage, knockback_force, color, destroy_projectiles))
+	_scheduled_enemy_shockwaves.append({
+		"trigger_at": _room_elapsed + delay,
+		"origin": origin,
+		"radius": radius,
+		"damage": damage,
+		"knockback_force": knockback_force,
+		"color": color,
+		"destroy_projectiles": destroy_projectiles,
+	})
 
-func _on_scheduled_enemy_shockwave(origin: Vector2, radius: float, damage: int, knockback_force: float, color: Color, destroy_projectiles: bool) -> void:
-	if not is_inside_tree():
+func _update_scheduled_enemy_shockwaves() -> void:
+	if _scheduled_enemy_shockwaves.is_empty():
 		return
-	spawn_enemy_shockwave(origin, radius, damage, knockback_force, color, destroy_projectiles)
+	var remaining: Array = []
+	for scheduled in _scheduled_enemy_shockwaves:
+		var trigger_at := float((scheduled as Dictionary).get("trigger_at", INF))
+		if _room_elapsed >= trigger_at:
+			spawn_enemy_shockwave(
+				scheduled.get("origin", Vector2.ZERO),
+				float(scheduled.get("radius", 0.0)),
+				int(scheduled.get("damage", 0)),
+				float(scheduled.get("knockback_force", 0.0)),
+				scheduled.get("color", Color.WHITE),
+				bool(scheduled.get("destroy_projectiles", false))
+			)
+		else:
+			remaining.append(scheduled)
+	_scheduled_enemy_shockwaves = remaining
 
 func spawn_enemy_hazard_zone(origin: Vector2, radius: float, duration: float, damage: int, color: Color) -> void:
 	var zone := HazardZoneData.new()
@@ -1278,13 +1437,15 @@ func spawn_enemy_hazard_zone(origin: Vector2, radius: float, duration: float, da
 	effects.add_child(zone)
 	_active_hazards.append(zone)
 
-func spawn_enemy_minions(origin: Vector2, count: int, phase: float) -> void:
+func spawn_enemy_minions(origin: Vector2, count: int, phase: float, forced_type: String = "") -> void:
 	for index in range(count):
-		var enemy_type := "chaser"
-		if phase >= 0.25 and randf() < phase:
-			enemy_type = "charger"
-		if phase >= 0.55 and randf() < phase * 0.7:
-			enemy_type = "spitter"
+		var enemy_type := forced_type
+		if enemy_type.is_empty():
+			enemy_type = "chaser"
+			if phase >= 0.25 and randf() < phase:
+				enemy_type = "charger"
+			if phase >= 0.55 and randf() < phase * 0.7:
+				enemy_type = "spitter"
 		var angle := TAU * float(index) / float(max(count, 1))
 		_spawn_enemy_instance(enemy_type, origin + Vector2.RIGHT.rotated(angle) * 96.0)
 
@@ -1328,6 +1489,9 @@ func get_active_players() -> Array:
 			active_players.append(player)
 	return active_players
 
+func get_arena_rect() -> Rect2:
+	return ARENA_RECT
+
 func get_player_target_nodes() -> Array:
 	return _player_nodes
 
@@ -1335,14 +1499,6 @@ func get_enemy_target_nodes() -> Array:
 	return _enemy_nodes
 
 func _get_player_spawn_position(index: int) -> Vector2:
-	var spawn_points := [
-		get_node_or_null("Player1Spawn"),
-		get_node_or_null("Player2Spawn"),
-		get_node_or_null("Player3Spawn"),
-		get_node_or_null("Player4Spawn"),
-	]
-	if index >= 0 and index < spawn_points.size() and spawn_points[index] != null:
-		return (spawn_points[index] as Node2D).global_position
 	return ARENA_CENTER + Vector2((index % 2) * 160.0 - 80.0, floor(index / 2.0) * 120.0 - 60.0)
 
 func _get_enemy_spawn_position() -> Vector2:
@@ -1375,6 +1531,38 @@ func _lock_player_input(locked: bool) -> void:
 		if player != null and is_instance_valid(player):
 			player.set_input_locked(locked)
 
+func _set_game_paused(paused: bool) -> void:
+	_game_paused = paused
+	pause_panel.visible = paused
+	_lock_player_input(paused)
+	_set_runtime_pause_state(paused)
+	get_tree().paused = paused
+	if paused:
+		_populate_pause_build_overlay()
+
+func _set_runtime_pause_state(paused: bool) -> void:
+	_set_nodes_physics_paused(projectiles.get_children(), paused)
+	_set_nodes_physics_paused(pickups.get_children(), paused)
+	_set_nodes_physics_paused(effects.get_children(), paused)
+	_set_nodes_physics_paused(_enemy_nodes, paused)
+	_set_nodes_physics_paused(_active_hazards, paused)
+	_set_nodes_physics_paused(_active_mines, paused)
+	_set_nodes_physics_paused(_active_decoys, paused)
+	_set_nodes_physics_paused(_active_turrets, paused)
+	_set_nodes_physics_paused(_active_orbits, paused)
+	for modifier in [_fire_floor_modifier, _ice_zone_modifier, _mine_field_modifier, _shrinking_arena_modifier, _hold_zone]:
+		_set_single_node_physics_paused(modifier, paused)
+
+func _set_nodes_physics_paused(nodes: Array, paused: bool) -> void:
+	for node in nodes:
+		_set_single_node_physics_paused(node, paused)
+
+func _set_single_node_physics_paused(node, paused: bool) -> void:
+	if node == null or not is_instance_valid(node):
+		return
+	node.set_process(not paused)
+	node.set_physics_process(not paused)
+
 func _sync_player_health_state(player) -> void:
 	if player == null or not is_instance_valid(player):
 		return
@@ -1384,29 +1572,29 @@ func _sync_player_health_state(player) -> void:
 	RunState.player_health_states[player_index] = player.get_health_state()
 
 func _on_retry_pressed() -> void:
-	get_tree().paused = false
-	pause_panel.visible = false
+	_set_game_paused(false)
 	_start_room()
 
 func _on_resume_pressed() -> void:
-	pause_panel.visible = false
-	get_tree().paused = false
+	_set_game_paused(false)
 
 func _on_main_menu_pressed() -> void:
-	get_tree().paused = false
+	_set_game_paused(false)
 	return_to_menu_requested.emit()
 
 func _unhandled_input(event: InputEvent) -> void:
 	if _awaiting_mutation_pick:
 		return
-	if event.is_action_pressed("ui_cancel"):
+	if event.is_action_pressed("pause"):
 		if pause_panel.visible:
 			_on_resume_pressed()
 		else:
-			pause_panel.visible = true
-			get_tree().paused = true
-			_populate_pause_build_overlay()
+			_set_game_paused(true)
 		get_viewport().set_input_as_handled()
+
+func _on_pause_proxy_pressed() -> void:
+	if _game_paused:
+		_on_resume_pressed()
 
 func _populate_pause_build_overlay() -> void:
 	var pause_layout := pause_panel.get_node_or_null("MarginContainer/PauseLayout")

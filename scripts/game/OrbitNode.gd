@@ -11,8 +11,8 @@ var tint := Color(0.56, 0.92, 1.0, 1.0)
 var _angle := 0.0
 var _hit_cooldowns: Dictionary = {}
 
-func configure(owner: Node2D, duration: float, stats: Dictionary, color: Color) -> void:
-	owner_node = owner
+func configure(orbit_owner: Node2D, duration: float, stats: Dictionary, color: Color) -> void:
+	owner_node = orbit_owner
 	lifetime = duration
 	orb_count = int(stats.get("orb_count", orb_count))
 	orbit_radius = float(stats.get("orbit_radius", orbit_radius))

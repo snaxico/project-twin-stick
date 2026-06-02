@@ -6,7 +6,7 @@ signal fire_requested(origin, direction, config)
 var lifetime := 6.0
 var fire_rate := 3.2
 var damage := 12
-var range := 780.0
+var attack_range := 780.0
 var projectile_speed := 760.0
 var tint := Color(0.9, 0.95, 1.0, 1.0)
 var _next_fire_at := 0.0
@@ -15,7 +15,7 @@ func configure(duration: float, stats: Dictionary, color: Color) -> void:
 	lifetime = duration
 	fire_rate = float(stats.get("fire_rate", fire_rate))
 	damage = int(stats.get("damage", damage))
-	range = float(stats.get("range", range))
+	attack_range = float(stats.get("range", attack_range))
 	projectile_speed = float(stats.get("projectile_speed", projectile_speed))
 	tint = color
 	set_physics_process(true)
@@ -39,7 +39,7 @@ func _physics_process(delta: float) -> void:
 				"color": tint,
 				"feedback_profile": "rifle",
 				"impact_weight": 0.9,
-				"max_distance": range,
+				"max_distance": attack_range,
 				"collision_half_width": 4.0,
 				"source_type": "ability",
 				"weapon_id": "turret",
@@ -58,7 +58,7 @@ func _find_target() -> Node2D:
 		if candidate.has_method("is_alive") and not candidate.is_alive():
 			continue
 		var distance := global_position.distance_to((candidate as Node2D).global_position)
-		if distance > range or distance >= best_distance:
+		if distance > attack_range or distance >= best_distance:
 			continue
 		best_distance = distance
 		best_target = candidate as Node2D

@@ -28,7 +28,7 @@ var debug_run_setup: Dictionary = {}
 var player_inventories: Array = []
 var xp_current: int = 0
 var xp_level: int = 0
-var xp_to_next_level: int = 150
+var xp_to_next_level: int = 200
 var xp_pending_levelups: int = 0
 var current_act: int = 1
 var endless_room_index: int = 1
@@ -64,7 +64,7 @@ func start_new_run(configs: Array, debug_options: Dictionary = {}) -> void:
 	player_inventories = _build_default_player_inventories(player_configs.size(), debug_run_setup.get("player_abilities", []) as Array)
 	xp_current = 0
 	xp_level = 0
-	xp_to_next_level = 150
+	xp_to_next_level = 200
 	xp_pending_levelups = 0
 	current_act = 1
 	endless_room_index = 1
@@ -240,7 +240,7 @@ func add_xp(amount: int) -> void:
 		xp_current -= xp_to_next_level
 		xp_level += 1
 		xp_pending_levelups += 1
-		xp_to_next_level = 150 + (xp_level * 100)
+		xp_to_next_level = 200 + (xp_level * 150)
 
 func get_pending_levelups() -> int:
 	return xp_pending_levelups

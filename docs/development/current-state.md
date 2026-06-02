@@ -125,15 +125,16 @@ The live runtime is now aligned to the `Feature Roadmap V3` redesign:
   - `Attack Speed`
 - live modifiers now use the roadmap set:
   - minors: `Accelerating Waves`, `Enemy Speed`, `Swarm`, `Shielded`, `Explosive Death`
-  - majors: `Fire Floor`, `Ice Zone`, `Mine Field`, `Gravity Wells`, `Shrinking Arena`
+  - majors: `Fire Floor`, `Ice Zone`, `Mine Field`, `Shrinking Arena`
+  - `Gravity Wells` was removed after playtesting because its effect was not readable enough
 
 ## UI / Presentation
 
 - combat HUD now shows:
   - top-center XP bar + level + pending picks
   - near-player cooldown arcs
-  - ability name labels on the cooldown indicators
-  - near-player health bars when relevant
+  - persistent near-player health bars
+  - bottom loadout overview cards with health, ability cooldowns, ability names, and mutation count
   - side objective progress
   - active modifier chips
   - endless room score label when applicable
@@ -147,9 +148,9 @@ The live runtime is now aligned to the `Feature Roadmap V3` redesign:
   - current mutation inventory per player
   - leveled common progression (`Lv X -> Lv Y`)
 - map UI now shows:
-  - branching paths with compact `110x30` node buttons
-  - text-only labels: `Fight`, `Elite`, boss name
-  - colored modifier dots on nodes
+  - vertical bottom-to-top branching paths
+  - custom-drawn combat / elite / boss nodes
+  - colored modifier dots below nodes
   - per-node modifier shorthand on hover detail panel
   - nodes positioned by actual row membership (not fixed 5-column grid)
 - pre-run UI now shows compact text-only ability selection (no large icons)
@@ -177,6 +178,7 @@ The live runtime is now aligned to the `Feature Roadmap V3` redesign:
   - boss helper attacks
   - modifier orchestration
   - side-objective orchestration
+  - manual pause freeze / resume handling
 - `Enemy.gd`
   - full enemy / elite / boss roster
   - slow / poison / shield / explosive-death handling
@@ -208,6 +210,8 @@ The live runtime is now aligned to the `Feature Roadmap V3` redesign:
 - full live playtesting and balance validation still have not been run after the full V3 integration
 - boss behavior is implemented, but still likely needs feel tuning against real runs
 - modifier stacking and endless pressure have not been manually stress-tested yet
+- the new vertical map and bottom HUD have passed parse validation but still need controller/manual readability testing
+- Pulsar teleport and Elite Support minion spawning need live feel validation
 - spawn timing values (`_room_duration`, `_spawn_interval`) are first-pass and need playtesting
 - the map UI is functional but compact — may need further polish for controller navigation
 - `GoldPickup.gd` remains deleted; gold stub functions in `RunState.gd` remain (no-ops)
