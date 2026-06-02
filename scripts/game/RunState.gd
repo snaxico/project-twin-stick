@@ -230,7 +230,7 @@ func get_player_runtime_loadout_for(player_index: int) -> Dictionary:
 		"ability_slot_1": ability_slot_1.duplicate(true),
 		"ability_slot_2": ability_slot_2.duplicate(true),
 		"mutations": get_mutations(player_index),
-		"move_speed": 390.0,
+		"move_speed": 488.0,
 		"max_health": 50,
 	}
 

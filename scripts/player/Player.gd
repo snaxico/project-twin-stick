@@ -4,6 +4,7 @@ const PlayerConfigData = preload("res://scripts/player/PlayerConfig.gd")
 const AutoTargetData = preload("res://scripts/player/AutoTarget.gd")
 const DashData = preload("res://scripts/player/Dash.gd")
 const ParticleFactoryData = preload("res://scripts/juice/ParticleFactory.gd")
+const CONTACT_INVULN_DURATION := 0.35
 
 const FLASH_SHADER_CODE := """
 shader_type canvas_item;
@@ -26,7 +27,7 @@ signal muzzle_flash_requested(origin, direction, color, feedback_profile, impact
 signal damage_taken(player, amount, current_health)
 
 @export_range(1, 4, 1) var player_id: int = 1
-@export var move_speed: float = 390.0
+@export var move_speed: float = 488.0
 @export var max_health: int = 50
 @export var weapon_fire_interval: float = 0.25
 @export var projectile_speed: float = 850.0
@@ -66,7 +67,7 @@ var _shield_until := 0.0
 var _invisible_until := 0.0
 var _external_impulse := Vector2.ZERO
 var _mutation_ids: Array = []
-var _base_move_speed: float = 390.0
+var _base_move_speed: float = 488.0
 var _base_max_health: int = 50
 var _base_weapon_fire_interval: float = 0.25
 var _base_projectile_damage: int = 16
@@ -89,6 +90,7 @@ var _chevron_polygon := PackedVector2Array([
 var _turn_squash := 0.0
 var _flash_material: ShaderMaterial = null
 var _flash_tween: Tween = null
+var _contact_invuln_until: float = 0.0
 
 func _ready() -> void:
 	add_to_group("player_target")
@@ -149,6 +151,7 @@ func get_ability_hud_data(slot_index: int) -> Dictionary:
 		"name": str(slot.get("name", "Ability")),
 		"cooldown_remaining": get_ability_cooldown_remaining(slot_index),
 		"cooldown_duration": float(slot.get("cooldown", 1.0)),
+		"base_cooldown": float(slot.get("base_cooldown", slot.get("cooldown", 1.0))),
 	}
 
 func get_mutation_ids() -> Array:
@@ -257,8 +260,10 @@ func heal(amount: int) -> bool:
 func apply_damage(amount: int) -> void:
 	if _is_downed or amount <= 0:
 		return
-	if _is_damage_immune(_current_time_seconds()):
+	var now := _current_time_seconds()
+	if _is_damage_immune(now):
 		return
+	_contact_invuln_until = now + CONTACT_INVULN_DURATION
 	current_health = max(current_health - amount, 0)
 	health_changed.emit(current_health, max_health)
 	damage_taken.emit(self, amount, current_health)
@@ -379,6 +384,8 @@ func _get_current_velocity(move_input: Vector2, now: float) -> Vector2:
 func _is_damage_immune(now: float) -> bool:
 	if now < _shield_until:
 		return true
+	if now < _contact_invuln_until:
+		return true
 	for dash_state in _dash_states.values():
 		if (dash_state as DashData).is_active(now):
 			return true
@@ -422,6 +429,9 @@ func _get_current_weapon_fire_interval() -> float:
 	if _is_slot_active_by_id("overcharge", _current_time_seconds()):
 		interval *= 0.5
 	return max(interval, 0.05)
+
+func get_current_fire_rate() -> float:
+	return 1.0 / max(_get_current_weapon_fire_interval(), 0.01)
 
 func _try_activate_ability(slot_index: int, now: float) -> void:
 	var slot := _get_ability_slot(slot_index)
@@ -520,8 +530,21 @@ func _is_slot_active_by_id(ability_id: String, now: float) -> bool:
 
 func _get_move_input() -> Vector2:
 	var keyboard_vector := Input.get_vector("p%d_move_left" % player_id, "p%d_move_right" % player_id, "p%d_move_up" % player_id, "p%d_move_down" % player_id)
-	var gamepad_vector := _get_gamepad_stick_vector(JOY_AXIS_LEFT_X, JOY_AXIS_LEFT_Y)
+	var gamepad_vector := _get_gamepad_movement_vector()
 	return gamepad_vector if player_config.control_source == "gamepad" else keyboard_vector
+
+func _get_gamepad_movement_vector() -> Vector2:
+	var left_action := "p%d_move_left" % player_id
+	var right_action := "p%d_move_right" % player_id
+	var up_action := "p%d_move_up" % player_id
+	var down_action := "p%d_move_down" % player_id
+	if _has_gamepad_action_events([left_action, right_action, up_action, down_action]):
+		var vector := Vector2(
+			_get_gamepad_action_strength(right_action) - _get_gamepad_action_strength(left_action),
+			_get_gamepad_action_strength(down_action) - _get_gamepad_action_strength(up_action)
+		)
+		return vector.normalized() if vector.length() > 1.0 else vector
+	return _get_gamepad_stick_vector(JOY_AXIS_LEFT_X, JOY_AXIS_LEFT_Y)
 
 func _get_gamepad_stick_vector(axis_x: JoyAxis, axis_y: JoyAxis) -> Vector2:
 	if gamepad_device_id < 0 or not Input.get_connected_joypads().has(gamepad_device_id):
@@ -533,10 +556,38 @@ func _is_ability_pressed(slot_index: int) -> bool:
 	if player_config.control_source == "gamepad":
 		if gamepad_device_id < 0:
 			return false
+		var action := "p%d_secondary" % player_id if slot_index == 0 else "p%d_dash" % player_id
+		if _has_gamepad_action_events([action]):
+			return _get_gamepad_action_strength(action) >= 0.5
 		if slot_index == 0:
 			return Input.get_joy_axis(gamepad_device_id, JOY_AXIS_TRIGGER_RIGHT) >= 0.5 or Input.is_joy_button_pressed(gamepad_device_id, JOY_BUTTON_X)
 		return Input.get_joy_axis(gamepad_device_id, JOY_AXIS_TRIGGER_LEFT) >= 0.5 or Input.is_joy_button_pressed(gamepad_device_id, JOY_BUTTON_B)
 	return Input.is_action_pressed("p%d_secondary" % player_id) if slot_index == 0 else Input.is_action_pressed("p%d_dash" % player_id)
+
+func _has_gamepad_action_events(actions: Array) -> bool:
+	for action_variant in actions:
+		for event in InputMap.action_get_events(str(action_variant)):
+			if event is InputEventJoypadButton or event is InputEventJoypadMotion:
+				return true
+	return false
+
+func _get_gamepad_action_strength(action: String) -> float:
+	if gamepad_device_id < 0 or not Input.get_connected_joypads().has(gamepad_device_id):
+		return 0.0
+	var strength := 0.0
+	for event in InputMap.action_get_events(action):
+		if event is InputEventJoypadButton:
+			var button_event := event as InputEventJoypadButton
+			if button_event.device == -1 or button_event.device == gamepad_device_id:
+				strength = maxf(strength, 1.0 if Input.is_joy_button_pressed(gamepad_device_id, button_event.button_index) else 0.0)
+		elif event is InputEventJoypadMotion:
+			var axis_event := event as InputEventJoypadMotion
+			if axis_event.device != -1 and axis_event.device != gamepad_device_id:
+				continue
+			var axis_value := Input.get_joy_axis(gamepad_device_id, axis_event.axis)
+			var signed_value := axis_value * signf(axis_event.axis_value)
+			strength = maxf(strength, clampf((signed_value - 0.2) / 0.8, 0.0, 1.0))
+	return strength
 
 func _enter_downed_state() -> void:
 	_is_downed = true

@@ -122,7 +122,7 @@ func _configure_type(type_name: String) -> void:
 		"chaser":
 			enemy_type = EnemyType.CHASER
 			max_health = 21.0
-			move_speed = 120.0
+			move_speed = 150.0
 			fire_interval = 99.0
 			projectile_damage = 0
 			projectile_speed = 0.0
@@ -132,7 +132,7 @@ func _configure_type(type_name: String) -> void:
 		"charger":
 			enemy_type = EnemyType.CHARGER
 			max_health = 40.0
-			move_speed = 157.0
+			move_speed = 196.0
 			fire_interval = 99.0
 			projectile_damage = 0
 			projectile_speed = 0.0
@@ -142,7 +142,7 @@ func _configure_type(type_name: String) -> void:
 		"spitter":
 			enemy_type = EnemyType.SPITTER
 			max_health = 30.0
-			move_speed = 280.0
+			move_speed = 350.0
 			fire_interval = 1.35
 			projectile_damage = 10
 			projectile_speed = 380.0
@@ -152,7 +152,7 @@ func _configure_type(type_name: String) -> void:
 		"splitter":
 			enemy_type = EnemyType.SPLITTER
 			max_health = 25.0
-			move_speed = 100.0
+			move_speed = 125.0
 			fire_interval = 99.0
 			projectile_damage = 0
 			projectile_speed = 0.0
@@ -162,7 +162,7 @@ func _configure_type(type_name: String) -> void:
 		"splitter_mini":
 			enemy_type = EnemyType.SPLITTER_MINI
 			max_health = 8.0
-			move_speed = 200.0
+			move_speed = 250.0
 			fire_interval = 99.0
 			projectile_damage = 0
 			projectile_speed = 0.0
@@ -172,7 +172,7 @@ func _configure_type(type_name: String) -> void:
 		"bomber":
 			enemy_type = EnemyType.BOMBER
 			max_health = 35.0
-			move_speed = 80.0
+			move_speed = 100.0
 			fire_interval = 99.0
 			projectile_damage = 0
 			projectile_speed = 0.0
@@ -182,7 +182,7 @@ func _configure_type(type_name: String) -> void:
 		"elite_charger":
 			enemy_type = EnemyType.ELITE_CHARGER
 			max_health = 1440.0
-			move_speed = 175.0
+			move_speed = 219.0
 			fire_interval = 99.0
 			projectile_damage = 0
 			projectile_speed = 0.0
@@ -192,7 +192,7 @@ func _configure_type(type_name: String) -> void:
 		"elite_spitter":
 			enemy_type = EnemyType.ELITE_SPITTER
 			max_health = 576.0
-			move_speed = 240.0
+			move_speed = 300.0
 			fire_interval = 1.0
 			projectile_damage = 12
 			projectile_speed = 430.0
@@ -202,7 +202,7 @@ func _configure_type(type_name: String) -> void:
 		"elite_support":
 			enemy_type = EnemyType.ELITE_SUPPORT
 			max_health = 900.0
-			move_speed = 160.0
+			move_speed = 200.0
 			fire_interval = 99.0
 			projectile_damage = 0
 			projectile_speed = 0.0
@@ -212,7 +212,7 @@ func _configure_type(type_name: String) -> void:
 		"boss_warden":
 			enemy_type = EnemyType.BOSS_WARDEN
 			max_health = 800.0
-			move_speed = 130.0
+			move_speed = 162.0
 			fire_interval = 99.0
 			projectile_damage = 0
 			projectile_speed = 0.0
@@ -232,7 +232,7 @@ func _configure_type(type_name: String) -> void:
 		"boss_hive":
 			enemy_type = EnemyType.BOSS_HIVE
 			max_health = 700.0
-			move_speed = 100.0
+			move_speed = 125.0
 			fire_interval = 99.0
 			projectile_damage = 0
 			projectile_speed = 0.0
@@ -469,26 +469,41 @@ func _find_target() -> Node2D:
 	return best_target
 
 func _attempt_contact_damage(now: float) -> void:
-	if _target == null or now < _next_contact_at:
+	if now < _next_contact_at:
 		return
-	if global_position.distance_to(_target.global_position) > _get_contact_range():
+	var tree := get_tree()
+	if tree == null:
 		return
-	if _target.has_method("apply_damage"):
+	var any_hit := false
+	var contact_range := _get_contact_range()
+	var range_squared := contact_range * contact_range
+	for candidate in tree.get_nodes_in_group("player_target"):
+		if not is_instance_valid(candidate) or not (candidate is Node2D):
+			continue
+		if candidate.has_method("is_alive") and not candidate.is_alive():
+			continue
+		var target_node := candidate as Node2D
+		if global_position.distance_squared_to(target_node.global_position) > range_squared:
+			continue
+		if not candidate.has_method("apply_damage"):
+			continue
 		var can_apply_hit_feedback := true
-		if _target.has_method("can_receive_damage"):
-			can_apply_hit_feedback = bool(_target.can_receive_damage())
-		_target.apply_damage(contact_damage)
-		if can_apply_hit_feedback and _target.has_method("apply_knockback"):
-			var knockback_direction := (_target.global_position - global_position).normalized()
+		if candidate.has_method("can_receive_damage"):
+			can_apply_hit_feedback = bool(candidate.can_receive_damage())
+		candidate.apply_damage(contact_damage)
+		if can_apply_hit_feedback and candidate.has_method("apply_knockback"):
+			var knockback_direction := (target_node.global_position - global_position).normalized()
 			if knockback_direction.length() <= 0.0:
 				knockback_direction = Vector2.RIGHT
-			_target.apply_knockback(knockback_direction, _get_contact_knockback_force())
+			candidate.apply_knockback(knockback_direction, _get_contact_knockback_force())
+		any_hit = true
+	if any_hit:
 		_next_contact_at = now + (0.65 if is_boss() else 0.45)
 
 func _get_contact_range() -> float:
 	if collision_shape == null or not (collision_shape.shape is CircleShape2D):
-		return 42.0
-	return (collision_shape.shape as CircleShape2D).radius + 20.0
+		return 60.0
+	return (collision_shape.shape as CircleShape2D).radius + 45.0
 
 func _update_charger_behavior(direction: Vector2, distance: float, now: float) -> Vector2:
 	var phase := _get_phase_ratio()

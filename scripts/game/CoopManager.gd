@@ -4,6 +4,8 @@ const EnemySceneData = preload("res://scenes/enemies/Enemy.tscn")
 const ProjectileSceneData = preload("res://scenes/weapons/Projectile.tscn")
 const PlayerCombatIndicatorData = preload("res://scripts/ui/PlayerCombatIndicator.gd")
 const MutationSystemData = preload("res://scripts/game/MutationSystem.gd")
+const AbilityRegistryData = preload("res://scripts/game/AbilityRegistry.gd")
+const HudPaletteData = preload("res://scripts/game/HudPalette.gd")
 const MutationPickUIScene = preload("res://scenes/ui/MutationPickUI.tscn")
 const TempBuffSystemData = preload("res://scripts/buffs/TempBuffSystem.gd")
 const HoldZoneObjectiveData = preload("res://scripts/objectives/HoldZoneObjective.gd")
@@ -42,7 +44,7 @@ const HEALTH_DROP_CHANCE := 0.10
 const BASE_RAMP_DURATION := 45.0
 const ENEMY_SEPARATION_CELL_SIZE := 96.0
 const HUD_HEALTH_COLOR := Color(0.24, 0.92, 0.34, 1.0)
-const HUD_SLOT_2_COLOR := Color(0.72, 0.36, 1.0, 1.0)
+const HUD_SLOT_2_COLOR := HudPaletteData.SLOT_2_COLOR
 const ENEMY_PROJECTILE_COLOR := Color(1.0, 0.0, 0.0, 1.0)
 const COMBAT_VFX_LOAD_THRESHOLD := 150
 
@@ -95,6 +97,7 @@ var _player_nodes: Array = []
 var _enemy_nodes: Array = []
 var _compiled_loadouts: Array = []
 var _mutation_system = MutationSystemData.new()
+var _ability_registry = AbilityRegistryData.new()
 var _room_config: Dictionary = {}
 var _room_type := "combat"
 var _room_enemy_pool: Array = []
@@ -297,7 +300,11 @@ func _build_hud() -> void:
 	_bottom_hud.offset_right = -36.0
 	_bottom_hud.offset_bottom = -20.0
 	_bottom_hud.alignment = BoxContainer.ALIGNMENT_CENTER
-	_bottom_hud.add_theme_constant_override("separation", 14)
+	var player_count := _player_configs.size()
+	var card_width := 260.0 if player_count <= 2 else 200.0
+	var card_separation := 14 if player_count <= 2 else 8
+	var ability_font_size := 10 if player_count <= 2 else 9
+	_bottom_hud.add_theme_constant_override("separation", card_separation)
 	_hud_root.add_child(_bottom_hud)
 
 	_player_combat_indicators.clear()
@@ -312,7 +319,7 @@ func _build_hud() -> void:
 		_player_combat_indicators.append(indicator)
 
 		var card := PanelContainer.new()
-		card.custom_minimum_size = Vector2(260.0, 72.0)
+		card.custom_minimum_size = Vector2(card_width, 72.0)
 		var card_style := StyleBoxFlat.new()
 		card_style.bg_color = Color(tint.r * 0.14, tint.g * 0.14, tint.b * 0.14, 0.84)
 		card_style.border_color = tint.lightened(0.18)
@@ -343,14 +350,9 @@ func _build_hud() -> void:
 		header.text = "P%d" % (index + 1)
 		header.add_theme_font_size_override("font_size", 12)
 		header.add_theme_color_override("font_color", tint.lightened(0.18))
+		header.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		header.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		top_row.add_child(header)
-
-		var mutation_badge := Label.new()
-		mutation_badge.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		mutation_badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-		mutation_badge.add_theme_font_size_override("font_size", 10)
-		mutation_badge.add_theme_color_override("font_color", tint.lightened(0.3))
-		top_row.add_child(mutation_badge)
 
 		var health_bar := ProgressBar.new()
 		health_bar.show_percentage = false
@@ -369,9 +371,11 @@ func _build_hud() -> void:
 		slot_1_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		slot_1_box.add_theme_constant_override("separation", 2)
 		ability_row.add_child(slot_1_box)
+		slot_1_box.add_child(_create_hud_trigger_label("LT", slot_1_color))
 		var slot_1_label := Label.new()
-		slot_1_label.add_theme_font_size_override("font_size", 10)
+		slot_1_label.add_theme_font_size_override("font_size", ability_font_size)
 		slot_1_label.add_theme_color_override("font_color", slot_1_color)
+		slot_1_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		slot_1_box.add_child(slot_1_label)
 		var slot_1_bar := ProgressBar.new()
 		slot_1_bar.show_percentage = false
@@ -386,9 +390,11 @@ func _build_hud() -> void:
 		slot_2_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		slot_2_box.add_theme_constant_override("separation", 2)
 		ability_row.add_child(slot_2_box)
+		slot_2_box.add_child(_create_hud_trigger_label("RT", slot_2_color))
 		var slot_2_label := Label.new()
-		slot_2_label.add_theme_font_size_override("font_size", 10)
+		slot_2_label.add_theme_font_size_override("font_size", ability_font_size)
 		slot_2_label.add_theme_color_override("font_color", slot_2_color)
+		slot_2_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		slot_2_box.add_child(slot_2_label)
 		var slot_2_bar := ProgressBar.new()
 		slot_2_bar.show_percentage = false
@@ -401,7 +407,6 @@ func _build_hud() -> void:
 
 		_bottom_player_hud_cards.append({
 			"health_bar": health_bar,
-			"mutation_badge": mutation_badge,
 			"slot_1_label": slot_1_label,
 			"slot_1_bar": slot_1_bar,
 			"slot_2_label": slot_2_label,
@@ -412,6 +417,14 @@ func _get_slot_color(player_tint: Color, slot_index: int) -> Color:
 	if slot_index == 0:
 		return player_tint.lightened(0.12)
 	return HUD_SLOT_2_COLOR
+
+func _create_hud_trigger_label(text: String, tint: Color) -> Label:
+	var trigger := Label.new()
+	trigger.text = text
+	trigger.add_theme_font_size_override("font_size", 9)
+	trigger.add_theme_color_override("font_color", tint.lightened(0.25))
+	trigger.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	return trigger
 
 func _apply_progress_bar_tint(bar: ProgressBar, tint: Color, alpha: float) -> void:
 	var background := StyleBoxFlat.new()
@@ -470,7 +483,7 @@ func _rebuild_player_loadouts() -> void:
 			"ability_slot_1_id": str(base_loadout.get("ability_slot_1_id", "shockwave")),
 			"ability_slot_2_id": str(base_loadout.get("ability_slot_2_id", "dash")),
 			"mutations": _mutation_system.get_active_mutations(index),
-			"move_speed": float(base_loadout.get("move_speed", 390.0)) * _mutation_system.get_move_speed_multiplier(index),
+			"move_speed": float(base_loadout.get("move_speed", 488.0)) * _mutation_system.get_move_speed_multiplier(index),
 			"max_health": int(round(float(base_loadout.get("max_health", 50)) * _mutation_system.get_max_health_multiplier(index))),
 		}
 		_compiled_loadouts.append(compiled_loadout)
@@ -483,7 +496,8 @@ func _build_runtime_ability(player_index: int, ability_definition: Dictionary) -
 	var cooldown_mult := 1.0 - _mutation_system.get_ability_cooldown_reduction(player_index)
 	var area_mult := _mutation_system.get_ability_area_multiplier(player_index)
 	var duration_mult := _mutation_system.get_ability_duration_multiplier(player_index)
-	var cooldown := maxf(0.2, float(ability_definition.get("cooldown", 1.0)) * maxf(cooldown_mult, 0.1))
+	var base_cooldown := float(ability_definition.get("cooldown", 1.0))
+	var cooldown := maxf(0.2, base_cooldown * maxf(cooldown_mult, 0.1))
 	var duration := maxf(0.0, float(ability_definition.get("duration", 0.0)) * duration_mult)
 	for stat_key in ["radius", "orbit_radius", "distance"]:
 		if stats.has(stat_key):
@@ -496,6 +510,7 @@ func _build_runtime_ability(player_index: int, ability_definition: Dictionary) -
 		"name": str(ability_definition.get("name", "Ability")),
 		"type": str(ability_definition.get("type", "instant")),
 		"cooldown": cooldown,
+		"base_cooldown": base_cooldown,
 		"duration": duration,
 		"stats": stats,
 	}
@@ -1399,7 +1414,6 @@ func _refresh_bottom_hud() -> void:
 		slot_1_ratio = 1.0 - clampf(float(slot_1_hud_data.get("cooldown_remaining", 0.0)) / slot_1_duration, 0.0, 1.0)
 		slot_2_ratio = 1.0 - clampf(float(slot_2_hud_data.get("cooldown_remaining", 0.0)) / slot_2_duration, 0.0, 1.0)
 		(card.get("health_bar") as ProgressBar).value = health_ratio * 100.0
-		(card.get("mutation_badge") as Label).text = "%d mut" % _mutation_system.get_active_mutations(index).size()
 		(card.get("slot_1_label") as Label).text = str(slot_1_hud_data.get("name", "Ability 1"))
 		(card.get("slot_1_bar") as ProgressBar).value = slot_1_ratio * 100.0
 		(card.get("slot_2_label") as Label).text = str(slot_2_hud_data.get("name", "Ability 2"))
@@ -1843,16 +1857,28 @@ func _populate_pause_build_overlay() -> void:
 		var header := Label.new()
 		header.text = "P%d Build" % (player_index + 1)
 		header.add_theme_font_size_override("font_size", 15)
-		header.add_theme_color_override("font_color", _player_configs[player_index].tint.lightened(0.2))
+		var player_tint: Color = _player_configs[player_index].tint
+		header.add_theme_color_override("font_color", player_tint.lightened(0.2))
 		overlay.add_child(header)
-		var ability_text := "Abilities: %s / %s" % [
-			str(player.get_ability_hud_data(0).get("name", "?")),
-			str(player.get_ability_hud_data(1).get("name", "?")),
+		var weapon: Dictionary = RunState.get_weapon(player_index)
+		var weapon_stats: Dictionary = weapon.get("stats", {}) as Dictionary
+		var weapon_label := Label.new()
+		var projectile_count := int(weapon_stats.get("projectile_count", 1))
+		var projectile_text := " x %d" % projectile_count if projectile_count > 1 else ""
+		weapon_label.text = "%s - %d dmg @ %.1f/s%s" % [
+			str(weapon.get("name", "Rifle")),
+			int(round(float(weapon_stats.get("damage", 16.0)))),
+			float(weapon_stats.get("fire_rate", 4.0)),
+			projectile_text,
 		]
-		var ability_label := Label.new()
-		ability_label.text = ability_text
-		ability_label.add_theme_font_size_override("font_size", 12)
-		overlay.add_child(ability_label)
+		weapon_label.add_theme_font_size_override("font_size", 12)
+		weapon_label.add_theme_color_override("font_color", Color(0.92, 0.94, 1.0, 0.9))
+		overlay.add_child(weapon_label)
+		var ability_cards := HBoxContainer.new()
+		ability_cards.add_theme_constant_override("separation", 8)
+		overlay.add_child(ability_cards)
+		ability_cards.add_child(_create_build_ability_card(player, player_tint, 0))
+		ability_cards.add_child(_create_build_ability_card(player, player_tint, 1))
 		var mutations: Array = _mutation_system.get_active_mutations(player_index)
 		var counts: Dictionary = {}
 		for mutation in mutations:
@@ -1864,6 +1890,7 @@ func _populate_pause_build_overlay() -> void:
 				"name": str(mutation_dict.get("name", mutation_id)),
 				"count": int(counts.get(mutation_id, {}).get("count", 0)) + 1,
 				"rarity": str(mutation_dict.get("rarity", "common")),
+				"description": str(mutation_dict.get("description", "")),
 			}
 		if counts.is_empty():
 			var empty_label := Label.new()
@@ -1876,14 +1903,99 @@ func _populate_pause_build_overlay() -> void:
 			chip_flow.add_theme_constant_override("h_separation", 6)
 			chip_flow.add_theme_constant_override("v_separation", 4)
 			overlay.add_child(chip_flow)
-			for mutation_id in counts.keys():
-				var entry: Dictionary = counts[mutation_id]
-				var chip := Label.new()
-				var level_text := " Lv%d" % int(entry["count"]) if int(entry["count"]) > 1 and str(entry["rarity"]) != "rare" else ""
-				chip.text = "%s%s" % [str(entry["name"]), level_text]
-				chip.add_theme_font_size_override("font_size", 11)
-				chip.modulate = Color(1.0, 0.86, 0.34, 0.96) if str(entry["rarity"]) == "rare" else Color(0.88, 0.94, 1.0, 0.88)
-				chip_flow.add_child(chip)
+			var sorted_mutations := counts.values()
+			sorted_mutations.sort_custom(Callable(self, "_compare_mutation_entries"))
+			for entry_variant in sorted_mutations:
+				chip_flow.add_child(_create_mutation_chip(entry_variant as Dictionary))
+		var stats_line := Label.new()
+		var fire_rate := float(player.get_current_fire_rate()) if player.has_method("get_current_fire_rate") else 0.0
+		stats_line.text = "Move %d  -  HP %d  -  Fire %.1f/s" % [
+			int(round(float(player.move_speed))),
+			int(player.max_health),
+			fire_rate,
+		]
+		stats_line.add_theme_font_size_override("font_size", 11)
+		stats_line.add_theme_color_override("font_color", Color(0.84, 0.92, 1.0, 0.78))
+		overlay.add_child(stats_line)
+
+func _create_build_ability_card(player, player_tint: Color, slot_index: int) -> PanelContainer:
+	var slot_data: Dictionary = player.get_ability_hud_data(slot_index)
+	var ability_id := str(slot_data.get("skill_id", ""))
+	var cooldown := float(slot_data.get("base_cooldown", 0.0))
+	if cooldown <= 0.0:
+		cooldown = float(_ability_registry.get_definition(ability_id).get("cooldown", 0.0))
+	var slot_color := _get_slot_color(player_tint, slot_index)
+	var card := PanelContainer.new()
+	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(slot_color.r * 0.12, slot_color.g * 0.12, slot_color.b * 0.12, 0.84)
+	style.border_color = Color(slot_color.r, slot_color.g, slot_color.b, 0.9)
+	style.set_border_width_all(1)
+	style.corner_radius_top_left = 7
+	style.corner_radius_top_right = 7
+	style.corner_radius_bottom_left = 7
+	style.corner_radius_bottom_right = 7
+	card.add_theme_stylebox_override("panel", style)
+	var margin := MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 8)
+	margin.add_theme_constant_override("margin_top", 6)
+	margin.add_theme_constant_override("margin_right", 8)
+	margin.add_theme_constant_override("margin_bottom", 6)
+	card.add_child(margin)
+	var layout := VBoxContainer.new()
+	layout.add_theme_constant_override("separation", 2)
+	margin.add_child(layout)
+	var trigger := Label.new()
+	trigger.text = "LT" if slot_index == 0 else "RT"
+	trigger.add_theme_font_size_override("font_size", 10)
+	trigger.add_theme_color_override("font_color", slot_color.lightened(0.25))
+	layout.add_child(trigger)
+	var name_label := Label.new()
+	name_label.text = str(slot_data.get("name", "Ability"))
+	name_label.add_theme_font_size_override("font_size", 12)
+	name_label.add_theme_color_override("font_color", Color(0.92, 0.96, 1.0, 0.96))
+	layout.add_child(name_label)
+	var cooldown_label := Label.new()
+	cooldown_label.text = "CD %.1fs" % cooldown
+	cooldown_label.add_theme_font_size_override("font_size", 10)
+	cooldown_label.add_theme_color_override("font_color", Color(0.82, 0.88, 0.96, 0.78))
+	layout.add_child(cooldown_label)
+	return card
+
+func _create_mutation_chip(entry: Dictionary) -> PanelContainer:
+	var rarity := str(entry.get("rarity", "common"))
+	var rarity_color := Color(1.0, 0.78, 0.32, 1.0) if rarity == "rare" else Color(0.48, 0.74, 1.0, 1.0)
+	var chip := PanelContainer.new()
+	chip.tooltip_text = str(entry.get("description", ""))
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(rarity_color.r, rarity_color.g, rarity_color.b, 0.18 if rarity == "rare" else 0.14)
+	style.border_color = rarity_color
+	style.set_border_width_all(1)
+	style.corner_radius_top_left = 4
+	style.corner_radius_top_right = 4
+	style.corner_radius_bottom_left = 4
+	style.corner_radius_bottom_right = 4
+	chip.add_theme_stylebox_override("panel", style)
+	var margin := MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 7)
+	margin.add_theme_constant_override("margin_top", 3)
+	margin.add_theme_constant_override("margin_right", 7)
+	margin.add_theme_constant_override("margin_bottom", 3)
+	chip.add_child(margin)
+	var label := Label.new()
+	var level_text := " Lv%d" % int(entry.get("count", 1)) if int(entry.get("count", 1)) > 1 and rarity != "rare" else ""
+	label.text = "%s%s" % [str(entry.get("name", "")), level_text]
+	label.add_theme_font_size_override("font_size", 11)
+	label.add_theme_color_override("font_color", rarity_color.lightened(0.18))
+	margin.add_child(label)
+	return chip
+
+func _compare_mutation_entries(left: Dictionary, right: Dictionary) -> bool:
+	var left_rarity_score := 0 if str(left.get("rarity", "common")) == "rare" else 1
+	var right_rarity_score := 0 if str(right.get("rarity", "common")) == "rare" else 1
+	if left_rarity_score != right_rarity_score:
+		return left_rarity_score < right_rarity_score
+	return str(left.get("name", "")).naturalnocasecmp_to(str(right.get("name", ""))) < 0
 
 func _current_time_seconds() -> float:
 	return Time.get_ticks_msec() / 1000.0

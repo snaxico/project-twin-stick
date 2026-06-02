@@ -35,6 +35,10 @@ Read this first to restore project context quickly, then read `current-state.md`
 - Current live loadout structure:
   - auto-firing `Rifle`
   - `2` equal ability slots per player
+- Current main-menu settings:
+  - keybinding editor
+  - controller binding editor for active `1-2P` gameplay actions
+  - binding persistence in `user://input_bindings.cfg`
 - Current live ability roster:
   - `Shockwave`
   - `Dash`
@@ -90,7 +94,7 @@ Read this first to restore project context quickly, then read `current-state.md`
   - elite reward value
   - boss escalation feel
   - modifier readability
-  - controller usability in ability select and map UI
+  - controller usability in ability select, map UI, and remapped bindings
 - Tune:
   - rifle cadence
   - room duration / spawn interval pressure
@@ -149,6 +153,7 @@ Read this first to restore project context quickly, then read `current-state.md`
 - `scripts/ui/Bootstrap.gd`:
   - player setup
   - run-mode / ability selection
+  - main-menu Settings and input remapping
   - run launch
 
 ## Validation Reminder

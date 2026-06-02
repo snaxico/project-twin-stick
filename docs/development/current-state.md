@@ -16,11 +16,17 @@ The live runtime is now aligned to the `Feature Roadmap V3` redesign:
 
 - front menu paths:
   - `Play`
+  - `Settings`
   - `Encounter Builder`
 - pre-run setup now supports:
   - `1P` or `2P`
   - `Structured` or `Endless`
   - per-player `pick 2` ability loadouts from the full 9-ability roster
+- main-menu settings now support:
+  - keyboard rebinding for menu and active `1-2P` gameplay actions
+  - controller button / axis rebinding for menu and active `1-2P` gameplay actions
+  - saved runtime bindings via `user://input_bindings.cfg`
+  - reset to default bindings
 - structured runs use a `2-act` branching map:
   - Act 1 combat rows + optional elites + mid-boss
   - Act 2 combat rows + optional elites + final boss
@@ -46,6 +52,7 @@ The live runtime is now aligned to the `Feature Roadmap V3` redesign:
 
 - every player always has:
   - faster starter `Rifle` (`~4 shots/sec`)
+  - faster base movement (`488` default speed)
   - `2` equal ability slots
   - mutation inventory
 - live ability roster:
@@ -117,6 +124,8 @@ The live runtime is now aligned to the `Feature Roadmap V3` redesign:
   - separation uses a per-frame spatial grid lookup instead of each enemy scanning the full enemy list
 - high-count combat target lookups now use the same nearby-enemy grid for player auto-targeting, turret targeting, orbit hits, ability mine checks, ricochets, and player AOE explosions where applicable
 - nonessential combat hit VFX are throttled during very dense fights to reduce particle/ring allocation spikes
+- enemy contact damage now checks all nearby player targets instead of only the current nearest target, uses a wider contact range, and grants a short player-side damage invulnerability window after a landed hit
+- round-3 tuning increased player and enemy movement speeds by `25%` while keeping stationary bosses stationary
 - HP pickups now drop from non-boss enemy kills:
   - `~10%` chance
   - `5 HP` heal
@@ -141,7 +150,7 @@ The live runtime is now aligned to the `Feature Roadmap V3` redesign:
   - top-center XP bar + level + pending picks
   - near-player cooldown arcs
   - persistent near-player health bars
-  - bottom loadout overview cards with green health, slot-colored ability cooldowns, ability names, and mutation count
+  - bottom loadout overview cards with green health, `LT` / `RT` trigger labels, slot-colored ability cooldowns, and ability names
   - slot 1 cooldown color uses the player tint, slot 2 cooldown color is purple, and near-player cooldown rings match those bottom-HUD slot colors
   - side objective progress
   - active modifier chips
@@ -149,9 +158,11 @@ The live runtime is now aligned to the `Feature Roadmap V3` redesign:
 - pause screen now shows:
   - full-screen dimmed backdrop with centered menu
   - per-player build summary
-  - equipped abilities
-  - current mutations with levels
-  - disabled `Settings` placeholder (`Coming soon`)
+  - weapon stats
+  - `LT` / `RT` ability cards
+  - rarity-styled mutation chips with levels/tooltips
+  - derived move / HP / fire-rate stats
+  - disabled in-run `Settings` placeholder (`Coming soon`)
 - mutation pick UI now shows:
   - simultaneous per-player picks
   - rare highlighting
@@ -163,7 +174,7 @@ The live runtime is now aligned to the `Feature Roadmap V3` redesign:
   - colored modifier dots below nodes
   - per-node modifier shorthand on hover detail panel
   - nodes positioned by actual row membership (not fixed 5-column grid)
-- pre-run UI now shows compact text-only ability selection (no large icons)
+- pre-run UI now shows compact text-only ability selection with inline descriptions, `LT` / `RT` selected-slot labels, and slot-colored selected cards
 - arena visuals now use:
   - pure black floor
   - neon grid
@@ -204,6 +215,7 @@ The live runtime is now aligned to the `Feature Roadmap V3` redesign:
 - `Bootstrap.gd`
   - run setup
   - per-player ability selection
+  - main-menu settings and runtime input rebinding
   - encounter builder wiring
 - `RunFlow.gd`
   - structured map flow
@@ -222,10 +234,10 @@ The live runtime is now aligned to the `Feature Roadmap V3` redesign:
 ## Known Risks
 
 - full live playtesting and balance validation still have not been run after the full V3 integration
-- round-2 tuning has passed headless validation but still needs live playtesting
+- round-2 and round-3 tuning have passed headless validation but still need live playtesting
 - boss behavior is implemented, but still likely needs feel tuning against real runs
 - modifier stacking and endless pressure have not been manually stress-tested yet
-- the rebuilt pause menu, new VFX density, swarm performance optimization, and slot-colored HUD have passed parse validation but still need controller/manual readability testing
+- the rebuilt pause menu, new VFX density, swarm performance optimization, slot-colored HUD, Build HUD overhaul, and input binding menu have passed parse validation but still need controller/manual readability testing
 - Pulsar teleport and Elite Support minion spawning need live feel validation
 - spawn timing values, opening burst size, base ramp, and anti-clump separation are first-pass and need playtesting
 - the map UI is functional but compact — may need further polish for controller navigation
@@ -244,4 +256,5 @@ Run manual validation across:
 - boss escalation feel
 - modifier readability under stacked late-game rooms
 - ability selection usability on controller
+- remapped keyboard/controller binding behavior from main-menu Settings
 - map node readability at the new compact size
