@@ -13,9 +13,8 @@ The live runtime is now aligned to the `Feature Roadmap V3` redesign:
 - meta progression, multiple starting weapons, and ability-specific rare mutations remain deferred
 
 Current stable runtime includes the playtest round-6 performance/gameplay patch on top of the
-round-4 + round-5 baseline. Heavy boss add-waves are implemented only behind the
-`debug_boss_add_waves` dry-run flag and are not shipped by default until the real boss-room
-performance gate passes.
+round-4 + round-5 baseline. Heavy boss add-waves are now enabled in normal boss rooms with a
+`25` non-boss enemy cap that includes pending spawns.
 
 ## Current Runtime
 
@@ -28,6 +27,7 @@ performance gate passes.
   - `Structured` or `Endless`
   - per-player `pick 2` ability loadouts from the full 9-ability roster
 - main-menu settings now support:
+  - VSync toggle persisted via `user://video_settings.cfg`; first-run project default is enabled
   - keyboard rebinding for menu and active `1-2P` gameplay actions
   - controller button / axis rebinding for menu and active `1-2P` gameplay actions
   - saved runtime bindings via `user://input_bindings.cfg`
@@ -175,7 +175,7 @@ performance gate passes.
   - `FireTrailZone` is now a `Node2D` distance-check pool instead of an `Area2D`, with player-team pools damaging nearby enemies and enemy-team pools damaging players
   - enemies now use a reduced one-polygon visual subtree; static visual updates are split from per-frame facing/fuse updates
   - Hive shield internals are generalized into boss deflector state; Pulsar has reactive close-range teleport
-  - boss add-wave pressure exists only as a debug dry-run path gated by `debug_boss_add_waves`; it caps all non-boss boss-room enemies including pending spawns
+  - boss add-wave pressure is enabled in normal boss rooms for Warden, Hydra, and Pulsar; it caps all non-boss boss-room enemies including pending spawns
   - reported live playtest performance improved massively after the round-6 patch
 
 ## UI / Presentation
@@ -236,7 +236,7 @@ performance gate passes.
   - deferred enemy spawn pipeline for physics-safe child spawns
   - pooled projectile activation/deactivation
   - dedicated slow homing projectile path for Hydra orbs
-  - debug-only boss add-wave dry-run budget for round-6 performance gate testing
+  - capped boss add-wave budget for normal boss rooms
   - ability dispatch
   - reward sequencing
   - boss helper attacks
@@ -256,7 +256,7 @@ performance gate passes.
 - `Bootstrap.gd`
   - run setup
   - per-player ability selection
-  - main-menu settings and runtime input rebinding
+  - main-menu VSync setting and runtime input rebinding
   - encounter builder wiring
 - `RunFlow.gd`
   - structured map flow
@@ -287,7 +287,8 @@ performance gate passes.
 - objective-panel icons currently use simple letter fallback glyphs (`H` / `K` / `C`); acceptable for the current local build, but a later IconFactory/drawn-glyph polish pass would improve presentation
 - Pulsar beam currently uses angle/range damage and does not raycast line-of-sight through walls; accept for now unless playtest reads unfair
 - Hive shield and boss add pressure may make boss fights feel too long; validate before further tuning
-- round-6 heavy boss add-waves are not shipped by default; they require the real boss-room stress gate before promotion
+- round-6 heavy boss add-waves are now shipped by default in normal boss rooms and still need focused balance/performance validation
+- B3 Pulsar deflector-spawned adds remain unimplemented until the desired Pulsar deflector count/pattern is specified; B2 Pulsar spitter add-waves are shipped
 - enemy visual draw reduction needs a manual readability check because shadow/outline nodes were removed
 - `FireTrailZone` distance checks passed parse validation and warning cleanup but still need focused in-game correctness validation for player Fire Bullets damaging enemies and no friendly fire
 
@@ -305,7 +306,7 @@ Run manual validation for the current round-6 local build. Use `docs/development
 - Fire Floor `280px` / `7` zone pressure
 - Blink movement-direction, arrival i-frames, and detonation feel
 - Fire Bullets impact-pool balance, correctness, and performance
-- real boss-room stress gate with `debug_boss_add_waves` enabled before shipping heavy boss add-waves
+- real boss-room stress validation for shipped capped boss add-waves in `1P` and `2P`
 - projectile pooling / AI time-slicing / boss entity-load performance at `100-150+` enemies/projectiles
 - ability selection usability on controller
 - remapped keyboard/controller binding behavior from main-menu Settings

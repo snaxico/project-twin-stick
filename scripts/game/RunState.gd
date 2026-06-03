@@ -317,7 +317,6 @@ func _build_single_room_map() -> Array:
 	node["next_node_ids"] = []
 	node["enemy_pool"] = _enemy_pool_from_debug_mix(str(debug_run_setup.get("enemy_mix", "mixed")), act, room_depth)
 	node["wave_count"] = 1 if room_type == "boss" else max(int(debug_run_setup.get("wave_count", node.get("wave_count", 3))), 1)
-	node["debug_boss_add_waves"] = bool(debug_run_setup.get("debug_boss_add_waves", false))
 	if room_type == "boss":
 		node["boss_type"] = str(debug_run_setup.get("boss_type", "warden"))
 	return [[node]]
@@ -633,7 +632,6 @@ func _build_default_debug_run_setup() -> Dictionary:
 		"modifiers": [],
 		"starting_mutations": [],
 		"player_abilities": [],
-		"debug_boss_add_waves": false,
 		"step_index": 0,
 	}
 

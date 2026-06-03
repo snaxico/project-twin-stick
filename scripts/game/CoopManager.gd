@@ -125,7 +125,6 @@ var _active_boss = null
 var _active_elite = null
 var _next_elite_add_spawn_at := 0.0
 var _next_boss_add_spawn_at := 0.0
-var _boss_add_dry_run_enabled := false
 var _revive_progress_by_player_id: Dictionary = {}
 var _hud_root: Control = null
 var _player_combat_indicators: Array = []
@@ -684,7 +683,6 @@ func _start_room() -> void:
 	_active_elite = null
 	_next_elite_add_spawn_at = 0.0
 	_next_boss_add_spawn_at = 0.0
-	_boss_add_dry_run_enabled = bool(_room_config.get("debug_boss_add_waves", false))
 	_room_elapsed = 0.0
 	_room_type = str(_room_config.get("room_type", "combat"))
 	_room_enemy_pool = ( _room_config.get("enemy_pool", []) as Array).duplicate()
@@ -869,7 +867,7 @@ func _update_elite_add_waves() -> void:
 		_enemies_spawned += 1
 
 func _update_boss_add_waves() -> void:
-	if not _boss_add_dry_run_enabled or _room_type != "boss" or _room_clear_started:
+	if _room_type != "boss" or _room_clear_started:
 		return
 	if _active_boss == null or not is_instance_valid(_active_boss) or not _active_boss.has_method("is_alive") or not _active_boss.is_alive():
 		return
@@ -905,7 +903,7 @@ func _get_boss_add_enemy_type(boss_type: String) -> String:
 			return "chaser"
 
 func _get_boss_add_budget_remaining() -> int:
-	if _room_type != "boss" or not _boss_add_dry_run_enabled:
+	if _room_type != "boss":
 		return 999999
 	var live_non_boss := 0
 	for enemy in _enemy_nodes:
@@ -996,7 +994,7 @@ func _queue_enemy_spawn(enemy_type: String, spawn_position: Vector2, health_mult
 	call_deferred("_spawn_queued_enemy_instance", enemy_type, spawn_position, health_multiplier)
 
 func _queue_boss_budgeted_enemy_spawn(enemy_type: String, spawn_position: Vector2, health_multiplier: float = 1.0) -> bool:
-	if _room_type == "boss" and _boss_add_dry_run_enabled and _get_boss_add_budget_remaining() <= 0:
+	if _room_type == "boss" and _get_boss_add_budget_remaining() <= 0:
 		return false
 	_queue_enemy_spawn(enemy_type, spawn_position, health_multiplier)
 	return true
@@ -1962,7 +1960,7 @@ func spawn_enemy_minion_mix(origin: Vector2, count: int, types: Array) -> void:
 func spawn_boss_deflector_minions(origin: Vector2, count: int) -> Array:
 	var shield_nodes: Array = []
 	for index in range(count):
-		if _room_type == "boss" and _boss_add_dry_run_enabled and _get_boss_add_budget_remaining() <= 0:
+		if _room_type == "boss" and _get_boss_add_budget_remaining() <= 0:
 			break
 		var angle := TAU * float(index) / float(max(count, 1))
 		var node := _spawn_enemy_instance("splitter_mini", origin + Vector2.RIGHT.rotated(angle) * 150.0, 3.75)

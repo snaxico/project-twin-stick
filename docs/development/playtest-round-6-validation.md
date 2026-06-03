@@ -2,8 +2,8 @@
 
 Manual validation for the current stable round-6 patch.
 
-Heavy boss add-waves are **debug dry-run only** through `debug_boss_add_waves`. Do not treat
-them as shipped until the real boss-room stress gate passes.
+Heavy boss add-waves are now shipped in normal boss rooms with a `25` non-boss enemy cap that
+includes pending/deferred spawns.
 
 Headless parse: **passing**.
 Follow-up Godot warning cleanup: **passing target** for reported local-name conflicts.
@@ -45,21 +45,22 @@ Live performance feedback: **massive improvement reported**.
 - [ ] Reactive teleport has readable telegraph/invulnerability.
 - [ ] Pulsar does not chain-teleport in a way that feels broken.
 - [ ] EMP and beam behavior still work.
+- [ ] Decide desired Pulsar deflector count/pattern before implementing B3 deflector-spawned adds.
 
-## Boss Add-Wave Dry Run
-- [ ] Normal boss rooms do **not** spawn heavy B2 add waves by default.
-- [ ] Encounter Builder / debug run with `debug_boss_add_waves` enabled spawns boss add waves.
+## Boss Add-Waves
+- [ ] Normal boss rooms spawn capped B2 add waves by default.
+- [ ] Encounter Builder boss rooms also spawn capped boss add waves.
 - [ ] Add-wave cap counts all non-boss enemies in the boss room.
 - [ ] Cap includes pending/deferred spawns.
-- [ ] Hive native minions/deflector minions do not blow past the cap during dry run.
-- [ ] Splitter death minis do not blow past the cap during dry run.
-- [ ] Real boss-room stress gate holds around `60 FPS` at the intended capped density in `1P` and `2P` before promotion.
+- [ ] Hive native minions/deflector minions do not blow past the cap.
+- [ ] Splitter death minis do not blow past the cap.
+- [ ] Real boss-room stress holds around `60 FPS` at the intended capped density in `1P` and `2P`.
 
 ## Profiling
 - [x] Non-headless `scenes/dev/ProfilingHarness.tscn` runs and prints FPS/process/physics/draw-call data.
 - [x] Live playtest feedback reports a massive performance improvement after the patch.
 - [ ] Harness is used for before/after diagnosis only, not as the shipping gate.
-- [ ] Real boss-room stress test is used as the B2 go/no-go gate.
+- [ ] Real boss-room stress test is used for shipped B2 tuning.
 
 ## Notes
 - Run:

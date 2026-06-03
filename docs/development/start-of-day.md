@@ -23,7 +23,7 @@ Read this first to restore project context quickly, then read `current-state.md`
 - Current target is the active `1-2` player V3 runtime.
 - The live runtime now follows the `Feature Roadmap V3` redesign captured in `current-state.md`.
 - Current stable runtime includes the round-6 performance/gameplay patch on top of the round-4 + round-5 baseline.
-- Current focus is manual round-6 validation, especially Scanline, Fire Bullets correctness, enemy readability, and the boss add-wave performance gate.
+- Current focus is manual round-6 validation, especially Scanline, Fire Bullets correctness, enemy readability, and shipped boss add-wave performance.
 
 ## Live Runtime Summary
 
@@ -37,6 +37,7 @@ Read this first to restore project context quickly, then read `current-state.md`
   - auto-firing `Rifle`
   - `2` equal ability slots per player
 - Current main-menu settings:
+  - VSync toggle persisted in `user://video_settings.cfg`; first-run project default is enabled
   - keybinding editor
   - controller binding editor for active `1-2P` gameplay actions
   - binding persistence in `user://input_bindings.cfg`
@@ -75,7 +76,7 @@ Read this first to restore project context quickly, then read `current-state.md`
   - `Duration` affects sustained abilities only, not `Dash` / `Blink`
   - Fire Bullets pools use distance checks instead of `Area2D` overlap bodies
   - enemy visuals use one polygon draw per enemy instead of shadow + outline + visual
-  - heavy boss add-waves are debug dry-run only via `debug_boss_add_waves`
+  - heavy boss add-waves are enabled in normal boss rooms with a `25` non-boss enemy cap
   - live playtest feedback reports a massive performance improvement
 - Current live progression loop:
   - enemy kills feed one shared XP bar
@@ -107,7 +108,7 @@ Read this first to restore project context quickly, then read `current-state.md`
   - boss escalation, phase transitions, adds, heavy-attack feel, and round-5 boss-specific mechanics
   - modifier readability
   - projectile pooling / AI time-slicing / boss entity-load performance at `100-150+` enemies/projectiles
-  - real boss-room stress gate with `debug_boss_add_waves` before promoting heavy boss add-waves
+  - real boss-room stress validation for shipped capped boss add-waves
   - controller usability in ability select, map UI, pause menu, and remapped bindings
 - Tune:
   - rifle cadence (`~5 shots/sec` in the current build)
@@ -144,7 +145,7 @@ Read this first to restore project context quickly, then read `current-state.md`
   - shared XP and banked pick progression
   - boss / modifier / side-objective assignment
   - per-player inventory state
-  - `debug_boss_add_waves` pass-through for single-room debug boss stress tests
+  - single-room debug setup for Encounter Builder runs
 - `scripts/game/CoopManager.gd`:
   - room runtime
   - continuous time-based spawning
@@ -153,7 +154,7 @@ Read this first to restore project context quickly, then read `current-state.md`
   - reward sequencing
   - boss helper attacks
   - elite add waves
-  - debug-only boss add-wave dry-run budget
+  - capped boss add-wave budget
   - Pulsar EMP / beam helpers
   - modifier / side-objective orchestration
 - `scripts/player/Player.gd`:
@@ -183,7 +184,7 @@ Read this first to restore project context quickly, then read `current-state.md`
 - `scripts/ui/Bootstrap.gd`:
   - player setup
   - run-mode / ability selection
-  - main-menu Settings and input remapping
+  - main-menu VSync setting and input remapping
   - run launch
 
 ## Round-4 + Round-5 Build Notes
@@ -204,8 +205,9 @@ Read this first to restore project context quickly, then read `current-state.md`
 - `docs/development/playtest-round-6-plan.md` is the round-6 implementation plan.
 - `docs/development/playtest-round-6-validation.md` is the active manual validation checklist for this patch.
 - Treat the round-6 patch as the current stable branch state for future work.
-- Heavy boss add-waves are implemented as a dry-run debug path only and are not shipped in normal runs.
+- Heavy boss add-waves are enabled in normal boss rooms and capped at `25` non-boss enemies including pending spawns.
 - Live playtest feedback after the patch reported a massive performance improvement.
+- B3 Pulsar deflector-spawned adds are still open because the plan does not specify the desired Pulsar deflector count/pattern.
 - Non-headless profiling harness after A2/B1 reported:
   - `50+50`: `1174.6 FPS`, `154` draw calls
   - `100+100`: `461.3 FPS`, `316` draw calls

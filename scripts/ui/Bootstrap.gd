@@ -8,6 +8,7 @@ const RUN_FLOW_SCENE = preload("res://scenes/ui/RunFlow.tscn")
 const MUTATIONS_DATA_PATH := "res://data/mutations.json"
 const MODIFIERS_DATA_PATH := "res://data/modifiers.json"
 const INPUT_BINDINGS_PATH := "user://input_bindings.cfg"
+const VIDEO_SETTINGS_PATH := "user://video_settings.cfg"
 const INPUT_BINDING_ACTIONS := [
 	{"label": "Move Left", "suffix": "move_left"},
 	{"label": "Move Right", "suffix": "move_right"},
@@ -94,6 +95,7 @@ var _ability_registry = AbilityRegistryData.new()
 var _ability_rows: Array = []
 var _settings_binding_buttons: Dictionary = {}
 var _settings_return_panel: Control = null
+var _settings_vsync_check: CheckBox = null
 var _pending_binding_action := ""
 var _pending_binding_kind := ""
 var _pending_binding_button: Button = null
@@ -103,6 +105,7 @@ func _ready() -> void:
 	_ensure_default_controller_bindings()
 	_cache_default_input_events()
 	_load_input_bindings()
+	_load_video_settings()
 	_load_mutation_definitions()
 	_load_modifier_definitions()
 	_populate_menu()
@@ -387,7 +390,7 @@ func _configure_settings_panel() -> void:
 	settings_panel.offset_top = -360.0
 	settings_panel.offset_right = 420.0
 	settings_panel.offset_bottom = 360.0
-	settings_detail_label.text = "Change gameplay keybindings and controller bindings. Pick a Bind button, then press the next key, controller button, or controller axis direction."
+	settings_detail_label.text = "Change display, gameplay keybindings, and controller bindings. Pick a Bind button, then press the next key, controller button, or controller axis direction."
 	settings_screen_effect_option.get_parent().visible = false
 	settings_player_1_row.visible = false
 	settings_player_2_row.visible = false
@@ -395,6 +398,7 @@ func _configure_settings_panel() -> void:
 	settings_player_4_row.visible = false
 	if settings_layout.get_node_or_null("BindingScroll") != null:
 		return
+	_add_video_settings_rows()
 	var scroll := ScrollContainer.new()
 	scroll.name = "BindingScroll"
 	scroll.custom_minimum_size = Vector2(0.0, 430.0)
@@ -421,6 +425,29 @@ func _configure_settings_panel() -> void:
 	settings_layout.add_child(reset_button)
 	settings_layout.move_child(reset_button, settings_back_button.get_index())
 	_refresh_binding_buttons()
+
+func _add_video_settings_rows() -> void:
+	var section_label := Label.new()
+	section_label.text = "Display"
+	section_label.add_theme_font_size_override("font_size", 15)
+	section_label.add_theme_color_override("font_color", Color(0.84, 0.92, 1.0, 0.92))
+	settings_layout.add_child(section_label)
+	settings_layout.move_child(section_label, settings_back_button.get_index())
+	var row := HBoxContainer.new()
+	row.name = "VSyncRow"
+	row.add_theme_constant_override("separation", 12)
+	settings_layout.add_child(row)
+	settings_layout.move_child(row, settings_back_button.get_index())
+	var label := Label.new()
+	label.text = "VSync"
+	label.custom_minimum_size = Vector2(160.0, 0.0)
+	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(label)
+	_settings_vsync_check = CheckBox.new()
+	_settings_vsync_check.button_pressed = _is_vsync_enabled()
+	_settings_vsync_check.text = "On" if _settings_vsync_check.button_pressed else "Off"
+	_settings_vsync_check.toggled.connect(_on_vsync_toggled)
+	row.add_child(_settings_vsync_check)
 
 func _add_settings_section(parent: VBoxContainer, title: String) -> void:
 	var label := Label.new()
@@ -652,6 +679,30 @@ func _reset_input_bindings_to_defaults() -> void:
 			InputMap.action_add_event(action, (event as InputEvent).duplicate())
 	_save_input_bindings()
 	_refresh_binding_buttons()
+
+func _load_video_settings() -> void:
+	var config := ConfigFile.new()
+	var enabled := true
+	if config.load(VIDEO_SETTINGS_PATH) == OK:
+		enabled = bool(config.get_value("display", "vsync_enabled", true))
+	_apply_vsync(enabled)
+
+func _save_video_settings() -> void:
+	var config := ConfigFile.new()
+	config.set_value("display", "vsync_enabled", _is_vsync_enabled())
+	config.save(VIDEO_SETTINGS_PATH)
+
+func _on_vsync_toggled(enabled: bool) -> void:
+	_apply_vsync(enabled)
+	if _settings_vsync_check != null:
+		_settings_vsync_check.text = "On" if enabled else "Off"
+	_save_video_settings()
+
+func _apply_vsync(enabled: bool) -> void:
+	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_ENABLED if enabled else DisplayServer.VSYNC_DISABLED)
+
+func _is_vsync_enabled() -> bool:
+	return DisplayServer.window_get_vsync_mode() != DisplayServer.VSYNC_DISABLED
 
 func _encode_input_event(event: InputEvent) -> Dictionary:
 	if event is InputEventKey:
