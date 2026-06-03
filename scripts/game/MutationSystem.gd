@@ -95,6 +95,9 @@ func get_compiled_weapon_stats(player_index: int, base_stats: Dictionary) -> Dic
 		compiled["trail_lifetime"] = float(_get_param("fire_trail", "trail_lifetime", 1.5))
 		compiled["trail_tick_interval"] = float(_get_param("fire_trail", "tick_interval", 0.5))
 		compiled["trail_damage_percent"] = float(_get_param("fire_trail", "damage_percent", 0.3))
+		compiled["impact_pool_radius"] = float(_get_param("fire_trail", "impact_pool_radius", 90.0))
+		compiled["impact_pool_lifetime"] = float(_get_param("fire_trail", "impact_pool_lifetime", 3.0))
+		compiled["impact_pool_damage_percent"] = float(_get_param("fire_trail", "impact_pool_damage_percent", 0.5))
 	if has_mutation(player_index, "explosive_rounds"):
 		compiled["explosion_radius"] = float(_get_param("explosive_rounds", "explosion_radius", 82.0))
 		compiled["explosion_damage_percent"] = float(_get_param("explosive_rounds", "damage_percent", 0.65))

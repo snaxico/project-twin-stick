@@ -338,13 +338,6 @@ layout_mode = 2
 custom_minimum_size = Vector2(280, 52)
 text = "Resume"
 
-[node name="PauseSettingsButton" type="Button" parent="UI/PausePanel/CenterContainer/PauseLayout"]
-layout_mode = 2
-custom_minimum_size = Vector2(280, 52)
-tooltip_text = "Coming soon"
-disabled = true
-text = "Settings"
-
 [node name="PauseRetryButton" type="Button" parent="UI/PausePanel/CenterContainer/PauseLayout"]
 layout_mode = 2
 custom_minimum_size = Vector2(280, 52)
@@ -354,88 +347,3 @@ text = "Restart Room"
 layout_mode = 2
 custom_minimum_size = Vector2(280, 52)
 text = "Main Menu"
-
-[node name="SettingsPanel" type="Panel" parent="UI"]
-visible = false
-process_mode = 3
-offset_left = 340.0
-offset_top = 230.0
-offset_right = 940.0
-offset_bottom = 570.0
-
-[node name="MarginContainer" type="MarginContainer" parent="UI/SettingsPanel"]
-offset_left = 16.0
-offset_top = 16.0
-offset_right = 584.0
-offset_bottom = 324.0
-theme_override_constants/margin_left = 8
-theme_override_constants/margin_top = 8
-theme_override_constants/margin_right = 8
-theme_override_constants/margin_bottom = 8
-
-[node name="SettingsLayout" type="VBoxContainer" parent="UI/SettingsPanel/MarginContainer"]
-offset_right = 568.0
-offset_bottom = 308.0
-theme_override_constants/separation = 14
-
-[node name="SettingsTitle" type="Label" parent="UI/SettingsPanel/MarginContainer/SettingsLayout"]
-text = "Settings"
-horizontal_alignment = 1
-
-[node name="SettingsDetail" type="Label" parent="UI/SettingsPanel/MarginContainer/SettingsLayout"]
-autowrap_mode = 2
-text = "Change player aim controls and visual effects without leaving the run."
-horizontal_alignment = 1
-
-[node name="ScreenEffectsRow" type="HBoxContainer" parent="UI/SettingsPanel/MarginContainer/SettingsLayout"]
-theme_override_constants/separation = 12
-
-[node name="ScreenEffectsLabel" type="Label" parent="UI/SettingsPanel/MarginContainer/SettingsLayout/ScreenEffectsRow"]
-size_flags_horizontal = 3
-text = "Screen Effects"
-
-[node name="ScreenEffectsOption" type="OptionButton" parent="UI/SettingsPanel/MarginContainer/SettingsLayout/ScreenEffectsRow"]
-size_flags_horizontal = 3
-
-[node name="Player1AimRow" type="HBoxContainer" parent="UI/SettingsPanel/MarginContainer/SettingsLayout"]
-theme_override_constants/separation = 12
-
-[node name="Player1AimLabel" type="Label" parent="UI/SettingsPanel/MarginContainer/SettingsLayout/Player1AimRow"]
-size_flags_horizontal = 3
-text = "Player 1 Aim"
-
-[node name="Player1AimOption" type="OptionButton" parent="UI/SettingsPanel/MarginContainer/SettingsLayout/Player1AimRow"]
-size_flags_horizontal = 3
-
-[node name="Player2AimRow" type="HBoxContainer" parent="UI/SettingsPanel/MarginContainer/SettingsLayout"]
-theme_override_constants/separation = 12
-
-[node name="Player2AimLabel" type="Label" parent="UI/SettingsPanel/MarginContainer/SettingsLayout/Player2AimRow"]
-size_flags_horizontal = 3
-text = "Player 2 Aim"
-
-[node name="Player2AimOption" type="OptionButton" parent="UI/SettingsPanel/MarginContainer/SettingsLayout/Player2AimRow"]
-size_flags_horizontal = 3
-
-[node name="Player3AimRow" type="HBoxContainer" parent="UI/SettingsPanel/MarginContainer/SettingsLayout"]
-theme_override_constants/separation = 12
-
-[node name="Player3AimLabel" type="Label" parent="UI/SettingsPanel/MarginContainer/SettingsLayout/Player3AimRow"]
-size_flags_horizontal = 3
-text = "Player 3 Aim"
-
-[node name="Player3AimOption" type="OptionButton" parent="UI/SettingsPanel/MarginContainer/SettingsLayout/Player3AimRow"]
-size_flags_horizontal = 3
-
-[node name="Player4AimRow" type="HBoxContainer" parent="UI/SettingsPanel/MarginContainer/SettingsLayout"]
-theme_override_constants/separation = 12
-
-[node name="Player4AimLabel" type="Label" parent="UI/SettingsPanel/MarginContainer/SettingsLayout/Player4AimRow"]
-size_flags_horizontal = 3
-text = "Player 4 Aim"
-
-[node name="Player4AimOption" type="OptionButton" parent="UI/SettingsPanel/MarginContainer/SettingsLayout/Player4AimRow"]
-size_flags_horizontal = 3
-
-[node name="SettingsBackButton" type="Button" parent="UI/SettingsPanel/MarginContainer/SettingsLayout"]
-text = "Back"

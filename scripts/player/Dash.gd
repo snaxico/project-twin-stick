@@ -45,6 +45,10 @@ func consume_buffer_if_ready(now: float) -> bool:
 func clear_buffer() -> void:
 	_buffered_until = 0.0
 
+func extend_cooldown(seconds: float, now: float) -> void:
+	_cooldown_until = max(_cooldown_until, now) + max(seconds, 0.0)
+	_buffered_until = 0.0
+
 func get_velocity(move_input: Vector2, fallback_direction: Vector2, move_speed: float, now: float) -> Vector2:
 	if is_active(now):
 		if _dash_direction.length() == 0.0:

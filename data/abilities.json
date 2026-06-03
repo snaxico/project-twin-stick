@@ -30,13 +30,13 @@
     {
       "id": "overcharge",
       "name": "Overcharge",
-      "description": "Weapon fires at double rate and double projectiles for a short burst.",
+      "description": "Weapon fires 30% faster for a short burst.",
       "type": "sustained",
-      "cooldown": 15.0,
+      "cooldown": 22.0,
       "duration": 4.0,
       "stats": {
-        "fire_rate_multiplier": 2.0,
-        "projectile_multiplier": 2
+        "fire_rate_multiplier": 1.3,
+        "projectile_multiplier": 1
       }
     },
     {
@@ -47,7 +47,10 @@
       "cooldown": 4.0,
       "duration": 0.0,
       "stats": {
-        "distance": 240.0
+        "distance": 340.0,
+        "arrival_iframes": 0.2,
+        "detonation_radius": 120.0,
+        "detonation_damage": 24
       }
     },
     {
@@ -79,10 +82,10 @@
       "description": "Place an auto-firing turret that tracks nearby enemies.",
       "type": "sustained",
       "cooldown": 12.0,
-      "duration": 6.0,
+      "duration": 9.0,
       "stats": {
-        "damage": 12,
-        "fire_rate": 3.2,
+        "damage": 20,
+        "fire_rate": 4.5,
         "range": 780.0,
         "projectile_speed": 760.0
       }
@@ -93,11 +96,12 @@
       "description": "Drop a spread of mines that detonate on enemy contact.",
       "type": "sustained",
       "cooldown": 10.0,
-      "duration": 8.0,
+      "duration": 14.0,
       "stats": {
-        "mine_count": 5,
-        "radius": 100.0,
-        "damage": 42
+        "mine_count": 7,
+        "radius": 130.0,
+        "trigger_radius": 80.0,
+        "damage": 60
       }
     },
     {

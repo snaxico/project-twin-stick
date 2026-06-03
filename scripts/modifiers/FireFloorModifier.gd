@@ -3,16 +3,16 @@ extends Node2D
 
 const WARNING_DURATION := 1.5
 const ACTIVE_DURATION := 4.0
-const SPAWN_INTERVAL := 2.8
+const SPAWN_INTERVAL := 2.4
 const DAMAGE_INTERVAL := 0.5
 const DAMAGE_AMOUNT := 5
-const ZONE_RADIUS := 240.0
+const ZONE_RADIUS := 280.0
 
 var _arena_rect := Rect2()
 var _player_nodes: Array = []
 var _zones: Array = []
 var _spawn_at := 0.0
-var _max_zones := 5
+var _max_zones := 7
 
 func setup(arena_rect: Rect2, player_nodes: Array) -> void:
 	_arena_rect = arena_rect
@@ -46,7 +46,7 @@ func _physics_process(delta: float) -> void:
 		_zones.erase(zone)
 
 func _spawn_zone() -> void:
-	var margin := 200.0
+	var margin := 290.0
 	_zones.append({
 		"position": Vector2(
 			randf_range(_arena_rect.position.x + margin, _arena_rect.end.x - margin),

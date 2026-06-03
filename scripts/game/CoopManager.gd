@@ -81,6 +81,7 @@ signal return_to_menu_requested
 @onready var floor_grid: Node2D = $FloorGrid
 @onready var camera: Camera2D = $Camera2D
 @onready var screen_shake = $Camera2D/ScreenShake
+@onready var screen_effects = $ScreenEffects
 @onready var top_wall: CollisionShape2D = $ArenaBounds/TopWall
 @onready var bottom_wall: CollisionShape2D = $ArenaBounds/BottomWall
 @onready var left_wall: CollisionShape2D = $ArenaBounds/LeftWall
@@ -88,7 +89,6 @@ signal return_to_menu_requested
 @onready var ui_layer: CanvasLayer = $UI
 @onready var pause_panel: Panel = $UI/PausePanel
 @onready var resume_button: Button = $UI/PausePanel/CenterContainer/PauseLayout/ResumeButton
-@onready var pause_settings_button: Button = $UI/PausePanel/CenterContainer/PauseLayout/PauseSettingsButton
 @onready var pause_retry_button: Button = $UI/PausePanel/CenterContainer/PauseLayout/PauseRetryButton
 @onready var pause_main_menu_button: Button = $UI/PausePanel/CenterContainer/PauseLayout/PauseMainMenuButton
 
@@ -118,6 +118,8 @@ var _next_burst_at := 0.0
 var _pending_pick_consumes_levelup := false
 var _pending_elite_bonus_pick := false
 var _pending_clear_summary := ""
+var _active_elite = null
+var _next_elite_add_spawn_at := 0.0
 var _revive_progress_by_player_id: Dictionary = {}
 var _hud_root: Control = null
 var _player_combat_indicators: Array = []
@@ -129,6 +131,11 @@ var _xp_label: Label = null
 var _xp_fill: ColorRect = null
 var _modifier_hud: VBoxContainer = null
 var _score_label: Label = null
+var _objective_panel: PanelContainer = null
+var _objective_icon_label: Label = null
+var _objective_title_label: Label = null
+var _objective_progress_label: Label = null
+var _objective_progress_bar: ProgressBar = null
 var _mutation_pick_ui = null
 var _active_modifiers: Array = []
 var _modifier_definitions: Dictionary = {}
@@ -165,6 +172,11 @@ var _enemy_separation_grid: Dictionary = {}
 var _enemy_separation_grid_frame := -1
 var _game_paused := false
 var _pause_input_proxy = null
+var _projectile_pool: Array = []
+var _active_projectiles: Array = []
+var _active_homing_projectiles: Array = []
+var _active_beams: Array = []
+var _screen_effect_level := "full"
 
 func configure_players(configs: Array) -> void:
 	_player_configs = configs.duplicate()
@@ -175,9 +187,6 @@ func configure_room(room_config: Dictionary) -> void:
 func _ready() -> void:
 	if player_scene == null:
 		player_scene = load("res://scenes/player/Player.tscn")
-	var level_up_callable := Callable(self, "_on_level_up")
-	if not RunState.level_up.is_connected(level_up_callable):
-		RunState.level_up.connect(level_up_callable)
 	_hide_legacy_ui()
 	_bind_ui()
 	_load_modifier_definitions()
@@ -190,8 +199,6 @@ func _bind_ui() -> void:
 	resume_button.pressed.connect(_on_resume_pressed)
 	pause_retry_button.pressed.connect(_on_retry_pressed)
 	pause_main_menu_button.pressed.connect(_on_main_menu_pressed)
-	pause_settings_button.disabled = true
-	pause_settings_button.tooltip_text = "Coming soon"
 	_configure_pause_focus()
 	_pause_input_proxy = PauseInputProxyData.new()
 	pause_panel.add_child(_pause_input_proxy)
@@ -206,7 +213,13 @@ func _configure_pause_focus() -> void:
 		var next_button := buttons[(index + 1) % buttons.size()] as Button
 		button.focus_neighbor_top = button.get_path_to(previous_button)
 		button.focus_neighbor_bottom = button.get_path_to(next_button)
-	pause_settings_button.focus_mode = Control.FOCUS_NONE
+
+func _apply_screen_effect_level() -> void:
+	if screen_effects != null and screen_effects.has_method("set_effect_level"):
+		screen_effects.set_effect_level(_screen_effect_level)
+
+func _screen_effects_enabled() -> bool:
+	return _screen_effect_level != "off"
 
 func _hide_legacy_ui() -> void:
 	for node_path in [
@@ -226,7 +239,6 @@ func _hide_legacy_ui() -> void:
 		"ModifierStatus",
 		"ModifierIntroPanel",
 		"ResultPanel",
-		"SettingsPanel",
 	]:
 		var node := ui_layer.get_node_or_null(node_path)
 		if node != null:
@@ -276,7 +288,9 @@ func _build_hud() -> void:
 	_objective_label.size = Vector2(520.0, 54.0)
 	_objective_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_objective_label.add_theme_font_size_override("font_size", 15)
+	_objective_label.visible = false
 	_hud_root.add_child(_objective_label)
+	_build_objective_panel()
 
 	_score_label = Label.new()
 	_score_label.position = Vector2(1520.0, 24.0)
@@ -412,6 +426,56 @@ func _build_hud() -> void:
 			"slot_2_label": slot_2_label,
 			"slot_2_bar": slot_2_bar,
 		})
+
+func _build_objective_panel() -> void:
+	_objective_panel = PanelContainer.new()
+	_objective_panel.position = Vector2(24.0, 20.0)
+	_objective_panel.size = Vector2(460.0, 92.0)
+	var panel_style := StyleBoxFlat.new()
+	panel_style.bg_color = Color(0.035, 0.05, 0.08, 0.86)
+	panel_style.border_color = Color(0.38, 0.88, 0.78, 0.72)
+	panel_style.set_border_width_all(1)
+	panel_style.corner_radius_top_left = 10
+	panel_style.corner_radius_top_right = 10
+	panel_style.corner_radius_bottom_left = 10
+	panel_style.corner_radius_bottom_right = 10
+	_objective_panel.add_theme_stylebox_override("panel", panel_style)
+	_hud_root.add_child(_objective_panel)
+	var margin := MarginContainer.new()
+	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	margin.add_theme_constant_override("margin_left", 12)
+	margin.add_theme_constant_override("margin_top", 10)
+	margin.add_theme_constant_override("margin_right", 12)
+	margin.add_theme_constant_override("margin_bottom", 10)
+	_objective_panel.add_child(margin)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 12)
+	margin.add_child(row)
+	_objective_icon_label = Label.new()
+	_objective_icon_label.custom_minimum_size = Vector2(42.0, 0.0)
+	_objective_icon_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_objective_icon_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_objective_icon_label.add_theme_font_size_override("font_size", 26)
+	row.add_child(_objective_icon_label)
+	var layout := VBoxContainer.new()
+	layout.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	layout.add_theme_constant_override("separation", 4)
+	row.add_child(layout)
+	_objective_title_label = Label.new()
+	_objective_title_label.add_theme_font_size_override("font_size", 15)
+	_objective_title_label.add_theme_color_override("font_color", Color(0.88, 0.98, 1.0, 0.96))
+	layout.add_child(_objective_title_label)
+	_objective_progress_label = Label.new()
+	_objective_progress_label.add_theme_font_size_override("font_size", 12)
+	_objective_progress_label.add_theme_color_override("font_color", Color(0.76, 0.86, 0.92, 0.9))
+	layout.add_child(_objective_progress_label)
+	_objective_progress_bar = ProgressBar.new()
+	_objective_progress_bar.show_percentage = false
+	_objective_progress_bar.min_value = 0.0
+	_objective_progress_bar.max_value = 100.0
+	_objective_progress_bar.custom_minimum_size = Vector2(340.0, 10.0)
+	_apply_progress_bar_tint(_objective_progress_bar, Color(0.38, 0.88, 0.78, 1.0), 0.86)
+	layout.add_child(_objective_progress_bar)
 
 func _get_slot_color(player_tint: Color, slot_index: int) -> Color:
 	if slot_index == 0:
@@ -608,6 +672,8 @@ func _start_room() -> void:
 	_awaiting_mutation_pick = false
 	_pending_pick_consumes_levelup = false
 	_pending_elite_bonus_pick = false
+	_active_elite = null
+	_next_elite_add_spawn_at = 0.0
 	_room_elapsed = 0.0
 	_room_type = str(_room_config.get("room_type", "combat"))
 	_room_enemy_pool = ( _room_config.get("enemy_pool", []) as Array).duplicate()
@@ -662,6 +728,10 @@ func _clear_runtime_nodes() -> void:
 	_active_orbits.clear()
 	_active_hazards.clear()
 	_active_mines.clear()
+	_projectile_pool.clear()
+	_active_projectiles.clear()
+	_active_homing_projectiles.clear()
+	_active_beams.clear()
 	_collector_orbs.clear()
 	_hold_zone = null
 	_fire_floor_modifier = null
@@ -686,7 +756,7 @@ func _setup_side_objective() -> void:
 			effects.add_child(_hold_zone)
 			_hold_zone.completed.connect(_complete_side_objective)
 		"kill_streak":
-			_kill_streak_target = maxi(1, int(round(float(_estimate_room_total_enemies()) * 0.65)))
+			_kill_streak_target = 18
 		"collector":
 			_collector_spawn_timer = 0.8
 
@@ -726,6 +796,9 @@ func _physics_process(delta: float) -> void:
 		return
 	_room_elapsed += delta
 	_update_scheduled_enemy_shockwaves()
+	_update_homing_projectiles(delta)
+	_update_active_beams(delta)
+	_update_elite_add_waves()
 	_update_side_objectives(delta)
 	_update_hazards(delta)
 	_update_revives(delta)
@@ -765,6 +838,23 @@ func _update_hazards(delta: float) -> void:
 		if hazard != null and is_instance_valid(hazard):
 			hazard.update_zone(delta, _player_nodes)
 	_cleanup_helpers()
+
+func _update_elite_add_waves() -> void:
+	if _room_type != "elite" or _room_clear_started:
+		return
+	if _active_elite == null or not is_instance_valid(_active_elite) or not _active_elite.has_method("is_alive") or not _active_elite.is_alive():
+		return
+	if _room_elapsed < _next_elite_add_spawn_at:
+		return
+	_next_elite_add_spawn_at = _room_elapsed + randf_range(6.0, 8.0)
+	var count := randi_range(2, 3)
+	var start_edge := randi() % 4
+	var health_multiplier := 0.5 if bool(_minor_modifier_flags["swarm"]) else 1.0
+	for index in range(count):
+		var enemy_type := _roll_wave_enemy_type(_room_enemy_pool)
+		var spawn_position := _get_enemy_spawn_position_for_index(index, start_edge)
+		_queue_enemy_spawn(enemy_type, spawn_position, health_multiplier)
+		_enemies_spawned += 1
 
 func _check_wave_progress() -> void:
 	if _room_clear_started:
@@ -854,7 +944,12 @@ func _spawn_queued_enemy_instance(enemy_type: String, spawn_position: Vector2, h
 func _spawn_elite_miniboss() -> void:
 	var elite_pool := ["elite_charger", "elite_spitter", "elite_support"]
 	var elite_type := str(elite_pool[randi() % elite_pool.size()])
-	_spawn_enemy_instance(elite_type, ARENA_CENTER + Vector2(randf_range(-240.0, 240.0), randf_range(-120.0, 120.0)))
+	var spawn_position := _get_elite_spawn_position()
+	_active_elite = _spawn_enemy_instance(elite_type, spawn_position)
+	if _active_elite != null and _active_elite.has_method("apply_elite_act_scale"):
+		_active_elite.apply_elite_act_scale(int(_room_config.get("act", 1)))
+	_next_elite_add_spawn_at = _room_elapsed + randf_range(6.0, 8.0)
+	_spawn_elite_entrance_vfx(spawn_position)
 
 func _spawn_boss() -> void:
 	_boss_spawned = true
@@ -976,18 +1071,17 @@ func _build_clear_summary() -> String:
 	return "\n".join(lines)
 
 func _on_player_fire_requested(origin: Vector2, direction: Vector2, projectile_config: Dictionary) -> void:
-	if projectiles.get_child_count() >= MAX_ACTIVE_PROJECTILES:
+	_cleanup_active_projectiles()
+	if _active_projectiles.size() >= MAX_ACTIVE_PROJECTILES:
 		return
 	var split_extra_count := int(projectile_config.get("split_extra_count", 0))
 	var spread_step := deg_to_rad(float(projectile_config.get("split_spread_degrees", 15.0)))
 	var projectile_count: int = (1 + split_extra_count) * maxi(1, int(projectile_config.get("projectile_multiplier", 1)))
 	var directions := _build_spread_directions(direction, projectile_count, spread_step)
 	for projectile_direction in directions:
-		var projectile = ProjectileSceneData.instantiate()
-		projectile.global_position = origin
-		projectile.setup_from_config("player", projectile_direction, projectile_config)
-		projectile.impact_requested.connect(_on_projectile_impact)
-		projectiles.add_child(projectile)
+		if _active_projectiles.size() >= MAX_ACTIVE_PROJECTILES:
+			return
+		_activate_projectile("player", origin, projectile_direction, projectile_config)
 
 func _on_player_ability_activated(player, _slot_index: int, ability_id: String, origin: Vector2, direction: Vector2, stats: Dictionary) -> void:
 	var tint: Color = stats.get("color", Color.WHITE)
@@ -999,6 +1093,7 @@ func _on_player_ability_activated(player, _slot_index: int, ability_id: String, 
 			_spawn_dash_effect(origin, direction, tint)
 		"blink":
 			_spawn_blink_effect(origin, tint)
+			_spawn_blink_detonation(origin, stats)
 		"shield":
 			_spawn_shield_effect(origin, float(stats.get("radius", 78.0)), tint)
 		"decoy":
@@ -1046,6 +1141,8 @@ func _spawn_player_shockwave(origin: Vector2, stats: Dictionary) -> void:
 	for projectile in projectiles.get_children():
 		if projectile == null or not is_instance_valid(projectile):
 			continue
+		if projectile.has_method("is_projectile_active") and not projectile.is_projectile_active():
+			continue
 		if not ("team" in projectile) or str(projectile.team) != "enemy":
 			continue
 		if projectile.global_position.distance_to(origin) <= radius:
@@ -1057,7 +1154,10 @@ func _spawn_player_shockwave(origin: Vector2, stats: Dictionary) -> void:
 			)
 			sparks.global_position = projectile.global_position
 			effects.add_child(sparks)
-			projectile.queue_free()
+			if projectile.has_method("_finish_projectile"):
+				projectile._finish_projectile()
+			else:
+				projectile.queue_free()
 	_spawn_shockwave_visual(origin, radius, stats.get("color", Color.WHITE), float(stats.get("expand_duration", 0.15)))
 
 func _spawn_dash_effect(origin: Vector2, direction: Vector2, color: Color) -> void:
@@ -1070,6 +1170,23 @@ func _spawn_blink_effect(origin: Vector2, color: Color) -> void:
 	burst.global_position = origin
 	effects.add_child(burst)
 
+func _spawn_blink_detonation(origin: Vector2, stats: Dictionary) -> void:
+	var radius := float(stats.get("detonation_radius", 0.0))
+	var damage := int(stats.get("detonation_damage", 0))
+	if radius <= 0.0 or damage <= 0:
+		return
+	var color: Color = stats.get("color", Color.WHITE)
+	for enemy in get_nearby_enemy_target_nodes(origin, radius):
+		if enemy == null or not is_instance_valid(enemy) or not enemy.has_method("is_alive") or not enemy.is_alive():
+			continue
+		if enemy.global_position.distance_squared_to(origin) > radius * radius:
+			continue
+		enemy.apply_damage(damage)
+		if enemy.has_method("apply_knockback"):
+			var offset: Vector2 = enemy.global_position - origin
+			enemy.apply_knockback(offset.normalized() if offset.length() > 0.0 else Vector2.RIGHT, 420.0)
+	_spawn_shockwave_visual(origin, radius, color, 0.12)
+
 func _spawn_shield_effect(origin: Vector2, radius: float, color: Color) -> void:
 	var ring := ParticleFactoryData.create_explosion_ring(color, radius, 3.0)
 	ring.global_position = origin
@@ -1078,6 +1195,7 @@ func _spawn_shield_effect(origin: Vector2, radius: float, color: Color) -> void:
 func _spawn_ability_mines(origin: Vector2, stats: Dictionary) -> void:
 	var mine_count := int(stats.get("mine_count", 5))
 	var radius := float(stats.get("radius", 100.0))
+	var trigger_radius := float(stats.get("trigger_radius", 52.0))
 	var damage := int(stats.get("damage", 42))
 	var duration := float(stats.get("duration", 8.0))
 	var tint: Color = stats.get("color", Color.WHITE)
@@ -1085,7 +1203,7 @@ func _spawn_ability_mines(origin: Vector2, stats: Dictionary) -> void:
 		var angle := TAU * float(mine_index) / float(max(mine_count, 1))
 		var mine := AbilityMineData.new()
 		mine.global_position = origin + Vector2.RIGHT.rotated(angle) * (60.0 + float(mine_index % 2) * 24.0)
-		mine.configure(duration, radius, damage, tint)
+		mine.configure(duration, radius, damage, tint, trigger_radius)
 		effects.add_child(mine)
 		_active_mines.append(mine)
 
@@ -1122,23 +1240,32 @@ func _spawn_modifier_activation_vfx(_modifier_id: String, color: Color) -> void:
 	_spawn_screen_flash(Color(color.r, color.g, color.b, 0.16), 0.28)
 
 func _spawn_boss_entrance_vfx() -> void:
-	if screen_shake != null and screen_shake.has_method("add_trauma"):
+	if _screen_effects_enabled() and screen_shake != null and screen_shake.has_method("add_trauma"):
 		screen_shake.add_trauma(0.55)
 	_spawn_screen_flash(Color(0.82, 0.06, 0.04, 0.24), 0.5)
 	var ring := ParticleFactoryData.create_explosion_ring(Color(1.0, 0.14, 0.08, 0.78), 260.0, 6.0)
 	ring.global_position = ARENA_CENTER
 	effects.add_child(ring)
 
+func _spawn_elite_entrance_vfx(spawn_position: Vector2) -> void:
+	if _screen_effects_enabled() and screen_shake != null and screen_shake.has_method("add_trauma"):
+		screen_shake.add_trauma(0.22)
+	var ring := ParticleFactoryData.create_explosion_ring(Color(1.0, 0.55, 0.18, 0.76), 190.0, 4.0)
+	ring.global_position = spawn_position
+	effects.add_child(ring)
+
 func _spawn_enemy_death_global_vfx(enemy_type_name: String) -> void:
 	if enemy_type_name.begins_with("boss_"):
-		if screen_shake != null and screen_shake.has_method("add_trauma"):
+		if _screen_effects_enabled() and screen_shake != null and screen_shake.has_method("add_trauma"):
 			screen_shake.add_trauma(0.6)
 		_spawn_screen_flash(Color(1.0, 1.0, 1.0, 0.18), 0.2)
 	elif enemy_type_name.begins_with("elite_"):
-		if screen_shake != null and screen_shake.has_method("add_trauma"):
+		if _screen_effects_enabled() and screen_shake != null and screen_shake.has_method("add_trauma"):
 			screen_shake.add_trauma(0.25)
 
 func _spawn_screen_flash(color: Color, duration: float) -> void:
+	if not _screen_effects_enabled():
+		return
 	var flash := ColorRect.new()
 	flash.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -1148,26 +1275,12 @@ func _spawn_screen_flash(color: Color, duration: float) -> void:
 	tween.tween_property(flash, "modulate:a", 0.0, maxf(duration, 0.01))
 	tween.tween_callback(flash.queue_free)
 
-func _on_level_up(_new_level: int) -> void:
-	for player in _player_nodes:
-		if player == null or not is_instance_valid(player):
-			continue
-		var tint: Color = _player_configs[int(player.player_index)].tint
-		var ring := ParticleFactoryData.create_explosion_ring(tint.lightened(0.22), 150.0, 4.5)
-		ring.global_position = player.global_position
-		effects.add_child(ring)
-		var burst := ParticleFactoryData.create_explosion_burst(tint.lightened(0.18), 1.0)
-		burst.global_position = player.global_position
-		effects.add_child(burst)
-	_spawn_screen_flash(Color(1.0, 0.94, 0.54, 0.18), 0.3)
-
 func _on_enemy_fire_requested(origin: Vector2, direction: Vector2, speed: float, damage: int, team: String, _color: Color, projectile_scale: float) -> void:
-	if projectiles.get_child_count() >= MAX_ACTIVE_PROJECTILES:
+	_cleanup_active_projectiles()
+	if _active_projectiles.size() >= MAX_ACTIVE_PROJECTILES:
 		return
-	var projectile = ProjectileSceneData.instantiate()
-	projectile.global_position = origin
 	var projectile_color := ENEMY_PROJECTILE_COLOR
-	projectile.setup_from_config(team, direction, {
+	_activate_projectile(team, origin, direction, {
 		"speed": speed,
 		"damage": damage,
 		"color": projectile_color,
@@ -1176,8 +1289,89 @@ func _on_enemy_fire_requested(origin: Vector2, direction: Vector2, speed: float,
 		"collision_half_width": 6.0 * projectile_scale,
 		"use_lifetime": true,
 	})
+
+func spawn_enemy_homing_orbs(origin: Vector2, count: int, speed: float, duration: float, damage: int, _color: Color) -> void:
+	for index in range(count):
+		var target: Node2D = _get_nearest_player_to(origin)
+		var direction := Vector2.RIGHT.rotated(TAU * float(index) / float(max(count, 1)))
+		if target != null:
+			direction = (target.global_position - origin).normalized()
+		var projectile = ProjectileSceneData.instantiate()
+		projectiles.add_child(projectile)
+		projectile.impact_requested.connect(_on_projectile_impact)
+		projectile.activate_from_config("enemy", direction, {
+			"speed": speed,
+			"damage": damage,
+			"color": ENEMY_PROJECTILE_COLOR,
+			"feedback_profile": "enemy",
+			"impact_weight": 1.4,
+			"collision_half_width": 12.0,
+			"use_lifetime": true,
+		}, origin + direction * 32.0)
+		_active_homing_projectiles.append({
+			"projectile": projectile,
+			"target": target,
+			"expires_at": _current_time_seconds() + duration,
+		})
+
+func _update_homing_projectiles(_delta: float) -> void:
+	var now := _current_time_seconds()
+	var kept: Array = []
+	for entry_variant in _active_homing_projectiles:
+		var entry := entry_variant as Dictionary
+		var projectile = entry.get("projectile", null)
+		if projectile == null or not is_instance_valid(projectile):
+			continue
+		if projectile.has_method("is_projectile_active") and not projectile.is_projectile_active():
+			continue
+		if now >= float(entry.get("expires_at", 0.0)):
+			if projectile.has_method("_finish_projectile"):
+				projectile._finish_projectile()
+			else:
+				projectile.queue_free()
+			continue
+		var target = entry.get("target", null)
+		if target == null or not is_instance_valid(target) or not target.has_method("is_alive") or not target.is_alive():
+			target = _get_nearest_player_to(projectile.global_position)
+			entry["target"] = target
+		if target != null and is_instance_valid(target):
+			var desired: Vector2 = (target.global_position - projectile.global_position).normalized()
+			if desired.length() > 0.0:
+				projectile.direction = projectile.direction.lerp(desired, 0.08).normalized()
+		kept.append(entry)
+	_active_homing_projectiles = kept
+
+func _activate_projectile(team: String, origin: Vector2, direction: Vector2, projectile_config: Dictionary) -> void:
+	var projectile = _acquire_projectile()
+	if projectile == null:
+		return
+	projectile.activate_from_config(team, direction, projectile_config, origin)
+	if not _active_projectiles.has(projectile):
+		_active_projectiles.append(projectile)
+
+func _acquire_projectile():
+	for projectile in _projectile_pool:
+		if projectile != null and is_instance_valid(projectile) and projectile.has_method("is_projectile_active") and not projectile.is_projectile_active():
+			return projectile
+	if _projectile_pool.size() >= MAX_ACTIVE_PROJECTILES:
+		return null
+	var projectile = ProjectileSceneData.instantiate()
+	projectile.set_pooled(true)
 	projectile.impact_requested.connect(_on_projectile_impact)
+	projectile.projectile_deactivated.connect(_on_projectile_deactivated)
 	projectiles.add_child(projectile)
+	_projectile_pool.append(projectile)
+	return projectile
+
+func _on_projectile_deactivated(projectile) -> void:
+	_active_projectiles.erase(projectile)
+
+func _cleanup_active_projectiles() -> void:
+	var kept: Array = []
+	for projectile in _active_projectiles:
+		if projectile != null and is_instance_valid(projectile) and projectile.has_method("is_projectile_active") and projectile.is_projectile_active():
+			kept.append(projectile)
+	_active_projectiles = kept
 
 func _on_projectile_impact(origin: Vector2, direction: Vector2, team: String, color: Color, _feedback_profile: String, impact_weight: float, target: Node, combat_context: Dictionary) -> void:
 	var suppress_vfx := _should_suppress_combat_vfx()
@@ -1223,7 +1417,8 @@ func _spawn_projectile_hit_effect(origin: Vector2, direction: Vector2, color: Co
 		effects.add_child(ring)
 
 func _should_suppress_combat_vfx() -> bool:
-	return _enemy_nodes.size() + projectiles.get_child_count() >= COMBAT_VFX_LOAD_THRESHOLD
+	_cleanup_active_projectiles()
+	return _enemy_nodes.size() + _active_projectiles.size() >= COMBAT_VFX_LOAD_THRESHOLD
 
 func _on_enemy_died(enemy) -> void:
 	_enemy_nodes.erase(enemy)
@@ -1269,6 +1464,8 @@ func _on_player_revived(player) -> void:
 func _on_player_damage_taken(player, _amount: int, _current_health: int) -> void:
 	if player == null or not is_instance_valid(player):
 		return
+	if _side_objective_id == "kill_streak" and not _side_objective_completed:
+		_kill_streak_progress = 0
 	var burst := ParticleFactoryData.create_impact_sparks(player.player_config.tint.lightened(0.22), Vector2.UP, 1.1)
 	burst.global_position = player.global_position
 	effects.add_child(burst)
@@ -1319,6 +1516,7 @@ func _refresh_hud() -> void:
 	]
 	_room_label.text = _build_room_status_text()
 	_objective_label.text = _build_side_objective_text()
+	_refresh_objective_panel()
 	_score_label.text = "Room %d" % max(_room_depth, RunState.get_current_score() + 1) if RunState.is_endless_mode() else ""
 	_update_player_combat_indicators()
 	_refresh_bottom_hud()
@@ -1380,6 +1578,55 @@ func _build_side_objective_text() -> String:
 			return "Collector: %d/%d orbs" % [_collector_collected, COLLECTOR_TARGET]
 		_:
 			return ""
+
+func _refresh_objective_panel() -> void:
+	if _objective_panel == null:
+		return
+	var has_objective := not _side_objective_id.is_empty()
+	_objective_panel.visible = has_objective
+	if not has_objective:
+		return
+	_objective_icon_label.text = _get_objective_icon_text()
+	_objective_title_label.text = _get_objective_title_text()
+	_objective_progress_label.text = _build_side_objective_text()
+	_objective_progress_bar.value = _get_objective_progress_ratio() * 100.0
+
+func _get_objective_icon_text() -> String:
+	match _side_objective_id:
+		"hold_zone":
+			return "H"
+		"kill_streak":
+			return "K"
+		"collector":
+			return "C"
+		_:
+			return "!"
+
+func _get_objective_title_text() -> String:
+	if _side_objective_completed:
+		return "Objective Complete"
+	match _side_objective_id:
+		"hold_zone":
+			return "Hold Zone"
+		"kill_streak":
+			return "Kill Streak"
+		"collector":
+			return "Collect"
+		_:
+			return "Objective"
+
+func _get_objective_progress_ratio() -> float:
+	if _side_objective_completed:
+		return 1.0
+	match _side_objective_id:
+		"hold_zone":
+			return _hold_zone.get_progress_ratio() if _hold_zone != null and is_instance_valid(_hold_zone) and _hold_zone.has_method("get_progress_ratio") else 0.0
+		"kill_streak":
+			return clampf(float(_kill_streak_progress) / maxf(float(_kill_streak_target), 1.0), 0.0, 1.0)
+		"collector":
+			return clampf(float(_collector_collected) / float(COLLECTOR_TARGET), 0.0, 1.0)
+		_:
+			return 0.0
 
 func _update_player_combat_indicators() -> void:
 	for index in range(min(_player_combat_indicators.size(), _player_nodes.size())):
@@ -1514,17 +1761,6 @@ func _clamp_runtime_nodes() -> void:
 		enemy.global_position.x = clampf(enemy.global_position.x, clamp_rect.position.x + 36.0, clamp_rect.end.x - 36.0)
 		enemy.global_position.y = clampf(enemy.global_position.y, clamp_rect.position.y + 36.0, clamp_rect.end.y - 36.0)
 
-func _estimate_room_total_enemies() -> int:
-	var stream := int(ceil(_room_duration / max(_spawn_interval, 0.25)))
-	var burst_count := int(floor(_room_duration / max(_burst_interval, 1.0)))
-	var avg_burst := 5 if RunState.get_current_act() <= 1 else 7
-	var total := stream + burst_count * avg_burst
-	if bool(_minor_modifier_flags["swarm"]):
-		total *= 2
-	if _room_type == "elite":
-		total += 1
-	return max(total, 8)
-
 func _load_modifier_definitions() -> void:
 	_modifier_definitions.clear()
 	if not FileAccess.file_exists(MODIFIERS_DATA_PATH):
@@ -1580,7 +1816,17 @@ func spawn_enemy_shockwave(origin: Vector2, radius: float, damage: int, knockbac
 		player.apply_knockback(offset.normalized() if distance > 0.0 else Vector2.RIGHT, knockback_force)
 	if destroy_projectiles:
 		for projectile in projectiles.get_children():
-			if projectile != null and is_instance_valid(projectile) and projectile.global_position.distance_to(origin) <= radius:
+			if projectile == null or not is_instance_valid(projectile):
+				continue
+			if projectile.has_method("is_projectile_active") and not projectile.is_projectile_active():
+				continue
+			if not ("team" in projectile):
+				continue
+			if projectile.global_position.distance_to(origin) > radius:
+				continue
+			if projectile.has_method("_finish_projectile"):
+				projectile._finish_projectile()
+			else:
 				projectile.queue_free()
 	_spawn_shockwave_visual(origin, radius, color, 0.18)
 
@@ -1636,6 +1882,90 @@ func spawn_enemy_minions(origin: Vector2, count: int, phase: float, forced_type:
 		var angle := TAU * float(index) / float(max(count, 1))
 		_queue_enemy_spawn(enemy_type, origin + Vector2.RIGHT.rotated(angle) * 96.0)
 
+func spawn_enemy_minion_mix(origin: Vector2, count: int, types: Array) -> void:
+	if types.is_empty():
+		return
+	for index in range(count):
+		var enemy_type := str(types[index % types.size()])
+		var angle := TAU * float(index) / float(max(count, 1))
+		_queue_enemy_spawn(enemy_type, origin + Vector2.RIGHT.rotated(angle) * 112.0)
+
+func spawn_hive_shield_minions(origin: Vector2, count: int) -> Array:
+	var shield_nodes: Array = []
+	for index in range(count):
+		var angle := TAU * float(index) / float(max(count, 1))
+		var node := _spawn_enemy_instance("splitter_mini", origin + Vector2.RIGHT.rotated(angle) * 150.0, 3.75)
+		if node != null:
+			shield_nodes.append(node)
+	return shield_nodes
+
+func spawn_pulsar_emp(origin: Vector2, lockout_seconds: float, color: Color) -> void:
+	for player in _player_nodes:
+		if player != null and is_instance_valid(player) and player.has_method("apply_ability_lockout"):
+			player.apply_ability_lockout(lockout_seconds)
+	spawn_enemy_shockwave(origin, 520.0, 0, 420.0, color, false)
+	_spawn_screen_flash(Color(color.r, color.g, color.b, 0.18), 0.22)
+
+func spawn_pulsar_beam(origin: Vector2, direction: Vector2, color: Color, damage: int) -> void:
+	var normalized := direction.normalized() if direction.length() > 0.0 else Vector2.RIGHT
+	_active_beams.append({
+		"origin": origin,
+		"start_angle": normalized.angle() - deg_to_rad(45.0),
+		"elapsed": 0.0,
+		"duration": 1.5,
+		"arc": deg_to_rad(90.0),
+		"damage": damage,
+		"color": color,
+		"hit_players": [],
+		"next_visual_at": 0.0,
+	})
+	_draw_beam_line(origin, normalized, color)
+
+func _update_active_beams(delta: float) -> void:
+	if _active_beams.is_empty():
+		return
+	var kept: Array = []
+	for beam_variant in _active_beams:
+		var beam := beam_variant as Dictionary
+		var elapsed := float(beam.get("elapsed", 0.0)) + delta
+		beam["elapsed"] = elapsed
+		var duration := maxf(float(beam.get("duration", 1.5)), 0.01)
+		if elapsed > duration:
+			continue
+		var origin: Vector2 = beam.get("origin", Vector2.ZERO)
+		var angle := float(beam.get("start_angle", 0.0)) + float(beam.get("arc", 0.0)) * clampf(elapsed / duration, 0.0, 1.0)
+		var direction := Vector2.RIGHT.rotated(angle)
+		var color: Color = beam.get("color", Color.WHITE)
+		if _room_elapsed >= float(beam.get("next_visual_at", 0.0)):
+			beam["next_visual_at"] = _room_elapsed + 0.08
+			_draw_beam_line(origin, direction, color)
+		var hit_players: Array = beam.get("hit_players", []) as Array
+		for player in _player_nodes:
+			if player == null or not is_instance_valid(player) or not player.has_method("is_alive") or not player.is_alive():
+				continue
+			if hit_players.has(player):
+				continue
+			var offset: Vector2 = player.global_position - origin
+			if offset.length() > 1500.0:
+				continue
+			var angle_delta: float = abs(angle_difference(direction.angle(), offset.angle()))
+			if angle_delta <= deg_to_rad(5.0):
+				player.apply_damage(int(beam.get("damage", 25)))
+				hit_players.append(player)
+		beam["hit_players"] = hit_players
+		kept.append(beam)
+	_active_beams = kept
+
+func _draw_beam_line(origin: Vector2, direction: Vector2, color: Color) -> void:
+	var line := Line2D.new()
+	line.width = 18.0
+	line.default_color = Color(color.r, color.g, color.b, 0.64)
+	line.points = PackedVector2Array([origin, origin + direction.normalized() * 1500.0])
+	effects.add_child(line)
+	var tween := line.create_tween()
+	tween.tween_property(line, "modulate:a", 0.0, 0.14)
+	tween.tween_callback(line.queue_free)
+
 func spawn_enemy_burst(origin: Vector2, count: int, phase: float) -> void:
 	for index in range(count):
 		var enemy_type := "chaser"
@@ -1675,6 +2005,18 @@ func get_active_players() -> Array:
 		if player != null and is_instance_valid(player) and player.is_alive():
 			active_players.append(player)
 	return active_players
+
+func _get_nearest_player_to(origin: Vector2):
+	var best_player = null
+	var best_distance_sq := INF
+	for player in _player_nodes:
+		if player == null or not is_instance_valid(player) or not player.has_method("is_alive") or not player.is_alive():
+			continue
+		var distance_sq := origin.distance_squared_to(player.global_position)
+		if distance_sq < best_distance_sq:
+			best_distance_sq = distance_sq
+			best_player = player
+	return best_player
 
 func get_arena_rect() -> Rect2:
 	return ARENA_RECT
@@ -1737,6 +2079,22 @@ func _get_enemy_spawn_position() -> Vector2:
 	var inner_margin := ARENA_MARGIN + 48.0
 	var edge := randi() % 4
 	return _get_enemy_spawn_position_for_edge(edge, inner_margin)
+
+func _get_elite_spawn_position() -> Vector2:
+	var best_position := _get_enemy_spawn_position()
+	var best_distance_sq := -1.0
+	for attempt in range(12):
+		var candidate := _get_enemy_spawn_position_for_index(attempt, randi() % 4)
+		var min_distance_sq := INF
+		for player_index in range(maxi(_player_configs.size(), 1)):
+			var spawn_position := ARENA_CENTER + Vector2((player_index % 2) * 160.0 - 80.0, floor(player_index / 2.0) * 120.0 - 60.0)
+			min_distance_sq = minf(min_distance_sq, candidate.distance_squared_to(spawn_position))
+		if min_distance_sq >= 600.0 * 600.0:
+			return candidate
+		if min_distance_sq > best_distance_sq:
+			best_distance_sq = min_distance_sq
+			best_position = candidate
+	return best_position
 
 func _get_enemy_spawn_position_for_index(spawn_index: int, start_edge: int) -> Vector2:
 	var inner_margin := ARENA_MARGIN + 48.0

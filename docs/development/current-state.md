@@ -12,6 +12,9 @@ The live runtime is now aligned to the `Feature Roadmap V3` redesign:
 - health resets at the start of every room
 - meta progression, multiple starting weapons, and ability-specific rare mutations remain deferred
 
+Current `v3/main` stable baseline includes the playtest round-4 and round-5 patch stack.
+Treat this build as the newest stable version and continue future work from here.
+
 ## Current Runtime
 
 - front menu paths:
@@ -51,7 +54,7 @@ The live runtime is now aligned to the `Feature Roadmap V3` redesign:
 ## Loadout / Combat
 
 - every player always has:
-  - faster starter `Rifle` (`~4 shots/sec`)
+  - faster starter `Rifle` (`~5 shots/sec`)
   - faster base movement (`488` default speed)
   - `2` equal ability slots
   - mutation inventory
@@ -66,6 +69,12 @@ The live runtime is now aligned to the `Feature Roadmap V3` redesign:
   - `Minefield`
   - `Orbit`
 - weapon fire is automatic via nearest-target auto-targeting
+- aim mode remains in code but the in-run pause Settings panel was removed; active runtime defaults to auto-target aim
+- current round-4 + round-5 tuning changed:
+  - `Overcharge` is now a smaller boost (`22s` cooldown, `4s` duration, `1.3x` fire-rate, no extra projectiles)
+  - `Blink` uses movement direction, longer range, short arrival i-frames, and an arrival detonation
+  - `Turret` and `Minefield` are stronger; mines now use separate trigger and explosion radii
+  - `Fire Bullets` replaces the old Fire Trail behavior and creates only a smaller burning impact pool on hit / expiry
 - player mutation visuals are now partially wired:
   - projectile streaks for high `Rapid Fire` / `Velocity`
   - speed-line feedback for `Move Speed`
@@ -122,7 +131,9 @@ The live runtime is now aligned to the `Feature Roadmap V3` redesign:
 - multi-enemy spawn pulses now distribute enemies across multiple arena edges instead of clumping on one edge
 - enemies apply soft local separation to reduce blob stacking while pursuing players
   - separation uses a per-frame spatial grid lookup instead of each enemy scanning the full enemy list
+- enemy target acquisition is staggered across physics frames to reduce high-count AI spikes while movement still updates every frame
 - high-count combat target lookups now use the same nearby-enemy grid for player auto-targeting, turret targeting, orbit hits, ability mine checks, ricochets, and player AOE explosions where applicable
+- player and enemy projectiles now use a reusable projectile pool instead of per-shot instantiate/free churn
 - nonessential combat hit VFX are throttled during very dense fights to reduce particle/ring allocation spikes
 - enemy contact damage now checks all nearby player targets instead of only the current nearest target, uses a wider contact range, and grants a short player-side damage invulnerability window after a landed hit
 - round-3 tuning increased player and enemy movement speeds by `25%` while keeping stationary bosses stationary
@@ -132,7 +143,7 @@ The live runtime is now aligned to the `Feature Roadmap V3` redesign:
   - magnet pickup behavior
 - side objectives now use the roadmap set:
   - `Hold Zone`
-  - `Kill Streak`
+  - `Kill Streak` (true consecutive kills, fixed target, resets on actual player damage)
   - `Collector`
 - completing a side objective grants one temporary room buff:
   - `Speed`
@@ -143,6 +154,19 @@ The live runtime is now aligned to the `Feature Roadmap V3` redesign:
   - majors: `Fire Floor`, `Ice Zone`, `Mine Field`, `Shrinking Arena`
   - `Gravity Wells` was removed after playtesting because its effect was not readable enough
 - `Mine Field` sweeps now use softened damage with a per-sweep/per-player hit cooldown to prevent frame-stacked one-shots
+- `Fire Floor` now uses larger, more numerous hazard zones (`280px`, up to `7` active)
+- elite mini-bosses now spawn away from the player center-spawn box and have stronger telegraphed pressure patterns
+- Act 2 elites now get `1.5x` HP, `1.3x` contact/projectile damage, and `25%` faster elite cooldowns
+- elite rooms now spawn 2-3 regular add enemies every `6-8s` while the elite is alive
+- bosses now have higher HP, HP-threshold phase telegraphs, add pressure, and clearer heavy-attack tells
+- current boss reworks:
+  - `Warden`: leap gap-closer, multi-charge combo, ground-pound shockwave, phase speed ramp
+  - `Hydra`: aimed snipes, rotating sweep, phase-transition minions, slow homing orbs
+  - `Hive`: phase shield minions, poison cloud, burrow relocate, escalating minion mix
+  - `Pulsar`: teleport repositioning, EMP ability lockout, sweeping beam, faster phase-3 pressure
+- Hive shield safeguard after review:
+  - shield count is fixed at `4`
+  - phase transitions only spawn a new shield if the previous shield is already cleared
 
 ## UI / Presentation
 
@@ -153,6 +177,7 @@ The live runtime is now aligned to the `Feature Roadmap V3` redesign:
   - bottom loadout overview cards with green health, `LT` / `RT` trigger labels, slot-colored ability cooldowns, and ability names
   - slot 1 cooldown color uses the player tint, slot 2 cooldown color is purple, and near-player cooldown rings match those bottom-HUD slot colors
   - side objective progress
+  - dedicated side-objective panel with icon fallback, label, progress text, and progress bar
   - active modifier chips
   - endless room score label when applicable
 - pause screen now shows:
@@ -162,7 +187,7 @@ The live runtime is now aligned to the `Feature Roadmap V3` redesign:
   - `LT` / `RT` ability cards
   - rarity-styled mutation chips with levels/tooltips
   - derived move / HP / fire-rate stats
-  - disabled in-run `Settings` placeholder (`Coming soon`)
+  - no in-run Settings panel; main-menu Settings remains the binding surface
 - mutation pick UI now shows:
   - simultaneous per-player picks
   - rare highlighting
@@ -181,9 +206,10 @@ The live runtime is now aligned to the `Feature Roadmap V3` redesign:
   - act-colored border treatment
   - stronger enemy hit / death particles, including elite/boss debris rings
   - ability-specific activation flashes and hit sparks
-  - level-up, boss-entrance, and major-modifier screen/ring feedback
+  - boss-entrance and major-modifier screen/ring feedback
   - enemy projectiles are rendered bright red for readability
-  - Fire Floor hazard zones are larger than the first round-2 implementation
+  - Fire Floor hazard zones are larger and more numerous than the first round-2 implementation
+  - level-up VFX were removed because they read like a no-effect ability
 
 ## Active Systems
 
@@ -198,16 +224,20 @@ The live runtime is now aligned to the `Feature Roadmap V3` redesign:
   - room runtime
   - continuous time-based spawning
   - deferred enemy spawn pipeline for physics-safe child spawns
+  - pooled projectile activation/deactivation
+  - dedicated slow homing projectile path for Hydra orbs
   - ability dispatch
   - reward sequencing
   - boss helper attacks
+  - Pulsar EMP / beam helpers
+  - elite add-wave spawning
   - modifier orchestration
   - side-objective orchestration
   - manual pause freeze / resume handling
 - `Enemy.gd`
   - full enemy / elite / boss roster
   - slow / poison / shield / explosive-death handling
-  - boss escalation logic
+  - boss escalation logic, phase telegraphs, round-5 boss behavior reworks, elite pressure patterns, elite Act 2 scaling, and staggered target refresh
 - `MutationSystem.gd`
   - mutation compilation
   - act-weighted rare rolls
@@ -234,27 +264,34 @@ The live runtime is now aligned to the `Feature Roadmap V3` redesign:
 ## Known Risks
 
 - full live playtesting and balance validation still have not been run after the full V3 integration
-- round-2 and round-3 tuning have passed headless validation but still need live playtesting
-- boss behavior is implemented, but still likely needs feel tuning against real runs
-- modifier stacking and endless pressure have not been manually stress-tested yet
+- round-2, round-3, round-4, and round-5 tuning have passed headless validation but still need live playtesting
+- boss and elite behavior is implemented, but still likely needs feel tuning against real runs
+- modifier stacking, projectile pooling, AI time-slicing, new boss add pressure, homing orbs, and endless pressure have not been manually stress-tested yet
 - the rebuilt pause menu, new VFX density, swarm performance optimization, slot-colored HUD, Build HUD overhaul, and input binding menu have passed parse validation but still need controller/manual readability testing
-- Pulsar teleport and Elite Support minion spawning need live feel validation
+- Pulsar teleport / EMP / beam, Hydra homing orbs, Hive shield/burrow, Warden leap pressure, and Elite Support minion spawning need live feel validation
 - spawn timing values, opening burst size, base ramp, and anti-clump separation are first-pass and need playtesting
 - the map UI is functional but compact — may need further polish for controller navigation
 - `GoldPickup.gd` remains deleted; gold stub functions in `RunState.gd` remain (no-ops)
 - `wave_count` fields in RunState node data are now unused dead data (harmless)
+- objective-panel icons currently use simple letter fallback glyphs (`H` / `K` / `C`); acceptable for the current local build, but a later IconFactory/drawn-glyph polish pass would improve presentation
+- Pulsar beam currently uses angle/range damage and does not raycast line-of-sight through walls; accept for now unless playtest reads unfair
+- Hive shield and boss add pressure may make boss fights feel too long; validate before further tuning
 
 ## Next Step
 
-Run manual validation across:
+Run the planned manual playtest for the current stable round-4 + round-5 build. Use `docs/development/playtest-round-5-validation.md` as the active checklist.
 
 - continuous spawn pacing in `1P` and `2P` — does `35-45s` room duration feel right?
-- first `30s` pressure — do the opening burst, faster rifle, spawn ramp, and multi-edge spawns feel active without overwhelming?
+- first `30s` pressure — do the opening burst, `~5/s` rifle, spawn ramp, and multi-edge spawns feel active without overwhelming?
 - minefield survivability — no sweep/mine one-shot behavior
 - endless difficulty scaling past room 20
-- elite reward value
-- boss escalation feel
+- elite reward value, Act 2 scaling, add-wave pressure, spawn distance, and telegraphed pressure patterns
+- boss escalation, phase transition, adds, heavy-attack feel, and round-5 boss-specific mechanics
 - modifier readability under stacked late-game rooms
+- Fire Floor `280px` / `7` zone pressure
+- Blink movement-direction, arrival i-frames, and detonation feel
+- Fire Bullets impact-pool balance and performance
+- projectile pooling / AI time-slicing / boss entity-load performance at `100-150+` enemies/projectiles
 - ability selection usability on controller
 - remapped keyboard/controller binding behavior from main-menu Settings
 - map node readability at the new compact size

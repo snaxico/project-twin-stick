@@ -3,13 +3,13 @@ extends Area2D
 const ParticleFactoryData = preload("res://scripts/juice/ParticleFactory.gd")
 const FireTrailZoneData = preload("res://scripts/weapons/FireTrailZone.gd")
 const BASE_COLLISION_HALF_WIDTH := 4.0
-const TRAIL_SPAWN_INTERVAL := 0.15
 const TRAIL_PARTICLE_SOFT_CAP := 90
 const ENEMY_TRAIL_PARTICLE_SOFT_CAP := 36
 
 @export var lifetime: float = 1.8
 
 signal impact_requested(origin, direction, team, color, feedback_profile, impact_weight, target, combat_context)
+signal projectile_deactivated(projectile)
 
 var direction: Vector2 = Vector2.RIGHT
 var speed: float = 500.0
@@ -26,9 +26,10 @@ var pierce_remaining: int = 0
 var ricochet_remaining: int = 0
 var ricochet_range: float = 200.0
 var leaves_fire_trail := false
-var trail_lifetime: float = 1.5
 var trail_tick_interval: float = 0.5
-var trail_damage_percent: float = 0.3
+var impact_pool_radius: float = 0.0
+var impact_pool_lifetime: float = 0.0
+var impact_pool_damage_percent: float = 0.0
 var knockback_force: float = 0.0
 var explosion_radius: float = 0.0
 var explosion_damage_percent: float = 0.0
@@ -56,7 +57,9 @@ var _spawn_position := Vector2.ZERO
 var _base_collision_radius := 0.0
 var _base_visual_scale := Vector2.ONE
 var _hit_targets: Array = []
-var _next_trail_spawn_at := 0.0
+var _pooled := false
+var _active := true
+var _impact_pool_spawned := false
 
 func setup(projectile_team: String, projectile_direction: Vector2, projectile_speed: float, projectile_damage: int, projectile_color: Color = Color(1.0, 0.96, 0.7, 1.0), projectile_shooter: Node = null, projectile_feedback_profile: String = "rifle", projectile_impact_weight: float = 1.0) -> void:
 	team = projectile_team
@@ -74,9 +77,10 @@ func setup(projectile_team: String, projectile_direction: Vector2, projectile_sp
 	ricochet_remaining = 0
 	ricochet_range = 200.0
 	leaves_fire_trail = false
-	trail_lifetime = 1.5
 	trail_tick_interval = 0.5
-	trail_damage_percent = 0.3
+	impact_pool_radius = 0.0
+	impact_pool_lifetime = 0.0
+	impact_pool_damage_percent = 0.0
 	knockback_force = 0.0
 	explosion_radius = 0.0
 	explosion_damage_percent = 0.0
@@ -93,6 +97,7 @@ func setup(projectile_team: String, projectile_direction: Vector2, projectile_sp
 	trigger_passives = []
 	use_lifetime = projectile_team != "enemy"
 	_hit_targets.clear()
+	_impact_pool_spawned = false
 
 func setup_from_config(projectile_team: String, projectile_direction: Vector2, config: Dictionary) -> void:
 	setup(
@@ -112,9 +117,10 @@ func setup_from_config(projectile_team: String, projectile_direction: Vector2, c
 	ricochet_remaining = max(0, int(config.get("ricochet_count", 0)))
 	ricochet_range = max(1.0, float(config.get("ricochet_range", ricochet_range)))
 	leaves_fire_trail = bool(config.get("leaves_fire_trail", false))
-	trail_lifetime = max(0.1, float(config.get("trail_lifetime", trail_lifetime)))
 	trail_tick_interval = max(0.1, float(config.get("trail_tick_interval", trail_tick_interval)))
-	trail_damage_percent = max(0.0, float(config.get("trail_damage_percent", trail_damage_percent)))
+	impact_pool_radius = max(0.0, float(config.get("impact_pool_radius", impact_pool_radius)))
+	impact_pool_lifetime = max(0.0, float(config.get("impact_pool_lifetime", impact_pool_lifetime)))
+	impact_pool_damage_percent = max(0.0, float(config.get("impact_pool_damage_percent", impact_pool_damage_percent)))
 	knockback_force = max(0.0, float(config.get("knockback_force", knockback_force)))
 	explosion_radius = max(0.0, float(config.get("explosion_radius", explosion_radius)))
 	explosion_damage_percent = max(0.0, float(config.get("explosion_damage_percent", explosion_damage_percent)))
@@ -132,53 +138,66 @@ func setup_from_config(projectile_team: String, projectile_direction: Vector2, c
 	use_lifetime = bool(config.get("use_lifetime", use_lifetime))
 
 func _ready() -> void:
-	body_entered.connect(_on_body_entered)
-	area_entered.connect(_on_area_entered)
+	if not body_entered.is_connected(_on_body_entered):
+		body_entered.connect(_on_body_entered)
+	if not area_entered.is_connected(_on_area_entered):
+		area_entered.connect(_on_area_entered)
+	if visual != null and _base_visual_scale == Vector2.ONE:
+		_base_visual_scale = visual.scale
+	if collision_shape != null and collision_shape.shape is CircleShape2D and _base_collision_radius <= 0.0:
+		collision_shape.shape = (collision_shape.shape as CircleShape2D).duplicate()
+		_base_collision_radius = (collision_shape.shape as CircleShape2D).radius
+	_activate_projectile_runtime()
+
+func set_pooled(pooled: bool) -> void:
+	_pooled = pooled
+
+func is_projectile_active() -> bool:
+	return _active
+
+func activate_from_config(projectile_team: String, projectile_direction: Vector2, config: Dictionary, spawn_position: Vector2) -> void:
+	global_position = spawn_position
+	setup_from_config(projectile_team, projectile_direction, config)
+	_activate_projectile_runtime()
+
+func _activate_projectile_runtime() -> void:
+	_active = true
+	visible = true
+	set_deferred("monitoring", true)
+	set_deferred("monitorable", true)
+	set_process(true)
+	set_physics_process(true)
+	if collision_shape != null:
+		collision_shape.set_deferred("disabled", false)
 	_expires_at = _current_time_seconds() + lifetime
 	rotation = direction.angle()
 	_spawn_position = global_position
-	if visual != null:
-		_base_visual_scale = visual.scale
-	if collision_shape != null and collision_shape.shape is CircleShape2D:
-		collision_shape.shape = (collision_shape.shape as CircleShape2D).duplicate()
-		_base_collision_radius = (collision_shape.shape as CircleShape2D).radius
 	_apply_visual_state()
+	if _trail_particles != null and is_instance_valid(_trail_particles):
+		_trail_particles.queue_free()
+	_trail_particles = null
 	if _should_spawn_trail_particles():
 		_trail_particles = ParticleFactoryData.create_projectile_trail(_get_projectile_color())
 		add_child(_trail_particles)
-	_next_trail_spawn_at = _current_time_seconds()
 
 func _physics_process(delta: float) -> void:
+	if not _active:
+		return
 	rotation = direction.angle()
 	global_position += direction * speed * delta
 	if max_distance > 0.0 and global_position.distance_squared_to(_spawn_position) >= max_distance * max_distance:
-		queue_free()
+		_spawn_impact_fire_pool()
+		_finish_projectile()
 		return
-	if leaves_fire_trail and _current_time_seconds() >= _next_trail_spawn_at:
-		_spawn_fire_trail_zone()
-		_next_trail_spawn_at = _current_time_seconds() + TRAIL_SPAWN_INTERVAL
 	if use_lifetime and _current_time_seconds() >= _expires_at:
-		queue_free()
-
-func _spawn_fire_trail_zone() -> void:
-	if get_parent() == null:
-		return
-	var trail := FireTrailZoneData.new()
-	trail.global_position = global_position
-	trail.configure(
-		max(collision_half_width * 1.6, 10.0),
-		max(1, int(round(float(damage) * trail_damage_percent))),
-		trail_lifetime,
-		trail_tick_interval,
-		team,
-		knockback_force
-	)
-	get_parent().add_child(trail)
+		_spawn_impact_fire_pool()
+		_finish_projectile()
 
 func _on_body_entered(body: Node) -> void:
 	if body is StaticBody2D:
 		impact_requested.emit(global_position, -direction, team, _get_projectile_color(), feedback_profile, impact_weight, body, _build_combat_context(body))
-		queue_free()
+		_spawn_impact_fire_pool()
+		_finish_projectile()
 		return
 	_attempt_hit_target(body)
 
@@ -211,7 +230,43 @@ func _attempt_hit_target(target: Node) -> void:
 	if ricochet_remaining > 0 and _redirect_to_ricochet_target(target):
 		ricochet_remaining -= 1
 		return
-	queue_free()
+	_spawn_impact_fire_pool()
+	_finish_projectile()
+
+func _spawn_impact_fire_pool() -> void:
+	if _impact_pool_spawned or not leaves_fire_trail or impact_pool_radius <= 0.0 or impact_pool_lifetime <= 0.0 or impact_pool_damage_percent <= 0.0:
+		return
+	if get_parent() == null:
+		return
+	_impact_pool_spawned = true
+	var pool := FireTrailZoneData.new()
+	pool.global_position = global_position
+	pool.configure(
+		impact_pool_radius,
+		max(1, int(round(float(damage) * impact_pool_damage_percent))),
+		impact_pool_lifetime,
+		trail_tick_interval,
+		team,
+		knockback_force
+	)
+	get_parent().add_child(pool)
+
+func _finish_projectile() -> void:
+	if not _pooled:
+		queue_free()
+		return
+	_active = false
+	visible = false
+	set_deferred("monitoring", false)
+	set_deferred("monitorable", false)
+	set_process(false)
+	set_physics_process(false)
+	if collision_shape != null:
+		collision_shape.set_deferred("disabled", true)
+	if _trail_particles != null and is_instance_valid(_trail_particles):
+		_trail_particles.queue_free()
+	_trail_particles = null
+	projectile_deactivated.emit(self)
 
 func _redirect_to_ricochet_target(previous_target: Node) -> bool:
 	var tree := get_tree()
@@ -255,7 +310,7 @@ func _apply_visual_state() -> void:
 	var size_scale: float = maxf(collision_half_width / BASE_COLLISION_HALF_WIDTH, 0.25)
 	var streak_scale: float = 1.0 + 0.18 * float(max(rapid_fire_level - 1, 0)) + 0.22 * float(max(velocity_level - 1, 0))
 	if enemy_shot:
-		visual.color = projectile_color.lightened(0.18)
+		visual.color = projectile_color
 		visual.scale = Vector2(_base_visual_scale.x * 1.36 * size_scale * streak_scale, _base_visual_scale.y * 1.36 * size_scale)
 		visual.polygon = _build_orb_polygon(8.0)
 	else:
@@ -264,7 +319,7 @@ func _apply_visual_state() -> void:
 		visual.polygon = _build_orb_polygon(6.0)
 	if outline != null:
 		outline.visible = true
-		outline.color = Color(1.0, 0.94, 0.88, 0.92) if enemy_shot else projectile_color.lightened(0.26)
+		outline.color = projectile_color.darkened(0.25) if enemy_shot else projectile_color.lightened(0.26)
 		outline.scale = Vector2(visual.scale.x * 1.16, visual.scale.y * 1.24)
 		outline.polygon = visual.polygon
 	if collision_shape != null and collision_shape.shape is CircleShape2D:

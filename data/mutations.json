@@ -121,12 +121,12 @@
     },
     {
       "id": "fire_trail",
-      "name": "Fire Trail",
-      "description": "Projectiles leave a burning trail behind them.",
+      "name": "Fire Bullets",
+      "description": "Projectiles ignite a burning pool where they hit.",
       "icon": "fire_trail",
       "category": "weapon",
       "rarity": "rare",
-      "params": { "trail_lifetime": 1.5, "tick_interval": 0.5, "damage_percent": 0.3 }
+      "params": { "impact_pool_radius": 50.0, "impact_pool_lifetime": 2.0, "impact_pool_damage_percent": 0.4 }
     },
     {
       "id": "explosive_rounds",

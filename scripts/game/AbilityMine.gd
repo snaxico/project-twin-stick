@@ -11,9 +11,10 @@ var tint := Color(1.0, 0.82, 0.34, 1.0)
 var _detonating := false
 var _detonate_at := 0.0
 
-func configure(duration: float, radius: float, mine_damage: int, color: Color) -> void:
+func configure(duration: float, radius: float, mine_damage: int, color: Color, mine_trigger_radius: float = 52.0) -> void:
 	lifetime = duration
 	explosion_radius = radius
+	trigger_radius = mine_trigger_radius
 	damage = mine_damage
 	tint = color
 	set_physics_process(true)

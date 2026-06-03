@@ -297,6 +297,18 @@ func get_ability_cooldown_remaining(slot_index: int) -> float:
 		return (_dash_states[slot_index] as DashData).get_cooldown_remaining(now)
 	return max(float(slot.get("cooldown_until", 0.0)) - now, 0.0)
 
+func apply_ability_lockout(seconds: float) -> void:
+	var now := _current_time_seconds()
+	var delay: float = max(seconds, 0.0)
+	for slot_index in range(_ability_slots.size()):
+		var slot := _get_ability_slot(slot_index)
+		var ability_id := str(slot.get("id", ""))
+		if ability_id == "dash" and _dash_states.has(slot_index):
+			(_dash_states[slot_index] as DashData).extend_cooldown(delay, now)
+			continue
+		slot["cooldown_until"] = max(float(slot.get("cooldown_until", 0.0)), now) + delay
+		_set_ability_slot(slot_index, slot)
+
 func is_secondary_skill_active() -> bool:
 	return _is_slot_active(1, _current_time_seconds())
 
@@ -319,10 +331,14 @@ func _physics_process(delta: float) -> void:
 		_external_impulse = _external_impulse.move_toward(Vector2.ZERO, delta * 12.0)
 
 	_auto_target = _find_auto_target()
+	var fire_direction := Vector2.ZERO
 	if _auto_target != null:
 		_auto_attack_direction = (_auto_target.global_position - global_position).normalized()
-	if _can_attack(now) and _auto_target != null and now >= _next_weapon_fire_at:
-		_fire_weapon(now, _auto_attack_direction)
+		fire_direction = _auto_attack_direction
+	elif str(player_config.aim_mode) == "movement":
+		fire_direction = _move_facing
+	if _can_attack(now) and fire_direction.length() > 0.0 and now >= _next_weapon_fire_at:
+		_fire_weapon(now, fire_direction.normalized())
 
 	for slot_index in range(2):
 		var slot_pressed := _is_ability_pressed(slot_index)
@@ -337,6 +353,8 @@ func _physics_process(delta: float) -> void:
 	_apply_visual_state(now, delta)
 
 func _find_auto_target() -> Node2D:
+	if str(player_config.aim_mode) == "movement":
+		return null
 	return _auto_targeter.find_nearest(self, _weapon_range)
 
 func _build_runtime_ability(definition: Dictionary, fallback_id: String) -> Dictionary:
@@ -351,8 +369,24 @@ func _build_runtime_ability(definition: Dictionary, fallback_id: String) -> Dict
 		"duration": float(definition.get("duration", 0.0)),
 		"cooldown_until": 0.0,
 		"active_until": 0.0,
+		"base_cooldown": float(definition.get("base_cooldown", definition.get("cooldown", 1.0))),
 		"stats": stats,
 	}
+
+func _get_overcharge_fire_rate_multiplier(now: float) -> float:
+	var stats := _get_active_ability_stats("overcharge", now)
+	return maxf(float(stats.get("fire_rate_multiplier", 1.0)), 1.0)
+
+func _get_overcharge_projectile_multiplier(now: float) -> int:
+	var stats := _get_active_ability_stats("overcharge", now)
+	return maxi(1, int(stats.get("projectile_multiplier", 1)))
+
+func _get_active_ability_stats(ability_id: String, now: float) -> Dictionary:
+	for slot_index in range(_ability_slots.size()):
+		var slot: Dictionary = _ability_slots[slot_index]
+		if str(slot.get("id", "")) == ability_id and _is_slot_active(slot_index, now):
+			return slot.get("stats", {}) as Dictionary
+	return {}
 
 func _get_ability_slot(slot_index: int) -> Dictionary:
 	if slot_index < 0 or slot_index >= _ability_slots.size():
@@ -417,7 +451,7 @@ func _fire_weapon(now: float, fire_direction: Vector2) -> void:
 	projectile_config["impact_weight"] = _weapon_impact_weight
 	projectile_config["max_distance"] = float(projectile_config.get("range", _weapon_range))
 	projectile_config["collision_half_width"] = float(projectile_config.get("area", _weapon_area))
-	projectile_config["projectile_multiplier"] = 2 if _is_slot_active_by_id("overcharge", now) else 1
+	projectile_config["projectile_multiplier"] = _get_overcharge_projectile_multiplier(now)
 	projectile_config["rapid_fire_level"] = rapid_fire_level
 	projectile_config["velocity_level"] = velocity_level
 	projectile_config["knockback_level"] = knockback_level
@@ -426,8 +460,9 @@ func _fire_weapon(now: float, fire_direction: Vector2) -> void:
 
 func _get_current_weapon_fire_interval() -> float:
 	var interval := weapon_fire_interval
-	if _is_slot_active_by_id("overcharge", _current_time_seconds()):
-		interval *= 0.5
+	var overcharge_multiplier := _get_overcharge_fire_rate_multiplier(_current_time_seconds())
+	if overcharge_multiplier > 1.0:
+		interval /= overcharge_multiplier
 	return max(interval, 0.05)
 
 func get_current_fire_rate() -> float:
@@ -453,10 +488,17 @@ func _try_activate_ability(slot_index: int, now: float) -> void:
 		"blink":
 			if not _is_slot_ready(slot_index, now):
 				return
-			var blink_distance := float((slot.get("stats", {}) as Dictionary).get("distance", 240.0))
-			global_position += (direction if direction.length() > 0.0 else Vector2.RIGHT).normalized() * blink_distance
+			var stats: Dictionary = slot.get("stats", {}) as Dictionary
+			var blink_direction := _get_move_input()
+			if blink_direction.length() <= 0.0:
+				blink_direction = _move_facing
+			if blink_direction.length() <= 0.0:
+				blink_direction = Vector2.RIGHT
+			var blink_distance := float(stats.get("distance", 240.0))
+			global_position += blink_direction.normalized() * blink_distance
+			_contact_invuln_until = maxf(_contact_invuln_until, now + float(stats.get("arrival_iframes", 0.2)))
 			_set_slot_cooldown(slot_index, now)
-			_emit_ability(slot_index, direction)
+			_emit_ability(slot_index, blink_direction)
 		"shield":
 			if not _is_slot_ready(slot_index, now):
 				return

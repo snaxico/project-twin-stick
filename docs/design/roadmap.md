@@ -80,7 +80,7 @@ All use +33.3% per level → 2.0x at Lv3, unless noted.
 | ID | Name | Effect |
 |---|---|---|
 | `ricochet` | Ricochet | Projectiles bounce to a nearby enemy on hit |
-| `fire_trail` | Fire Trail | Projectiles leave a burning trail |
+| `fire_trail` | Fire Bullets | Projectiles ignite a burning pool where they hit |
 | `dash_damage` | Impact Dash | Dash damages enemies you pass through |
 
 ---

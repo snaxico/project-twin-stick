@@ -22,7 +22,8 @@ Read this first to restore project context quickly, then read `current-state.md`
 - Same-screen local co-op twin-stick roguelite prototype in Godot `4.6.2`.
 - Current target is the active `1-2` player V3 runtime.
 - The live runtime now follows the `Feature Roadmap V3` redesign captured in `current-state.md`.
-- Current focus is validation, tuning, and runtime clarity after the V3 integration pass.
+- Current `v3/main` stable runtime includes the round-4 + round-5 patch stack.
+- Current focus is manual playtest validation, tuning, and runtime clarity after the V3 integration pass.
 
 ## Live Runtime Summary
 
@@ -39,6 +40,10 @@ Read this first to restore project context quickly, then read `current-state.md`
   - keybinding editor
   - controller binding editor for active `1-2P` gameplay actions
   - binding persistence in `user://input_bindings.cfg`
+- Current in-run pause menu:
+  - build summary only
+  - no in-run Settings panel
+  - aim mode remains default `auto`
 - Current live ability roster:
   - `Shockwave`
   - `Dash`
@@ -87,19 +92,24 @@ Read this first to restore project context quickly, then read `current-state.md`
 
 - Preserve the approved V3 core loop.
 - Favor validation, tuning, and readability over adding more systems.
-- Validate the full runtime restructure in live play:
+- Validate the current stable round-4 + round-5 build in live play:
   - shared XP and room-end pick cadence
   - structured map flow pacing
   - endless scaling past room `20`
-  - elite reward value
-  - boss escalation feel
+  - elite reward value, spawn distance, Act 2 scaling, add waves, and new pressure patterns
+  - boss escalation, phase transitions, adds, heavy-attack feel, and round-5 boss-specific mechanics
   - modifier readability
-  - controller usability in ability select, map UI, and remapped bindings
+  - projectile pooling / AI time-slicing / boss entity-load performance at `100-150+` enemies/projectiles
+  - controller usability in ability select, map UI, pause menu, and remapped bindings
 - Tune:
-  - rifle cadence
+  - rifle cadence (`~5 shots/sec` in the current build)
   - room duration / spawn interval pressure
   - ability feel across the `9`-ability roster
-  - boss pressure
+  - Overcharge after round-5 nerf (`22s`, `1.3x` fire-rate, no extra projectiles)
+  - Blink movement-direction / arrival detonation feel
+  - Fire Bullets impact-pool balance
+  - Fire Floor `280px` / `7` zone pressure
+  - boss pressure, especially Warden reach, Hydra homing/sweep, Hive shield/burrow, and Pulsar EMP/beam
 - Keep scope tight:
   - no casual re-expansion toward removed gold/shop/meta directions
   - no casual `3-4` player work
@@ -128,14 +138,19 @@ Read this first to restore project context quickly, then read `current-state.md`
 - `scripts/game/CoopManager.gd`:
   - room runtime
   - continuous time-based spawning
+  - pooled projectile runtime
   - ability dispatch
   - reward sequencing
   - boss helper attacks
+  - elite add waves
+  - Pulsar EMP / beam helpers
   - modifier / side-objective orchestration
 - `scripts/player/Player.gd`:
   - movement
   - auto-fire
+  - generic aim mode support; current runtime defaults to auto-target
   - generic ability-slot runtime
+  - additive ability lockout from Pulsar EMP
   - ability visuals / local state
 - `scripts/player/AutoTarget.gd`:
   - automatic target selection
@@ -146,6 +161,7 @@ Read this first to restore project context quickly, then read `current-state.md`
 - `scripts/weapons/Projectile.gd`:
   - live projectile behavior
   - rare effect delivery
+  - pooled activation/deactivation
 - `scripts/ui/RunFlow.gd`:
   - structured map flow
   - endless room chaining
@@ -155,6 +171,19 @@ Read this first to restore project context quickly, then read `current-state.md`
   - run-mode / ability selection
   - main-menu Settings and input remapping
   - run launch
+
+## Current Round-4 + Round-5 Build Notes
+
+- Round-4 and round-5 code are the current stable baseline on `v3/main`.
+- Treat this branch state as the version future work continues from.
+- Headless parse passed after implementation, Hive safeguard cleanup, and unused-parameter warning cleanup.
+- `docs/development/playtest-round-4-plan.md` is the historical round-4 plan that was implemented.
+- `docs/development/playtest-round-5-plan.md` is the historical round-5 plan that was implemented.
+- `docs/development/playtest-round-5-validation.md` is the active manual validation checklist for the combined build.
+- Known follow-up after playtest:
+  - decide whether objective-panel letter icons (`H` / `K` / `C`) need an IconFactory/drawn-glyph polish pass
+  - validate whether Pulsar beam line-of-sight needs a wall/raycast check
+  - validate Hive shield / boss add pressure so boss fights do not become slogs
 
 ## Validation Reminder
 
