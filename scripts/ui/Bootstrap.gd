@@ -83,7 +83,7 @@ const MENU_BINDING_ACTIONS := [
 
 var _active_game = null
 var _player_tints := [
-	Color(0.2, 0.9, 1.0, 1.0),
+	Color(0.25, 1.0, 0.3, 1.0),
 	Color(1.0, 0.2, 0.8, 1.0),
 ]
 var _mutation_definitions: Array = []

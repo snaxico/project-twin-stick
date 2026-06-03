@@ -3,13 +3,13 @@ extends RefCounted
 
 var player_id: int = 1
 var control_source: String = "hybrid"
-var tint: Color = Color(0.2, 0.9, 1.0, 1.0)
+var tint: Color = Color(0.25, 1.0, 0.3, 1.0)
 var aim_mode: String = "auto"
 
 func _init(
 	initial_player_id: int = 1,
 	initial_control_source: String = "hybrid",
-	initial_tint: Color = Color(0.2, 0.9, 1.0, 1.0),
+	initial_tint: Color = Color(0.25, 1.0, 0.3, 1.0),
 ) -> void:
 	player_id = initial_player_id
 	control_source = initial_control_source
