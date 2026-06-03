@@ -12,9 +12,9 @@ The live runtime is now aligned to the `Feature Roadmap V3` redesign:
 - health resets at the start of every room
 - meta progression, multiple starting weapons, and ability-specific rare mutations remain deferred
 
-Current stable runtime includes the playtest round-7 spectacle / ability-slot / mutation patch on
-top of the round-6 performance baseline. Heavy boss add-waves remain enabled in normal boss rooms
-with a `25` non-boss enemy cap that includes pending spawns.
+Current stable runtime includes the playtest round-8 offense / cadence / bloom / generated-SFX
+patch on top of the round-7 spectacle and ability-slot baseline. Heavy boss add-waves remain
+enabled in normal boss rooms with a `25` non-boss enemy cap that includes pending spawns.
 
 ## Current Runtime
 
@@ -57,7 +57,7 @@ with a `25` non-boss enemy cap that includes pending spawns.
 ## Loadout / Combat
 
 - every player always has:
-  - faster starter `Rifle` (`~5 shots/sec`)
+  - stronger starter `Rifle` (`20` damage, `6.5` shots/sec)
   - faster base movement (`488` default speed)
   - `1 OFF` ability slot on `LT`
   - `1 DEF` ability slot on `RT`
@@ -86,6 +86,12 @@ with a `25` non-boss enemy cap that includes pending spawns.
   - `Overcharge`, `Turret`, `Minefield`, and `Orbit` are OFF abilities
   - `Dash`, `Shield`, `Blink`, `Decoy`, and `Shockwave` are DEF abilities
   - `oc_piercing_overdrive` and `sw_resonance` are loadout-gated ability rare pilots
+- current round-8 tuning changed:
+  - starter Rifle damage/fire-rate is buffed to make level-1 offense feel stronger
+  - room duration, spawn interval, opening burst, and burst cadence now scale by normalized run progress instead of binary Act 1/Act 2 branches
+  - enemy pool escalation remains the old act-based step; pool ramp is an explicit follow-up, not part of round 8
+  - player/enemy/projectile/VFX colors use render-local `x1.45` over-bright bloom without mutating source tints or UI colors
+  - generated SFX stay procedural through `AudioStreamGenerator`, with richer frame synthesis and an idempotent `SFX` bus limiter/reverb chain
 - player mutation visuals are now partially wired:
   - projectile streaks for high `Rapid Fire` / `Velocity`
   - speed-line feedback for `Move Speed`

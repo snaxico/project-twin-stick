@@ -22,8 +22,8 @@ Read this first to restore project context quickly, then read `current-state.md`
 - Same-screen local co-op twin-stick roguelite prototype in Godot `4.6.2`.
 - Current target is the active `1-2` player V3 runtime.
 - The live runtime now follows the `Feature Roadmap V3` redesign captured in `current-state.md`.
-- Current stable runtime includes the round-7 spectacle / OFF-DEF ability slot / distinct mutation patch on top of the round-6 performance baseline.
-- Current focus is manual round-7 validation, especially OFF/DEF mapping, bloom/hit-stop feel, boss HP readability, distinct mutation visuals/SFX, ability rare pilots, and shipped boss add-wave performance.
+- Current stable runtime includes the round-8 offense / cadence / over-bright bloom / generated-SFX patch on top of the round-7 spectacle and OFF/DEF ability-slot baseline.
+- Current focus is manual round-8 validation, especially level-1 offense feel, smoother cadence ramp, over-bright bloom readability/performance, generated SFX quality, unchanged enemy-pool Act 2 step, and shipped boss add-wave performance.
 
 ## Live Runtime Summary
 
@@ -35,6 +35,7 @@ Read this first to restore project context quickly, then read `current-state.md`
   - `Endless`
 - Current live loadout structure:
   - auto-firing `Rifle`
+  - starter Rifle uses `20` damage and `6.5` shots/sec
   - `1 OFF` ability on `LT`
   - `1 DEF` ability on `RT`
 - Current main-menu settings:
@@ -87,6 +88,12 @@ Read this first to restore project context quickly, then read `current-state.md`
   - boss fights show a top-center HP bar with phase pips
   - behavior-changing weapon mutations have distinct projectile shape/trail/accent/SFX
   - ability rare pilot includes `oc_piercing_overdrive` for Overcharge and `sw_resonance` for Shockwave
+- Current round-8 state:
+  - starter Rifle damage/fire-rate is buffed for stronger baseline offense
+  - room duration, spawn interval, opening burst, and burst interval use `RunState.get_run_progress()` instead of binary Act 1/Act 2 cadence branches
+  - enemy pools still swap by act; pool ramp is deferred by plan
+  - player core, projectiles, enemy visuals, and generated VFX use render-local `x1.45` over-bright bloom
+  - generated SFX stay on `AudioStreamGenerator` with richer synthesis and an idempotent `SFX` bus limiter/reverb chain
 - Current live progression loop:
   - enemy kills feed one shared XP bar
   - level-ups bank room-end pick rounds
@@ -109,7 +116,7 @@ Read this first to restore project context quickly, then read `current-state.md`
 
 - Preserve the approved V3 core loop.
 - Favor validation, tuning, and readability over adding more systems.
-- Validate the current round-7 local build in live play:
+- Validate the current round-8 local build in live play:
   - shared XP and room-end pick cadence
   - structured map flow pacing
   - endless scaling past room `20`
@@ -123,9 +130,14 @@ Read this first to restore project context quickly, then read `current-state.md`
   - boss HP bar readability
   - mutation projectile readability and SFX distinctness
   - ability rare pilot behavior
+  - level-1 Rifle offense feel at `20` damage / `6.5` shots/sec
+  - smooth cadence progression without the old Act 2 spawn-rate cliff
+  - residual Act 2 enemy-pool step, because pool ramp is deferred
+  - over-bright bloom readability and performance
+  - generated SFX quality and repetition fatigue
   - controller usability in ability select, map UI, pause menu, and remapped bindings
 - Tune:
-  - rifle cadence (`~5 shots/sec` in the current build)
+  - rifle cadence (`6.5` shots/sec in the current build)
   - room duration / spawn interval pressure
   - ability feel across the `9`-ability roster
   - Overcharge after round-5 nerf (`22s`, `1.3x` fire-rate, no extra projectiles)
@@ -239,6 +251,24 @@ Read this first to restore project context quickly, then read `current-state.md`
 - Expansion ability rares remain deferred; only the two pilot rares are live.
 - Manual validation still needs to cover `1P` and `2P` feel/performance with DebugOverlay F3.
 - Headless parse passed after implementation and `FireTrailZone.gd` warning cleanup.
+
+## Current Round-8 Build Notes
+
+- `docs/development/playtest-round-8-plan.md` is the round-8 implementation and validation guide.
+- Treat the round-8 patch as the current stable branch state for future work.
+- Starting Rifle is now `20` damage / `6.5` shots/sec; projectile speed and range are unchanged.
+- Cadence ramp uses normalized progress:
+  - structured depth over last combat-row depth
+  - endless room number over a room-20 soft horizon
+  - Encounter Builder `step_index + 1` over a fixed horizon of `10`
+- Cadence-only ramp is implemented; enemy pool ramp remains deferred and the old act-based pool step is expected.
+- Bloom is applied render-locally with `x1.45` over-bright colors; source player tints, enemy feedback colors, and UI palette remain unchanged.
+- SFX still use generated `AudioStreamGenerator` buffers, now routed through an idempotent `SFX` bus with limiter then reverb.
+- Pickup SFX frame generation exists as `play_pickup()`, but no pickup call site was wired because the plan did not specify one.
+- Validation passed:
+  - `git diff --check`
+  - headless project parse
+  - headless main scene boot with `--quit-after 1`
 
 ## Validation Reminder
 

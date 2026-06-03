@@ -1,5 +1,25 @@
 # Round 8 Plan — Offense Power, Difficulty Curve, Bloom, Generated SFX
 
+Status: implemented on `v3/main` as of 2026-06-03. Treat this patch as the current stable
+runtime baseline for manual playtest and future work.
+
+Implementation notes:
+- Rifle is now exactly `20.0` damage / `6.5` fire-rate; projectile speed/range are unchanged.
+- Cadence ramp uses `RunState.get_run_progress()` for room duration, spawn interval, opening
+  burst size, and recurring burst interval.
+- Enemy-pool ramp remains deferred by plan; the act-based pool step is still present.
+- Bloom uses render-local `x1.45` over-bright colors for player/enemy/projectile/VFX paths without
+  mutating source gameplay/UI tints.
+- SFX still use `AudioStreamGenerator`; the pass added richer generated frames plus an
+  idempotent `SFX` bus with limiter then reverb.
+- `play_pickup()` exists in `SfxEngine.gd`, but pickup trigger wiring was not added because this
+  plan did not specify a call site.
+
+Validation passed:
+- `git diff --check`
+- `Godot_v4.6.2-stable_win64_console.exe --headless --path D:\GameDev\Project_Twin_stick --quit`
+- `Godot_v4.6.2-stable_win64_console.exe --headless --path D:\GameDev\Project_Twin_stick --quit-after 1`
+
 ## Context
 
 Playtest feedback on the round-7 build:
