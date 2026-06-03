@@ -51,10 +51,10 @@
     },
     {
       "id": "mine_field",
-      "name": "Mine Field",
+      "name": "Scanline",
       "category": "major",
       "delivery_type": "sweep",
-      "description": "Telegraphed mine lanes sweep across the arena."
+      "description": "Telegraphed scanlines sweep across the arena with safe gaps."
     },
     {
       "id": "shrinking_arena",

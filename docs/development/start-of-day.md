@@ -22,8 +22,8 @@ Read this first to restore project context quickly, then read `current-state.md`
 - Same-screen local co-op twin-stick roguelite prototype in Godot `4.6.2`.
 - Current target is the active `1-2` player V3 runtime.
 - The live runtime now follows the `Feature Roadmap V3` redesign captured in `current-state.md`.
-- Current `v3/main` stable runtime includes the round-4 + round-5 patch stack.
-- Current focus is manual playtest validation, tuning, and runtime clarity after the V3 integration pass.
+- Current stable runtime includes the round-6 performance/gameplay patch on top of the round-4 + round-5 baseline.
+- Current focus is manual round-6 validation, especially Scanline, Fire Bullets correctness, enemy readability, and the boss add-wave performance gate.
 
 ## Live Runtime Summary
 
@@ -70,6 +70,13 @@ Read this first to restore project context quickly, then read `current-state.md`
   - `Hydra`
   - `Hive`
   - `Pulsar`
+- Current round-6 state:
+  - `Mine Field` display is now `Scanline` while keeping id `mine_field`
+  - `Duration` affects sustained abilities only, not `Dash` / `Blink`
+  - Fire Bullets pools use distance checks instead of `Area2D` overlap bodies
+  - enemy visuals use one polygon draw per enemy instead of shadow + outline + visual
+  - heavy boss add-waves are debug dry-run only via `debug_boss_add_waves`
+  - live playtest feedback reports a massive performance improvement
 - Current live progression loop:
   - enemy kills feed one shared XP bar
   - level-ups bank room-end pick rounds
@@ -92,7 +99,7 @@ Read this first to restore project context quickly, then read `current-state.md`
 
 - Preserve the approved V3 core loop.
 - Favor validation, tuning, and readability over adding more systems.
-- Validate the current stable round-4 + round-5 build in live play:
+- Validate the current round-6 local build in live play:
   - shared XP and room-end pick cadence
   - structured map flow pacing
   - endless scaling past room `20`
@@ -100,6 +107,7 @@ Read this first to restore project context quickly, then read `current-state.md`
   - boss escalation, phase transitions, adds, heavy-attack feel, and round-5 boss-specific mechanics
   - modifier readability
   - projectile pooling / AI time-slicing / boss entity-load performance at `100-150+` enemies/projectiles
+  - real boss-room stress gate with `debug_boss_add_waves` before promoting heavy boss add-waves
   - controller usability in ability select, map UI, pause menu, and remapped bindings
 - Tune:
   - rifle cadence (`~5 shots/sec` in the current build)
@@ -107,9 +115,10 @@ Read this first to restore project context quickly, then read `current-state.md`
   - ability feel across the `9`-ability roster
   - Overcharge after round-5 nerf (`22s`, `1.3x` fire-rate, no extra projectiles)
   - Blink movement-direction / arrival detonation feel
-  - Fire Bullets impact-pool balance
+  - Fire Bullets impact-pool balance and team-correct damage behavior
   - Fire Floor `280px` / `7` zone pressure
   - boss pressure, especially Warden reach, Hydra homing/sweep, Hive shield/burrow, and Pulsar EMP/beam
+  - Pulsar reactive teleport feel
 - Keep scope tight:
   - no casual re-expansion toward removed gold/shop/meta directions
   - no casual `3-4` player work
@@ -135,6 +144,7 @@ Read this first to restore project context quickly, then read `current-state.md`
   - shared XP and banked pick progression
   - boss / modifier / side-objective assignment
   - per-player inventory state
+  - `debug_boss_add_waves` pass-through for single-room debug boss stress tests
 - `scripts/game/CoopManager.gd`:
   - room runtime
   - continuous time-based spawning
@@ -143,6 +153,7 @@ Read this first to restore project context quickly, then read `current-state.md`
   - reward sequencing
   - boss helper attacks
   - elite add waves
+  - debug-only boss add-wave dry-run budget
   - Pulsar EMP / beam helpers
   - modifier / side-objective orchestration
 - `scripts/player/Player.gd`:
@@ -162,6 +173,9 @@ Read this first to restore project context quickly, then read `current-state.md`
   - live projectile behavior
   - rare effect delivery
   - pooled activation/deactivation
+- `scripts/weapons/FireTrailZone.gd`:
+  - Fire Bullets impact pools
+  - team-dependent distance-check damage
 - `scripts/ui/RunFlow.gd`:
   - structured map flow
   - endless room chaining
@@ -172,10 +186,10 @@ Read this first to restore project context quickly, then read `current-state.md`
   - main-menu Settings and input remapping
   - run launch
 
-## Current Round-4 + Round-5 Build Notes
+## Round-4 + Round-5 Build Notes
 
-- Round-4 and round-5 code are the current stable baseline on `v3/main`.
-- Treat this branch state as the version future work continues from.
+- Round-4 and round-5 code are the previous stable baseline on `v3/main`.
+- Round-6 is now the current stable baseline for future work.
 - Headless parse passed after implementation, Hive safeguard cleanup, and unused-parameter warning cleanup.
 - `docs/development/playtest-round-4-plan.md` is the historical round-4 plan that was implemented.
 - `docs/development/playtest-round-5-plan.md` is the historical round-5 plan that was implemented.
@@ -184,6 +198,21 @@ Read this first to restore project context quickly, then read `current-state.md`
   - decide whether objective-panel letter icons (`H` / `K` / `C`) need an IconFactory/drawn-glyph polish pass
   - validate whether Pulsar beam line-of-sight needs a wall/raycast check
   - validate Hive shield / boss add pressure so boss fights do not become slogs
+
+## Current Round-6 Build Notes
+
+- `docs/development/playtest-round-6-plan.md` is the round-6 implementation plan.
+- `docs/development/playtest-round-6-validation.md` is the active manual validation checklist for this patch.
+- Treat the round-6 patch as the current stable branch state for future work.
+- Heavy boss add-waves are implemented as a dry-run debug path only and are not shipped in normal runs.
+- Live playtest feedback after the patch reported a massive performance improvement.
+- Non-headless profiling harness after A2/B1 reported:
+  - `50+50`: `1174.6 FPS`, `154` draw calls
+  - `100+100`: `461.3 FPS`, `316` draw calls
+  - `150+150`: `191.9 FPS`, `487` draw calls
+  - `200+200`: `73.8 FPS`, `651` draw calls
+- Headless harness output has `0` draw calls and should not be used for render profiling.
+- Warning cleanup after implementation removed Godot local-name conflicts in `FireTrailZone.gd` and `MineFieldModifier.gd`.
 
 ## Validation Reminder
 

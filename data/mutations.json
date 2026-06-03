@@ -83,7 +83,7 @@
     {
       "id": "duration",
       "name": "Duration",
-      "description": "Active ability uptime increases by 33% per level.",
+      "description": "Sustained ability uptime increases by 33% per level.",
       "icon": "duration",
       "category": "ability",
       "rarity": "common",

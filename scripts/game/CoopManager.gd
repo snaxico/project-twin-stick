@@ -43,6 +43,9 @@ const COLLECTOR_SPAWN_INTERVAL := 2.5
 const HEALTH_DROP_CHANCE := 0.10
 const BASE_RAMP_DURATION := 45.0
 const ENEMY_SEPARATION_CELL_SIZE := 96.0
+const BOSS_ADD_CAP := 25
+const BOSS_ADD_WAVE_MIN := 4
+const BOSS_ADD_WAVE_MAX := 5
 const HUD_HEALTH_COLOR := Color(0.24, 0.92, 0.34, 1.0)
 const HUD_SLOT_2_COLOR := HudPaletteData.SLOT_2_COLOR
 const ENEMY_PROJECTILE_COLOR := Color(1.0, 0.0, 0.0, 1.0)
@@ -118,8 +121,11 @@ var _next_burst_at := 0.0
 var _pending_pick_consumes_levelup := false
 var _pending_elite_bonus_pick := false
 var _pending_clear_summary := ""
+var _active_boss = null
 var _active_elite = null
 var _next_elite_add_spawn_at := 0.0
+var _next_boss_add_spawn_at := 0.0
+var _boss_add_dry_run_enabled := false
 var _revive_progress_by_player_id: Dictionary = {}
 var _hud_root: Control = null
 var _player_combat_indicators: Array = []
@@ -560,19 +566,21 @@ func _build_runtime_ability(player_index: int, ability_definition: Dictionary) -
 	var cooldown_mult := 1.0 - _mutation_system.get_ability_cooldown_reduction(player_index)
 	var area_mult := _mutation_system.get_ability_area_multiplier(player_index)
 	var duration_mult := _mutation_system.get_ability_duration_multiplier(player_index)
+	var ability_type := str(ability_definition.get("type", "instant"))
+	var scales_duration := ability_type != "instant" and ability_type != "movement"
 	var base_cooldown := float(ability_definition.get("cooldown", 1.0))
 	var cooldown := maxf(0.2, base_cooldown * maxf(cooldown_mult, 0.1))
-	var duration := maxf(0.0, float(ability_definition.get("duration", 0.0)) * duration_mult)
+	var duration := maxf(0.0, float(ability_definition.get("duration", 0.0)) * (duration_mult if scales_duration else 1.0))
 	for stat_key in ["radius", "orbit_radius", "distance"]:
 		if stats.has(stat_key):
 			stats[stat_key] = float(stats[stat_key]) * area_mult
 	for stat_key in ["duration", "trail_duration"]:
-		if stats.has(stat_key):
+		if scales_duration and stats.has(stat_key):
 			stats[stat_key] = float(stats[stat_key]) * duration_mult
 	return {
 		"id": str(ability_definition.get("id", "")),
 		"name": str(ability_definition.get("name", "Ability")),
-		"type": str(ability_definition.get("type", "instant")),
+		"type": ability_type,
 		"cooldown": cooldown,
 		"base_cooldown": base_cooldown,
 		"duration": duration,
@@ -672,8 +680,11 @@ func _start_room() -> void:
 	_awaiting_mutation_pick = false
 	_pending_pick_consumes_levelup = false
 	_pending_elite_bonus_pick = false
+	_active_boss = null
 	_active_elite = null
 	_next_elite_add_spawn_at = 0.0
+	_next_boss_add_spawn_at = 0.0
+	_boss_add_dry_run_enabled = bool(_room_config.get("debug_boss_add_waves", false))
 	_room_elapsed = 0.0
 	_room_type = str(_room_config.get("room_type", "combat"))
 	_room_enemy_pool = ( _room_config.get("enemy_pool", []) as Array).duplicate()
@@ -799,6 +810,7 @@ func _physics_process(delta: float) -> void:
 	_update_homing_projectiles(delta)
 	_update_active_beams(delta)
 	_update_elite_add_waves()
+	_update_boss_add_waves()
 	_update_side_objectives(delta)
 	_update_hazards(delta)
 	_update_revives(delta)
@@ -855,6 +867,54 @@ func _update_elite_add_waves() -> void:
 		var spawn_position := _get_enemy_spawn_position_for_index(index, start_edge)
 		_queue_enemy_spawn(enemy_type, spawn_position, health_multiplier)
 		_enemies_spawned += 1
+
+func _update_boss_add_waves() -> void:
+	if not _boss_add_dry_run_enabled or _room_type != "boss" or _room_clear_started:
+		return
+	if _active_boss == null or not is_instance_valid(_active_boss) or not _active_boss.has_method("is_alive") or not _active_boss.is_alive():
+		return
+	if _room_elapsed < _next_boss_add_spawn_at:
+		return
+	var remaining_budget := _get_boss_add_budget_remaining()
+	if remaining_budget <= 0:
+		_next_boss_add_spawn_at = _room_elapsed + 1.0
+		return
+	var boss_type := str(_room_config.get("boss_type", "warden"))
+	if boss_type == "hive":
+		_next_boss_add_spawn_at = _room_elapsed + randf_range(5.0, 6.0)
+		return
+	var count := mini(randi_range(BOSS_ADD_WAVE_MIN, BOSS_ADD_WAVE_MAX), remaining_budget)
+	var enemy_type := _get_boss_add_enemy_type(boss_type)
+	var start_edge := randi() % 4
+	var health_multiplier := 0.5 if bool(_minor_modifier_flags["swarm"]) else 1.0
+	for index in range(count):
+		var spawn_position := _get_enemy_spawn_position_for_index(index, start_edge)
+		if _queue_boss_budgeted_enemy_spawn(enemy_type, spawn_position, health_multiplier):
+			_enemies_spawned += 1
+	_next_boss_add_spawn_at = _room_elapsed + randf_range(5.0, 6.0)
+
+func _get_boss_add_enemy_type(boss_type: String) -> String:
+	match boss_type:
+		"warden":
+			return "charger"
+		"hydra":
+			return "splitter"
+		"pulsar":
+			return "spitter"
+		_:
+			return "chaser"
+
+func _get_boss_add_budget_remaining() -> int:
+	if _room_type != "boss" or not _boss_add_dry_run_enabled:
+		return 999999
+	var live_non_boss := 0
+	for enemy in _enemy_nodes:
+		if enemy == null or not is_instance_valid(enemy) or not enemy.has_method("is_alive") or not enemy.is_alive():
+			continue
+		if enemy.has_method("get_type_name") and str(enemy.get_type_name()).begins_with("boss_"):
+			continue
+		live_non_boss += 1
+	return maxi(BOSS_ADD_CAP - live_non_boss - _pending_enemy_spawns, 0)
 
 func _check_wave_progress() -> void:
 	if _room_clear_started:
@@ -935,6 +995,12 @@ func _queue_enemy_spawn(enemy_type: String, spawn_position: Vector2, health_mult
 	_pending_enemy_spawns += 1
 	call_deferred("_spawn_queued_enemy_instance", enemy_type, spawn_position, health_multiplier)
 
+func _queue_boss_budgeted_enemy_spawn(enemy_type: String, spawn_position: Vector2, health_multiplier: float = 1.0) -> bool:
+	if _room_type == "boss" and _boss_add_dry_run_enabled and _get_boss_add_budget_remaining() <= 0:
+		return false
+	_queue_enemy_spawn(enemy_type, spawn_position, health_multiplier)
+	return true
+
 func _spawn_queued_enemy_instance(enemy_type: String, spawn_position: Vector2, health_multiplier: float) -> void:
 	_pending_enemy_spawns = max(_pending_enemy_spawns - 1, 0)
 	if _room_clear_started or not is_inside_tree():
@@ -956,6 +1022,7 @@ func _spawn_boss() -> void:
 	var boss_type := str(_room_config.get("boss_type", "warden"))
 	var full_boss_id := "boss_%s" % boss_type
 	var boss = _spawn_enemy_instance(full_boss_id, ARENA_CENTER, 1.0)
+	_active_boss = boss
 	if boss != null and boss.has_method("apply_boss_scale"):
 		boss.apply_boss_scale(_player_nodes.size())
 		if int(_room_config.get("act", 1)) >= 2:
@@ -1422,6 +1489,8 @@ func _should_suppress_combat_vfx() -> bool:
 
 func _on_enemy_died(enemy) -> void:
 	_enemy_nodes.erase(enemy)
+	if enemy == _active_boss:
+		_active_boss = null
 	_enemies_killed += 1
 	var enemy_type_name := str(enemy.get_type_name())
 	_spawn_enemy_death_global_vfx(enemy_type_name)
@@ -1434,7 +1503,7 @@ func _on_enemy_died(enemy) -> void:
 	if enemy_type_name == "splitter":
 		for mini_index in range(3):
 			var angle := TAU * float(mini_index) / 3.0
-			_queue_enemy_spawn("splitter_mini", enemy.global_position + Vector2.RIGHT.rotated(angle) * 36.0)
+			_queue_boss_budgeted_enemy_spawn("splitter_mini", enemy.global_position + Vector2.RIGHT.rotated(angle) * 36.0)
 	if _ice_zone_modifier != null and is_instance_valid(_ice_zone_modifier):
 		_ice_zone_modifier.spawn_patch(enemy.global_position)
 	if _side_objective_id == "kill_streak" and not _side_objective_completed:
@@ -1880,7 +1949,7 @@ func spawn_enemy_minions(origin: Vector2, count: int, phase: float, forced_type:
 			if phase >= 0.55 and randf() < phase * 0.7:
 				enemy_type = "spitter"
 		var angle := TAU * float(index) / float(max(count, 1))
-		_queue_enemy_spawn(enemy_type, origin + Vector2.RIGHT.rotated(angle) * 96.0)
+		_queue_boss_budgeted_enemy_spawn(enemy_type, origin + Vector2.RIGHT.rotated(angle) * 96.0)
 
 func spawn_enemy_minion_mix(origin: Vector2, count: int, types: Array) -> void:
 	if types.is_empty():
@@ -1888,16 +1957,21 @@ func spawn_enemy_minion_mix(origin: Vector2, count: int, types: Array) -> void:
 	for index in range(count):
 		var enemy_type := str(types[index % types.size()])
 		var angle := TAU * float(index) / float(max(count, 1))
-		_queue_enemy_spawn(enemy_type, origin + Vector2.RIGHT.rotated(angle) * 112.0)
+		_queue_boss_budgeted_enemy_spawn(enemy_type, origin + Vector2.RIGHT.rotated(angle) * 112.0)
 
-func spawn_hive_shield_minions(origin: Vector2, count: int) -> Array:
+func spawn_boss_deflector_minions(origin: Vector2, count: int) -> Array:
 	var shield_nodes: Array = []
 	for index in range(count):
+		if _room_type == "boss" and _boss_add_dry_run_enabled and _get_boss_add_budget_remaining() <= 0:
+			break
 		var angle := TAU * float(index) / float(max(count, 1))
 		var node := _spawn_enemy_instance("splitter_mini", origin + Vector2.RIGHT.rotated(angle) * 150.0, 3.75)
 		if node != null:
 			shield_nodes.append(node)
 	return shield_nodes
+
+func spawn_hive_shield_minions(origin: Vector2, count: int) -> Array:
+	return spawn_boss_deflector_minions(origin, count)
 
 func spawn_pulsar_emp(origin: Vector2, lockout_seconds: float, color: Color) -> void:
 	for player in _player_nodes:
@@ -1974,7 +2048,7 @@ func spawn_enemy_burst(origin: Vector2, count: int, phase: float) -> void:
 		if phase >= 0.66 and index % 4 == 0:
 			enemy_type = "spitter"
 		var angle := TAU * float(index) / float(max(count, 1))
-		_queue_enemy_spawn(enemy_type, origin + Vector2.RIGHT.rotated(angle) * 160.0)
+		_queue_boss_budgeted_enemy_spawn(enemy_type, origin + Vector2.RIGHT.rotated(angle) * 160.0)
 
 func handle_enemy_charge_windup(origin: Vector2) -> void:
 	var ring := ParticleFactoryData.create_impact_ring(Color(1.0, 0.76, 0.48, 0.82), 64.0, 3.0)

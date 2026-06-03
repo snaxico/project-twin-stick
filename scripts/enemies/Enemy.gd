@@ -3,6 +3,7 @@ extends CharacterBody2D
 const ParticleFactoryData = preload("res://scripts/juice/ParticleFactory.gd")
 const PULSAR_ARENA_MARGIN := 260.0
 const PULSAR_TELEPORT_MIN_DISTANCE := 400.0
+const PULSAR_REACTIVE_TELEPORT_DISTANCE := 250.0
 const SEPARATION_RADIUS := 64.0
 const SEPARATION_STRENGTH := 120.0
 
@@ -30,10 +31,8 @@ enum EnemyType {
 @export var projectile_speed: float = 340.0
 @export var projectile_damage: int = 10
 
-@onready var shadow: Polygon2D = $Shadow
 @onready var collision_shape: CollisionShape2D = $CollisionShape2D
 @onready var body_root: Node2D = $BodyRoot
-@onready var outline: Polygon2D = $BodyRoot/Outline
 @onready var visual: Polygon2D = $BodyRoot/Visual
 
 var enemy_type: EnemyType = EnemyType.CHASER
@@ -76,7 +75,6 @@ var _feedback_color := Color(1.0, 0.26, 0.22, 1.0)
 var _feedback_weight := 1.0
 var _alive := true
 var _base_visual_scale := Vector2.ONE
-var _base_shadow_scale := Vector2.ONE
 var _base_collision_radius := 19.0
 var _pulsar_teleport_at := 0.0
 var _pulsar_telegraph_until := 0.0
@@ -96,9 +94,9 @@ var _hydra_sweep_start_angle := 0.0
 var _hydra_orb_at := 0.0
 var _hive_burrow_until := 0.0
 var _hive_burrow_pending := false
-var _hive_invulnerable_until := 0.0
-var _hive_shield_nodes: Array = []
-var _hive_shield_phase_index := -1
+var _boss_invulnerable_until := 0.0
+var _boss_deflector_nodes: Array = []
+var _boss_deflector_phase_index := -1
 var _target_refresh_frame_offset := 0
 var _target_refresh_interval := 4
 
@@ -107,8 +105,6 @@ func _ready() -> void:
 	add_to_group("aim_target")
 	if visual != null:
 		_base_visual_scale = visual.scale
-	if shadow != null:
-		_base_shadow_scale = shadow.scale
 	if collision_shape != null and collision_shape.shape is CircleShape2D:
 		collision_shape.shape = (collision_shape.shape as CircleShape2D).duplicate()
 		_base_collision_radius = (collision_shape.shape as CircleShape2D).radius
@@ -150,9 +146,9 @@ func setup(type_name: String, combat_owner: Node) -> void:
 	_hydra_orb_at = 0.0
 	_hive_burrow_until = 0.0
 	_hive_burrow_pending = false
-	_hive_invulnerable_until = 0.0
-	_hive_shield_nodes.clear()
-	_hive_shield_phase_index = -1
+	_boss_invulnerable_until = 0.0
+	_boss_deflector_nodes.clear()
+	_boss_deflector_phase_index = -1
 	_target_refresh_frame_offset = int(get_instance_id() % _target_refresh_interval)
 	_configure_type(type_name)
 	current_health = max_health
@@ -397,11 +393,10 @@ func get_type_name() -> String:
 func apply_damage(amount: int) -> void:
 	if not _alive or amount <= 0:
 		return
-	if enemy_type == EnemyType.BOSS_HIVE:
-		_cleanup_hive_shield_nodes()
-		if _hive_shield_nodes.size() > 0 or _current_time_seconds() < _hive_invulnerable_until:
-			_spawn_hit_particles(0.75, true)
-			return
+	_cleanup_boss_deflector_nodes()
+	if is_boss() and (_boss_deflector_nodes.size() > 0 or _current_time_seconds() < _boss_invulnerable_until):
+		_spawn_hit_particles(0.75, true)
+		return
 	if _shield_active:
 		_shield_active = false
 		_spawn_hit_particles(1.1, true)
@@ -468,7 +463,7 @@ func _physics_process(delta: float) -> void:
 	desired_velocity += _apply_separation()
 	velocity = desired_velocity + _external_velocity
 	move_and_slide()
-	_update_visual_state()
+	_update_dynamic_visuals()
 
 func _apply_separation() -> Vector2:
 	if is_boss() or _combat_owner == null:
@@ -526,10 +521,10 @@ func _update_boss_phase_transition(now: float) -> void:
 	if enemy_type == EnemyType.BOSS_HYDRA and _combat_owner != null and _combat_owner.has_method("spawn_enemy_minion_mix"):
 		_combat_owner.spawn_enemy_minion_mix(global_position, _random.randi_range(4, 6), ["chaser", "splitter"])
 	if enemy_type == EnemyType.BOSS_HIVE:
-		_cleanup_hive_shield_nodes()
-		if _hive_shield_nodes.is_empty():
-			_hive_shield_phase_index = -1
-			_spawn_hive_shield()
+		_cleanup_boss_deflector_nodes()
+		if _boss_deflector_nodes.is_empty():
+			_boss_deflector_phase_index = -1
+			_spawn_boss_deflector(4)
 	_spawn_phase_transition_telegraph()
 
 func _spawn_phase_transition_telegraph() -> void:
@@ -793,9 +788,9 @@ func _update_hydra_behavior(now: float) -> Vector2:
 
 func _update_hive_behavior(direction: Vector2, distance: float, now: float) -> Vector2:
 	var phase := _get_phase_ratio()
-	_update_hive_shield_positions(now)
-	if _hive_shield_phase_index < 0:
-		_spawn_hive_shield()
+	_update_boss_deflector_positions(now)
+	if _boss_deflector_phase_index < 0:
+		_spawn_boss_deflector(4)
 	if _hive_burrow_pending:
 		if now < _hive_burrow_until:
 			return Vector2.ZERO
@@ -823,33 +818,33 @@ func _update_hive_behavior(direction: Vector2, distance: float, now: float) -> V
 		_next_ability_at = now + lerpf(12.0, 10.0, phase)
 		_hive_burrow_pending = true
 		_hive_burrow_until = now + 1.0
-		_hive_invulnerable_until = _hive_burrow_until
+		_boss_invulnerable_until = _hive_burrow_until
 		_spawn_boss_attack_telegraph(180.0)
 	return direction * _get_effective_move_speed()
 
-func _spawn_hive_shield() -> void:
-	if enemy_type != EnemyType.BOSS_HIVE or _combat_owner == null or not _combat_owner.has_method("spawn_hive_shield_minions"):
+func _spawn_boss_deflector(count: int) -> void:
+	if not is_boss() or _combat_owner == null or not _combat_owner.has_method("spawn_boss_deflector_minions"):
 		return
-	_cleanup_hive_shield_nodes()
-	if not _hive_shield_nodes.is_empty():
+	_cleanup_boss_deflector_nodes()
+	if not _boss_deflector_nodes.is_empty():
 		return
-	_hive_shield_nodes = _combat_owner.spawn_hive_shield_minions(global_position, 4)
-	_hive_shield_phase_index = _boss_phase_index
+	_boss_deflector_nodes = _combat_owner.spawn_boss_deflector_minions(global_position, count)
+	_boss_deflector_phase_index = _boss_phase_index
 
-func _cleanup_hive_shield_nodes() -> void:
+func _cleanup_boss_deflector_nodes() -> void:
 	var kept: Array = []
-	for node in _hive_shield_nodes:
+	for node in _boss_deflector_nodes:
 		if node != null and is_instance_valid(node) and node.has_method("is_alive") and node.is_alive():
 			kept.append(node)
-	_hive_shield_nodes = kept
+	_boss_deflector_nodes = kept
 
-func _update_hive_shield_positions(now: float) -> void:
-	_cleanup_hive_shield_nodes()
-	var count := _hive_shield_nodes.size()
+func _update_boss_deflector_positions(now: float) -> void:
+	_cleanup_boss_deflector_nodes()
+	var count := _boss_deflector_nodes.size()
 	if count <= 0:
 		return
 	for index in range(count):
-		var node = _hive_shield_nodes[index]
+		var node = _boss_deflector_nodes[index]
 		if node == null or not is_instance_valid(node):
 			continue
 		var angle := now * 1.4 + TAU * float(index) / float(count)
@@ -886,6 +881,9 @@ func _update_pulsar_behavior(direction: Vector2, _distance: float, now: float) -
 	if _pulsar_beam_at <= 0.0:
 		_pulsar_beam_at = now + lerpf(10.0, 8.0, phase)
 	if _pulsar_telegraph_until > now:
+		return Vector2.ZERO
+	if _distance <= PULSAR_REACTIVE_TELEPORT_DISTANCE and now + 0.5 < _pulsar_teleport_at:
+		_start_pulsar_telegraph(now)
 		return Vector2.ZERO
 	if now >= _pulsar_teleport_at:
 		_start_pulsar_telegraph(now)
@@ -1061,8 +1059,6 @@ func _die(already_exploded: bool = false) -> void:
 		tween.set_parallel(true)
 		tween.tween_property(body_root, "scale", body_root.scale * 0.75, 0.18)
 		tween.tween_property(body_root, "modulate:a", 0.0, 0.18)
-		if shadow != null:
-			tween.tween_property(shadow, "modulate:a", 0.0, 0.18)
 		tween.set_parallel(false)
 		tween.tween_callback(queue_free)
 	else:
@@ -1098,6 +1094,9 @@ func _spawn_death_particles() -> void:
 		parent_node.add_child(pop)
 
 func _update_visual_state() -> void:
+	_refresh_static_visuals()
+
+func _refresh_static_visuals() -> void:
 	if visual == null:
 		return
 	var is_elite := get_type_name().begins_with("elite_")
@@ -1114,20 +1113,22 @@ func _update_visual_state() -> void:
 		EnemyType.SPLITTER:
 			scale_mult = 1.1
 	visual.scale = _base_visual_scale * scale_mult
-	shadow.scale = _base_shadow_scale * lerpf(1.0, 1.5, scale_mult * 0.2)
-	visual.color = _feedback_color
-	outline.color = Color(1.0, 0.92, 0.64, 0.98) if _shield_active else (Color(0.12, 0.02, 0.02, 0.94) if is_boss() else Color(0.04, 0.06, 0.08, 0.92))
-	body_root.rotation = lerp_angle(body_root.rotation, velocity.angle() if velocity.length() > 0.1 else body_root.rotation, 0.18)
+	visual.color = _feedback_color.lightened(0.24) if _shield_active else _feedback_color
 	if collision_shape != null and collision_shape.shape is CircleShape2D:
 		(collision_shape.shape as CircleShape2D).radius = _base_collision_radius * max(0.7, scale_mult)
-	if _fuse_active:
-		visual.modulate = Color(1.2, 1.0, 0.8, 1.0)
-	else:
-		visual.modulate = Color(1.0, 1.0, 1.0, 1.0)
 	if is_elite:
 		body_root.scale = Vector2.ONE * 1.06
 	else:
 		body_root.scale = Vector2.ONE
+
+func _update_dynamic_visuals() -> void:
+	if visual == null or body_root == null:
+		return
+	body_root.rotation = lerp_angle(body_root.rotation, velocity.angle() if velocity.length() > 0.1 else body_root.rotation, 0.18)
+	if _fuse_active:
+		visual.modulate = Color(1.2, 1.0, 0.8, 1.0)
+	else:
+		visual.modulate = Color(1.0, 1.0, 1.0, 1.0)
 
 func _current_time_seconds() -> float:
 	return Time.get_ticks_msec() / 1000.0

@@ -12,8 +12,10 @@ The live runtime is now aligned to the `Feature Roadmap V3` redesign:
 - health resets at the start of every room
 - meta progression, multiple starting weapons, and ability-specific rare mutations remain deferred
 
-Current `v3/main` stable baseline includes the playtest round-4 and round-5 patch stack.
-Treat this build as the newest stable version and continue future work from here.
+Current stable runtime includes the playtest round-6 performance/gameplay patch on top of the
+round-4 + round-5 baseline. Heavy boss add-waves are implemented only behind the
+`debug_boss_add_waves` dry-run flag and are not shipped by default until the real boss-room
+performance gate passes.
 
 ## Current Runtime
 
@@ -75,6 +77,8 @@ Treat this build as the newest stable version and continue future work from here
   - `Blink` uses movement direction, longer range, short arrival i-frames, and an arrival detonation
   - `Turret` and `Minefield` are stronger; mines now use separate trigger and explosion radii
   - `Fire Bullets` replaces the old Fire Trail behavior and creates only a smaller burning impact pool on hit / expiry
+- current round-6 tuning changed:
+  - `Duration` now scales sustained abilities only; instant and movement abilities such as `Blink` and `Dash` ignore it
 - player mutation visuals are now partially wired:
   - projectile streaks for high `Rapid Fire` / `Velocity`
   - speed-line feedback for `Move Speed`
@@ -151,9 +155,9 @@ Treat this build as the newest stable version and continue future work from here
   - `Attack Speed`
 - live modifiers now use the roadmap set:
   - minors: `Accelerating Waves`, `Enemy Speed`, `Swarm`, `Shielded`, `Explosive Death`
-  - majors: `Fire Floor`, `Ice Zone`, `Mine Field`, `Shrinking Arena`
+  - majors: `Fire Floor`, `Ice Zone`, `Scanline`, `Shrinking Arena`
   - `Gravity Wells` was removed after playtesting because its effect was not readable enough
-- `Mine Field` sweeps now use softened damage with a per-sweep/per-player hit cooldown to prevent frame-stacked one-shots
+- `Scanline` keeps the `mine_field` id but now draws segmented sweeping lines with safe gaps instead of many mine circles/arcs
 - `Fire Floor` now uses larger, more numerous hazard zones (`280px`, up to `7` active)
 - elite mini-bosses now spawn away from the player center-spawn box and have stronger telegraphed pressure patterns
 - Act 2 elites now get `1.5x` HP, `1.3x` contact/projectile damage, and `25%` faster elite cooldowns
@@ -167,6 +171,12 @@ Treat this build as the newest stable version and continue future work from here
 - Hive shield safeguard after review:
   - shield count is fixed at `4`
   - phase transitions only spawn a new shield if the previous shield is already cleared
+- round-6 boss/performance state:
+  - `FireTrailZone` is now a `Node2D` distance-check pool instead of an `Area2D`, with player-team pools damaging nearby enemies and enemy-team pools damaging players
+  - enemies now use a reduced one-polygon visual subtree; static visual updates are split from per-frame facing/fuse updates
+  - Hive shield internals are generalized into boss deflector state; Pulsar has reactive close-range teleport
+  - boss add-wave pressure exists only as a debug dry-run path gated by `debug_boss_add_waves`; it caps all non-boss boss-room enemies including pending spawns
+  - reported live playtest performance improved massively after the round-6 patch
 
 ## UI / Presentation
 
@@ -226,6 +236,7 @@ Treat this build as the newest stable version and continue future work from here
   - deferred enemy spawn pipeline for physics-safe child spawns
   - pooled projectile activation/deactivation
   - dedicated slow homing projectile path for Hydra orbs
+  - debug-only boss add-wave dry-run budget for round-6 performance gate testing
   - ability dispatch
   - reward sequencing
   - boss helper attacks
@@ -237,7 +248,7 @@ Treat this build as the newest stable version and continue future work from here
 - `Enemy.gd`
   - full enemy / elite / boss roster
   - slow / poison / shield / explosive-death handling
-  - boss escalation logic, phase telegraphs, round-5 boss behavior reworks, elite pressure patterns, elite Act 2 scaling, and staggered target refresh
+  - boss escalation logic, phase telegraphs, round-5 boss behavior reworks, boss deflector state, elite pressure patterns, elite Act 2 scaling, and staggered target refresh
 - `MutationSystem.gd`
   - mutation compilation
   - act-weighted rare rolls
@@ -264,7 +275,7 @@ Treat this build as the newest stable version and continue future work from here
 ## Known Risks
 
 - full live playtesting and balance validation still have not been run after the full V3 integration
-- round-2, round-3, round-4, and round-5 tuning have passed headless validation but still need live playtesting
+- round-2 through round-6 tuning have passed headless validation; round-6 also has non-headless profiling harness data and a strong live performance report, but still needs full balance/readability playtesting
 - boss and elite behavior is implemented, but still likely needs feel tuning against real runs
 - modifier stacking, projectile pooling, AI time-slicing, new boss add pressure, homing orbs, and endless pressure have not been manually stress-tested yet
 - the rebuilt pause menu, new VFX density, swarm performance optimization, slot-colored HUD, Build HUD overhaul, and input binding menu have passed parse validation but still need controller/manual readability testing
@@ -276,21 +287,25 @@ Treat this build as the newest stable version and continue future work from here
 - objective-panel icons currently use simple letter fallback glyphs (`H` / `K` / `C`); acceptable for the current local build, but a later IconFactory/drawn-glyph polish pass would improve presentation
 - Pulsar beam currently uses angle/range damage and does not raycast line-of-sight through walls; accept for now unless playtest reads unfair
 - Hive shield and boss add pressure may make boss fights feel too long; validate before further tuning
+- round-6 heavy boss add-waves are not shipped by default; they require the real boss-room stress gate before promotion
+- enemy visual draw reduction needs a manual readability check because shadow/outline nodes were removed
+- `FireTrailZone` distance checks passed parse validation and warning cleanup but still need focused in-game correctness validation for player Fire Bullets damaging enemies and no friendly fire
 
 ## Next Step
 
-Run the planned manual playtest for the current stable round-4 + round-5 build. Use `docs/development/playtest-round-5-validation.md` as the active checklist.
+Run manual validation for the current round-6 local build. Use `docs/development/playtest-round-6-validation.md` as the active checklist.
 
 - continuous spawn pacing in `1P` and `2P` — does `35-45s` room duration feel right?
 - first `30s` pressure — do the opening burst, `~5/s` rifle, spawn ramp, and multi-edge spawns feel active without overwhelming?
-- minefield survivability — no sweep/mine one-shot behavior
+- Scanline readability, safe gaps, and performance
 - endless difficulty scaling past room 20
 - elite reward value, Act 2 scaling, add-wave pressure, spawn distance, and telegraphed pressure patterns
 - boss escalation, phase transition, adds, heavy-attack feel, and round-5 boss-specific mechanics
 - modifier readability under stacked late-game rooms
 - Fire Floor `280px` / `7` zone pressure
 - Blink movement-direction, arrival i-frames, and detonation feel
-- Fire Bullets impact-pool balance and performance
+- Fire Bullets impact-pool balance, correctness, and performance
+- real boss-room stress gate with `debug_boss_add_waves` enabled before shipping heavy boss add-waves
 - projectile pooling / AI time-slicing / boss entity-load performance at `100-150+` enemies/projectiles
 - ability selection usability on controller
 - remapped keyboard/controller binding behavior from main-menu Settings
