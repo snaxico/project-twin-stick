@@ -5,6 +5,7 @@ const AutoTargetData = preload("res://scripts/player/AutoTarget.gd")
 const DashData = preload("res://scripts/player/Dash.gd")
 const ParticleFactoryData = preload("res://scripts/juice/ParticleFactory.gd")
 const CONTACT_INVULN_DURATION := 0.35
+const BLOOM_COLOR_MULTIPLIER := 1.45
 
 const FLASH_SHADER_CODE := """
 shader_type canvas_item;
@@ -662,21 +663,21 @@ func _apply_visual_state(now: float, delta: float = 0.0) -> void:
 	var squash_y := 1.0 - _turn_squash * 0.12
 	if visual.polygon != _chevron_polygon:
 		visual.polygon = _chevron_polygon
-	visual.color = player_config.tint.lightened(mutation_glow + bonus_glow) if not _is_downed else player_config.tint.darkened(0.55)
+	visual.color = _bloom_color(player_config.tint.lightened(mutation_glow + bonus_glow)) if not _is_downed else player_config.tint.darkened(0.55)
 	visual.modulate.a = 0.45 if now < _invisible_until else 1.0
 	visual.scale = Vector2(_base_visual_scale.x * dash_scale * squash_x, _base_visual_scale.y * dash_scale * squash_y)
 	if outline != null and outline.polygon != _chevron_polygon:
 		outline.polygon = _chevron_polygon
 	if outline != null:
 		outline.scale = visual.scale * 1.28
-		outline.color = player_config.tint.lightened(0.2 + mutation_glow * 0.4 + bonus_glow * 0.5) if shield_active or overcharge_active else Color(0.04, 0.06, 0.08, 0.92)
+		outline.color = _bloom_color(player_config.tint.lightened(0.2 + mutation_glow * 0.4 + bonus_glow * 0.5)) if shield_active or overcharge_active else Color(0.04, 0.06, 0.08, 0.92)
 		outline.modulate.a = 0.65 if now < _invisible_until else 1.0
 	if shadow != null:
 		shadow.scale = _base_shadow_scale * (1.08 if tough_level >= 2 else 1.0)
 		shadow.modulate.a = 0.18 if now < _invisible_until else 1.0
 	if dash_shield_ring != null:
 		dash_shield_ring.visible = (shield_active or dash_active) and not _is_downed
-		dash_shield_ring.default_color = player_config.tint.lerp(Color(0.92, 1.0, 1.0, 1.0), 0.42 if shield_active else 0.18)
+		dash_shield_ring.default_color = _bloom_color(player_config.tint.lerp(Color(0.92, 1.0, 1.0, 1.0), 0.42 if shield_active else 0.18))
 		dash_shield_ring.width = 5.0 if tough_level >= 2 else 4.0
 	body_root.rotation = lerp_angle(body_root.rotation, _move_facing.angle(), 0.22)
 	_turn_squash = move_toward(_turn_squash, 0.0, delta * 4.0)
@@ -702,6 +703,9 @@ func _emit_reflex_feedback(now: float) -> void:
 	var crackle := ParticleFactoryData.create_attack_trail(player_config.tint.lightened(0.28), crackle_direction, 0.7)
 	crackle.global_position = global_position
 	get_parent().add_child(crackle)
+
+func _bloom_color(color: Color) -> Color:
+	return Color(color.r * BLOOM_COLOR_MULTIPLIER, color.g * BLOOM_COLOR_MULTIPLIER, color.b * BLOOM_COLOR_MULTIPLIER, color.a)
 
 func _play_fire_recoil() -> void:
 	_turn_squash = max(_turn_squash, 0.28)

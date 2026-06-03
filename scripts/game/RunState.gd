@@ -42,6 +42,7 @@ var _modifiers_by_id: Dictionary = {}
 var _ability_registry = AbilityRegistryData.new()
 var _structured_mid_boss_type := "warden"
 var _structured_final_boss_type := "hydra"
+var _structured_total_combat_depth := 1
 
 func _ready() -> void:
 	_random.randomize()
@@ -70,6 +71,7 @@ func start_new_run(configs: Array, debug_options: Dictionary = {}) -> void:
 	xp_pending_levelups = 0
 	current_act = 1
 	endless_room_index = 1
+	_structured_total_combat_depth = 1
 	_apply_debug_starting_mutations()
 	for _index in range(player_configs.size()):
 		player_health_states.append({"current": 50, "max": 50})
@@ -269,6 +271,21 @@ func set_current_act(act: int) -> void:
 func get_current_score() -> int:
 	return rooms_completed
 
+func get_run_progress() -> float:
+	if is_debug_single_room_mode():
+		var debug_depth := maxi(1, int(debug_run_setup.get("step_index", 0)) + 1)
+		return clampf(float(debug_depth - 1) / 10.0, 0.0, 1.0)
+	if is_endless_mode():
+		var room_number := endless_room_index
+		if not current_node.is_empty():
+			room_number = int(current_node.get("depth", room_number))
+		return clampf(float(maxi(room_number, 1) - 1) / 20.0, 0.0, 1.0)
+	var global_depth := maxi(current_step_index + 1, 1)
+	if not current_node.is_empty():
+		global_depth = int(current_node.get("depth", global_depth))
+	var denominator := float(maxi(_structured_total_combat_depth - 1, 1))
+	return clampf(float(maxi(global_depth, 1) - 1) / denominator, 0.0, 1.0)
+
 func _load_weapons() -> void:
 	_weapons_by_id.clear()
 	if not FileAccess.file_exists(WEAPONS_DATA_PATH):
@@ -343,6 +360,7 @@ func _generate_node_map() -> Array:
 	for act_row_index in range(act_2_rows):
 		rows.append(_build_branching_row(rows.size(), 2, act_row_index, act_2_rows, global_depth))
 		global_depth += 1
+	_structured_total_combat_depth = maxi(global_depth - 1, 1)
 	rows.append([_build_boss_node(rows.size(), 2, global_depth, false)])
 	_link_rows(rows)
 	_assign_modifiers_to_map(rows)

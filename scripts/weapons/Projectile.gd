@@ -5,6 +5,7 @@ const FireTrailZoneData = preload("res://scripts/weapons/FireTrailZone.gd")
 const BASE_COLLISION_HALF_WIDTH := 4.0
 const TRAIL_PARTICLE_SOFT_CAP := 90
 const ENEMY_TRAIL_PARTICLE_SOFT_CAP := 36
+const BLOOM_COLOR_MULTIPLIER := 1.45
 
 @export var lifetime: float = 1.8
 
@@ -326,16 +327,16 @@ func _apply_visual_state() -> void:
 	var size_scale: float = maxf(collision_half_width / BASE_COLLISION_HALF_WIDTH, 0.25)
 	var streak_scale: float = 1.0 + 0.18 * float(max(rapid_fire_level - 1, 0)) + 0.22 * float(max(velocity_level - 1, 0))
 	if enemy_shot:
-		visual.color = projectile_color
+		visual.color = _bloom_color(projectile_color)
 		visual.scale = Vector2(_base_visual_scale.x * 1.36 * size_scale * streak_scale, _base_visual_scale.y * 1.36 * size_scale)
 		visual.polygon = _build_orb_polygon(8.0)
 	else:
-		visual.color = projectile_color.lightened(0.05)
+		visual.color = _bloom_color(projectile_color.lightened(0.05))
 		visual.scale = _get_shape_scale(size_scale, streak_scale)
 		visual.polygon = _build_shape_polygon(projectile_shape)
 	if outline != null:
 		outline.visible = true
-		outline.color = projectile_color.darkened(0.25) if enemy_shot else accent_color
+		outline.color = _bloom_color(projectile_color.darkened(0.25)) if enemy_shot else _bloom_color(accent_color)
 		outline.scale = Vector2(visual.scale.x * 1.16, visual.scale.y * 1.24)
 		outline.polygon = visual.polygon
 	if collision_shape != null and collision_shape.shape is CircleShape2D:
@@ -351,6 +352,9 @@ func _get_trail_color() -> Color:
 	if team == "enemy":
 		return tint_color
 	return accent_color
+
+func _bloom_color(color: Color) -> Color:
+	return Color(color.r * BLOOM_COLOR_MULTIPLIER, color.g * BLOOM_COLOR_MULTIPLIER, color.b * BLOOM_COLOR_MULTIPLIER, color.a)
 
 func _should_spawn_trail_particles() -> bool:
 	if trail_style == "default" and rapid_fire_level < 2 and velocity_level < 2:

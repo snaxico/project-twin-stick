@@ -1,5 +1,7 @@
 extends RefCounted
 
+const BLOOM_COLOR_MULTIPLIER := 1.45
+
 static var _particle_texture: Texture2D = null
 
 static func create_muzzle_flash(color: Color, direction: Vector2, profile: String = "rifle", weight: float = 1.0) -> GPUParticles2D:
@@ -9,7 +11,7 @@ static func create_muzzle_flash(color: Color, direction: Vector2, profile: Strin
 	particles.one_shot = true
 	particles.explosiveness = 1.0
 	particles.speed_scale = 1.1 + weight * 0.12
-	particles.modulate = color
+	particles.modulate = _bloom_color(color)
 
 	var material := ParticleProcessMaterial.new()
 	material.direction = Vector3(direction.x, direction.y, 0.0)
@@ -30,7 +32,7 @@ static func create_impact_sparks(color: Color, direction: Vector2, weight: float
 	particles.lifetime = 0.12 + weight * 0.05 + (0.03 if weight >= 1.35 else 0.0)
 	particles.one_shot = true
 	particles.explosiveness = 1.0
-	particles.modulate = color
+	particles.modulate = _bloom_color(color)
 
 	var material := ParticleProcessMaterial.new()
 	material.direction = Vector3(direction.x, direction.y, 0.0)
@@ -52,7 +54,7 @@ static func create_explosion_burst(color: Color, weight: float = 1.0) -> GPUPart
 	particles.lifetime = 0.22 + weight * 0.08 + (0.05 if weight >= 1.35 else 0.0)
 	particles.one_shot = true
 	particles.explosiveness = 1.0
-	particles.modulate = color
+	particles.modulate = _bloom_color(color)
 
 	var material := ParticleProcessMaterial.new()
 	material.direction = Vector3(1.0, 0.0, 0.0)
@@ -74,7 +76,7 @@ static func create_death_burst(color: Color, weight: float = 1.0) -> GPUParticle
 	particles.lifetime = 0.2 + weight * 0.07 + (0.05 if weight >= 1.35 else 0.0)
 	particles.one_shot = true
 	particles.explosiveness = 1.0
-	particles.modulate = color
+	particles.modulate = _bloom_color(color)
 
 	var material := ParticleProcessMaterial.new()
 	material.direction = Vector3(1.0, 0.0, 0.0)
@@ -96,7 +98,7 @@ static func create_debris_ring(color: Color, radius: float = 84.0, spoke_count: 
 		var direction := Vector2.RIGHT.rotated(TAU * float(index) / float(maxi(spoke_count, 1)))
 		var spoke := Line2D.new()
 		spoke.width = 2.0
-		spoke.default_color = color
+		spoke.default_color = _bloom_color(color)
 		spoke.points = PackedVector2Array([direction * radius * 0.22, direction * radius])
 		node.add_child(spoke)
 	var tween := node.create_tween()
@@ -113,7 +115,7 @@ static func create_dash_trail(color: Color, weight: float = 1.0) -> GPUParticles
 	particles.lifetime = 0.14 + weight * 0.05
 	particles.one_shot = true
 	particles.explosiveness = 1.0
-	particles.modulate = color
+	particles.modulate = _bloom_color(color)
 
 	var material := ParticleProcessMaterial.new()
 	material.direction = Vector3(0.0, 1.0, 0.0)
@@ -134,7 +136,7 @@ static func create_dash_burst(color: Color, direction: Vector2, weight: float = 
 	particles.lifetime = 0.12 + weight * 0.03
 	particles.one_shot = true
 	particles.explosiveness = 1.0
-	particles.modulate = color
+	particles.modulate = _bloom_color(color)
 
 	var material := ParticleProcessMaterial.new()
 	material.direction = Vector3(-direction.x, -direction.y, 0.0)
@@ -155,7 +157,7 @@ static func create_attack_trail(color: Color, direction: Vector2, weight: float 
 	particles.lifetime = 0.10 + min(weight, 2.0) * 0.02
 	particles.one_shot = true
 	particles.explosiveness = 1.0
-	particles.modulate = color
+	particles.modulate = _bloom_color(color)
 
 	var material := ParticleProcessMaterial.new()
 	material.direction = Vector3(-direction.x, -direction.y, 0.0)
@@ -183,7 +185,7 @@ static func create_projectile_trail(color: Color) -> GPUParticles2D:
 	particles.one_shot = false
 	particles.explosiveness = 0.0
 	particles.local_coords = false
-	particles.modulate = color
+	particles.modulate = _bloom_color(color)
 
 	var material := ParticleProcessMaterial.new()
 	material.direction = Vector3(0.0, 0.0, 0.0)
@@ -203,7 +205,7 @@ static func _create_ring_effect(color: Color, start_radius: float, end_radius: f
 	var ring := Line2D.new()
 	ring.closed = true
 	ring.width = thickness
-	ring.default_color = color
+	ring.default_color = _bloom_color(color)
 	ring.points = _build_circle_points(end_radius, 28)
 	var safe_end_radius: float = max(end_radius, 0.01)
 	var start_scale: float = clamp(start_radius / safe_end_radius, 0.01, 1.0)
@@ -225,6 +227,9 @@ static func _create_particles() -> GPUParticles2D:
 	canvas_material.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
 	particles.material = canvas_material
 	return particles
+
+static func _bloom_color(color: Color) -> Color:
+	return Color(color.r * BLOOM_COLOR_MULTIPLIER, color.g * BLOOM_COLOR_MULTIPLIER, color.b * BLOOM_COLOR_MULTIPLIER, color.a)
 
 static func _configure_one_shot(particles: GPUParticles2D) -> void:
 	particles.finished.connect(particles.queue_free)

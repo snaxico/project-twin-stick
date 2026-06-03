@@ -2,6 +2,7 @@ extends Node
 
 const MIX_RATE := 22050.0
 const POOL_SIZE := 16
+const SFX_BUS_NAME := "SFX"
 
 var _players: Array = []
 var _player_busy_until: Array = []
@@ -11,12 +12,14 @@ var _rng := RandomNumberGenerator.new()
 func _ready() -> void:
 	add_to_group("sfx_engine")
 	_rng.randomize()
+	_ensure_sfx_bus()
 	for _index in range(POOL_SIZE):
 		var player := AudioStreamPlayer.new()
 		var stream := AudioStreamGenerator.new()
 		stream.mix_rate = MIX_RATE
 		stream.buffer_length = 0.4
 		player.stream = stream
+		player.bus = SFX_BUS_NAME
 		add_child(player)
 		_players.append(player)
 		_player_busy_until.append(0.0)
@@ -54,6 +57,29 @@ func play_room_clear() -> void:
 func play_level_up() -> void:
 	_play_buffer(_build_level_up_frames(), -6.8)
 
+func play_pickup(weight: float = 1.0) -> void:
+	_play_buffer(_build_pickup_frames(weight), -10.0 + weight * 0.45)
+
+func _ensure_sfx_bus() -> void:
+	var bus_index := AudioServer.get_bus_index(SFX_BUS_NAME)
+	if bus_index < 0:
+		AudioServer.add_bus()
+		bus_index = AudioServer.get_bus_count() - 1
+		AudioServer.set_bus_name(bus_index, SFX_BUS_NAME)
+		AudioServer.set_bus_send(bus_index, "Master")
+	if AudioServer.get_bus_effect_count(bus_index) == 0:
+		var limiter := AudioEffectLimiter.new()
+		limiter.ceiling_db = -1.5
+		limiter.threshold_db = -3.0
+		limiter.soft_clip_db = 2.0
+		AudioServer.add_bus_effect(bus_index, limiter)
+		var reverb := AudioEffectReverb.new()
+		reverb.room_size = 0.4
+		reverb.wet = 0.12
+		reverb.dry = 0.88
+		reverb.damping = 0.5
+		AudioServer.add_bus_effect(bus_index, reverb)
+
 func _play_buffer(frames: PackedVector2Array, volume_db: float) -> void:
 	if frames.is_empty():
 		return
@@ -85,6 +111,9 @@ func _get_available_player_index() -> int:
 func _current_time_seconds() -> float:
 	return Time.get_ticks_msec() / 1000.0
 
+func _pitch_variation() -> float:
+	return _rng.randf_range(0.88, 1.12)
+
 func _build_fire_frames(profile: String, weight: float) -> PackedVector2Array:
 	var duration := 0.04
 	if profile == "slug":
@@ -94,23 +123,28 @@ func _build_fire_frames(profile: String, weight: float) -> PackedVector2Array:
 	var sample_count := int(MIX_RATE * duration)
 	var frames := PackedVector2Array()
 	frames.resize(sample_count)
-	var carrier := _rng.randf_range(1400.0, 2200.0)
+	var pitch := _pitch_variation()
+	var carrier := _rng.randf_range(1400.0, 2200.0) * pitch
 	var tone_mix: float = 0.45
 	var noise_mix: float = 0.7
 	match profile:
 		"scatter":
-			carrier = _rng.randf_range(820.0, 1280.0)
+			carrier = _rng.randf_range(820.0, 1280.0) * pitch
 			tone_mix = 0.38
 			noise_mix = 0.95
 		"slug":
-			carrier = _rng.randf_range(220.0, 360.0)
+			carrier = _rng.randf_range(220.0, 360.0) * pitch
 			tone_mix = 0.72
 			noise_mix = 0.3
+	var detune := _rng.randf_range(1.01, 1.04)
 	for index in range(sample_count):
 		var t := float(index) / MIX_RATE
 		var env := exp(-t * (42.0 - weight * 5.0))
+		var pitch_env := 1.0 + (0.24 if profile != "slug" else -0.16) * exp(-t * 36.0)
 		var noise := _rng.randf_range(-1.0, 1.0)
-		var tone := sin(TAU * carrier * t) * tone_mix
+		var tone := sin(TAU * carrier * pitch_env * t) * tone_mix
+		tone += sin(TAU * carrier * detune * pitch_env * t) * tone_mix * 0.22
+		tone += sin(TAU * carrier * 1.92 * pitch_env * t) * tone_mix * 0.12
 		if profile == "slug":
 			tone += sin(TAU * (carrier * 0.52) * t) * 0.42
 		var sample := (noise * noise_mix + tone) * env * (0.48 + weight * 0.08)
@@ -122,11 +156,19 @@ func _build_hit_frames(weight: float) -> PackedVector2Array:
 	var sample_count := int(MIX_RATE * duration)
 	var frames := PackedVector2Array()
 	frames.resize(sample_count)
-	var frequency := _rng.randf_range(760.0, 900.0 - weight * 80.0)
+	var pitch := _pitch_variation()
+	var frequency := _rng.randf_range(760.0, 900.0 - weight * 80.0) * pitch
 	for index in range(sample_count):
 		var t := float(index) / MIX_RATE
 		var env := exp(-t * (72.0 - weight * 10.0))
-		var sample := (sin(TAU * frequency * t) + sin(TAU * (frequency * 0.45) * t) * 0.34) * env * (0.34 + weight * 0.08)
+		var progress := t / duration
+		var sweep := frequency * lerpf(1.18, 0.72, progress)
+		var sample := (
+			sin(TAU * sweep * t) * 0.72
+			+ sin(TAU * sweep * 0.45 * t) * 0.34
+			+ sin(TAU * sweep * 2.01 * t) * 0.12
+			+ _rng.randf_range(-1.0, 1.0) * 0.16
+		) * env * (0.34 + weight * 0.08)
 		frames[index] = Vector2(sample, sample)
 	return frames
 
@@ -135,32 +177,33 @@ func _build_profiled_hit_frames(weight: float, profile: String) -> PackedVector2
 	var sample_count := int(MIX_RATE * duration)
 	var frames := PackedVector2Array()
 	frames.resize(sample_count)
-	var base_frequency := 780.0
+	var pitch := _pitch_variation()
+	var base_frequency := 780.0 * pitch
 	var noise_mix := 0.18
 	match profile:
 		"spread":
-			base_frequency = 1120.0
+			base_frequency = 1120.0 * pitch
 			noise_mix = 0.28
 		"zip":
-			base_frequency = 1640.0
+			base_frequency = 1640.0 * pitch
 			noise_mix = 0.08
 		"thump":
-			base_frequency = 180.0
+			base_frequency = 180.0 * pitch
 			noise_mix = 0.2
 		"ping":
-			base_frequency = 1320.0
+			base_frequency = 1320.0 * pitch
 			noise_mix = 0.04
 		"crackle":
-			base_frequency = 520.0
+			base_frequency = 520.0 * pitch
 			noise_mix = 0.5
 		"boom":
-			base_frequency = 110.0
+			base_frequency = 110.0 * pitch
 			noise_mix = 0.42
 		"chime":
-			base_frequency = 1480.0
+			base_frequency = 1480.0 * pitch
 			noise_mix = 0.03
 		"squelch":
-			base_frequency = 240.0
+			base_frequency = 240.0 * pitch
 			noise_mix = 0.36
 	for index in range(sample_count):
 		var t := float(index) / MIX_RATE
@@ -171,7 +214,9 @@ func _build_profiled_hit_frames(weight: float, profile: String) -> PackedVector2
 			sweep = base_frequency * (1.0 - progress * 0.35)
 		var sample := (
 			sin(TAU * sweep * t) * 0.42
+			+ sin(TAU * sweep * 1.015 * t) * 0.14
 			+ sin(TAU * sweep * 0.5 * t) * 0.2
+			+ sin(TAU * sweep * 2.0 * t) * 0.08
 			+ _rng.randf_range(-1.0, 1.0) * noise_mix
 		) * env * (0.34 + weight * 0.08)
 		frames[index] = Vector2(sample, sample)
@@ -179,17 +224,26 @@ func _build_profiled_hit_frames(weight: float, profile: String) -> PackedVector2
 
 func _build_explosion_frames(weight: float, profile: String) -> PackedVector2Array:
 	var duration := 0.22 + weight * 0.06
+	if profile == "boss":
+		duration += 0.08
 	var sample_count := int(MIX_RATE * duration)
 	var frames := PackedVector2Array()
 	frames.resize(sample_count)
+	var pitch := _pitch_variation()
 	for index in range(sample_count):
 		var t := float(index) / MIX_RATE
+		var progress := t / duration
 		var env := exp(-t * (10.5 - weight * 1.2))
-		var rumble := sin(TAU * (58.0 - weight * 6.0) * t) * (0.42 + weight * 0.08)
-		var body := sin(TAU * (180.0 - t * (320.0 + weight * 36.0)) * t) * 0.2
+		var rumble := sin(TAU * (58.0 - weight * 6.0) * pitch * t) * (0.42 + weight * 0.08)
+		var body := sin(TAU * (180.0 - t * (320.0 + weight * 36.0)) * pitch * t) * 0.2
 		var noise := _rng.randf_range(-1.0, 1.0) * (0.48 + weight * 0.09)
 		if profile == "mine":
 			body += sin(TAU * 96.0 * t) * 0.18
+		elif profile == "boss":
+			rumble += sin(TAU * lerpf(42.0, 30.0, progress) * t) * 0.36
+			body += sin(TAU * lerpf(280.0, 74.0, progress) * t) * 0.28
+		elif profile != "shockwave":
+			body += sin(TAU * lerpf(620.0, 220.0, progress) * pitch * t) * 0.18
 		var sample := (rumble + body + noise) * env * (0.56 + weight * 0.08)
 		frames[index] = Vector2(sample, sample)
 	return frames
@@ -199,12 +253,17 @@ func _build_dash_frames(weight: float) -> PackedVector2Array:
 	var sample_count := int(MIX_RATE * duration)
 	var frames := PackedVector2Array()
 	frames.resize(sample_count)
+	var pitch := _pitch_variation()
 	for index in range(sample_count):
 		var t := float(index) / MIX_RATE
 		var progress := t / duration
 		var env := exp(-t * (18.0 - weight * 2.0))
-		var sweep := lerpf(220.0, 1640.0, progress)
-		var sample := (sin(TAU * sweep * t) * (0.28 + weight * 0.08) + _rng.randf_range(-1.0, 1.0) * 0.18) * env
+		var sweep := lerpf(220.0, 1640.0, progress) * pitch
+		var sample := (
+			sin(TAU * sweep * t) * (0.28 + weight * 0.08)
+			+ sin(TAU * sweep * 1.5 * t) * 0.1
+			+ _rng.randf_range(-1.0, 1.0) * 0.18
+		) * env
 		frames[index] = Vector2(sample, sample)
 	return frames
 
@@ -213,12 +272,13 @@ func _build_damage_frames() -> PackedVector2Array:
 	var sample_count := int(MIX_RATE * duration)
 	var frames := PackedVector2Array()
 	frames.resize(sample_count)
+	var pitch := _pitch_variation()
 	for index in range(sample_count):
 		var t := float(index) / MIX_RATE
 		var env := exp(-t * 18.0)
-		var frequency := lerpf(220.0, 110.0, t / duration)
+		var frequency := lerpf(220.0, 110.0, t / duration) * pitch
 		var pulse: float = 1.0 if sin(TAU * frequency * t) >= 0.0 else -1.0
-		var sample: float = pulse * env * 0.24 + sin(TAU * frequency * 0.5 * t) * env * 0.1
+		var sample: float = pulse * env * 0.24 + sin(TAU * frequency * 0.5 * t) * env * 0.1 + _rng.randf_range(-1.0, 1.0) * env * 0.08
 		frames[index] = Vector2(sample, sample)
 	return frames
 
@@ -227,11 +287,17 @@ func _build_enemy_death_frames(weight: float) -> PackedVector2Array:
 	var sample_count := int(MIX_RATE * duration)
 	var frames := PackedVector2Array()
 	frames.resize(sample_count)
+	var pitch := _pitch_variation()
 	for index in range(sample_count):
 		var t := float(index) / MIX_RATE
 		var env := exp(-t * (26.0 - weight * 2.5))
-		var frequency := lerpf(340.0, 90.0, t / duration)
-		var sample := (sin(TAU * frequency * t) + sin(TAU * (frequency * 0.42) * t) * 0.24 + _rng.randf_range(-1.0, 1.0) * 0.2) * env * (0.34 + weight * 0.08)
+		var frequency := lerpf(340.0, 90.0, t / duration) * pitch
+		var sample := (
+			sin(TAU * frequency * t)
+			+ sin(TAU * (frequency * 0.42) * t) * 0.24
+			+ sin(TAU * (frequency * 1.85) * t) * 0.12
+			+ _rng.randf_range(-1.0, 1.0) * 0.24
+		) * env * (0.34 + weight * 0.08)
 		frames[index] = Vector2(sample, sample)
 	return frames
 
@@ -240,10 +306,11 @@ func _build_ui_click_frames() -> PackedVector2Array:
 	var sample_count := int(MIX_RATE * duration)
 	var frames := PackedVector2Array()
 	frames.resize(sample_count)
+	var pitch := _pitch_variation()
 	for index in range(sample_count):
 		var t := float(index) / MIX_RATE
 		var env := exp(-t * 45.0)
-		var sample := (sin(TAU * 900.0 * t) * 0.35 + sin(TAU * 1300.0 * t) * 0.18) * env
+		var sample := (sin(TAU * 900.0 * pitch * t) * 0.35 + sin(TAU * 1300.0 * pitch * t) * 0.18) * env
 		frames[index] = Vector2(sample, sample)
 	return frames
 
@@ -252,12 +319,13 @@ func _build_room_clear_frames() -> PackedVector2Array:
 	var sample_count := int(MIX_RATE * duration)
 	var frames := PackedVector2Array()
 	frames.resize(sample_count)
+	var pitch := _pitch_variation()
 	for index in range(sample_count):
 		var t := float(index) / MIX_RATE
 		var progress := t / duration
 		var env := exp(-t * 8.0)
-		var frequency := lerpf(420.0, 880.0, progress)
-		var sample := (sin(TAU * frequency * t) + sin(TAU * frequency * 1.5 * t) * 0.35) * env * 0.34
+		var frequency := lerpf(420.0, 880.0, progress) * pitch
+		var sample := (sin(TAU * frequency * t) + sin(TAU * frequency * 1.5 * t) * 0.35 + sin(TAU * frequency * 2.0 * t) * 0.14) * env * 0.34
 		frames[index] = Vector2(sample, sample)
 	return frames
 
@@ -266,15 +334,32 @@ func _build_level_up_frames() -> PackedVector2Array:
 	var sample_count := int(MIX_RATE * duration)
 	var frames := PackedVector2Array()
 	frames.resize(sample_count)
+	var pitch := _pitch_variation()
 	for index in range(sample_count):
 		var t := float(index) / MIX_RATE
 		var progress := t / duration
 		var env := sin(progress * PI) * exp(-t * 1.8)
-		var root := lerpf(220.0, 440.0, progress)
+		var root := lerpf(220.0, 440.0, progress) * pitch
 		var fifth := root * 1.5
 		var octave := root * 2.0
 		var bass := sin(TAU * 72.0 * t) * exp(-t * 5.0) * 0.34
 		var sparkle := sin(TAU * octave * t) * 0.18 + sin(TAU * fifth * t) * 0.22
 		var sample := (bass + sparkle + sin(TAU * root * t) * 0.28) * env * 0.62
+		frames[index] = Vector2(sample, sample)
+	return frames
+
+func _build_pickup_frames(weight: float) -> PackedVector2Array:
+	var duration := 0.13 + weight * 0.02
+	var sample_count := int(MIX_RATE * duration)
+	var frames := PackedVector2Array()
+	frames.resize(sample_count)
+	var pitch := _pitch_variation()
+	for index in range(sample_count):
+		var t := float(index) / MIX_RATE
+		var progress := t / duration
+		var env := sin(progress * PI) * exp(-t * 4.0)
+		var root := lerpf(720.0, 1180.0, progress) * pitch
+		var sparkle := sin(TAU * root * 2.0 * t) * 0.14 + _rng.randf_range(-1.0, 1.0) * 0.06
+		var sample := (sin(TAU * root * t) * 0.32 + sin(TAU * root * 1.25 * t) * 0.18 + sparkle) * env * (0.42 + weight * 0.08)
 		frames[index] = Vector2(sample, sample)
 	return frames

@@ -722,7 +722,7 @@ func _start_room() -> void:
 	_enemies_killed = 0
 	_pending_enemy_spawns = 0
 	_spawning_done = false
-	_burst_interval = 10.0 if RunState.get_current_act() <= 1 else 8.0
+	_burst_interval = lerpf(11.0, 7.0, RunState.get_run_progress())
 	_next_burst_at = _burst_interval
 	_side_objective_id = str(_room_config.get("side_objective", ""))
 	_side_objective_completed = false
@@ -867,6 +867,8 @@ func _update_side_objectives(delta: float) -> void:
 				if orb.update_orb(delta, _player_nodes):
 					collected_now += 1
 			_collector_collected += collected_now
+			if collected_now > 0:
+				_play_sfx("play_pickup", [])
 			_cleanup_orbs()
 			if _collector_collected >= COLLECTOR_TARGET:
 				_complete_side_objective()
@@ -976,7 +978,7 @@ func _continuous_spawn() -> void:
 			_enemies_spawned += 1
 	if _room_elapsed >= _next_burst_at:
 		_next_burst_at = _room_elapsed + _burst_interval
-		var burst_size := randi_range(4, 6) if RunState.get_current_act() <= 1 else randi_range(6, 8)
+		var burst_size := int(round(lerpf(4.0, 9.0, RunState.get_run_progress())))
 		if bool(_minor_modifier_flags["swarm"]):
 			burst_size *= 2
 		var burst_start_edge := randi() % 4
@@ -987,7 +989,7 @@ func _continuous_spawn() -> void:
 			_enemies_spawned += 1
 
 func _spawn_opening_burst() -> void:
-	var burst_size := 6 if RunState.get_current_act() <= 1 else 8
+	var burst_size := int(round(lerpf(4.0, 9.0, RunState.get_run_progress())))
 	if bool(_minor_modifier_flags["swarm"]):
 		burst_size *= 2
 	var health_multiplier := 0.5 if bool(_minor_modifier_flags["swarm"]) else 1.0
@@ -1064,26 +1066,18 @@ func _roll_wave_enemy_type(pool: Array) -> String:
 	return str(pool[randi() % pool.size()])
 
 func _get_room_duration() -> float:
-	var base := 35.0
-	if RunState.get_current_act() >= 2:
-		base = 45.0
+	var base := lerpf(32.0, 45.0, RunState.get_run_progress())
 	if _room_type == "elite":
 		base += 10.0
 	if RunState.is_endless_mode() and _room_depth >= 20:
-		base += 10.0
+		base += 5.0
 	return base
 
 func _get_spawn_interval() -> float:
-	var base := 0.7
-	if RunState.get_current_act() >= 2:
-		base = 0.5
+	var base := lerpf(0.80, 0.50, RunState.get_run_progress())
 	if _room_type == "elite":
-		base -= 0.1
-	if _room_depth >= 10:
-		base -= 0.05
-	if _room_depth >= 20:
-		base -= 0.05
-	return maxf(base, 0.25)
+		base -= 0.07
+	return maxf(base, 0.30)
 
 func _handle_room_clear() -> void:
 	if _room_clear_started:
@@ -1619,7 +1613,7 @@ func _on_player_damage_taken(player, _amount: int, _current_health: int) -> void
 	_play_sfx("play_damage", [])
 
 func _on_muzzle_flash_requested(origin: Vector2, direction: Vector2, color: Color, feedback_profile: String, impact_weight: float) -> void:
-	var flash := ParticleFactoryData.create_muzzle_flash(_overbright_color(color, 1.35), direction, feedback_profile, impact_weight + 0.18)
+	var flash := ParticleFactoryData.create_muzzle_flash(color, direction, feedback_profile, impact_weight + 0.18)
 	flash.global_position = origin
 	effects.add_child(flash)
 	_play_sfx("play_fire", [feedback_profile, impact_weight])

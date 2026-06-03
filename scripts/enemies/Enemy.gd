@@ -6,6 +6,7 @@ const PULSAR_TELEPORT_MIN_DISTANCE := 400.0
 const PULSAR_REACTIVE_TELEPORT_DISTANCE := 250.0
 const SEPARATION_RADIUS := 64.0
 const SEPARATION_STRENGTH := 120.0
+const BLOOM_COLOR_MULTIPLIER := 1.45
 
 signal enemy_died(enemy)
 signal fire_requested(origin, direction, speed, damage, team, color, projectile_scale)
@@ -1106,7 +1107,7 @@ func _refresh_static_visuals() -> void:
 		EnemyType.SPLITTER:
 			scale_mult = 1.1
 	visual.scale = _base_visual_scale * scale_mult
-	visual.color = _feedback_color.lightened(0.24) if _shield_active else _feedback_color
+	visual.color = _bloom_color(_feedback_color.lightened(0.24)) if _shield_active else _bloom_color(_feedback_color)
 	if collision_shape != null and collision_shape.shape is CircleShape2D:
 		(collision_shape.shape as CircleShape2D).radius = _base_collision_radius * max(0.7, scale_mult)
 	if is_elite:
@@ -1122,6 +1123,9 @@ func _update_dynamic_visuals() -> void:
 		visual.modulate = Color(1.2, 1.0, 0.8, 1.0)
 	else:
 		visual.modulate = Color(1.0, 1.0, 1.0, 1.0)
+
+func _bloom_color(color: Color) -> Color:
+	return Color(color.r * BLOOM_COLOR_MULTIPLIER, color.g * BLOOM_COLOR_MULTIPLIER, color.b * BLOOM_COLOR_MULTIPLIER, color.a)
 
 func _current_time_seconds() -> float:
 	return Time.get_ticks_msec() / 1000.0
