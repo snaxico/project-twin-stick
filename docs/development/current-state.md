@@ -12,9 +12,9 @@ The live runtime is now aligned to the `Feature Roadmap V3` redesign:
 - health resets at the start of every room
 - meta progression, multiple starting weapons, and ability-specific rare mutations remain deferred
 
-Current stable runtime includes the playtest round-6 performance/gameplay patch on top of the
-round-4 + round-5 baseline. Heavy boss add-waves are now enabled in normal boss rooms with a
-`25` non-boss enemy cap that includes pending spawns.
+Current stable runtime includes the playtest round-7 spectacle / ability-slot / mutation patch on
+top of the round-6 performance baseline. Heavy boss add-waves remain enabled in normal boss rooms
+with a `25` non-boss enemy cap that includes pending spawns.
 
 ## Current Runtime
 
@@ -25,7 +25,8 @@ round-4 + round-5 baseline. Heavy boss add-waves are now enabled in normal boss 
 - pre-run setup now supports:
   - `1P` or `2P`
   - `Structured` or `Endless`
-  - per-player `pick 2` ability loadouts from the full 9-ability roster
+  - per-player ability loadouts restricted to `1 OFF + 1 DEF`
+  - slot order is fixed: `LT = OFF`, `RT = DEF`
 - main-menu settings now support:
   - VSync toggle persisted via `user://video_settings.cfg`; first-run project default is enabled
   - keyboard rebinding for menu and active `1-2P` gameplay actions
@@ -58,7 +59,8 @@ round-4 + round-5 baseline. Heavy boss add-waves are now enabled in normal boss 
 - every player always has:
   - faster starter `Rifle` (`~5 shots/sec`)
   - faster base movement (`488` default speed)
-  - `2` equal ability slots
+  - `1 OFF` ability slot on `LT`
+  - `1 DEF` ability slot on `RT`
   - mutation inventory
 - live ability roster:
   - `Shockwave`
@@ -79,11 +81,17 @@ round-4 + round-5 baseline. Heavy boss add-waves are now enabled in normal boss 
   - `Fire Bullets` replaces the old Fire Trail behavior and creates only a smaller burning impact pool on hit / expiry
 - current round-6 tuning changed:
   - `Duration` now scales sustained abilities only; instant and movement abilities such as `Blink` and `Dash` ignore it
+- current round-7 tuning changed:
+  - ability selection and migration enforce `LT = OFF` and `RT = DEF`
+  - `Overcharge`, `Turret`, `Minefield`, and `Orbit` are OFF abilities
+  - `Dash`, `Shield`, `Blink`, `Decoy`, and `Shockwave` are DEF abilities
+  - `oc_piercing_overdrive` and `sw_resonance` are loadout-gated ability rare pilots
 - player mutation visuals are now partially wired:
   - projectile streaks for high `Rapid Fire` / `Velocity`
   - speed-line feedback for `Move Speed`
   - cooldown crackle feedback for `Quick Reflexes`
   - stronger player glow for `Tough` / `Overcharge`
+  - behavior-changing projectile mutations now alter projectile shape, trail/accent, and impact SFX while keeping the player-tint core
 
 ## Content State
 
@@ -105,6 +113,9 @@ round-4 + round-5 baseline. Heavy boss add-waves are now enabled in normal boss 
   - `explosive_rounds`
   - `freeze_shot`
   - `poison`
+- live loadout-gated ability rare pilots:
+  - `oc_piercing_overdrive` requires `Overcharge`
+  - `sw_resonance` requires `Shockwave`
 - live enemy roster:
   - `Chaser`
   - `Charger`
@@ -163,6 +174,7 @@ round-4 + round-5 baseline. Heavy boss add-waves are now enabled in normal boss 
 - Act 2 elites now get `1.5x` HP, `1.3x` contact/projectile damage, and `25%` faster elite cooldowns
 - elite rooms now spawn 2-3 regular add enemies every `6-8s` while the elite is alive
 - bosses now have higher HP, HP-threshold phase telegraphs, add pressure, and clearer heavy-attack tells
+- boss rooms now show a top-center boss HP bar with phase pips while a boss is alive
 - current boss reworks:
   - `Warden`: leap gap-closer, multi-charge combo, ground-pound shockwave, phase speed ramp
   - `Hydra`: aimed snipes, rotating sweep, phase-transition minions, slow homing orbs
@@ -210,6 +222,7 @@ round-4 + round-5 baseline. Heavy boss add-waves are now enabled in normal boss 
   - per-node modifier shorthand on hover detail panel
   - nodes positioned by actual row membership (not fixed 5-column grid)
 - pre-run UI now shows compact text-only ability selection with inline descriptions, `LT` / `RT` selected-slot labels, and slot-colored selected cards
+- pre-run ability UI is split into `LT / OFF` and `RT / DEF` pickers per player
 - arena visuals now use:
   - pure black floor
   - neon grid
@@ -220,6 +233,10 @@ round-4 + round-5 baseline. Heavy boss add-waves are now enabled in normal boss 
   - enemy projectiles are rendered bright red for readability
   - Fire Floor hazard zones are larger and more numerous than the first round-2 implementation
   - level-up VFX were removed because they read like a no-effect ability
+  - round-7 level-ups now use a lightweight screen flash and procedural sting without mid-combat slow-mo
+  - bloom/glow is enabled through HDR 2D plus a `WorldEnvironment`
+  - managed hit-stop is routed through `HitStopManager.gd`; trash kills do not trigger it
+  - projectile mutation shapes/trails/SFX make weapon mutations read more distinctly
 
 ## Active Systems
 
@@ -251,6 +268,8 @@ round-4 + round-5 baseline. Heavy boss add-waves are now enabled in normal boss 
   - boss escalation logic, phase telegraphs, round-5 boss behavior reworks, boss deflector state, elite pressure patterns, elite Act 2 scaling, and staggered target refresh
 - `MutationSystem.gd`
   - mutation compilation
+  - loadout-gated ability rare filtering
+  - ability rare effect compilation for equipped ability ids
   - act-weighted rare rolls
   - elite force-rare support
 - `Bootstrap.gd`
@@ -267,7 +286,7 @@ round-4 + round-5 baseline. Heavy boss add-waves are now enabled in normal boss 
 
 - no meta progression
 - no multiple starting weapons
-- no ability-specific rare mutation pass
+- no expanded ability-specific rare mutation pass beyond the two round-7 pilots
 - no `3-4` player support
 - no final art pass
 - no formal automated gameplay validation
@@ -275,7 +294,7 @@ round-4 + round-5 baseline. Heavy boss add-waves are now enabled in normal boss 
 ## Known Risks
 
 - full live playtesting and balance validation still have not been run after the full V3 integration
-- round-2 through round-6 tuning have passed headless validation; round-6 also has non-headless profiling harness data and a strong live performance report, but still needs full balance/readability playtesting
+- round-2 through round-7 tuning have passed headless validation; round-6 also has non-headless profiling harness data and a strong live performance report, but round-7 still needs full balance/readability/performance playtesting
 - boss and elite behavior is implemented, but still likely needs feel tuning against real runs
 - modifier stacking, projectile pooling, AI time-slicing, new boss add pressure, homing orbs, and endless pressure have not been manually stress-tested yet
 - the rebuilt pause menu, new VFX density, swarm performance optimization, slot-colored HUD, Build HUD overhaul, and input binding menu have passed parse validation but still need controller/manual readability testing
@@ -288,13 +307,14 @@ round-4 + round-5 baseline. Heavy boss add-waves are now enabled in normal boss 
 - Pulsar beam currently uses angle/range damage and does not raycast line-of-sight through walls; accept for now unless playtest reads unfair
 - Hive shield and boss add pressure may make boss fights feel too long; validate before further tuning
 - round-6 heavy boss add-waves are now shipped by default in normal boss rooms and still need focused balance/performance validation
+- round-7 bloom, hit-stop, projectile mutation visuals/SFX, boss HP bar, and ability rare pilots are implemented but still need manual `1P` / `2P` feel and performance validation
 - B3 Pulsar deflector-spawned adds remain unimplemented until the desired Pulsar deflector count/pattern is specified; B2 Pulsar spitter add-waves are shipped
 - enemy visual draw reduction needs a manual readability check because shadow/outline nodes were removed
 - `FireTrailZone` distance checks passed parse validation and warning cleanup but still need focused in-game correctness validation for player Fire Bullets damaging enemies and no friendly fire
 
 ## Next Step
 
-Run manual validation for the current round-6 local build. Use `docs/development/playtest-round-6-validation.md` as the active checklist.
+Run manual validation for the current round-7 local build. Use `docs/development/playtest-round-7-plan.md` verification and checklist sections as the active playtest guide.
 
 - continuous spawn pacing in `1P` and `2P` — does `35-45s` room duration feel right?
 - first `30s` pressure — do the opening burst, `~5/s` rifle, spawn ramp, and multi-edge spawns feel active without overwhelming?
@@ -307,6 +327,12 @@ Run manual validation for the current round-6 local build. Use `docs/development
 - Blink movement-direction, arrival i-frames, and detonation feel
 - Fire Bullets impact-pool balance, correctness, and performance
 - real boss-room stress validation for shipped capped boss add-waves in `1P` and `2P`
+- boss HP bar visibility, phase pips, and readability in `1P` and `2P`
+- OFF/DEF picker usability and `LT = OFF` / `RT = DEF` mapping for both players
+- hit-stop feel, especially that trash kills do not stutter dense rooms
+- bloom readability and performance with DebugOverlay F3
+- distinct projectile mutation visuals/SFX and player-green core readability
+- loadout-gated ability rare pilots: `oc_piercing_overdrive` and `sw_resonance`
 - projectile pooling / AI time-slicing / boss entity-load performance at `100-150+` enemies/projectiles
 - ability selection usability on controller
 - remapped keyboard/controller binding behavior from main-menu Settings

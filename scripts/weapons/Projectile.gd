@@ -40,6 +40,10 @@ var poison_duration: float = 0.0
 var rapid_fire_level: int = 0
 var velocity_level: int = 0
 var knockback_level: int = 0
+var projectile_shape: String = "orb"
+var trail_style: String = "default"
+var accent_color: Color = Color.WHITE
+var impact_sfx: String = "hit"
 var source_type: String = "projectile"
 var weapon_id: String = ""
 var weapon_tags: Array = []
@@ -91,6 +95,10 @@ func setup(projectile_team: String, projectile_direction: Vector2, projectile_sp
 	rapid_fire_level = 0
 	velocity_level = 0
 	knockback_level = 0
+	projectile_shape = "orb"
+	trail_style = "default"
+	accent_color = projectile_color.lightened(0.2)
+	impact_sfx = "hit"
 	source_type = "projectile"
 	weapon_id = ""
 	weapon_tags = []
@@ -131,6 +139,10 @@ func setup_from_config(projectile_team: String, projectile_direction: Vector2, c
 	rapid_fire_level = max(0, int(config.get("rapid_fire_level", rapid_fire_level)))
 	velocity_level = max(0, int(config.get("velocity_level", velocity_level)))
 	knockback_level = max(0, int(config.get("knockback_level", knockback_level)))
+	projectile_shape = str(config.get("projectile_shape", projectile_shape))
+	trail_style = str(config.get("trail_style", trail_style))
+	accent_color = _parse_color(config.get("accent_color", accent_color), accent_color)
+	impact_sfx = str(config.get("impact_sfx", impact_sfx))
 	source_type = str(config.get("source_type", source_type))
 	weapon_id = str(config.get("weapon_id", weapon_id))
 	weapon_tags = (config.get("weapon_tags", []) as Array).duplicate(true)
@@ -177,7 +189,7 @@ func _activate_projectile_runtime() -> void:
 		_trail_particles.queue_free()
 	_trail_particles = null
 	if _should_spawn_trail_particles():
-		_trail_particles = ParticleFactoryData.create_projectile_trail(_get_projectile_color())
+		_trail_particles = ParticleFactoryData.create_projectile_trail(_get_trail_color())
 		add_child(_trail_particles)
 
 func _physics_process(delta: float) -> void:
@@ -195,7 +207,7 @@ func _physics_process(delta: float) -> void:
 
 func _on_body_entered(body: Node) -> void:
 	if body is StaticBody2D:
-		impact_requested.emit(global_position, -direction, team, _get_projectile_color(), feedback_profile, impact_weight, body, _build_combat_context(body))
+		impact_requested.emit(global_position, -direction, team, _get_impact_color(), impact_sfx, impact_weight, body, _build_combat_context(body))
 		_spawn_impact_fire_pool()
 		_finish_projectile()
 		return
@@ -223,7 +235,7 @@ func _attempt_hit_target(target: Node) -> void:
 	if poison_duration > 0.0 and poison_dps > 0.0 and target.has_method("apply_poison"):
 		target.apply_poison(poison_dps, poison_duration)
 	_hit_targets.append(target)
-	impact_requested.emit(global_position, -direction, team, _get_projectile_color(), feedback_profile, impact_weight, target, _build_combat_context(target))
+	impact_requested.emit(global_position, -direction, team, _get_impact_color(), impact_sfx, impact_weight, target, _build_combat_context(target))
 	if pierce_remaining > 0:
 		pierce_remaining -= 1
 		return
@@ -315,11 +327,11 @@ func _apply_visual_state() -> void:
 		visual.polygon = _build_orb_polygon(8.0)
 	else:
 		visual.color = projectile_color.lightened(0.05)
-		visual.scale = Vector2(_base_visual_scale.x * 1.18 * size_scale * streak_scale, _base_visual_scale.y * 1.18 * size_scale)
-		visual.polygon = _build_orb_polygon(6.0)
+		visual.scale = _get_shape_scale(size_scale, streak_scale)
+		visual.polygon = _build_shape_polygon(projectile_shape)
 	if outline != null:
 		outline.visible = true
-		outline.color = projectile_color.darkened(0.25) if enemy_shot else projectile_color.lightened(0.26)
+		outline.color = projectile_color.darkened(0.25) if enemy_shot else accent_color
 		outline.scale = Vector2(visual.scale.x * 1.16, visual.scale.y * 1.24)
 		outline.polygon = visual.polygon
 	if collision_shape != null and collision_shape.shape is CircleShape2D:
@@ -328,8 +340,16 @@ func _apply_visual_state() -> void:
 func _get_projectile_color() -> Color:
 	return tint_color
 
+func _get_impact_color() -> Color:
+	return accent_color if team == "player" else tint_color
+
+func _get_trail_color() -> Color:
+	if team == "enemy":
+		return tint_color
+	return accent_color
+
 func _should_spawn_trail_particles() -> bool:
-	if rapid_fire_level < 2 and velocity_level < 2:
+	if trail_style == "default" and rapid_fire_level < 2 and velocity_level < 2:
 		return false
 	var parent_node := get_parent()
 	if parent_node == null:
@@ -340,6 +360,44 @@ func _should_spawn_trail_particles() -> bool:
 	if team == "enemy" and sibling_count >= ENEMY_TRAIL_PARTICLE_SOFT_CAP:
 		return false
 	return true
+
+func _get_shape_scale(size_scale: float, streak_scale: float) -> Vector2:
+	match projectile_shape:
+		"small_orb":
+			return Vector2(_base_visual_scale.x * 0.92 * size_scale * streak_scale, _base_visual_scale.y * 0.92 * size_scale)
+		"lance":
+			return Vector2(_base_visual_scale.x * 1.75 * size_scale * streak_scale, _base_visual_scale.y * 0.76 * size_scale)
+		"large_orb":
+			return Vector2(_base_visual_scale.x * 1.36 * size_scale * streak_scale, _base_visual_scale.y * 1.36 * size_scale)
+		"diamond":
+			return Vector2(_base_visual_scale.x * 1.18 * size_scale * streak_scale, _base_visual_scale.y * 1.18 * size_scale)
+		"shard":
+			return Vector2(_base_visual_scale.x * 1.45 * size_scale * streak_scale, _base_visual_scale.y * 0.9 * size_scale)
+		"blob":
+			return Vector2(_base_visual_scale.x * 1.18 * size_scale * streak_scale, _base_visual_scale.y * 1.0 * size_scale)
+		"bomb", "ember_orb":
+			return Vector2(_base_visual_scale.x * 1.28 * size_scale * streak_scale, _base_visual_scale.y * 1.28 * size_scale)
+		_:
+			return Vector2(_base_visual_scale.x * 1.18 * size_scale * streak_scale, _base_visual_scale.y * 1.18 * size_scale)
+
+func _build_shape_polygon(shape: String) -> PackedVector2Array:
+	match shape:
+		"lance":
+			return PackedVector2Array([Vector2(10.0, 0.0), Vector2(1.5, 5.0), Vector2(-8.0, 3.0), Vector2(-8.0, -3.0), Vector2(1.5, -5.0)])
+		"diamond":
+			return PackedVector2Array([Vector2(8.0, 0.0), Vector2(0.0, 7.0), Vector2(-8.0, 0.0), Vector2(0.0, -7.0)])
+		"shard":
+			return PackedVector2Array([Vector2(9.0, 0.0), Vector2(2.0, 5.5), Vector2(-7.0, 2.0), Vector2(-4.0, -4.5)])
+		"blob":
+			return PackedVector2Array([Vector2(7.0, -1.0), Vector2(3.0, 6.0), Vector2(-5.5, 5.0), Vector2(-8.0, -1.0), Vector2(-2.0, -6.5), Vector2(5.0, -5.0)])
+		"bomb":
+			return _build_orb_polygon(7.0, 10)
+		"large_orb", "ember_orb":
+			return _build_orb_polygon(7.0, 10)
+		"small_orb":
+			return _build_orb_polygon(5.2, 8)
+		_:
+			return _build_orb_polygon(6.0)
 
 func _build_orb_polygon(radius: float, point_count: int = 8) -> PackedVector2Array:
 	var points := PackedVector2Array()
@@ -359,6 +417,7 @@ func _build_combat_context(target: Node) -> Dictionary:
 		"damage": damage,
 		"color": _get_projectile_color(),
 		"feedback_profile": feedback_profile,
+		"impact_sfx": impact_sfx,
 		"impact_weight": impact_weight,
 		"is_tick": false,
 		"source_type": source_type,
@@ -373,3 +432,12 @@ func _build_combat_context(target: Node) -> Dictionary:
 		"poison_dps": poison_dps,
 		"poison_duration": poison_duration,
 	}
+
+func _parse_color(value: Variant, fallback: Color) -> Color:
+	if value is Color:
+		return value
+	if value is Array:
+		var parts: Array = value as Array
+		if parts.size() >= 3:
+			return Color(float(parts[0]), float(parts[1]), float(parts[2]), float(parts[3]) if parts.size() > 3 else 1.0)
+	return fallback

@@ -3,7 +3,7 @@ extends RefCounted
 
 var player_index: int = 0
 var weapon_id: String = "rifle"
-var ability_slot_1: String = "shockwave"
+var ability_slot_1: String = "overcharge"
 var ability_slot_2: String = "dash"
 var mutations: Array = []
 

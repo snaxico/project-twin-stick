@@ -71,10 +71,12 @@ func get_compiled_weapon_stats(player_index: int, base_stats: Dictionary) -> Dic
 	if split_count > 0:
 		compiled["split_extra_count"] = split_count * int(_get_param("split_shot", "extra_count", 1))
 		compiled["split_spread_degrees"] = float(_get_param("split_shot", "spread_degrees", 15.0))
+		_apply_projectile_visual_fields(compiled, "split_shot")
 	var big_shot_count := get_mutation_level(player_index, "big_shot")
 	if big_shot_count > 0:
 		var size_mult := 1.0 + float(big_shot_count) * float(_get_param("big_shot", "size_bonus_per_level", 0.333))
 		compiled["area"] = float(compiled.get("area", 4.0)) * size_mult
+		_apply_projectile_visual_fields(compiled, "big_shot")
 	var rapid_fire_count := get_mutation_level(player_index, "rapid_fire")
 	compiled["rapid_fire_level"] = rapid_fire_count
 	if rapid_fire_count > 0:
@@ -86,10 +88,12 @@ func get_compiled_weapon_stats(player_index: int, base_stats: Dictionary) -> Dic
 	var pierce_count := get_mutation_level(player_index, "pierce")
 	if pierce_count > 0:
 		compiled["pierce_count"] = pierce_count * int(_get_param("pierce", "pierce_count", 1))
+		_apply_projectile_visual_fields(compiled, "pierce")
 	var ricochet_count := get_mutation_level(player_index, "ricochet")
 	if ricochet_count > 0:
 		compiled["ricochet_count"] = ricochet_count * int(_get_param("ricochet", "bounce_count", 1))
 		compiled["ricochet_range"] = float(_get_param("ricochet", "bounce_range", 200.0))
+		_apply_projectile_visual_fields(compiled, "ricochet")
 	if has_mutation(player_index, "fire_trail"):
 		compiled["leaves_fire_trail"] = true
 		compiled["trail_lifetime"] = float(_get_param("fire_trail", "trail_lifetime", 1.5))
@@ -98,20 +102,41 @@ func get_compiled_weapon_stats(player_index: int, base_stats: Dictionary) -> Dic
 		compiled["impact_pool_radius"] = float(_get_param("fire_trail", "impact_pool_radius", 90.0))
 		compiled["impact_pool_lifetime"] = float(_get_param("fire_trail", "impact_pool_lifetime", 3.0))
 		compiled["impact_pool_damage_percent"] = float(_get_param("fire_trail", "impact_pool_damage_percent", 0.5))
+		_apply_projectile_visual_fields(compiled, "fire_trail")
 	if has_mutation(player_index, "explosive_rounds"):
 		compiled["explosion_radius"] = float(_get_param("explosive_rounds", "explosion_radius", 82.0))
 		compiled["explosion_damage_percent"] = float(_get_param("explosive_rounds", "damage_percent", 0.65))
+		_apply_projectile_visual_fields(compiled, "explosive_rounds")
 	if has_mutation(player_index, "freeze_shot"):
 		compiled["slow_multiplier"] = float(_get_param("freeze_shot", "slow_multiplier", 0.5))
 		compiled["slow_duration"] = float(_get_param("freeze_shot", "slow_duration", 1.0))
+		_apply_projectile_visual_fields(compiled, "freeze_shot")
 	if has_mutation(player_index, "poison"):
 		compiled["poison_dps"] = float(_get_param("poison", "poison_dps", 8.0))
 		compiled["poison_duration"] = float(_get_param("poison", "poison_duration", 2.5))
+		_apply_projectile_visual_fields(compiled, "poison")
 	var knockback_count := get_mutation_level(player_index, "knockback")
 	compiled["knockback_level"] = knockback_count
 	if knockback_count > 0:
 		compiled["knockback_force"] = 300.0 * (1.0 + float(knockback_count) * float(_get_param("knockback", "force_bonus_per_level", 0.333)))
 	return compiled
+
+func get_ability_rare_effects(player_index: int, ability_id: String) -> Dictionary:
+	var effects: Dictionary = {}
+	for mutation_id_variant in RunState.get_mutations(player_index):
+		var mutation_id := str(mutation_id_variant)
+		if not _definition_map.has(mutation_id):
+			continue
+		var mutation: Dictionary = _definition_map[mutation_id] as Dictionary
+		if str(mutation.get("category", "")) != "ability":
+			continue
+		if str(mutation.get("requires_ability", "")) != ability_id:
+			continue
+		var params: Dictionary = (mutation.get("params", {}) as Dictionary).duplicate(true)
+		for key in params.keys():
+			effects[str(key)] = params[key]
+		effects[str(mutation_id)] = true
+	return effects
 
 func get_ability_area_multiplier(player_index: int) -> float:
 	return 1.0 + float(get_mutation_level(player_index, "wide_pulse")) * float(_get_param("wide_pulse", "area_bonus_per_level", 0.333))
@@ -193,9 +218,22 @@ func _is_stackable(mutation_id: String) -> bool:
 	return _get_rarity(mutation_id) == "common"
 
 func _can_still_pick(player_index: int, mutation_id: String) -> bool:
+	if not _required_ability_is_equipped(player_index, mutation_id):
+		return false
 	if _is_stackable(mutation_id):
 		return get_mutation_level(player_index, mutation_id) < _get_max_level(mutation_id)
 	return not has_mutation(player_index, mutation_id)
+
+func _required_ability_is_equipped(player_index: int, mutation_id: String) -> bool:
+	if not _definition_map.has(mutation_id):
+		return false
+	var required_ability := str((_definition_map[mutation_id] as Dictionary).get("requires_ability", ""))
+	if required_ability.is_empty():
+		return true
+	var inventory = RunState.get_player_inventory(player_index)
+	if inventory == null:
+		return false
+	return str(inventory.ability_slot_1) == required_ability or str(inventory.ability_slot_2) == required_ability
 
 func _get_rarity(mutation_id: String) -> String:
 	if not _definition_map.has(mutation_id):
@@ -212,6 +250,26 @@ func _get_param(mutation_id: String, param_name: String, default_value: Variant)
 		return default_value
 	var params: Dictionary = (_definition_map[mutation_id] as Dictionary).get("params", {})
 	return params.get(param_name, default_value)
+
+func _apply_projectile_visual_fields(compiled: Dictionary, mutation_id: String) -> void:
+	if not _definition_map.has(mutation_id):
+		return
+	var definition: Dictionary = _definition_map[mutation_id] as Dictionary
+	compiled["projectile_shape"] = str(definition.get("projectile_shape", compiled.get("projectile_shape", "orb")))
+	compiled["trail_style"] = str(definition.get("trail_style", compiled.get("trail_style", "default")))
+	compiled["impact_sfx"] = str(definition.get("impact_sfx", compiled.get("impact_sfx", "hit")))
+	compiled["accent_color"] = _parse_color(definition.get("accent_color", compiled.get("accent_color", Color.WHITE)), Color.WHITE)
+
+func _parse_color(value: Variant, fallback: Color) -> Color:
+	if value is Color:
+		return value
+	if value is Array:
+		var parts: Array = value as Array
+		if parts.size() >= 3:
+			return Color(float(parts[0]), float(parts[1]), float(parts[2]), float(parts[3]) if parts.size() > 3 else 1.0)
+	if value is String:
+		return Color.html(str(value))
+	return fallback
 
 func _pop_option(pool: Array) -> Dictionary:
 	if pool.is_empty():

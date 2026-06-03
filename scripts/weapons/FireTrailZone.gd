@@ -56,12 +56,12 @@ func _get_targets_for_team() -> Array:
 	if team == "player":
 		if combat_owner != null and combat_owner.has_method("get_nearby_enemy_target_nodes"):
 			return combat_owner.get_nearby_enemy_target_nodes(global_position, radius)
-		var scene_tree := get_tree()
-		return scene_tree.get_nodes_in_group("aim_target") if scene_tree != null else []
+		var aim_target_tree := get_tree()
+		return aim_target_tree.get_nodes_in_group("aim_target") if aim_target_tree != null else []
 	if combat_owner != null and combat_owner.has_method("get_player_target_nodes"):
 		return combat_owner.get_player_target_nodes()
-	var scene_tree := get_tree()
-	return scene_tree.get_nodes_in_group("player_target") if scene_tree != null else []
+	var player_target_tree := get_tree()
+	return player_target_tree.get_nodes_in_group("player_target") if player_target_tree != null else []
 
 func _get_combat_owner() -> Node:
 	var current := get_parent()
@@ -69,8 +69,8 @@ func _get_combat_owner() -> Node:
 		if current.has_method("get_nearby_enemy_target_nodes") or current.has_method("get_player_target_nodes"):
 			return current
 		current = current.get_parent()
-	var scene_tree := get_tree()
-	return scene_tree.current_scene if scene_tree != null else null
+	var owner_tree := get_tree()
+	return owner_tree.current_scene if owner_tree != null else null
 
 func _draw() -> void:
 	var remaining_ratio := clampf((_expires_at - _current_time_seconds()) / maxf(lifetime, 0.01), 0.0, 1.0)

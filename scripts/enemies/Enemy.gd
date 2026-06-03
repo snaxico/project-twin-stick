@@ -79,7 +79,6 @@ var _base_collision_radius := 19.0
 var _pulsar_teleport_at := 0.0
 var _pulsar_telegraph_until := 0.0
 var _pulsar_emp_at := 0.0
-var _pulsar_beam_at := 0.0
 var _boss_phase_index := 0
 var _elite_charge_slam_pending := false
 var _elite_cd_mult := 1.0
@@ -131,7 +130,6 @@ func setup(type_name: String, combat_owner: Node) -> void:
 	_pulsar_teleport_at = 0.0
 	_pulsar_telegraph_until = 0.0
 	_pulsar_emp_at = 0.0
-	_pulsar_beam_at = 0.0
 	_boss_phase_index = 0
 	_elite_charge_slam_pending = false
 	_elite_cd_mult = 1.0
@@ -525,6 +523,8 @@ func _update_boss_phase_transition(now: float) -> void:
 		if _boss_deflector_nodes.is_empty():
 			_boss_deflector_phase_index = -1
 			_spawn_boss_deflector(4)
+	if _combat_owner != null and _combat_owner.has_method("notify_boss_phase_transition"):
+		_combat_owner.notify_boss_phase_transition(self, _boss_phase_index)
 	_spawn_phase_transition_telegraph()
 
 func _spawn_phase_transition_telegraph() -> void:
@@ -878,8 +878,6 @@ func _update_pulsar_behavior(direction: Vector2, _distance: float, now: float) -
 		_pulsar_teleport_at = now + _get_pulsar_teleport_interval(phase)
 	if _pulsar_emp_at <= 0.0:
 		_pulsar_emp_at = now + lerpf(15.0, 12.0, phase)
-	if _pulsar_beam_at <= 0.0:
-		_pulsar_beam_at = now + lerpf(10.0, 8.0, phase)
 	if _pulsar_telegraph_until > now:
 		return Vector2.ZERO
 	if _distance <= PULSAR_REACTIVE_TELEPORT_DISTANCE and now + 0.5 < _pulsar_teleport_at:
@@ -896,11 +894,6 @@ func _update_pulsar_behavior(direction: Vector2, _distance: float, now: float) -
 		_spawn_boss_attack_telegraph(520.0)
 		if _combat_owner != null and _combat_owner.has_method("spawn_pulsar_emp"):
 			_combat_owner.spawn_pulsar_emp(global_position, 2.0, _feedback_color)
-	if now >= _pulsar_beam_at:
-		_pulsar_beam_at = now + lerpf(10.0, 8.0, phase)
-		_spawn_boss_attack_telegraph(260.0)
-		if _combat_owner != null and _combat_owner.has_method("spawn_pulsar_beam"):
-			_combat_owner.spawn_pulsar_beam(global_position, direction, _feedback_color, 25)
 	if now >= _next_ability_at:
 		_next_ability_at = now + (4.0 if phase < 0.25 else 3.0 if phase < 0.5 else 2.4 if phase < 0.75 else 2.0)
 		_spawn_boss_attack_telegraph(210.0)

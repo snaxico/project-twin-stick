@@ -22,8 +22,8 @@ Read this first to restore project context quickly, then read `current-state.md`
 - Same-screen local co-op twin-stick roguelite prototype in Godot `4.6.2`.
 - Current target is the active `1-2` player V3 runtime.
 - The live runtime now follows the `Feature Roadmap V3` redesign captured in `current-state.md`.
-- Current stable runtime includes the round-6 performance/gameplay patch on top of the round-4 + round-5 baseline.
-- Current focus is manual round-6 validation, especially Scanline, Fire Bullets correctness, enemy readability, and shipped boss add-wave performance.
+- Current stable runtime includes the round-7 spectacle / OFF-DEF ability slot / distinct mutation patch on top of the round-6 performance baseline.
+- Current focus is manual round-7 validation, especially OFF/DEF mapping, bloom/hit-stop feel, boss HP readability, distinct mutation visuals/SFX, ability rare pilots, and shipped boss add-wave performance.
 
 ## Live Runtime Summary
 
@@ -35,7 +35,8 @@ Read this first to restore project context quickly, then read `current-state.md`
   - `Endless`
 - Current live loadout structure:
   - auto-firing `Rifle`
-  - `2` equal ability slots per player
+  - `1 OFF` ability on `LT`
+  - `1 DEF` ability on `RT`
 - Current main-menu settings:
   - VSync toggle persisted in `user://video_settings.cfg`; first-run project default is enabled
   - keybinding editor
@@ -78,6 +79,14 @@ Read this first to restore project context quickly, then read `current-state.md`
   - enemy visuals use one polygon draw per enemy instead of shadow + outline + visual
   - heavy boss add-waves are enabled in normal boss rooms with a `25` non-boss enemy cap
   - live playtest feedback reports a massive performance improvement
+- Current round-7 state:
+  - ability data and UI are split into OFF and DEF slots
+  - defaults and migrated old loadouts normalize to `LT = OFF`, `RT = DEF`
+  - bloom/glow is enabled through HDR 2D and `WorldEnvironment`
+  - hit-stop is managed by `HitStopManager.gd` as the sole `Engine.time_scale` owner
+  - boss fights show a top-center HP bar with phase pips
+  - behavior-changing weapon mutations have distinct projectile shape/trail/accent/SFX
+  - ability rare pilot includes `oc_piercing_overdrive` for Overcharge and `sw_resonance` for Shockwave
 - Current live progression loop:
   - enemy kills feed one shared XP bar
   - level-ups bank room-end pick rounds
@@ -100,7 +109,7 @@ Read this first to restore project context quickly, then read `current-state.md`
 
 - Preserve the approved V3 core loop.
 - Favor validation, tuning, and readability over adding more systems.
-- Validate the current round-6 local build in live play:
+- Validate the current round-7 local build in live play:
   - shared XP and room-end pick cadence
   - structured map flow pacing
   - endless scaling past room `20`
@@ -109,6 +118,11 @@ Read this first to restore project context quickly, then read `current-state.md`
   - modifier readability
   - projectile pooling / AI time-slicing / boss entity-load performance at `100-150+` enemies/projectiles
   - real boss-room stress validation for shipped capped boss add-waves
+  - OFF/DEF picker usability and controller mapping
+  - bloom/hit-stop feel and performance
+  - boss HP bar readability
+  - mutation projectile readability and SFX distinctness
+  - ability rare pilot behavior
   - controller usability in ability select, map UI, pause menu, and remapped bindings
 - Tune:
   - rifle cadence (`~5 shots/sec` in the current build)
@@ -168,6 +182,7 @@ Read this first to restore project context quickly, then read `current-state.md`
   - automatic target selection
 - `scripts/game/MutationSystem.gd`:
   - live mutation compilation
+  - loadout-gated ability rare filtering and effect exposure
   - act-weighted rare rolls
   - elite `force_rare` support
 - `scripts/weapons/Projectile.gd`:
@@ -215,6 +230,15 @@ Read this first to restore project context quickly, then read `current-state.md`
   - `200+200`: `73.8 FPS`, `651` draw calls
 - Headless harness output has `0` draw calls and should not be used for render profiling.
 - Warning cleanup after implementation removed Godot local-name conflicts in `FireTrailZone.gd` and `MineFieldModifier.gd`.
+
+## Current Round-7 Build Notes
+
+- `docs/development/playtest-round-7-plan.md` is the round-7 implementation and validation guide.
+- Treat the round-7 patch as the current stable branch state for future work.
+- A8 fire-rate bump remains deferred by plan.
+- Expansion ability rares remain deferred; only the two pilot rares are live.
+- Manual validation still needs to cover `1P` and `2P` feel/performance with DebugOverlay F3.
+- Headless parse passed after implementation and `FireTrailZone.gd` warning cleanup.
 
 ## Validation Reminder
 

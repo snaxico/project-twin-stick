@@ -27,8 +27,16 @@ A lot of infra already exists in `scripts/juice/` (`ScreenShake`, `ScreenEffects
 `ParticleFactory`, `SfxEngine`, `HealthBarHUD`, `FloatingText`). The work is mostly *using it
 harder* + a few new pieces.
 
-- **A1. Bloom/glow (biggest visual win).** Add a `WorldEnvironment` with `Environment.glow`
-  enabled to `scenes/game/GameWorld.tscn` (none exists today). Neon-on-black pops instantly.
+- **A1. Bloom/glow (biggest visual win).** Add a `WorldEnvironment` + `Environment` with `glow`
+  to `scenes/game/GameWorld.tscn` (none exists today). **Glow alone won't show** — the project
+  has no HDR/glow setup and colors are normal-range (0-1), so bloom would be enabled but
+  invisible. Required setup:
+  - Enable **HDR 2D**: project setting `rendering/viewport/hdr_2d = true`.
+  - On the `Environment`: `glow_enabled = true`, and either set `glow_hdr_threshold` **below 1.0**
+    (~0.8) so bright neon catches, or feed it **over-bright (>1.0) emissive** colors.
+  - Give at least one **test emissive target** so we can confirm it's working — e.g. push the
+    player/projectile colors over-bright (the bright-green player core × ~1.3-1.6) and verify the
+    glow halos them.
   *Perf note:* glow is a fill-rate post-process, not draw calls — cheap on draw count but watch
   it on low-end; verify with the DebugOverlay.
 - **A2. Hit-stop (new).** Brief `Engine.time_scale` dip (~0.05 for ~40-60ms) on big hits / elite
@@ -115,20 +123,22 @@ Implemented in `scripts/weapons/Projectile.gd` (shape/trail/impact draw), applie
 | `freeze_shot` | crystalline shard | frosty trail, ice-blue accent | glassy "chime" |
 | `poison` | irregular blob | bubbly trail, toxic-green/violet accent | wet "squelch" |
 
-New optional `data/mutations.json` fields per behavior mutation:
+New required `data/mutations.json` fields per behavior mutation:
 `projectile_shape`, `trail_style`, `accent_color` (trail/outline/impact only), `impact_sfx`.
 Core fill remains `player_config.tint`.
 - **Stat mutations** stay numeric but get clearer feedback (already partly wired — streaks for
   rapid_fire/velocity, speed lines for move_speed, etc.): `rapid_fire`, `velocity`, `move_speed`,
   `tough`, `duration`, `quick_reflexes`, `knockback`, `wide_pulse`.
-- **`data/mutations.json`:** add per-mutation visual/sfx hints if helpful (color, trail style).
+
+The table above is the implementation spec — the listed `data/mutations.json` fields are
+**required** for the behavior mutations (not optional).
 
 ## Track D — Ability-specific rare mutations (net-new content)
 
 The actual *new content* for this round (#6). Rares that **transform an equipped ability**, not
 just tweak weapon stats. This is high-risk because it touches mutation rolling, loadout compile,
 player ability execution, and several helper nodes. Do **not** implement all 9 in the first patch.
-Round 7 should ship a **2-3 rare pilot** only after Track B is stable.
+Round 7 should ship **exactly a 2-rare pilot** only after Track B is stable.
 
 - **Loadout-gated pool (the core mechanic):** an ability rare tagged `requires_ability: "<id>"`
   is only offered if the player has that ability equipped. Gate it in
@@ -145,13 +155,14 @@ Round 7 should ship a **2-3 rare pilot** only after Track B is stable.
     each affected ability path.
   - Verification must prove the rare changes behavior, not only that it appears in the pick UI.
 - **Pilot: ship exactly these TWO first** (one OFF + one DEF, both **non-entity-spawning** so the
-  pilot proves the full pipeline — loadout-gate → compile → behavior — with zero perf risk).
+  pilot proves the full pipeline — loadout-gate → compile → behavior — with low perf risk and no
+  persistent entity-count risk).
   Expansion rares (incl. the entity-spawning ones) come later, each behind its own gate re-check.
 
   | Pilot rare ID | `requires_ability` | slot | params | behavior | implemented in |
   |---|---|---|---|---|---|
-  | `oc_piercing_overdrive` | `overcharge` | OFF | `{ "pierce_bonus": 2, "projectile_speed_mult": 1.2 }` | While Overcharge is active, player projectiles pierce +2 enemies and travel 20% faster. | `Player.gd` overcharge path → adds to `projectile_config` (`pierce_remaining`, `speed`) at fire time |
-  | `sw_resonance` | `shockwave` | DEF | `{ "extra_pulses": 2, "pulse_interval": 0.15 }` | Shockwave emits 3 total pulses (1 + 2 extra) staggered 0.15s, each at full damage/radius/knockback. | `Player.gd` shockwave activation (`match ability_id` :481) → schedule `extra_pulses` more emits via the existing shockwave damage/knockback path |
+  | `oc_piercing_overdrive` | `overcharge` | OFF | `{ "pierce_bonus": 2, "projectile_speed_mult": 1.2 }` | While Overcharge is active, player projectiles pierce +2 enemies and travel 20% faster. | `Player.gd` fire path: read the compiled rare stats from the active slot via `_get_active_ability_stats("overcharge", now)` (:377), then set `projectile_config["pierce_count"] = base + pierce_bonus` (NOT `pierce_remaining` — `Projectile.setup_from_config` reads `pierce_count` at :115 and derives `pierce_remaining` itself) and scale `speed` |
+  | `sw_resonance` | `shockwave` | DEF | `{ "extra_pulses": 2, "pulse_interval": 0.15 }` | Shockwave emits 3 total pulses (1 + 2 extra) staggered 0.15s, each at full damage/radius/knockback. | **CoopManager**, not Player. Shockwave damage/VFX live in `CoopManager._spawn_player_shockwave()` (:1189) via `_on_player_ability_activated` (:1151). Pass the resonance stat through `ability_activated`, and in the handler schedule `extra_pulses` additional `_spawn_player_shockwave()` calls at `pulse_interval` (mirror the existing `schedule_enemy_shockwave` delay pattern at :1900). Do NOT add timers in `Player.gd` — it can't reach the damage path |
 
   Both are `rarity: rare`, `category: ability` entries in `data/mutations.json`.
 
@@ -183,7 +194,7 @@ and again before any A8 fire-rate bump: ~60 FPS at capped density, no spikes, 1P
    boss HP bar, and SFX pass.
 3. **Track C:** distinct visuals/SFX for existing behavior-changing weapon mutations.
 4. **Track D pilot only:** exactly the 2 rares (`oc_piercing_overdrive`, `sw_resonance`) via the
-   explicit runtime application path — both Player-side, non-entity-spawning.
+   explicit runtime application path — one Player-side, one CoopManager-side, both non-entity-spawning.
 5. **A8 remains deferred:** only consider a small fire-rate bump if the above still feels slow
    and the real-room performance gate has headroom.
 
@@ -191,8 +202,8 @@ and again before any A8 fire-rate bump: ~60 FPS at capped density, no spikes, 1P
 
 | File | Track | Change |
 |------|-------|--------|
-| `scenes/game/GameWorld.tscn` | A1 | Add `WorldEnvironment` + glow |
-| `scripts/juice/ScreenShake.gd`, `ScreenEffects.gd` | A2/A3 | Hit-stop; stronger event-scaled shake |
+| `scenes/game/GameWorld.tscn`, `project.godot` (`hdr_2d`), + an emissive/over-bright color target | A1 | `WorldEnvironment`+glow, HDR 2D on, threshold <1.0; push player/projectile colors over-bright so glow is visible |
+| `scripts/juice/HitStopManager.gd`, `ScreenShake.gd`, `ScreenEffects.gd` | A2/A3 | Managed hit-stop; stronger event-scaled shake |
 | `scripts/juice/ParticleFactory.gd` | A4 | Kill pops, muzzle flash, trails |
 | `scripts/game/CoopManager.gd` | A5/A6 | Level-up moment; boss HP bar in `_build_hud` from `_active_boss` |
 | `scripts/juice/SfxEngine.gd` | A7 | Layered SFX, level-up sting — **procedural only, no asset imports** |
@@ -202,7 +213,8 @@ and again before any A8 fire-rate bump: ~60 FPS at capped density, no spikes, 1P
 | `scripts/game/RunState.gd` | B | Default/migrate loadouts to 1 OFF + 1 DEF |
 | `scripts/weapons/Projectile.gd`, `scripts/game/MutationSystem.gd`, `data/mutations.json` | C | Distinct per-mutation projectile visuals + SFX |
 | `scripts/game/MutationSystem.gd`, `scripts/game/CoopManager.gd`, `data/mutations.json` | D | Loadout-gated ability-rare pool (`requires_ability`) + compile rare effects into ability stats/flags |
-| `scripts/player/Player.gd` | D (pilot) | The 2 pilot rares: `oc_piercing_overdrive` (overcharge path) + `sw_resonance` (shockwave path). Both Player-side, no entities |
+| `scripts/player/Player.gd` | D (pilot) | `oc_piercing_overdrive` — overcharge fire path sets `pierce_count` + `speed` |
+| `scripts/game/CoopManager.gd` | D (pilot) | `sw_resonance` — schedule extra `_spawn_player_shockwave()` pulses in `_on_player_ability_activated` |
 | `scripts/game/TurretNode.gd`, `OrbitNode.gd`, `AbilityMine.gd`, `DecoyNode.gd`, `Dash.gd` | D (expansion, NOT pilot) | Later transforms only — out of scope for the round-7 pilot |
 
 ## Verification

@@ -70,8 +70,8 @@ static func create_explosion_burst(color: Color, weight: float = 1.0) -> GPUPart
 
 static func create_death_burst(color: Color, weight: float = 1.0) -> GPUParticles2D:
 	var particles := _create_particles()
-	particles.amount = 32 + int(round(weight * 28.0))
-	particles.lifetime = 0.18 + weight * 0.06 + (0.04 if weight >= 1.35 else 0.0)
+	particles.amount = 40 + int(round(weight * 34.0))
+	particles.lifetime = 0.2 + weight * 0.07 + (0.05 if weight >= 1.35 else 0.0)
 	particles.one_shot = true
 	particles.explosiveness = 1.0
 	particles.modulate = color
@@ -82,8 +82,8 @@ static func create_death_burst(color: Color, weight: float = 1.0) -> GPUParticle
 	material.initial_velocity_min = 80.0 + weight * 24.0
 	material.initial_velocity_max = 180.0 + weight * 46.0
 	var heavy_scale_boost: float = 1.25 if weight >= 1.35 else 1.0
-	material.scale_min = (0.4 + weight * 0.08) * heavy_scale_boost
-	material.scale_max = (0.9 + weight * 0.16) * heavy_scale_boost
+	material.scale_min = (0.48 + weight * 0.1) * heavy_scale_boost
+	material.scale_max = (1.05 + weight * 0.2) * heavy_scale_boost
 	material.damping_min = 8.0
 	material.damping_max = 14.0
 	particles.process_material = material
@@ -178,8 +178,8 @@ static func create_explosion_ring(color: Color, radius: float = 88.0, thickness:
 
 static func create_projectile_trail(color: Color) -> GPUParticles2D:
 	var particles := _create_particles()
-	particles.amount = 16
-	particles.lifetime = 0.12
+	particles.amount = 22
+	particles.lifetime = 0.16
 	particles.one_shot = false
 	particles.explosiveness = 0.0
 	particles.local_coords = false
@@ -189,9 +189,9 @@ static func create_projectile_trail(color: Color) -> GPUParticles2D:
 	material.direction = Vector3(0.0, 0.0, 0.0)
 	material.spread = 180.0
 	material.initial_velocity_min = 0.0
-	material.initial_velocity_max = 8.0
-	material.scale_min = 0.3
-	material.scale_max = 0.55
+	material.initial_velocity_max = 14.0
+	material.scale_min = 0.38
+	material.scale_max = 0.72
 	material.damping_min = 1.5
 	material.damping_max = 3.5
 	particles.process_material = material
@@ -221,6 +221,9 @@ static func _create_particles() -> GPUParticles2D:
 	var particles := GPUParticles2D.new()
 	particles.texture = _get_particle_texture()
 	particles.local_coords = false
+	var canvas_material := CanvasItemMaterial.new()
+	canvas_material.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
+	particles.material = canvas_material
 	return particles
 
 static func _configure_one_shot(particles: GPUParticles2D) -> void:

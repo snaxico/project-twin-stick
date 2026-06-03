@@ -183,7 +183,7 @@ func apply_loadout(loadout: Dictionary) -> void:
 	_weapon_range = float(_weapon_stats.get("range", _weapon_range))
 	_weapon_area = float(_weapon_stats.get("area", _weapon_area))
 	_ability_slots = [
-		_build_runtime_ability((loadout.get("ability_slot_1", {}) as Dictionary).duplicate(true), str(loadout.get("ability_slot_1_id", "shockwave"))),
+		_build_runtime_ability((loadout.get("ability_slot_1", {}) as Dictionary).duplicate(true), str(loadout.get("ability_slot_1_id", "overcharge"))),
 		_build_runtime_ability((loadout.get("ability_slot_2", {}) as Dictionary).duplicate(true), str(loadout.get("ability_slot_2_id", "dash")))
 	]
 	_dash_states.clear()
@@ -452,6 +452,14 @@ func _fire_weapon(now: float, fire_direction: Vector2) -> void:
 	projectile_config["max_distance"] = float(projectile_config.get("range", _weapon_range))
 	projectile_config["collision_half_width"] = float(projectile_config.get("area", _weapon_area))
 	projectile_config["projectile_multiplier"] = _get_overcharge_projectile_multiplier(now)
+	var overcharge_stats := _get_active_ability_stats("overcharge", now)
+	if not overcharge_stats.is_empty():
+		var pierce_bonus := int(overcharge_stats.get("pierce_bonus", 0))
+		if pierce_bonus > 0:
+			projectile_config["pierce_count"] = int(projectile_config.get("pierce_count", 0)) + pierce_bonus
+		var projectile_speed_mult := float(overcharge_stats.get("projectile_speed_mult", 1.0))
+		if projectile_speed_mult > 1.0:
+			projectile_config["speed"] = float(projectile_config.get("speed", projectile_speed)) * projectile_speed_mult
 	projectile_config["rapid_fire_level"] = rapid_fire_level
 	projectile_config["velocity_level"] = velocity_level
 	projectile_config["knockback_level"] = knockback_level
@@ -602,8 +610,8 @@ func _is_ability_pressed(slot_index: int) -> bool:
 		if _has_gamepad_action_events([action]):
 			return _get_gamepad_action_strength(action) >= 0.5
 		if slot_index == 0:
-			return Input.get_joy_axis(gamepad_device_id, JOY_AXIS_TRIGGER_RIGHT) >= 0.5 or Input.is_joy_button_pressed(gamepad_device_id, JOY_BUTTON_X)
-		return Input.get_joy_axis(gamepad_device_id, JOY_AXIS_TRIGGER_LEFT) >= 0.5 or Input.is_joy_button_pressed(gamepad_device_id, JOY_BUTTON_B)
+			return Input.get_joy_axis(gamepad_device_id, JOY_AXIS_TRIGGER_LEFT) >= 0.5 or Input.is_joy_button_pressed(gamepad_device_id, JOY_BUTTON_X)
+		return Input.get_joy_axis(gamepad_device_id, JOY_AXIS_TRIGGER_RIGHT) >= 0.5 or Input.is_joy_button_pressed(gamepad_device_id, JOY_BUTTON_B)
 	return Input.is_action_pressed("p%d_secondary" % player_id) if slot_index == 0 else Input.is_action_pressed("p%d_dash" % player_id)
 
 func _has_gamepad_action_events(actions: Array) -> bool:

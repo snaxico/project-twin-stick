@@ -21,6 +21,8 @@ const HealthPickupData = preload("res://scripts/pickups/HealthPickup.gd")
 const HazardZoneData = preload("res://scripts/game/HazardZone.gd")
 const AbilityMineData = preload("res://scripts/game/AbilityMine.gd")
 const ParticleFactoryData = preload("res://scripts/juice/ParticleFactory.gd")
+const HealthBarHUDData = preload("res://scripts/juice/HealthBarHUD.gd")
+const HitStopManagerData = preload("res://scripts/juice/HitStopManager.gd")
 const PauseInputProxyData = preload("res://scripts/ui/PauseInputProxy.gd")
 
 const MODIFIERS_DATA_PATH := "res://data/modifiers.json"
@@ -141,6 +143,8 @@ var _objective_icon_label: Label = null
 var _objective_title_label: Label = null
 var _objective_progress_label: Label = null
 var _objective_progress_bar: ProgressBar = null
+var _boss_health_bar = null
+var _boss_phase_label: Label = null
 var _mutation_pick_ui = null
 var _active_modifiers: Array = []
 var _modifier_definitions: Dictionary = {}
@@ -173,6 +177,7 @@ var _active_hazards: Array = []
 var _active_mines: Array = []
 var _next_hud_refresh_at := 0.0
 var _scheduled_enemy_shockwaves: Array = []
+var _scheduled_player_shockwaves: Array = []
 var _enemy_separation_grid: Dictionary = {}
 var _enemy_separation_grid_frame := -1
 var _game_paused := false
@@ -180,8 +185,8 @@ var _pause_input_proxy = null
 var _projectile_pool: Array = []
 var _active_projectiles: Array = []
 var _active_homing_projectiles: Array = []
-var _active_beams: Array = []
 var _screen_effect_level := "full"
+var _hit_stop_manager = null
 
 func configure_players(configs: Array) -> void:
 	_player_configs = configs.duplicate()
@@ -192,6 +197,10 @@ func configure_room(room_config: Dictionary) -> void:
 func _ready() -> void:
 	if player_scene == null:
 		player_scene = load("res://scenes/player/Player.tscn")
+	_hit_stop_manager = HitStopManagerData.new()
+	add_child(_hit_stop_manager)
+	if not RunState.level_up.is_connected(_on_run_level_up):
+		RunState.level_up.connect(_on_run_level_up)
 	_hide_legacy_ui()
 	_bind_ui()
 	_load_modifier_definitions()
@@ -287,6 +296,21 @@ func _build_hud() -> void:
 	_xp_label = Label.new()
 	_xp_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	xp_layout.add_child(_xp_label)
+
+	_boss_health_bar = HealthBarHUDData.new()
+	_boss_health_bar.position = Vector2(700.0, 98.0)
+	_boss_health_bar.size = Vector2(520.0, 36.0)
+	_boss_health_bar.configure("Boss", Color(1.0, 0.22, 0.14, 0.95))
+	_boss_health_bar.visible = false
+	_hud_root.add_child(_boss_health_bar)
+	_boss_phase_label = Label.new()
+	_boss_phase_label.position = Vector2(700.0, 132.0)
+	_boss_phase_label.size = Vector2(520.0, 22.0)
+	_boss_phase_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_boss_phase_label.add_theme_font_size_override("font_size", 13)
+	_boss_phase_label.add_theme_color_override("font_color", Color(1.0, 0.72, 0.54, 0.92))
+	_boss_phase_label.visible = false
+	_hud_root.add_child(_boss_phase_label)
 
 	_objective_label = Label.new()
 	_objective_label.position = Vector2(24.0, 24.0)
@@ -549,7 +573,7 @@ func _rebuild_player_loadouts() -> void:
 			"weapon_stats": compiled_weapon,
 			"ability_slot_1": _build_runtime_ability(index, (base_loadout.get("ability_slot_1", {}) as Dictionary).duplicate(true)),
 			"ability_slot_2": _build_runtime_ability(index, (base_loadout.get("ability_slot_2", {}) as Dictionary).duplicate(true)),
-			"ability_slot_1_id": str(base_loadout.get("ability_slot_1_id", "shockwave")),
+			"ability_slot_1_id": str(base_loadout.get("ability_slot_1_id", "overcharge")),
 			"ability_slot_2_id": str(base_loadout.get("ability_slot_2_id", "dash")),
 			"mutations": _mutation_system.get_active_mutations(index),
 			"move_speed": float(base_loadout.get("move_speed", 488.0)) * _mutation_system.get_move_speed_multiplier(index),
@@ -562,6 +586,10 @@ func _build_runtime_ability(player_index: int, ability_definition: Dictionary) -
 	if ability_definition.is_empty():
 		return {}
 	var stats: Dictionary = (ability_definition.get("stats", {}) as Dictionary).duplicate(true)
+	var ability_id := str(ability_definition.get("id", ""))
+	var rare_effects := _mutation_system.get_ability_rare_effects(player_index, ability_id)
+	for key in rare_effects.keys():
+		stats[str(key)] = rare_effects[key]
 	var cooldown_mult := 1.0 - _mutation_system.get_ability_cooldown_reduction(player_index)
 	var area_mult := _mutation_system.get_ability_area_multiplier(player_index)
 	var duration_mult := _mutation_system.get_ability_duration_multiplier(player_index)
@@ -577,7 +605,7 @@ func _build_runtime_ability(player_index: int, ability_definition: Dictionary) -
 		if scales_duration and stats.has(stat_key):
 			stats[stat_key] = float(stats[stat_key]) * duration_mult
 	return {
-		"id": str(ability_definition.get("id", "")),
+		"id": ability_id,
 		"name": str(ability_definition.get("name", "Ability")),
 		"type": ability_type,
 		"cooldown": cooldown,
@@ -740,7 +768,6 @@ func _clear_runtime_nodes() -> void:
 	_projectile_pool.clear()
 	_active_projectiles.clear()
 	_active_homing_projectiles.clear()
-	_active_beams.clear()
 	_collector_orbs.clear()
 	_hold_zone = null
 	_fire_floor_modifier = null
@@ -748,6 +775,7 @@ func _clear_runtime_nodes() -> void:
 	_mine_field_modifier = null
 	_shrinking_arena_modifier = null
 	_scheduled_enemy_shockwaves.clear()
+	_scheduled_player_shockwaves.clear()
 	_enemy_separation_grid.clear()
 	_enemy_separation_grid_frame = -1
 	_hold_buff_offer.clear()
@@ -805,8 +833,8 @@ func _physics_process(delta: float) -> void:
 		return
 	_room_elapsed += delta
 	_update_scheduled_enemy_shockwaves()
+	_update_scheduled_player_shockwaves()
 	_update_homing_projectiles(delta)
-	_update_active_beams(delta)
 	_update_elite_add_waves()
 	_update_boss_add_waves()
 	_update_side_objectives(delta)
@@ -1088,6 +1116,8 @@ func _show_mutation_pick(force_rare: bool, title: String, subtitle: String) -> v
 	_mutation_pick_ui.selections_confirmed.connect(_on_mutation_selections_confirmed)
 	ui_layer.add_child(_mutation_pick_ui)
 	_awaiting_mutation_pick = true
+	if _hit_stop_manager != null and _hit_stop_manager.has_method("request_dilation"):
+		_hit_stop_manager.request_dilation(70, 0.18)
 
 func _on_mutation_selections_confirmed(selections_per_player: Array) -> void:
 	for player_index in range(min(selections_per_player.size(), _player_nodes.size())):
@@ -1151,9 +1181,11 @@ func _on_player_fire_requested(origin: Vector2, direction: Vector2, projectile_c
 func _on_player_ability_activated(player, _slot_index: int, ability_id: String, origin: Vector2, direction: Vector2, stats: Dictionary) -> void:
 	var tint: Color = stats.get("color", Color.WHITE)
 	_spawn_ability_activation_flash(origin, tint, ability_id)
+	_play_sfx("play_explosion", [0.85, ability_id])
 	match ability_id:
 		"shockwave":
 			_spawn_player_shockwave(origin, stats)
+			_schedule_player_shockwave_resonance(origin, stats)
 		"dash":
 			_spawn_dash_effect(origin, direction, tint)
 		"blink":
@@ -1224,6 +1256,20 @@ func _spawn_player_shockwave(origin: Vector2, stats: Dictionary) -> void:
 			else:
 				projectile.queue_free()
 	_spawn_shockwave_visual(origin, radius, stats.get("color", Color.WHITE), float(stats.get("expand_duration", 0.15)))
+	if _screen_effects_enabled() and screen_shake != null and screen_shake.has_method("add_trauma"):
+		screen_shake.add_trauma(0.18)
+
+func _schedule_player_shockwave_resonance(origin: Vector2, stats: Dictionary) -> void:
+	var extra_pulses: int = maxi(0, int(stats.get("extra_pulses", 0)))
+	if extra_pulses <= 0:
+		return
+	var pulse_interval: float = maxf(0.01, float(stats.get("pulse_interval", 0.15)))
+	for pulse_index in range(extra_pulses):
+		_scheduled_player_shockwaves.append({
+			"trigger_at": _room_elapsed + pulse_interval * float(pulse_index + 1),
+			"origin": origin,
+			"stats": stats.duplicate(true),
+		})
 
 func _spawn_dash_effect(origin: Vector2, direction: Vector2, color: Color) -> void:
 	var burst := ParticleFactoryData.create_dash_burst(color, direction, 1.0)
@@ -1307,6 +1353,8 @@ func _spawn_modifier_activation_vfx(_modifier_id: String, color: Color) -> void:
 func _spawn_boss_entrance_vfx() -> void:
 	if _screen_effects_enabled() and screen_shake != null and screen_shake.has_method("add_trauma"):
 		screen_shake.add_trauma(0.55)
+	_request_hit_stop(1.0, 60)
+	_play_sfx("play_explosion", [1.35, "boss"])
 	_spawn_screen_flash(Color(0.82, 0.06, 0.04, 0.24), 0.5)
 	var ring := ParticleFactoryData.create_explosion_ring(Color(1.0, 0.14, 0.08, 0.78), 260.0, 6.0)
 	ring.global_position = ARENA_CENTER
@@ -1323,10 +1371,32 @@ func _spawn_enemy_death_global_vfx(enemy_type_name: String) -> void:
 	if enemy_type_name.begins_with("boss_"):
 		if _screen_effects_enabled() and screen_shake != null and screen_shake.has_method("add_trauma"):
 			screen_shake.add_trauma(0.6)
+		_request_hit_stop(1.0, 65)
+		_play_sfx("play_explosion", [1.45, "boss"])
 		_spawn_screen_flash(Color(1.0, 1.0, 1.0, 0.18), 0.2)
 	elif enemy_type_name.begins_with("elite_"):
 		if _screen_effects_enabled() and screen_shake != null and screen_shake.has_method("add_trauma"):
 			screen_shake.add_trauma(0.25)
+		_request_hit_stop(0.75, 45)
+		_play_sfx("play_enemy_death", [1.2])
+	else:
+		_play_sfx("play_enemy_death", [0.8])
+
+func _on_run_level_up(_new_level: int) -> void:
+	_spawn_screen_flash(Color(0.42, 1.0, 0.72, 0.18), 0.22)
+	if _screen_effects_enabled() and screen_shake != null and screen_shake.has_method("add_trauma"):
+		screen_shake.add_trauma(0.12)
+	_play_sfx("play_level_up", [])
+
+func notify_boss_phase_transition(_boss, _phase_index: int) -> void:
+	_request_hit_stop(0.9, 55)
+	if _screen_effects_enabled() and screen_shake != null and screen_shake.has_method("add_trauma"):
+		screen_shake.add_trauma(0.38)
+	_play_sfx("play_explosion", [1.2, "boss"])
+
+func _request_hit_stop(weight: float, duration_ms: int) -> void:
+	if _hit_stop_manager != null and _hit_stop_manager.has_method("request_hit_stop"):
+		_hit_stop_manager.request_hit_stop(weight, duration_ms)
 
 func _spawn_screen_flash(color: Color, duration: float) -> void:
 	if not _screen_effects_enabled():
@@ -1438,10 +1508,11 @@ func _cleanup_active_projectiles() -> void:
 			kept.append(projectile)
 	_active_projectiles = kept
 
-func _on_projectile_impact(origin: Vector2, direction: Vector2, team: String, color: Color, _feedback_profile: String, impact_weight: float, target: Node, combat_context: Dictionary) -> void:
+func _on_projectile_impact(origin: Vector2, direction: Vector2, team: String, color: Color, feedback_profile: String, impact_weight: float, target: Node, combat_context: Dictionary) -> void:
 	var suppress_vfx := _should_suppress_combat_vfx()
 	if not suppress_vfx:
 		_spawn_projectile_hit_effect(origin, direction, color, impact_weight, target)
+	_play_sfx("play_impact_profile", [impact_weight, feedback_profile])
 	if not suppress_vfx and int(combat_context.get("knockback_level", 0)) >= 2:
 		var knockback_burst := ParticleFactoryData.create_impact_sparks(color.lightened(0.24), -direction.normalized() if direction.length() > 0.0 else Vector2.UP, impact_weight + 0.35)
 		knockback_burst.global_position = origin
@@ -1510,7 +1581,16 @@ func _on_enemy_died(enemy) -> void:
 			_complete_side_objective()
 
 func _on_enemy_hit_received(_enemy, _damage_amount: int, _lethal: bool) -> void:
-	pass
+	if _enemy == null or not is_instance_valid(_enemy):
+		return
+	var is_big_hit: bool = _damage_amount >= 90
+	var is_boss_hit: bool = _enemy.has_method("is_boss") and bool(_enemy.is_boss())
+	if is_big_hit or is_boss_hit:
+		if _screen_effects_enabled() and screen_shake != null and screen_shake.has_method("add_trauma"):
+			screen_shake.add_trauma(0.08 if not is_boss_hit else 0.12)
+		if not _lethal:
+			_request_hit_stop(0.45 if not is_boss_hit else 0.55, 35)
+	_play_sfx("play_impact_profile", [0.85, "hit"])
 
 func _spawn_health_pickup(spawn_position: Vector2) -> void:
 	if _room_clear_started or not is_inside_tree():
@@ -1536,11 +1616,13 @@ func _on_player_damage_taken(player, _amount: int, _current_health: int) -> void
 	var burst := ParticleFactoryData.create_impact_sparks(player.player_config.tint.lightened(0.22), Vector2.UP, 1.1)
 	burst.global_position = player.global_position
 	effects.add_child(burst)
+	_play_sfx("play_damage", [])
 
 func _on_muzzle_flash_requested(origin: Vector2, direction: Vector2, color: Color, feedback_profile: String, impact_weight: float) -> void:
-	var flash := ParticleFactoryData.create_muzzle_flash(color, direction, feedback_profile, impact_weight)
+	var flash := ParticleFactoryData.create_muzzle_flash(_overbright_color(color, 1.35), direction, feedback_profile, impact_weight + 0.18)
 	flash.global_position = origin
 	effects.add_child(flash)
+	_play_sfx("play_fire", [feedback_profile, impact_weight])
 
 func _update_revives(delta: float) -> void:
 	for player in _player_nodes:
@@ -1584,9 +1666,46 @@ func _refresh_hud() -> void:
 	_room_label.text = _build_room_status_text()
 	_objective_label.text = _build_side_objective_text()
 	_refresh_objective_panel()
+	_refresh_boss_hud()
 	_score_label.text = "Room %d" % max(_room_depth, RunState.get_current_score() + 1) if RunState.is_endless_mode() else ""
 	_update_player_combat_indicators()
 	_refresh_bottom_hud()
+
+func _refresh_boss_hud() -> void:
+	var boss_alive: bool = _active_boss != null and is_instance_valid(_active_boss) and _active_boss.has_method("is_alive") and bool(_active_boss.is_alive())
+	if _boss_health_bar != null:
+		_boss_health_bar.visible = boss_alive
+	if _boss_phase_label != null:
+		_boss_phase_label.visible = boss_alive
+	if not boss_alive:
+		return
+	var current_health := int(round(float(_active_boss.current_health)))
+	var max_health := int(round(float(_active_boss.max_health)))
+	var title := _format_boss_type()
+	_boss_health_bar.configure(title if not title.is_empty() else "Boss", Color(1.0, 0.22, 0.14, 0.95))
+	_boss_health_bar.set_health(current_health, max_health)
+	var ratio := clampf(float(current_health) / maxf(float(max_health), 1.0), 0.0, 1.0)
+	var phase_index := 0
+	if ratio <= 0.34:
+		phase_index = 2
+	elif ratio <= 0.67:
+		phase_index = 1
+	_boss_phase_label.text = "Phase %d   %s" % [phase_index + 1, _build_boss_phase_pips(phase_index)]
+
+func _build_boss_phase_pips(phase_index: int) -> String:
+	var pips: Array = []
+	for index in range(3):
+		pips.append("[#]" if index <= phase_index else "[ ]")
+	return " ".join(pips)
+
+func _play_sfx(method_name: String, args: Array) -> void:
+	for node in get_tree().get_nodes_in_group("sfx_engine"):
+		if node != null and is_instance_valid(node) and node.has_method(method_name):
+			node.callv(method_name, args)
+			return
+
+func _overbright_color(color: Color, multiplier: float) -> Color:
+	return Color(color.r * multiplier, color.g * multiplier, color.b * multiplier, color.a)
 
 func _build_room_status_text() -> String:
 	if RunState.is_endless_mode():
@@ -1930,6 +2049,21 @@ func _update_scheduled_enemy_shockwaves() -> void:
 			remaining.append(scheduled)
 	_scheduled_enemy_shockwaves = remaining
 
+func _update_scheduled_player_shockwaves() -> void:
+	if _scheduled_player_shockwaves.is_empty():
+		return
+	var remaining: Array = []
+	for scheduled in _scheduled_player_shockwaves:
+		var trigger_at := float((scheduled as Dictionary).get("trigger_at", INF))
+		if _room_elapsed >= trigger_at:
+			_spawn_player_shockwave(
+				scheduled.get("origin", Vector2.ZERO),
+				(scheduled.get("stats", {}) as Dictionary).duplicate(true)
+			)
+		else:
+			remaining.append(scheduled)
+	_scheduled_player_shockwaves = remaining
+
 func spawn_enemy_hazard_zone(origin: Vector2, radius: float, duration: float, damage: int, color: Color) -> void:
 	var zone := HazardZoneData.new()
 	zone.global_position = origin
@@ -1977,66 +2111,6 @@ func spawn_pulsar_emp(origin: Vector2, lockout_seconds: float, color: Color) -> 
 			player.apply_ability_lockout(lockout_seconds)
 	spawn_enemy_shockwave(origin, 520.0, 0, 420.0, color, false)
 	_spawn_screen_flash(Color(color.r, color.g, color.b, 0.18), 0.22)
-
-func spawn_pulsar_beam(origin: Vector2, direction: Vector2, color: Color, damage: int) -> void:
-	var normalized := direction.normalized() if direction.length() > 0.0 else Vector2.RIGHT
-	_active_beams.append({
-		"origin": origin,
-		"start_angle": normalized.angle() - deg_to_rad(45.0),
-		"elapsed": 0.0,
-		"duration": 1.5,
-		"arc": deg_to_rad(90.0),
-		"damage": damage,
-		"color": color,
-		"hit_players": [],
-		"next_visual_at": 0.0,
-	})
-	_draw_beam_line(origin, normalized, color)
-
-func _update_active_beams(delta: float) -> void:
-	if _active_beams.is_empty():
-		return
-	var kept: Array = []
-	for beam_variant in _active_beams:
-		var beam := beam_variant as Dictionary
-		var elapsed := float(beam.get("elapsed", 0.0)) + delta
-		beam["elapsed"] = elapsed
-		var duration := maxf(float(beam.get("duration", 1.5)), 0.01)
-		if elapsed > duration:
-			continue
-		var origin: Vector2 = beam.get("origin", Vector2.ZERO)
-		var angle := float(beam.get("start_angle", 0.0)) + float(beam.get("arc", 0.0)) * clampf(elapsed / duration, 0.0, 1.0)
-		var direction := Vector2.RIGHT.rotated(angle)
-		var color: Color = beam.get("color", Color.WHITE)
-		if _room_elapsed >= float(beam.get("next_visual_at", 0.0)):
-			beam["next_visual_at"] = _room_elapsed + 0.08
-			_draw_beam_line(origin, direction, color)
-		var hit_players: Array = beam.get("hit_players", []) as Array
-		for player in _player_nodes:
-			if player == null or not is_instance_valid(player) or not player.has_method("is_alive") or not player.is_alive():
-				continue
-			if hit_players.has(player):
-				continue
-			var offset: Vector2 = player.global_position - origin
-			if offset.length() > 1500.0:
-				continue
-			var angle_delta: float = abs(angle_difference(direction.angle(), offset.angle()))
-			if angle_delta <= deg_to_rad(5.0):
-				player.apply_damage(int(beam.get("damage", 25)))
-				hit_players.append(player)
-		beam["hit_players"] = hit_players
-		kept.append(beam)
-	_active_beams = kept
-
-func _draw_beam_line(origin: Vector2, direction: Vector2, color: Color) -> void:
-	var line := Line2D.new()
-	line.width = 18.0
-	line.default_color = Color(color.r, color.g, color.b, 0.64)
-	line.points = PackedVector2Array([origin, origin + direction.normalized() * 1500.0])
-	effects.add_child(line)
-	var tween := line.create_tween()
-	tween.tween_property(line, "modulate:a", 0.0, 0.14)
-	tween.tween_callback(line.queue_free)
 
 func spawn_enemy_burst(origin: Vector2, count: int, phase: float) -> void:
 	for index in range(count):

@@ -14,8 +14,8 @@ const INPUT_BINDING_ACTIONS := [
 	{"label": "Move Right", "suffix": "move_right"},
 	{"label": "Move Up", "suffix": "move_up"},
 	{"label": "Move Down", "suffix": "move_down"},
-	{"label": "Ability LT", "suffix": "secondary"},
-	{"label": "Ability RT", "suffix": "dash"},
+	{"label": "OFF Ability LT", "suffix": "secondary"},
+	{"label": "DEF Ability RT", "suffix": "dash"},
 	{"label": "Swap LT", "suffix": "switch_primary"},
 	{"label": "Swap RT", "suffix": "switch_secondary"},
 ]
@@ -250,7 +250,7 @@ func _refresh_menu_state(_unused: Variant = null) -> void:
 		summary_lines.append("Depth: %d" % int(debug_step_spinbox.value))
 	for player_index in range(player_count):
 		var selected_abilities := _get_player_ability_pair(player_index)
-		summary_lines.append("P%d Abilities: %s / %s" % [player_index + 1, _format_name(selected_abilities[0]), _format_name(selected_abilities[1])])
+		summary_lines.append("P%d Abilities: LT OFF %s / RT DEF %s" % [player_index + 1, _format_name(selected_abilities[0]), _format_name(selected_abilities[1])])
 	status_label.text = "\n".join(summary_lines)
 	start_button.text = "Launch Encounter" if encounter_builder_mode else "Start Run"
 	for row_index in range(_ability_rows.size()):
@@ -798,6 +798,7 @@ func _build_ability_rows() -> void:
 		return
 	var insert_before := status_label
 	var ability_defs := _ability_registry.get_all()
+	var default_loadout := _ability_registry.get_default_loadout()
 	for player_index in range(2):
 		var container := VBoxContainer.new()
 		container.name = "AbilityRowsP%d" % (player_index + 1)
@@ -809,20 +810,36 @@ func _build_ability_rows() -> void:
 		header.add_theme_font_size_override("font_size", 17)
 		container.add_child(header)
 		var helper := Label.new()
-		helper.text = "Pick exactly 2. First pick maps to Slot 1, second pick maps to Slot 2."
+		helper.text = "Pick one OFF for LT and one DEF for RT."
 		helper.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		helper.modulate = Color(0.82, 0.88, 0.96, 0.82)
 		container.add_child(helper)
-		var grid := GridContainer.new()
-		grid.columns = 3
-		grid.add_theme_constant_override("h_separation", 10)
-		grid.add_theme_constant_override("v_separation", 10)
-		container.add_child(grid)
+		var off_label := Label.new()
+		off_label.text = "LT / OFF"
+		off_label.modulate = Color(0.95, 1.0, 0.84, 0.92)
+		container.add_child(off_label)
+		var off_grid := GridContainer.new()
+		off_grid.columns = 2
+		off_grid.add_theme_constant_override("h_separation", 10)
+		off_grid.add_theme_constant_override("v_separation", 10)
+		container.add_child(off_grid)
+		var def_label := Label.new()
+		def_label.text = "RT / DEF"
+		def_label.modulate = Color(0.84, 0.92, 1.0, 0.92)
+		container.add_child(def_label)
+		var def_grid := GridContainer.new()
+		def_grid.columns = 3
+		def_grid.add_theme_constant_override("h_separation", 10)
+		def_grid.add_theme_constant_override("v_separation", 10)
+		container.add_child(def_grid)
 		var cards: Dictionary = {}
 		for ability_def in ability_defs:
 			var ability_definition: Dictionary = ability_def as Dictionary
 			var ability_id := str(ability_definition.get("id", ""))
 			if ability_id.is_empty():
+				continue
+			var ability_slot := str(ability_definition.get("slot", ""))
+			if ability_slot != "off" and ability_slot != "def":
 				continue
 			var card := Button.new()
 			card.toggle_mode = true
@@ -839,9 +856,13 @@ func _build_ability_rows() -> void:
 			card.text = card_text
 			card.set_meta("ability_name", ability_name)
 			card.set_meta("card_text", card_text)
+			card.set_meta("ability_slot", ability_slot)
 			card.tooltip_text = str(ability_definition.get("description", ""))
 			card.toggled.connect(_on_ability_card_toggled.bind(player_index, ability_id))
-			grid.add_child(card)
+			if ability_slot == "off":
+				off_grid.add_child(card)
+			else:
+				def_grid.add_child(card)
 			cards[ability_id] = card
 		var summary := Label.new()
 		summary.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -850,7 +871,8 @@ func _build_ability_rows() -> void:
 			"container": container,
 			"cards": cards,
 			"summary": summary,
-			"selection_order": ["shockwave", "dash"],
+			"off_selection": str(default_loadout[0]),
+			"def_selection": str(default_loadout[1]),
 		})
 		_sync_ability_row_buttons(player_index)
 
@@ -862,28 +884,25 @@ func _build_player_ability_selection() -> Array:
 
 func _get_player_ability_pair(player_index: int) -> Array:
 	if player_index < 0 or player_index >= _ability_rows.size():
-		return ["shockwave", "dash"]
+		return _ability_registry.get_default_loadout()
 	var row_data: Dictionary = _ability_rows[player_index]
-	var selection_order: Array = (row_data.get("selection_order", ["shockwave", "dash"]) as Array).duplicate()
-	if selection_order.is_empty():
-		selection_order.append("shockwave")
-	if selection_order.size() == 1:
-		selection_order.append("dash" if str(selection_order[0]) != "dash" else "shockwave")
-	return [str(selection_order[0]), str(selection_order[1])]
+	return _ability_registry.normalize_loadout([row_data.get("off_selection", ""), row_data.get("def_selection", "")])
 
 func _on_ability_card_toggled(pressed: bool, player_index: int, ability_id: String) -> void:
 	if player_index < 0 or player_index >= _ability_rows.size():
 		return
 	var row_data: Dictionary = _ability_rows[player_index]
-	var selection_order: Array = (row_data.get("selection_order", []) as Array).duplicate()
+	var ability_slot := _ability_registry.get_slot(ability_id)
 	if pressed:
-		if not selection_order.has(ability_id):
-			if selection_order.size() >= 2:
-				selection_order.pop_back()
-			selection_order.append(ability_id)
+		if ability_slot == "off":
+			row_data["off_selection"] = ability_id
+		elif ability_slot == "def":
+			row_data["def_selection"] = ability_id
 	else:
-		selection_order.erase(ability_id)
-	row_data["selection_order"] = selection_order
+		if ability_slot == "off" and str(row_data.get("off_selection", "")) == ability_id:
+			row_data["off_selection"] = ""
+		elif ability_slot == "def" and str(row_data.get("def_selection", "")) == ability_id:
+			row_data["def_selection"] = ""
 	_ability_rows[player_index] = row_data
 	_sync_ability_row_buttons(player_index)
 	_refresh_menu_state()
@@ -893,35 +912,41 @@ func _sync_ability_row_buttons(player_index: int) -> void:
 		return
 	var row_data: Dictionary = _ability_rows[player_index]
 	var cards: Dictionary = row_data.get("cards", {}) as Dictionary
-	var selection_order: Array = row_data.get("selection_order", []) as Array
+	var selected_pair := _get_player_ability_pair(player_index)
+	var off_selection := str(row_data.get("off_selection", ""))
+	var def_selection := str(row_data.get("def_selection", ""))
 	for ability_id_variant in cards.keys():
 		var ability_id := str(ability_id_variant)
 		var button: Button = cards[ability_id]
 		if button == null:
 			continue
-		var slot_index := selection_order.find(ability_id)
+		var slot_index := -1
+		if ability_id == off_selection:
+			slot_index = 0
+		elif ability_id == def_selection:
+			slot_index = 1
 		button.set_pressed_no_signal(slot_index >= 0)
 		button.text = _format_ability_card_text(button, slot_index)
 		var player_tint: Color = _player_tints[player_index] if player_index < _player_tints.size() else Color(0.2, 0.9, 1.0, 1.0)
 		_style_ability_card(button, slot_index, player_tint)
 	var summary: Label = row_data.get("summary", null)
 	if summary != null:
-		if selection_order.size() >= 2:
-			summary.text = "Selected: LT %s  |  RT %s" % [
-				_format_name(str(selection_order[0])),
-				_format_name(str(selection_order[1])),
+		if not off_selection.is_empty() and not def_selection.is_empty():
+			summary.text = "Selected: LT OFF %s  |  RT DEF %s" % [
+				_format_name(str(selected_pair[0])),
+				_format_name(str(selected_pair[1])),
 			]
 			summary.modulate = Color(0.84, 0.92, 1.0, 0.92)
 		else:
-			summary.text = "Select one more ability to finish the loadout."
+			summary.text = "Select one OFF and one DEF ability to finish the loadout."
 			summary.modulate = Color(1.0, 0.8, 0.42, 0.96)
 
 func _format_ability_card_text(button: Button, slot_index: int) -> String:
 	var card_text := str(button.get_meta("card_text", button.text))
 	if slot_index == 0:
-		return "LT - %s" % card_text
+		return "LT OFF - %s" % card_text
 	if slot_index == 1:
-		return "RT - %s" % card_text
+		return "RT DEF - %s" % card_text
 	return card_text
 
 func _style_ability_card(button: Button, slot_index: int, player_tint: Color) -> void:
@@ -958,8 +983,14 @@ func _style_ability_card(button: Button, slot_index: int, player_tint: Color) ->
 func _can_start_run(player_count: int) -> bool:
 	for player_index in range(player_count):
 		var row_data: Dictionary = _ability_rows[player_index]
-		var selection_order: Array = row_data.get("selection_order", []) as Array
-		if selection_order.size() < 2:
+		if str(row_data.get("off_selection", "")).is_empty() or str(row_data.get("def_selection", "")).is_empty():
+			return false
+		var selected_pair := _get_player_ability_pair(player_index)
+		if selected_pair.size() < 2:
+			return false
+		if _ability_registry.get_slot(str(selected_pair[0])) != "off":
+			return false
+		if _ability_registry.get_slot(str(selected_pair[1])) != "def":
 			return false
 	return true
 

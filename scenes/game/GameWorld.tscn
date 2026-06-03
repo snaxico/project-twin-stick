@@ -1,4 +1,4 @@
-[gd_scene load_steps=13 format=3 uid="uid://c6ov0pl7m3y8a"]
+[gd_scene load_steps=14 format=3 uid="uid://c6ov0pl7m3y8a"]
 
 [ext_resource type="Script" path="res://scripts/game/CoopManager.gd" id="1_4o0x5"]
 [ext_resource type="PackedScene" path="res://scenes/player/Player.tscn" id="1_3sby6"]
@@ -24,9 +24,19 @@ size = Vector2(280, 120)
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_pause_backdrop"]
 bg_color = Color(0, 0, 0, 0.65)
 
+[sub_resource type="Environment" id="Environment_round7_glow"]
+background_mode = 3
+glow_enabled = true
+glow_hdr_threshold = 0.8
+glow_hdr_scale = 1.35
+glow_bloom = 0.08
+
 [node name="GameWorld" type="Node2D"]
 script = ExtResource("1_4o0x5")
 player_scene = ExtResource("1_3sby6")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_round7_glow")
 
 [node name="Floor" type="Polygon2D" parent="."]
 color = Color(0.28, 0.3, 0.25, 1)

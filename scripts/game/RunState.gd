@@ -202,6 +202,7 @@ func get_ability(player_index: int, slot_index: int) -> Dictionary:
 	var inventory = get_player_inventory(player_index)
 	if inventory == null:
 		return {}
+	_normalize_inventory_ability_slots(inventory)
 	var ability_id: String = inventory.ability_slot_1 if slot_index == 0 else inventory.ability_slot_2
 	return _ability_registry.get_definition(ability_id)
 
@@ -225,7 +226,7 @@ func get_player_runtime_loadout_for(player_index: int) -> Dictionary:
 		"weapon_id": str(weapon.get("id", "rifle")),
 		"weapon_name": str(weapon.get("name", "Rifle")),
 		"weapon_stats": (weapon.get("stats", {}) as Dictionary).duplicate(true),
-		"ability_slot_1_id": str(inventory.ability_slot_1 if inventory != null else "shockwave"),
+		"ability_slot_1_id": str(inventory.ability_slot_1 if inventory != null else "overcharge"),
 		"ability_slot_2_id": str(inventory.ability_slot_2 if inventory != null else "dash"),
 		"ability_slot_1": ability_slot_1.duplicate(true),
 		"ability_slot_2": ability_slot_2.duplicate(true),
@@ -298,10 +299,18 @@ func _build_default_player_inventories(player_count: int, selected_abilities: Ar
 		var chosen: Array = []
 		if index < selected_abilities.size() and selected_abilities[index] is Array:
 			chosen = (selected_abilities[index] as Array).duplicate()
-		inventory.ability_slot_1 = str(chosen[0]) if chosen.size() > 0 else "shockwave"
-		inventory.ability_slot_2 = str(chosen[1]) if chosen.size() > 1 else "dash"
+		var normalized := _ability_registry.normalize_loadout(chosen)
+		inventory.ability_slot_1 = str(normalized[0])
+		inventory.ability_slot_2 = str(normalized[1])
 		inventories.append(inventory)
 	return inventories
+
+func _normalize_inventory_ability_slots(inventory) -> void:
+	if inventory == null:
+		return
+	var normalized := _ability_registry.normalize_loadout([inventory.ability_slot_1, inventory.ability_slot_2])
+	inventory.ability_slot_1 = str(normalized[0])
+	inventory.ability_slot_2 = str(normalized[1])
 
 func _build_single_room_map() -> Array:
 	var room_type := str(debug_run_setup.get("room_type", "combat"))

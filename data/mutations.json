@@ -8,6 +8,10 @@
       "category": "weapon",
       "rarity": "common",
       "max_level": 3,
+      "projectile_shape": "small_orb",
+      "trail_style": "short_green",
+      "accent_color": [0.45, 1.3, 0.52, 1.0],
+      "impact_sfx": "spread",
       "params": { "extra_count": 1, "spread_degrees": 10.0 }
     },
     {
@@ -18,6 +22,10 @@
       "category": "weapon",
       "rarity": "common",
       "max_level": 3,
+      "projectile_shape": "lance",
+      "trail_style": "sharp_green",
+      "accent_color": [0.2, 1.25, 1.35, 1.0],
+      "impact_sfx": "zip",
       "params": { "pierce_count": 1 }
     },
     {
@@ -28,6 +36,10 @@
       "category": "weapon",
       "rarity": "common",
       "max_level": 3,
+      "projectile_shape": "large_orb",
+      "trail_style": "heavy_slow",
+      "accent_color": [0.7, 1.25, 0.58, 1.0],
+      "impact_sfx": "thump",
       "params": { "size_bonus_per_level": 0.333 }
     },
     {
@@ -117,6 +129,10 @@
       "icon": "ricochet",
       "category": "weapon",
       "rarity": "rare",
+      "projectile_shape": "diamond",
+      "trail_style": "sparks",
+      "accent_color": [1.35, 1.08, 0.22, 1.0],
+      "impact_sfx": "ping",
       "params": { "bounce_count": 1, "bounce_range": 220.0 }
     },
     {
@@ -126,6 +142,10 @@
       "icon": "fire_trail",
       "category": "weapon",
       "rarity": "rare",
+      "projectile_shape": "ember_orb",
+      "trail_style": "embers",
+      "accent_color": [1.45, 0.48, 0.12, 1.0],
+      "impact_sfx": "crackle",
       "params": { "impact_pool_radius": 50.0, "impact_pool_lifetime": 2.0, "impact_pool_damage_percent": 0.4 }
     },
     {
@@ -135,6 +155,10 @@
       "icon": "explosive_rounds",
       "category": "weapon",
       "rarity": "rare",
+      "projectile_shape": "bomb",
+      "trail_style": "smoke",
+      "accent_color": [1.35, 0.28, 0.1, 1.0],
+      "impact_sfx": "boom",
       "params": { "explosion_radius": 82.0, "damage_percent": 0.65 }
     },
     {
@@ -144,6 +168,10 @@
       "icon": "freeze_shot",
       "category": "weapon",
       "rarity": "rare",
+      "projectile_shape": "shard",
+      "trail_style": "frost",
+      "accent_color": [0.38, 1.05, 1.45, 1.0],
+      "impact_sfx": "chime",
       "params": { "slow_multiplier": 0.5, "slow_duration": 1.0 }
     },
     {
@@ -153,7 +181,31 @@
       "icon": "poison",
       "category": "weapon",
       "rarity": "rare",
+      "projectile_shape": "blob",
+      "trail_style": "bubbles",
+      "accent_color": [0.65, 1.35, 0.22, 1.0],
+      "impact_sfx": "squelch",
       "params": { "poison_dps": 8.0, "poison_duration": 2.5 }
+    },
+    {
+      "id": "oc_piercing_overdrive",
+      "name": "Piercing Overdrive",
+      "description": "While Overcharge is active, projectiles pierce +2 enemies and travel 20% faster.",
+      "icon": "overcharge",
+      "category": "ability",
+      "rarity": "rare",
+      "requires_ability": "overcharge",
+      "params": { "pierce_bonus": 2, "projectile_speed_mult": 1.2 }
+    },
+    {
+      "id": "sw_resonance",
+      "name": "Shockwave Resonance",
+      "description": "Shockwave emits 2 extra pulses, staggered by 0.15 seconds.",
+      "icon": "shockwave",
+      "category": "ability",
+      "rarity": "rare",
+      "requires_ability": "shockwave",
+      "params": { "extra_pulses": 2, "pulse_interval": 0.15 }
     }
   ]
 }
