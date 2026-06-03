@@ -142,6 +142,10 @@ func setup_from_config(projectile_team: String, projectile_direction: Vector2, c
 	projectile_shape = str(config.get("projectile_shape", projectile_shape))
 	trail_style = str(config.get("trail_style", trail_style))
 	accent_color = _parse_color(config.get("accent_color", accent_color), accent_color)
+	# Player projectiles read as the player color: outline/accent follows the player tint,
+	# overriding any per-mutation accent. Mutation distinction stays via shape/trail/impact.
+	if team == "player":
+		accent_color = tint_color.lightened(0.22)
 	impact_sfx = str(config.get("impact_sfx", impact_sfx))
 	source_type = str(config.get("source_type", source_type))
 	weapon_id = str(config.get("weapon_id", weapon_id))
