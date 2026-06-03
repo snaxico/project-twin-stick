@@ -20,8 +20,8 @@ fix bloom by going over-bright. Plan only — no implementation in this doc.
 was deferred in round 7 — pull it forward now.)
 
 **Changes (`data/weapons.json` rifle, currently `fire_rate 5.0 / damage 16.0`):**
-- `fire_rate` 5.0 → **~6.5** (A8, tune in play).
-- `damage` 16.0 → **~20** (tune).
+- `fire_rate` 5.0 → **6.5** (exact starting value; re-tune in play if needed).
+- `damage` 16.0 → **20.0** (exact starting value; re-tune in play if needed).
 - Leave `projectile_speed 850` / `range 950` unless it still feels weak.
 
 **No separate front-load mechanic** (avoids arbitrary, hard-to-tune starting power). L1 strength
@@ -56,17 +56,22 @@ normalized progress `t ∈ [0,1]` so randomized act lengths don't break it:
     where `total_combat_depth` = the run's last combat row's global depth (RunState builds the
     rows, so it knows this; compute once at generation and store).
   - **Endless:** `t = clamp(float(room_number - 1) / 20.0, 0, 1)` (soft horizon at room 20).
+  - **Debug / Encounter Builder single-room:** use the synthesized debug depth
+    (`step_index + 1`) against a fixed structured horizon of 11:
+    `t = clamp(float(debug_depth - 1) / 10.0, 0, 1)`. (Lets the builder preview any point on the
+    curve by changing `step_index`; there's no full run to derive `total_combat_depth` from.)
   - Bosses can reuse the room's own `t`; they're per-encounter, not part of the cadence ramp.
 - Then interpolate each knob by `t` (replace the binary Act 1/2 branches), explicit endpoints:
   - `room_duration   = lerp(32, 45, t)` (+10 elite; +5 endless ≥ depth 20)
   - `spawn_interval  = lerp(0.80, 0.50, t)` (−0.07 elite; floor `max(…, 0.30)`)
   - `opening_burst   = round(lerp(4, 9, t))` (×2 swarm)
   - `_burst_interval = lerp(11.0, 7.0, t)`
-- **Enemy-pool cliff:** keep boss ×2 HP and elite ×1.5 as-is (per-encounter, not the ramp). The
-  remaining hard step is the binary Act-1/Act-2 enemy *pool*; **softening that is the one bigger
-  change** — make the pool/mix escalate with `t` instead of swapping at the act boundary. If
-  that's too much scope now, do the cadence interpolation first and leave the pool swap, noting
-  the Act-2 pool jump as a known residual.
+- **Enemy-pool cliff — DECIDED: cadence-only this round; pool swap deferred.** Keep boss ×2 HP
+  and elite ×1.5 as-is (per-encounter, not the ramp). This round implements **only** the cadence
+  interpolation above; the binary Act-1/Act-2 enemy *pool* swap is **left as-is and documented as
+  a known open residual** (an Act-2 difficulty step remains from the tougher pool). A pool/mix
+  ramp (escalate the pool with `t`) is a separate follow-up, not part of round 8. Do not
+  implement the pool ramp now.
 - **Keep enemy *amount* roughly the same** (player likes it) — these endpoints are tuned to
   flatten the *rate of increase*, not cut totals; tune in play.
 - Functions: `_get_room_duration()`, `_get_spawn_interval()`, `_spawn_opening_burst()`, the
@@ -78,9 +83,9 @@ normalized progress `t ∈ [0,1]` so randomized act lengths don't break it:
 HDR 2D is on, but **nothing is pushed over-bright**, so almost nothing crosses the threshold —
 bloom is technically on but invisible. (The round-7 A1 "emissive target" step was skipped.)
 
-**Change:** push key colors **over-bright (×~1.3-1.6)** so they actually bloom — player core,
-player projectiles, enemy projectiles, hit/kill flashes, and ability VFX. Tune threshold/scale
-alongside.
+**Change:** push key colors **over-bright with a default multiplier of ×1.45** so they actually
+bloom — player core, player projectiles, enemy projectiles, hit/kill flashes, and ability VFX.
+This is the implementation value; tune threshold/scale only after playtest if needed.
 - **Render-local only — do NOT mutate gameplay/UI color sources.** `player_config.tint` also
   drives the HUD / loadout / readability, so over-bright must be applied at *draw time* (e.g.
   multiply the visual node's draw color, a `self_modulate`/material brightness, or a separate
@@ -108,8 +113,16 @@ shows cost).
 - Distinct, recognizable profiles for: fire, hit, enemy death, level-up sting, pickup, ability
   cast, boss phase.
 - Per-trigger **pitch variation** (±10-15%) so repetition doesn't fatigue.
-- A **master-bus limiter + a touch of reverb** for cohesion/punch (AudioServer bus effects, no
-  assets).
+- **Dedicated `SFX` bus + effects (exact, idempotent):**
+  - Create an `SFX` audio bus as a child of `Master` **once at boot**, guarded:
+    `if AudioServer.get_bus_index("SFX") < 0:` → add bus, set its send to `Master`. Route the
+    16 pooled `AudioStreamPlayer`s to it (`player.bus = "SFX"`).
+  - Add effects **only if the bus has none** (`AudioServer.get_bus_effect_count(idx) == 0`) so
+    re-entry / scene reloads don't stack duplicates:
+    - `AudioEffectLimiter` — `ceiling_db = -1.5`, `threshold_db = -3.0`, `soft_clip_db = 2.0`.
+    - `AudioEffectReverb` — light glue: `room_size = 0.4`, `wet = 0.12`, `dry = 0.88`,
+      `damping = 0.5`.
+  - Limiter before reverb in the chain. All settings are starting points; tune by ear.
 
 ## 5. Projectile color = player — DONE
 
@@ -131,6 +144,7 @@ not color. Keep that in mind when tuning Track C — lean on shape/trail/SFX, no
 ## Verification
 1. Headless parse: `Godot_v4.6.2-stable_win64_console.exe --headless --path D:\GameDev\Project_Twin_stick --quit`
 2. Perf re-check (DebugOverlay F3, 1P + 2P) after §1 fire-rate + §3 bloom.
-3. Manual feel: L1 feels strong and fun (offense satisfying); difficulty ramps smoothly with no
-   Act-2 cliff; neon glow is clearly visible; SFX sound noticeably better and distinct per event;
-   player projectiles read green.
+3. Manual feel: L1 feels strong and fun (offense satisfying); **cadence** ramps smoothly across
+   rows (no spawn-rate/burst/duration cliff at Act 2) — note a residual Act-2 difficulty step
+   from the unchanged enemy pool is expected/acceptable this round; neon glow is clearly visible;
+   SFX sound noticeably better and distinct per event; player projectiles read green.
