@@ -4,12 +4,81 @@
       "id": "rifle",
       "name": "Rifle",
       "type": "weapon",
+      "projectile_kind": "bullet",
       "stats": {
-        "damage": 20.0,
-        "fire_rate": 6.5,
         "projectile_speed": 850.0,
         "range": 950.0,
         "area": 4.0
+      },
+      "per_level": {
+        "damage": [10, 13, 17, 21, 25],
+        "fire_rate": [6.5, 6.8, 7.1, 7.4, 7.7]
+      }
+    },
+    {
+      "id": "rocket",
+      "name": "Rocket Launcher",
+      "type": "weapon",
+      "projectile_kind": "rocket",
+      "stats": {
+        "fire_rate": 1.6,
+        "projectile_speed": 600.0,
+        "range": 900.0,
+        "area": 6.0,
+        "blast_damage_percent": 0.7
+      },
+      "per_level": {
+        "damage": [40, 55, 70, 85, 100],
+        "blast_radius": [90, 102, 114, 126, 138]
+      }
+    },
+    {
+      "id": "scattergun",
+      "name": "Scattergun",
+      "type": "weapon",
+      "projectile_kind": "pellet",
+      "stats": {
+        "damage": 8.0,
+        "fire_rate": 2.2,
+        "projectile_speed": 800.0,
+        "range": 550.0
+      },
+      "per_level": {
+        "pellet_count": [4, 5, 6, 7, 8],
+        "spread_degrees": [18, 17, 16, 15, 14]
+      }
+    },
+    {
+      "id": "cannon",
+      "name": "Cannon",
+      "type": "weapon",
+      "projectile_kind": "slug",
+      "stats": {
+        "fire_rate": 2.0,
+        "projectile_speed": 700.0,
+        "range": 900.0,
+        "area": 8.0,
+        "knockback": 220.0
+      },
+      "per_level": {
+        "damage": [30, 42, 54, 66, 78],
+        "pierce": [1, 1, 2, 2, 3]
+      }
+    },
+    {
+      "id": "railgun",
+      "name": "Railgun",
+      "type": "weapon",
+      "projectile_kind": "lance",
+      "stats": {
+        "fire_rate": 4.0,
+        "projectile_speed": 1400.0,
+        "range": 950.0,
+        "area": 3.0
+      },
+      "per_level": {
+        "damage": [16, 22, 28, 34, 40],
+        "pierce": [3, 3, 4, 4, 5]
       }
     },
     {

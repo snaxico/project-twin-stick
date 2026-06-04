@@ -105,6 +105,7 @@ func _ready() -> void:
 	_ensure_default_controller_bindings()
 	_cache_default_input_events()
 	_load_input_bindings()
+	_strip_player_2_controller_bindings()
 	_load_video_settings()
 	_load_mutation_definitions()
 	_load_modifier_definitions()
@@ -176,7 +177,7 @@ func _populate_menu() -> void:
 		{"label": "Endless", "value": "endless"},
 	], "structured")
 	_populate_control_option(player_1_control_option, "gamepad")
-	_populate_control_option(player_2_control_option, "keyboard")
+	_populate_player_2_control_option()
 	_populate_profile_option(debug_primary_option, [{"label": "Rifle", "value": "rifle"}], "rifle")
 	_populate_profile_option(debug_secondary_option, [{"label": "Mixed", "value": "mixed"}], "mixed")
 	_populate_profile_option(debug_room_type_option, [
@@ -208,6 +209,12 @@ func _populate_control_option(option_button: OptionButton, default_value: String
 		if option_button.get_item_metadata(index) == default_value:
 			option_button.select(index)
 			break
+
+func _populate_player_2_control_option() -> void:
+	player_2_control_option.clear()
+	player_2_control_option.add_item("Keyboard")
+	player_2_control_option.set_item_metadata(0, "keyboard")
+	player_2_control_option.select(0)
 
 func _populate_profile_option(option_button: OptionButton, entries: Array, default_value: String) -> void:
 	option_button.clear()
@@ -281,6 +288,8 @@ func _build_player_configs() -> Array:
 	var control_options := [player_1_control_option, player_2_control_option]
 	for index in range(get_selected_player_count()):
 		var control_source := str(control_options[index].get_selected_metadata())
+		if index == 1:
+			control_source = "keyboard"
 		configs.append(PlayerConfigData.new(index + 1, control_source, _player_tints[index]))
 	return configs
 
@@ -471,7 +480,12 @@ func _add_binding_row(parent: VBoxContainer, label_text: String, action: String)
 	row.add_child(keyboard_button)
 	var controller_button := Button.new()
 	controller_button.custom_minimum_size = Vector2(180.0, 32.0)
-	controller_button.pressed.connect(_begin_binding.bind(action, "controller", controller_button))
+	if _is_player_2_action(action):
+		controller_button.text = "Pad: disabled"
+		controller_button.disabled = true
+		controller_button.tooltip_text = "Player 2 controller input is disabled for now."
+	else:
+		controller_button.pressed.connect(_begin_binding.bind(action, "controller", controller_button))
 	row.add_child(controller_button)
 	_settings_binding_buttons[action] = {
 		"keyboard": keyboard_button,
@@ -479,6 +493,8 @@ func _add_binding_row(parent: VBoxContainer, label_text: String, action: String)
 	}
 
 func _begin_binding(action: String, kind: String, button: Button) -> void:
+	if kind == "controller" and _is_player_2_action(action):
+		return
 	_pending_binding_action = action
 	_pending_binding_kind = kind
 	_pending_binding_button = button
@@ -529,6 +545,8 @@ func _try_capture_binding_event(event: InputEvent) -> bool:
 	return false
 
 func _apply_binding_event(action: String, kind: String, event: InputEvent) -> void:
+	if kind == "controller" and _is_player_2_action(action):
+		return
 	if not InputMap.has_action(action):
 		InputMap.add_action(action)
 	var preserved_events: Array = []
@@ -550,7 +568,7 @@ func _refresh_binding_buttons() -> void:
 			keyboard_button.text = "Key: %s" % _describe_binding(action, "keyboard")
 		var controller_button: Button = buttons.get("controller", null)
 		if controller_button != null:
-			controller_button.text = "Pad: %s" % _describe_binding(action, "controller")
+			controller_button.text = "Pad: disabled" if _is_player_2_action(action) else "Pad: %s" % _describe_binding(action, "controller")
 
 func _describe_binding(action: String, kind: String) -> String:
 	for event in InputMap.action_get_events(action):
@@ -575,6 +593,9 @@ func _get_binding_kind(event: InputEvent) -> String:
 	if event is InputEventJoypadButton or event is InputEventJoypadMotion:
 		return "controller"
 	return "other"
+
+func _is_player_2_action(action: String) -> bool:
+	return action.begins_with("p2_")
 
 func _joy_button_name(button_index: int) -> String:
 	var names := {
@@ -603,7 +624,9 @@ func _joy_axis_name(axis: int) -> String:
 	return str(names.get(axis, "Axis %d" % axis))
 
 func _ensure_default_controller_bindings() -> void:
-	for player_id in [1, 2]:
+	# Player 2 controller bindings are disabled temporarily because shared pad
+	# bindings can drive both local players at once.
+	for player_id in [1]:
 		_add_default_controller_motion("p%d_move_left" % player_id, JOY_AXIS_LEFT_X, -1.0)
 		_add_default_controller_motion("p%d_move_right" % player_id, JOY_AXIS_LEFT_X, 1.0)
 		_add_default_controller_motion("p%d_move_up" % player_id, JOY_AXIS_LEFT_Y, -1.0)
@@ -670,6 +693,28 @@ func _load_input_bindings() -> void:
 			var event := _decode_input_event(encoded as Dictionary)
 			if event != null:
 				InputMap.action_add_event(action, event)
+	_strip_player_2_controller_bindings()
+
+func _strip_player_2_controller_bindings() -> void:
+	var removed_any := false
+	for entry in INPUT_BINDING_ACTIONS:
+		var action := "p2_%s" % str(entry["suffix"])
+		if not InputMap.has_action(action):
+			continue
+		var preserved_events: Array = []
+		for event in InputMap.action_get_events(action):
+			if _get_binding_kind(event) == "controller":
+				removed_any = true
+				continue
+			preserved_events.append(event)
+		if preserved_events.size() == InputMap.action_get_events(action).size():
+			continue
+		InputMap.action_erase_events(action)
+		for preserved_event in preserved_events:
+			InputMap.action_add_event(action, preserved_event)
+	if removed_any:
+		_save_input_bindings()
+		_refresh_binding_buttons()
 
 func _reset_input_bindings_to_defaults() -> void:
 	_cancel_pending_binding()
@@ -677,6 +722,7 @@ func _reset_input_bindings_to_defaults() -> void:
 		InputMap.action_erase_events(action)
 		for event in (_default_input_events.get(action, []) as Array):
 			InputMap.action_add_event(action, (event as InputEvent).duplicate())
+	_strip_player_2_controller_bindings()
 	_save_input_bindings()
 	_refresh_binding_buttons()
 

@@ -74,7 +74,7 @@ func start_new_run(configs: Array, debug_options: Dictionary = {}) -> void:
 	_structured_total_combat_depth = 1
 	_apply_debug_starting_mutations()
 	for _index in range(player_configs.size()):
-		player_health_states.append({"current": 50, "max": 50})
+		player_health_states.append({"current": 100, "max": 100})
 	if is_debug_single_room_mode():
 		node_map = _build_single_room_map()
 	elif is_endless_mode():
@@ -171,7 +171,7 @@ func set_player_health_states(health_states: Array) -> void:
 	for state in health_states:
 		player_health_states.append({
 			"current": int(state.get("current", 1)),
-			"max": int(state.get("max", 50)),
+			"max": int(state.get("max", 100)),
 		})
 
 func get_run_summary_text() -> String:
@@ -200,6 +200,50 @@ func get_weapon(player_index: int) -> Dictionary:
 		return {}
 	return (_weapons_by_id.get(inventory.weapon_id, {}) as Dictionary).duplicate(true)
 
+func get_weapon_level(player_index: int) -> int:
+	var inventory = get_player_inventory(player_index)
+	if inventory == null:
+		return 1
+	return clampi(int(inventory.weapon_level), 1, 5)
+
+func get_active_weapon_id(player_index: int) -> String:
+	var inventory = get_player_inventory(player_index)
+	if inventory == null:
+		return "rifle"
+	return str(inventory.weapon_id)
+
+func level_up_weapon(player_index: int) -> void:
+	var inventory = get_player_inventory(player_index)
+	if inventory == null:
+		return
+	inventory.weapon_level = clampi(int(inventory.weapon_level) + 1, 1, 5)
+
+func set_active_weapon(player_index: int, weapon_id: String) -> void:
+	var inventory = get_player_inventory(player_index)
+	if inventory == null:
+		return
+	if not _weapons_by_id.has(weapon_id):
+		return
+	var weapon: Dictionary = _weapons_by_id[weapon_id] as Dictionary
+	if str(weapon.get("type", "weapon")) != "weapon":
+		return
+	inventory.weapon_id = weapon_id
+
+func get_weapon_catalog() -> Array:
+	var catalog: Array = []
+	for weapon_id_variant in _weapons_by_id.keys():
+		var weapon: Dictionary = _weapons_by_id[weapon_id_variant] as Dictionary
+		if str(weapon.get("type", "weapon")) != "weapon":
+			continue
+		catalog.append({
+			"id": str(weapon.get("id", weapon_id_variant)),
+			"name": str(weapon.get("name", weapon_id_variant)),
+		})
+	catalog.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return str(a.get("name", "")).naturalnocasecmp_to(str(b.get("name", ""))) < 0
+	)
+	return catalog
+
 func get_ability(player_index: int, slot_index: int) -> Dictionary:
 	var inventory = get_player_inventory(player_index)
 	if inventory == null:
@@ -224,17 +268,20 @@ func get_player_runtime_loadout_for(player_index: int) -> Dictionary:
 	var ability_slot_2: Dictionary = get_ability(player_index, 1)
 	if weapon.is_empty():
 		weapon = {"id": "rifle", "name": "Rifle", "stats": {}}
+	var weapon_level := get_weapon_level(player_index)
+	var weapon_stats := _resolve_weapon_stats(weapon, weapon_level)
 	return {
 		"weapon_id": str(weapon.get("id", "rifle")),
 		"weapon_name": str(weapon.get("name", "Rifle")),
-		"weapon_stats": (weapon.get("stats", {}) as Dictionary).duplicate(true),
+		"weapon_level": weapon_level,
+		"weapon_stats": weapon_stats,
 		"ability_slot_1_id": str(inventory.ability_slot_1 if inventory != null else "overcharge"),
 		"ability_slot_2_id": str(inventory.ability_slot_2 if inventory != null else "dash"),
 		"ability_slot_1": ability_slot_1.duplicate(true),
 		"ability_slot_2": ability_slot_2.duplicate(true),
 		"mutations": get_mutations(player_index),
 		"move_speed": 488.0,
-		"max_health": 50,
+		"max_health": 100,
 	}
 
 func add_xp(amount: int) -> void:
@@ -306,6 +353,20 @@ func _load_weapons() -> void:
 		if str(weapon.get("type", "weapon")) != "weapon":
 			continue
 		_weapons_by_id[weapon_id] = weapon
+
+func _resolve_weapon_stats(weapon_def: Dictionary, weapon_level: int) -> Dictionary:
+	var resolved: Dictionary = (weapon_def.get("stats", {}) as Dictionary).duplicate(true)
+	var level_index := clampi(weapon_level, 1, 5) - 1
+	var per_level: Dictionary = (weapon_def.get("per_level", {}) as Dictionary)
+	for stat_key_variant in per_level.keys():
+		var stat_key := str(stat_key_variant)
+		var values: Array = per_level[stat_key_variant] as Array
+		if values.is_empty():
+			continue
+		var value_index := mini(level_index, values.size() - 1)
+		resolved[stat_key] = values[value_index]
+	resolved["projectile_kind"] = str(weapon_def.get("projectile_kind", resolved.get("projectile_kind", "bullet")))
+	return resolved
 
 func _build_default_player_inventories(player_count: int, selected_abilities: Array) -> Array:
 	var inventories: Array = []

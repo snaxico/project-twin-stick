@@ -4,6 +4,13 @@ extends RefCounted
 const ICON_SIZE: int = 64
 const UI_ICON_SIZE: int = 32
 
+const MUTATION_GROUP_COLORS: Dictionary = {
+	"weapon": Color(1.0, 0.55, 0.2, 1.0),
+	"effect": Color(0.4, 0.9, 0.4, 1.0),
+	"attribute": Color(0.35, 0.75, 1.0, 1.0),
+	"ability": Color(0.72, 0.46, 1.0, 1.0),
+}
+
 const REAL_WEAPON_TEXTURE_PATHS: Dictionary = {
 	"rifle": "res://assets/sprites/weapons/player_rifle.png",
 	"scatter": "res://assets/sprites/weapons/player_scattergun.png",
@@ -79,16 +86,20 @@ static func get_passive_icon(passive_id: String) -> Texture2D:
 	_texture_cache[cache_key] = texture
 	return texture
 
-static func get_mutation_icon(mutation_id: String) -> Texture2D:
+static func get_mutation_icon(mutation_id: String, group: String = "attribute") -> Texture2D:
 	var normalized_id: String = mutation_id.strip_edges().to_lower()
 	if normalized_id.is_empty():
 		return null
-	var cache_key: String = "mutation:%s" % normalized_id
+	var normalized_group := group.strip_edges().to_lower()
+	var cache_key: String = "mutation:%s:%s" % [normalized_group, normalized_id]
 	if _texture_cache.has(cache_key):
 		return _texture_cache[cache_key] as Texture2D
-	var texture: Texture2D = _build_mutation_icon(normalized_id)
+	var texture: Texture2D = _build_mutation_icon(normalized_id, normalized_group)
 	_texture_cache[cache_key] = texture
 	return texture
+
+static func get_group_color(group: String) -> Color:
+	return MUTATION_GROUP_COLORS.get(group.strip_edges().to_lower(), Color(0.35, 0.75, 1.0, 1.0))
 
 static func get_ui_icon(icon_name: String) -> Texture2D:
 	var normalized_name: String = icon_name.strip_edges().to_lower()
@@ -139,11 +150,10 @@ static func _build_ui_icon(icon_name: String) -> Texture2D:
 			_draw_coin_icon(image)
 	return ImageTexture.create_from_image(image)
 
-static func _build_mutation_icon(mutation_id: String) -> Texture2D:
+static func _build_mutation_icon(mutation_id: String, group: String) -> Texture2D:
 	var image: Image = Image.create(ICON_SIZE, ICON_SIZE, false, Image.FORMAT_RGBA8)
 	image.fill(Color(0.0, 0.0, 0.0, 0.0))
-	var hue_seed := float(abs(mutation_id.hash()) % 360) / 360.0
-	var base_color := Color.from_hsv(hue_seed, 0.55, 0.95, 1.0)
+	var base_color := get_group_color(group)
 	_draw_rounded_rect(image, Rect2(10.0, 10.0, 44.0, 44.0), 10.0, base_color)
 	_draw_rounded_rect_outline(image, Rect2(10.0, 10.0, 44.0, 44.0), 10.0, Color(0.08, 0.1, 0.14, 0.92), 2.0)
 	match mutation_id:

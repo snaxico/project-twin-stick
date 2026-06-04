@@ -142,7 +142,7 @@ func _build_mutation_chip(mutation: Dictionary) -> Control:
 	icon.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	icon.texture = IconFactoryData.get_mutation_icon(str(mutation.get("id", "")))
+	icon.texture = IconFactoryData.get_mutation_icon(str(mutation.get("id", "")), str(mutation.get("group", "attribute")))
 	chip.add_child(icon)
 
 	var count := int(mutation.get("count", 1))

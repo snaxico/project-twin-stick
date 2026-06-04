@@ -157,32 +157,32 @@ func _configure_type(type_name: String) -> void:
 	match type_name:
 		"chaser":
 			enemy_type = EnemyType.CHASER
-			max_health = 21.0
+			max_health = 20.0
 			move_speed = 150.0
 			fire_interval = 99.0
 			projectile_damage = 0
 			projectile_speed = 0.0
-			contact_damage = 6
+			contact_damage = 8
 			_feedback_color = Color(0.96, 0.24, 0.26, 1.0)
 			_feedback_weight = 0.9
 		"charger":
 			enemy_type = EnemyType.CHARGER
-			max_health = 40.0
+			max_health = 45.0
 			move_speed = 196.0
 			fire_interval = 99.0
 			projectile_damage = 0
 			projectile_speed = 0.0
-			contact_damage = 8
+			contact_damage = 18
 			_feedback_color = Color(1.0, 0.48, 0.18, 1.0)
 			_feedback_weight = 1.1
 		"spitter":
 			enemy_type = EnemyType.SPITTER
-			max_health = 30.0
+			max_health = 15.0
 			move_speed = 350.0
 			fire_interval = 1.35
-			projectile_damage = 10
+			projectile_damage = 12
 			projectile_speed = 380.0
-			contact_damage = 5
+			contact_damage = 6
 			_feedback_color = Color(0.4, 0.9, 1.0, 1.0)
 			_feedback_weight = 1.0
 		"splitter":
@@ -192,7 +192,7 @@ func _configure_type(type_name: String) -> void:
 			fire_interval = 99.0
 			projectile_damage = 0
 			projectile_speed = 0.0
-			contact_damage = 5
+			contact_damage = 8
 			_feedback_color = Color(0.3, 0.9, 0.4, 1.0)
 			_feedback_weight = 1.0
 		"splitter_mini":
@@ -202,12 +202,12 @@ func _configure_type(type_name: String) -> void:
 			fire_interval = 99.0
 			projectile_damage = 0
 			projectile_speed = 0.0
-			contact_damage = 5
+			contact_damage = 6
 			_feedback_color = Color(1.0, 0.7, 0.95, 1.0)
 			_feedback_weight = 0.65
 		"bomber":
 			enemy_type = EnemyType.BOMBER
-			max_health = 35.0
+			max_health = 30.0
 			move_speed = 100.0
 			fire_interval = 99.0
 			projectile_damage = 0
@@ -217,72 +217,72 @@ func _configure_type(type_name: String) -> void:
 			_feedback_weight = 1.15
 		"elite_charger":
 			enemy_type = EnemyType.ELITE_CHARGER
-			max_health = 900.0
+			max_health = 500.0
 			move_speed = 250.0
 			fire_interval = 99.0
 			projectile_damage = 0
 			projectile_speed = 0.0
-			contact_damage = 18
+			contact_damage = 28
 			_feedback_color = Color(1.0, 0.54, 0.18, 1.0)
 			_feedback_weight = 1.75
 		"elite_spitter":
 			enemy_type = EnemyType.ELITE_SPITTER
-			max_health = 650.0
+			max_health = 380.0
 			move_speed = 320.0
 			fire_interval = 0.8
-			projectile_damage = 14
+			projectile_damage = 20
 			projectile_speed = 470.0
-			contact_damage = 8
+			contact_damage = 12
 			_feedback_color = Color(0.46, 0.98, 1.0, 1.0)
 			_feedback_weight = 1.6
 		"elite_support":
 			enemy_type = EnemyType.ELITE_SUPPORT
-			max_health = 760.0
+			max_health = 440.0
 			move_speed = 220.0
 			fire_interval = 99.0
 			projectile_damage = 0
 			projectile_speed = 0.0
-			contact_damage = 5
+			contact_damage = 10
 			_feedback_color = Color(0.72, 0.98, 0.48, 1.0)
 			_feedback_weight = 1.55
 		"boss_warden":
 			enemy_type = EnemyType.BOSS_WARDEN
-			max_health = 1650.0
+			max_health = 800.0
 			move_speed = 178.0
 			fire_interval = 99.0
-			projectile_damage = 0
+			projectile_damage = 16
 			projectile_speed = 0.0
-			contact_damage = 22
+			contact_damage = 35
 			_feedback_color = Color(1.0, 0.32, 0.26, 1.0)
 			_feedback_weight = 2.2
 		"boss_hydra":
 			enemy_type = EnemyType.BOSS_HYDRA
-			max_health = 2100.0
+			max_health = 1000.0
 			move_speed = 0.0
 			fire_interval = 1.2
-			projectile_damage = 13
+			projectile_damage = 16
 			projectile_speed = 460.0
-			contact_damage = 12
+			contact_damage = 35
 			_feedback_color = Color(0.44, 0.78, 1.0, 1.0)
 			_feedback_weight = 2.0
 		"boss_hive":
 			enemy_type = EnemyType.BOSS_HIVE
-			max_health = 1800.0
+			max_health = 900.0
 			move_speed = 145.0
 			fire_interval = 99.0
-			projectile_damage = 0
+			projectile_damage = 16
 			projectile_speed = 0.0
-			contact_damage = 10
+			contact_damage = 35
 			_feedback_color = Color(0.8, 0.36, 0.9, 1.0)
 			_feedback_weight = 2.0
 		"boss_pulsar":
 			enemy_type = EnemyType.BOSS_PULSAR
-			max_health = 1950.0
+			max_health = 950.0
 			move_speed = 0.0
 			fire_interval = 0.9
-			projectile_damage = 10
+			projectile_damage = 16
 			projectile_speed = 440.0
-			contact_damage = 10
+			contact_damage = 35
 			_feedback_color = Color(0.88, 0.96, 1.0, 1.0)
 			_feedback_weight = 2.0
 		_:
@@ -316,13 +316,13 @@ func apply_boss_scale(player_count: int) -> void:
 		return
 	_boss_scale = 1.0 + max(player_count - 1, 0) * 0.6
 	if enemy_type == EnemyType.BOSS_WARDEN:
-		max_health = 1650.0 * _boss_scale
+		max_health = 800.0 * _boss_scale
 	elif enemy_type == EnemyType.BOSS_HYDRA:
-		max_health = 2100.0 * _boss_scale
+		max_health = 1000.0 * _boss_scale
 	elif enemy_type == EnemyType.BOSS_HIVE:
-		max_health = 1800.0 * _boss_scale
+		max_health = 900.0 * _boss_scale
 	elif enemy_type == EnemyType.BOSS_PULSAR:
-		max_health = 1950.0 * _boss_scale
+		max_health = 950.0 * _boss_scale
 	current_health = max_health
 
 func apply_elite_act_scale(act: int) -> void:
@@ -359,6 +359,11 @@ func get_feedback_color() -> Color:
 
 func get_feedback_weight() -> float:
 	return _feedback_weight
+
+func get_collision_radius() -> float:
+	if collision_shape != null and collision_shape.shape is CircleShape2D:
+		return (collision_shape.shape as CircleShape2D).radius
+	return _base_collision_radius
 
 func get_type_name() -> String:
 	match enemy_type:
@@ -418,6 +423,13 @@ func apply_knockback(direction: Vector2, force: float) -> void:
 
 func apply_slow(multiplier: float, duration: float) -> void:
 	_slow_multiplier = min(_slow_multiplier, clampf(multiplier, 0.15, 1.0))
+	_slow_until = max(_slow_until, _current_time_seconds() + max(duration, 0.1))
+
+func apply_stacking_slow(step: float, floor_multiplier: float, duration: float) -> void:
+	var clamped_floor := clampf(floor_multiplier, 0.01, 1.0)
+	var clamped_step := clampf(step, 0.01, 1.0)
+	var next_multiplier := maxf(_slow_multiplier * clamped_step, clamped_floor)
+	_slow_multiplier = min(_slow_multiplier, next_multiplier)
 	_slow_until = max(_slow_until, _current_time_seconds() + max(duration, 0.1))
 
 func apply_poison(dps: float, duration: float) -> void:
@@ -1031,7 +1043,7 @@ func _trigger_bomber_explosion() -> void:
 	if not _alive:
 		return
 	if _combat_owner != null and _combat_owner.has_method("handle_enemy_death_explosion"):
-		_combat_owner.handle_enemy_death_explosion(global_position, 120.0, 15)
+		_combat_owner.handle_enemy_death_explosion(global_position, 120.0, 25)
 	_die(true)
 
 func _die(already_exploded: bool = false) -> void:
@@ -1040,7 +1052,7 @@ func _die(already_exploded: bool = false) -> void:
 	_alive = false
 	clear_aura()
 	if get_type_name() == "bomber" and not already_exploded and _combat_owner != null and _combat_owner.has_method("handle_enemy_death_explosion"):
-		_combat_owner.handle_enemy_death_explosion(global_position, 120.0, 15)
+		_combat_owner.handle_enemy_death_explosion(global_position, 120.0, 25)
 	if _death_explosion_radius > 0.0 and _death_explosion_damage > 0 and _combat_owner != null and _combat_owner.has_method("handle_enemy_death_explosion"):
 		_combat_owner.handle_enemy_death_explosion(global_position, _death_explosion_radius, _death_explosion_damage)
 	_spawn_death_particles()

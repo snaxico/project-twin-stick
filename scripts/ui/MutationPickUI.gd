@@ -11,14 +11,15 @@ var _selected_indices: Array = []
 var _confirmed: Array = []
 var _locked_selection_ids: Array = []
 var _player_views: Array = []
+var _definition_cache: Dictionary = {}
 var _round_title := "Level Up"
-var _round_subtitle := "Choose one mutation."
+var _round_subtitle := "Choose one upgrade."
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_STOP
 
-func configure_for_players(configs: Array, options_by_player: Array, round_title: String, round_subtitle: String = "Choose one mutation.") -> void:
+func configure_for_players(configs: Array, options_by_player: Array, round_title: String, round_subtitle: String = "Choose one upgrade.") -> void:
 	_player_configs = configs.duplicate()
 	_options_by_player = options_by_player.duplicate(true)
 	_round_title = round_title
@@ -26,6 +27,7 @@ func configure_for_players(configs: Array, options_by_player: Array, round_title
 	_selected_indices.clear()
 	_confirmed.clear()
 	_locked_selection_ids.clear()
+	_definition_cache.clear()
 	for player_index in range(_player_configs.size()):
 		_selected_indices.append(0)
 		_confirmed.append(false)
@@ -179,7 +181,7 @@ func _refresh_panels() -> void:
 			state_label.text = "Locked In" if not selection_id.is_empty() else "No valid picks"
 			state_label.modulate = Color(0.46, 0.98, 0.72, 0.95)
 		else:
-			state_label.text = "Choose one mutation"
+			state_label.text = "Choose one upgrade"
 			state_label.modulate = Color(0.84, 0.9, 0.98, 0.82)
 		_populate_inventory_flow(inventory_flow, player_index)
 		var options: Array = _options_by_player[player_index]
@@ -231,11 +233,22 @@ func _build_card(player_index: int, option_index: int) -> Control:
 	rarity_label.modulate = Color(1.0, 0.82, 0.28, 0.9) if is_rare else Color(0.74, 0.82, 0.94, 0.72)
 	layout.add_child(rarity_label)
 
+	var group := str(option.get("group", "attribute"))
+	var group_label := Label.new()
+	group_label.text = group.to_upper()
+	group_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	group_label.add_theme_font_size_override("font_size", 9)
+	group_label.modulate = IconFactoryData.get_group_color(group).lightened(0.18)
+	layout.add_child(group_label)
+
 	var icon := TextureRect.new()
 	icon.custom_minimum_size = Vector2(64.0, 64.0)
 	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	icon.texture = IconFactoryData.get_mutation_icon(str(option.get("id", "")))
+	if group == "weapon":
+		icon.texture = IconFactoryData.get_weapon_icon(str(option.get("icon", "")))
+	else:
+		icon.texture = IconFactoryData.get_mutation_icon(str(option.get("id", "")), group)
 	layout.add_child(icon)
 
 	var mutation_title := Label.new()
@@ -244,7 +257,7 @@ func _build_card(player_index: int, option_index: int) -> Control:
 	mutation_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	layout.add_child(mutation_title)
 
-	if not is_rare:
+	if not is_rare and group != "weapon":
 		var current_level := _get_current_mutation_level(player_index, str(option.get("id", "")))
 		var level_label := Label.new()
 		level_label.text = "Lv %d -> Lv %d" % [current_level, current_level + 1]
@@ -280,7 +293,7 @@ func _populate_inventory_flow(flow: FlowContainer, player_index: int) -> void:
 	var entries := _build_inventory_entries(player_index)
 	if entries.is_empty():
 		var empty_chip := Label.new()
-		empty_chip.text = "No mutations yet"
+		empty_chip.text = "No upgrades yet"
 		empty_chip.modulate = Color(0.76, 0.82, 0.92, 0.62)
 		flow.add_child(empty_chip)
 		return
@@ -293,23 +306,40 @@ func _build_inventory_entries(player_index: int) -> Array:
 		var mutation_id := str(mutation_id_variant)
 		counts[mutation_id] = int(counts.get(mutation_id, 0)) + 1
 	var entries: Array = []
+	var active_weapon_id := RunState.get_active_weapon_id(player_index)
+	entries.append({
+		"id": active_weapon_id,
+		"name": "%s Lv%d" % [_get_weapon_name(active_weapon_id), RunState.get_weapon_level(player_index)],
+		"level": 1,
+		"rarity": "common",
+		"group": "weapon",
+	})
 	for mutation_id_variant in counts.keys():
 		var mutation_id := str(mutation_id_variant)
+		var definition := _get_mutation_definition(mutation_id)
 		entries.append({
 			"id": mutation_id,
-			"name": _format_name(mutation_id),
+			"name": str(definition.get("name", _format_name(mutation_id))),
 			"level": int(counts[mutation_id]),
-			"rarity": "rare" if _is_current_pick_rare(player_index, mutation_id) else "common",
+			"rarity": str(definition.get("rarity", "common")),
+			"group": str(definition.get("group", "attribute")),
 		})
-	entries.sort_custom(func(a: Dictionary, b: Dictionary): return str(a.get("name", "")) < str(b.get("name", "")))
+	entries.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		if str(a.get("group", "")) == "weapon" and str(b.get("group", "")) != "weapon":
+			return true
+		if str(a.get("group", "")) != "weapon" and str(b.get("group", "")) == "weapon":
+			return false
+		return str(a.get("name", "")).naturalnocasecmp_to(str(b.get("name", ""))) < 0
+	)
 	return entries
 
 func _build_inventory_chip(entry: Dictionary) -> Control:
 	var chip := PanelContainer.new()
 	var style := StyleBoxFlat.new()
 	var is_rare := str(entry.get("rarity", "common")) == "rare"
-	style.bg_color = Color(0.12, 0.1, 0.06, 0.96) if is_rare else Color(0.08, 0.1, 0.14, 0.94)
-	style.border_color = Color(0.98, 0.82, 0.28, 0.92) if is_rare else Color(0.36, 0.46, 0.62, 0.78)
+	var group_color := IconFactoryData.get_group_color(str(entry.get("group", "attribute")))
+	style.bg_color = Color(group_color.r * 0.16, group_color.g * 0.16, group_color.b * 0.16, 0.96)
+	style.border_color = Color(0.98, 0.82, 0.28, 0.92) if is_rare else Color(group_color.r, group_color.g, group_color.b, 0.78)
 	style.set_border_width_all(1)
 	style.corner_radius_top_left = 8
 	style.corner_radius_top_right = 8
@@ -326,12 +356,20 @@ func _build_inventory_chip(entry: Dictionary) -> Control:
 	chip.add_child(label)
 	return chip
 
-func _is_current_pick_rare(player_index: int, mutation_id: String) -> bool:
-	for option in (_options_by_player[player_index] as Array):
-		var option_dict: Dictionary = option as Dictionary
-		if str(option_dict.get("id", "")) == mutation_id:
-			return str(option_dict.get("rarity", "common")) == "rare"
-	return mutation_id in ["ricochet", "fire_trail", "explosive_rounds", "freeze_shot", "poison"]
+func _get_mutation_definition(mutation_id: String) -> Dictionary:
+	if _definition_cache.has(mutation_id):
+		return (_definition_cache[mutation_id] as Dictionary).duplicate(true)
+	var system := MutationSystem.new()
+	var definition := system.get_definition(mutation_id)
+	_definition_cache[mutation_id] = definition.duplicate(true)
+	return definition
+
+func _get_weapon_name(weapon_id: String) -> String:
+	for weapon in RunState.get_weapon_catalog():
+		var weapon_dict: Dictionary = weapon as Dictionary
+		if str(weapon_dict.get("id", "")) == weapon_id:
+			return str(weapon_dict.get("name", weapon_id))
+	return _format_name(weapon_id)
 
 func _format_name(raw_id: String) -> String:
 	var parts: Array = []

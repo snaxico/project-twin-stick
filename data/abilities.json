@@ -9,7 +9,7 @@
       "cooldown": 5.0,
       "duration": 0.0,
       "stats": {
-        "damage": 30.0,
+        "damage": 15.0,
         "radius": 250.0,
         "knockback_force": 950.0,
         "expand_duration": 0.15
@@ -32,7 +32,7 @@
     {
       "id": "overcharge",
       "name": "Overcharge",
-      "description": "Weapon fires 30% faster for a short burst.",
+      "description": "For a short burst, your weapon fires 30% faster.",
       "slot": "off",
       "type": "sustained",
       "cooldown": 22.0,
@@ -54,7 +54,7 @@
         "distance": 340.0,
         "arrival_iframes": 0.2,
         "detonation_radius": 120.0,
-        "detonation_damage": 24
+        "detonation_damage": 12
       }
     },
     {
@@ -91,7 +91,7 @@
       "cooldown": 12.0,
       "duration": 9.0,
       "stats": {
-        "damage": 20,
+        "damage": 10,
         "fire_rate": 4.5,
         "range": 780.0,
         "projectile_speed": 760.0
@@ -106,10 +106,11 @@
       "cooldown": 10.0,
       "duration": 14.0,
       "stats": {
-        "mine_count": 7,
-        "radius": 130.0,
-        "trigger_radius": 80.0,
-        "damage": 60
+        "mine_count": 4,
+        "spread_radius": 150.0,
+        "radius": 170.0,
+        "trigger_radius": 110.0,
+        "damage": 40
       }
     },
     {
@@ -123,7 +124,7 @@
       "stats": {
         "orb_count": 3,
         "orbit_radius": 84.0,
-        "damage": 18,
+        "damage": 9,
         "rotation_speed": 2.6
       }
     }

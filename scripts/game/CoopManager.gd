@@ -21,6 +21,7 @@ const HealthPickupData = preload("res://scripts/pickups/HealthPickup.gd")
 const HazardZoneData = preload("res://scripts/game/HazardZone.gd")
 const AbilityMineData = preload("res://scripts/game/AbilityMine.gd")
 const ParticleFactoryData = preload("res://scripts/juice/ParticleFactory.gd")
+const IconFactoryData = preload("res://scripts/ui/IconFactory.gd")
 const HealthBarHUDData = preload("res://scripts/juice/HealthBarHUD.gd")
 const HitStopManagerData = preload("res://scripts/juice/HitStopManager.gd")
 const PauseInputProxyData = preload("res://scripts/ui/PauseInputProxy.gd")
@@ -420,6 +421,12 @@ func _build_hud() -> void:
 		slot_1_label.add_theme_color_override("font_color", slot_1_color)
 		slot_1_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		slot_1_box.add_child(slot_1_label)
+		var slot_1_charge_label := Label.new()
+		slot_1_charge_label.add_theme_font_size_override("font_size", 9)
+		slot_1_charge_label.add_theme_color_override("font_color", slot_1_color.lightened(0.28))
+		slot_1_charge_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		slot_1_charge_label.visible = false
+		slot_1_box.add_child(slot_1_charge_label)
 		var slot_1_bar := ProgressBar.new()
 		slot_1_bar.show_percentage = false
 		slot_1_bar.min_value = 0.0
@@ -439,6 +446,12 @@ func _build_hud() -> void:
 		slot_2_label.add_theme_color_override("font_color", slot_2_color)
 		slot_2_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		slot_2_box.add_child(slot_2_label)
+		var slot_2_charge_label := Label.new()
+		slot_2_charge_label.add_theme_font_size_override("font_size", 9)
+		slot_2_charge_label.add_theme_color_override("font_color", slot_2_color.lightened(0.28))
+		slot_2_charge_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		slot_2_charge_label.visible = false
+		slot_2_box.add_child(slot_2_charge_label)
 		var slot_2_bar := ProgressBar.new()
 		slot_2_bar.show_percentage = false
 		slot_2_bar.min_value = 0.0
@@ -451,8 +464,10 @@ func _build_hud() -> void:
 		_bottom_player_hud_cards.append({
 			"health_bar": health_bar,
 			"slot_1_label": slot_1_label,
+			"slot_1_charge_label": slot_1_charge_label,
 			"slot_1_bar": slot_1_bar,
 			"slot_2_label": slot_2_label,
+			"slot_2_charge_label": slot_2_charge_label,
 			"slot_2_bar": slot_2_bar,
 		})
 
@@ -557,6 +572,7 @@ func _spawn_players() -> void:
 		player.revived.connect(_on_player_revived)
 		player.damage_taken.connect(_on_player_damage_taken)
 		player.muzzle_flash_requested.connect(_on_muzzle_flash_requested)
+		player.shield_burst_requested.connect(_on_player_shield_burst_requested)
 		_player_nodes.append(player)
 	if camera.has_method("set_players"):
 		camera.set_players(_player_nodes)
@@ -570,6 +586,7 @@ func _rebuild_player_loadouts() -> void:
 		var compiled_loadout := {
 			"weapon_id": str(base_loadout.get("weapon_id", "rifle")),
 			"weapon_name": str(base_loadout.get("weapon_name", "Rifle")),
+			"weapon_level": int(base_loadout.get("weapon_level", 1)),
 			"weapon_stats": compiled_weapon,
 			"ability_slot_1": _build_runtime_ability(index, (base_loadout.get("ability_slot_1", {}) as Dictionary).duplicate(true)),
 			"ability_slot_2": _build_runtime_ability(index, (base_loadout.get("ability_slot_2", {}) as Dictionary).duplicate(true)),
@@ -577,7 +594,7 @@ func _rebuild_player_loadouts() -> void:
 			"ability_slot_2_id": str(base_loadout.get("ability_slot_2_id", "dash")),
 			"mutations": _mutation_system.get_active_mutations(index),
 			"move_speed": float(base_loadout.get("move_speed", 488.0)) * _mutation_system.get_move_speed_multiplier(index),
-			"max_health": int(round(float(base_loadout.get("max_health", 50)) * _mutation_system.get_max_health_multiplier(index))),
+			"max_health": int(round(float(base_loadout.get("max_health", 100)) * _mutation_system.get_max_health_multiplier(index))),
 		}
 		_compiled_loadouts.append(compiled_loadout)
 		_player_nodes[index].apply_loadout(compiled_loadout)
@@ -1090,12 +1107,12 @@ func _handle_room_clear() -> void:
 func _show_progression_pick_if_needed() -> void:
 	if RunState.get_pending_levelups() > 0:
 		_pending_pick_consumes_levelup = true
-		_show_mutation_pick(false, "Level Up", "Choose one mutation.")
+		_show_mutation_pick(false, "Level Up", "Choose one upgrade.")
 		return
 	if _room_type == "elite" and not _pending_elite_bonus_pick:
 		_pending_elite_bonus_pick = true
 		_pending_pick_consumes_levelup = false
-		_show_mutation_pick(true, "Elite Reward", "Guaranteed rare pressure. Choose one mutation.")
+		_show_mutation_pick(true, "Elite Reward", "Guaranteed rare pressure. Choose one upgrade.")
 		return
 	_finish_room_progression()
 
@@ -1130,7 +1147,7 @@ func _on_mutation_selections_confirmed(selections_per_player: Array) -> void:
 	if _pending_pick_consumes_levelup and _room_type == "elite" and not _pending_elite_bonus_pick:
 		_pending_pick_consumes_levelup = false
 		_pending_elite_bonus_pick = true
-		_show_mutation_pick(true, "Elite Reward", "Guaranteed rare pressure. Choose one mutation.")
+		_show_mutation_pick(true, "Elite Reward", "Guaranteed rare pressure. Choose one upgrade.")
 		return
 	if not _pending_pick_consumes_levelup and _pending_elite_bonus_pick:
 		_pending_elite_bonus_pick = false
@@ -1190,7 +1207,7 @@ func _on_player_ability_activated(player, _slot_index: int, ability_id: String, 
 		"decoy":
 			var decoy := DecoyNodeData.new()
 			decoy.global_position = origin
-			decoy.configure(float(stats.get("duration", 5.0)), tint, int(stats.get("decoy_health", 120)))
+			decoy.configure(float(stats.get("duration", 5.0)), tint, int(stats.get("decoy_health", 120)), stats)
 			players.add_child(decoy)
 			_active_decoys.append(decoy)
 		"turret":
@@ -1298,7 +1315,8 @@ func _spawn_shield_effect(origin: Vector2, radius: float, color: Color) -> void:
 	effects.add_child(ring)
 
 func _spawn_ability_mines(origin: Vector2, stats: Dictionary) -> void:
-	var mine_count := int(stats.get("mine_count", 5))
+	var mine_count := int(stats.get("mine_count", 4)) + int(stats.get("mine_count_bonus", 0))
+	var spread_radius := float(stats.get("spread_radius", 150.0))
 	var radius := float(stats.get("radius", 100.0))
 	var trigger_radius := float(stats.get("trigger_radius", 52.0))
 	var damage := int(stats.get("damage", 42))
@@ -1307,10 +1325,26 @@ func _spawn_ability_mines(origin: Vector2, stats: Dictionary) -> void:
 	for mine_index in range(mine_count):
 		var angle := TAU * float(mine_index) / float(max(mine_count, 1))
 		var mine := AbilityMineData.new()
-		mine.global_position = origin + Vector2.RIGHT.rotated(angle) * (60.0 + float(mine_index % 2) * 24.0)
+		mine.global_position = origin + Vector2.RIGHT.rotated(angle) * spread_radius
 		mine.configure(duration, radius, damage, tint, trigger_radius)
 		effects.add_child(mine)
 		_active_mines.append(mine)
+
+func _on_player_shield_burst_requested(origin: Vector2, radius: float, damage: int, color: Color) -> void:
+	if radius <= 0.0 or damage <= 0:
+		return
+	for enemy in get_nearby_enemy_target_nodes(origin, radius):
+		if enemy == null or not is_instance_valid(enemy) or not enemy.has_method("is_alive") or not enemy.is_alive():
+			continue
+		if enemy.global_position.distance_squared_to(origin) > radius * radius:
+			continue
+		enemy.apply_damage(damage)
+		if enemy.has_method("apply_knockback"):
+			var offset: Vector2 = enemy.global_position - origin
+			enemy.apply_knockback(offset.normalized() if offset.length() > 0.0 else Vector2.RIGHT, 360.0)
+	var ring := ParticleFactoryData.create_explosion_ring(color, radius, 4.0)
+	ring.global_position = origin
+	effects.add_child(ring)
 
 func _spawn_shockwave_visual(center: Vector2, radius: float, color: Color, _duration: float) -> void:
 	var ring := ParticleFactoryData.create_explosion_ring(color, radius, 4.0)
@@ -1842,9 +1876,22 @@ func _refresh_bottom_hud() -> void:
 		slot_2_ratio = 1.0 - clampf(float(slot_2_hud_data.get("cooldown_remaining", 0.0)) / slot_2_duration, 0.0, 1.0)
 		(card.get("health_bar") as ProgressBar).value = health_ratio * 100.0
 		(card.get("slot_1_label") as Label).text = str(slot_1_hud_data.get("name", "Ability 1"))
+		_update_slot_charge_label(card.get("slot_1_charge_label") as Label, slot_1_hud_data)
 		(card.get("slot_1_bar") as ProgressBar).value = slot_1_ratio * 100.0
 		(card.get("slot_2_label") as Label).text = str(slot_2_hud_data.get("name", "Ability 2"))
+		_update_slot_charge_label(card.get("slot_2_charge_label") as Label, slot_2_hud_data)
 		(card.get("slot_2_bar") as ProgressBar).value = slot_2_ratio * 100.0
+
+func _update_slot_charge_label(label: Label, slot_hud_data: Dictionary) -> void:
+	if label == null:
+		return
+	var max_charges := int(slot_hud_data.get("charges_max", 1))
+	if max_charges <= 1:
+		label.visible = false
+		label.text = ""
+		return
+	label.visible = true
+	label.text = "%d/%d" % [int(slot_hud_data.get("charges_current", max_charges)), max_charges]
 
 func _update_player_combat_indicator_positions() -> void:
 	if _player_combat_indicators.is_empty():
@@ -2358,16 +2405,14 @@ func _populate_pause_build_overlay() -> void:
 		var player_tint: Color = _player_configs[player_index].tint
 		header.add_theme_color_override("font_color", player_tint.lightened(0.2))
 		overlay.add_child(header)
-		var weapon: Dictionary = RunState.get_weapon(player_index)
-		var weapon_stats: Dictionary = weapon.get("stats", {}) as Dictionary
+		var loadout: Dictionary = _compiled_loadouts[player_index] if player_index < _compiled_loadouts.size() else RunState.get_player_runtime_loadout_for(player_index)
+		var weapon_stats: Dictionary = loadout.get("weapon_stats", {}) as Dictionary
 		var weapon_label := Label.new()
-		var projectile_count := int(weapon_stats.get("projectile_count", 1))
-		var projectile_text := " x %d" % projectile_count if projectile_count > 1 else ""
-		weapon_label.text = "%s - %d dmg @ %.1f/s%s" % [
-			str(weapon.get("name", "Rifle")),
+		weapon_label.text = "%s Lv%d - %d dmg @ %.1f/s" % [
+			str(loadout.get("weapon_name", "Rifle")),
+			int(loadout.get("weapon_level", 1)),
 			int(round(float(weapon_stats.get("damage", 16.0)))),
 			float(weapon_stats.get("fire_rate", 4.0)),
-			projectile_text,
 		]
 		weapon_label.add_theme_font_size_override("font_size", 12)
 		weapon_label.add_theme_color_override("font_color", Color(0.92, 0.94, 1.0, 0.9))
@@ -2388,11 +2433,12 @@ func _populate_pause_build_overlay() -> void:
 				"name": str(mutation_dict.get("name", mutation_id)),
 				"count": int(counts.get(mutation_id, {}).get("count", 0)) + 1,
 				"rarity": str(mutation_dict.get("rarity", "common")),
+				"group": str(mutation_dict.get("group", "attribute")),
 				"description": str(mutation_dict.get("description", "")),
 			}
 		if counts.is_empty():
 			var empty_label := Label.new()
-			empty_label.text = "  No mutations yet"
+			empty_label.text = "  No upgrades yet"
 			empty_label.add_theme_font_size_override("font_size", 11)
 			empty_label.modulate = Color(0.7, 0.78, 0.88, 0.7)
 			overlay.add_child(empty_label)
@@ -2463,11 +2509,12 @@ func _create_build_ability_card(player, player_tint: Color, slot_index: int) -> 
 func _create_mutation_chip(entry: Dictionary) -> PanelContainer:
 	var rarity := str(entry.get("rarity", "common"))
 	var rarity_color := Color(1.0, 0.78, 0.32, 1.0) if rarity == "rare" else Color(0.48, 0.74, 1.0, 1.0)
+	var group_color := IconFactoryData.get_group_color(str(entry.get("group", "attribute")))
 	var chip := PanelContainer.new()
 	chip.tooltip_text = str(entry.get("description", ""))
 	var style := StyleBoxFlat.new()
-	style.bg_color = Color(rarity_color.r, rarity_color.g, rarity_color.b, 0.18 if rarity == "rare" else 0.14)
-	style.border_color = rarity_color
+	style.bg_color = Color(group_color.r, group_color.g, group_color.b, 0.18 if rarity == "rare" else 0.14)
+	style.border_color = rarity_color if rarity == "rare" else group_color
 	style.set_border_width_all(1)
 	style.corner_radius_top_left = 4
 	style.corner_radius_top_right = 4

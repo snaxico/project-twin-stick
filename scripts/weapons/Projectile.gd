@@ -35,6 +35,8 @@ var knockback_force: float = 0.0
 var explosion_radius: float = 0.0
 var explosion_damage_percent: float = 0.0
 var slow_multiplier: float = 1.0
+var slow_step: float = 0.0
+var slow_floor: float = 0.15
 var slow_duration: float = 0.0
 var poison_dps: float = 0.0
 var poison_duration: float = 0.0
@@ -90,6 +92,8 @@ func setup(projectile_team: String, projectile_direction: Vector2, projectile_sp
 	explosion_radius = 0.0
 	explosion_damage_percent = 0.0
 	slow_multiplier = 1.0
+	slow_step = 0.0
+	slow_floor = 0.15
 	slow_duration = 0.0
 	poison_dps = 0.0
 	poison_duration = 0.0
@@ -134,6 +138,8 @@ func setup_from_config(projectile_team: String, projectile_direction: Vector2, c
 	explosion_radius = max(0.0, float(config.get("explosion_radius", explosion_radius)))
 	explosion_damage_percent = max(0.0, float(config.get("explosion_damage_percent", explosion_damage_percent)))
 	slow_multiplier = clampf(float(config.get("slow_multiplier", slow_multiplier)), 0.1, 1.0)
+	slow_step = max(0.0, float(config.get("slow_step", slow_step)))
+	slow_floor = clampf(float(config.get("slow_floor", slow_floor)), 0.01, 1.0)
 	slow_duration = max(0.0, float(config.get("slow_duration", slow_duration)))
 	poison_dps = max(0.0, float(config.get("poison_dps", poison_dps)))
 	poison_duration = max(0.0, float(config.get("poison_duration", poison_duration)))
@@ -194,7 +200,7 @@ func _activate_projectile_runtime() -> void:
 		_trail_particles.queue_free()
 	_trail_particles = null
 	if _should_spawn_trail_particles():
-		_trail_particles = ParticleFactoryData.create_projectile_trail(_get_trail_color())
+		_trail_particles = ParticleFactoryData.create_projectile_trail(_get_trail_color(), trail_style)
 		add_child(_trail_particles)
 
 func _physics_process(delta: float) -> void:
@@ -235,8 +241,11 @@ func _attempt_hit_target(target: Node) -> void:
 	elif target.has_method("apply_knockback"):
 		target.apply_knockback(direction, 180.0 + impact_weight * 90.0)
 	target.apply_damage(damage)
-	if slow_duration > 0.0 and target.has_method("apply_slow"):
-		target.apply_slow(slow_multiplier, slow_duration)
+	if slow_duration > 0.0:
+		if slow_step > 0.0 and target.has_method("apply_stacking_slow"):
+			target.apply_stacking_slow(slow_step, slow_floor, slow_duration)
+		elif target.has_method("apply_slow"):
+			target.apply_slow(slow_multiplier, slow_duration)
 	if poison_duration > 0.0 and poison_dps > 0.0 and target.has_method("apply_poison"):
 		target.apply_poison(poison_dps, poison_duration)
 	_hit_targets.append(target)
@@ -436,6 +445,8 @@ func _build_combat_context(target: Node) -> Dictionary:
 		"explosion_radius": explosion_radius,
 		"explosion_damage": int(round(float(damage) * explosion_damage_percent)),
 		"slow_multiplier": slow_multiplier,
+		"slow_step": slow_step,
+		"slow_floor": slow_floor,
 		"slow_duration": slow_duration,
 		"poison_dps": poison_dps,
 		"poison_duration": poison_duration,

@@ -178,10 +178,24 @@ static func create_impact_ring(color: Color, radius: float = 18.0, thickness: fl
 static func create_explosion_ring(color: Color, radius: float = 88.0, thickness: float = 4.0) -> Node2D:
 	return _create_ring_effect(color, radius * 0.22, radius * 1.05, 0.26, thickness)
 
-static func create_projectile_trail(color: Color) -> GPUParticles2D:
+static func create_projectile_trail(color: Color, style: String = "default") -> GPUParticles2D:
 	var particles := _create_particles()
-	particles.amount = 22
-	particles.lifetime = 0.16
+	match style:
+		"thin", "sharp":
+			particles.amount = 14
+			particles.lifetime = 0.11
+		"short":
+			particles.amount = 10
+			particles.lifetime = 0.08
+		"heavy_slow":
+			particles.amount = 30
+			particles.lifetime = 0.22
+		"embers":
+			particles.amount = 36
+			particles.lifetime = 0.26
+		_:
+			particles.amount = 22
+			particles.lifetime = 0.16
 	particles.one_shot = false
 	particles.explosiveness = 0.0
 	particles.local_coords = false
@@ -189,11 +203,43 @@ static func create_projectile_trail(color: Color) -> GPUParticles2D:
 
 	var material := ParticleProcessMaterial.new()
 	material.direction = Vector3(0.0, 0.0, 0.0)
-	material.spread = 180.0
-	material.initial_velocity_min = 0.0
-	material.initial_velocity_max = 14.0
-	material.scale_min = 0.38
-	material.scale_max = 0.72
+	match style:
+		"thin":
+			material.spread = 70.0
+			material.initial_velocity_min = 4.0
+			material.initial_velocity_max = 18.0
+			material.scale_min = 0.22
+			material.scale_max = 0.42
+		"short":
+			material.spread = 95.0
+			material.initial_velocity_min = 2.0
+			material.initial_velocity_max = 12.0
+			material.scale_min = 0.2
+			material.scale_max = 0.36
+		"heavy_slow":
+			material.spread = 180.0
+			material.initial_velocity_min = 0.0
+			material.initial_velocity_max = 9.0
+			material.scale_min = 0.52
+			material.scale_max = 0.95
+		"sharp":
+			material.spread = 32.0
+			material.initial_velocity_min = 10.0
+			material.initial_velocity_max = 26.0
+			material.scale_min = 0.18
+			material.scale_max = 0.32
+		"embers":
+			material.spread = 160.0
+			material.initial_velocity_min = 5.0
+			material.initial_velocity_max = 28.0
+			material.scale_min = 0.38
+			material.scale_max = 0.78
+		_:
+			material.spread = 180.0
+			material.initial_velocity_min = 0.0
+			material.initial_velocity_max = 14.0
+			material.scale_min = 0.38
+			material.scale_max = 0.72
 	material.damping_min = 1.5
 	material.damping_max = 3.5
 	particles.process_material = material

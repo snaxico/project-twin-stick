@@ -10,11 +10,12 @@ The live runtime is now aligned to the `Feature Roadmap V3` redesign:
 - run modes are `Structured` and `Endless`
 - the core economy is shared XP with room-end picks
 - health resets at the start of every room
-- meta progression, multiple starting weapons, and ability-specific rare mutations remain deferred
+- meta progression and pre-run weapon unlock/selection remain deferred
+- the round-9 weapon system is live: five peer weapons, one active weapon, shared weapon level, and categorized upgrade cards
 
-Current stable runtime includes the playtest round-8 offense / cadence / bloom / generated-SFX
-patch on top of the round-7 spectacle and ability-slot baseline. Heavy boss add-waves remain
-enabled in normal boss rooms with a `25` non-boss enemy cap that includes pending spawns.
+Current stable runtime includes the playtest round-9 Mutation-to-Weapon system rework on top of the
+round-8 offense / cadence / bloom / generated-SFX patch. Heavy boss add-waves remain enabled in
+normal boss rooms with a `25` non-boss enemy cap that includes pending spawns.
 
 ## Current Runtime
 
@@ -30,7 +31,8 @@ enabled in normal boss rooms with a `25` non-boss enemy cap that includes pendin
 - main-menu settings now support:
   - VSync toggle persisted via `user://video_settings.cfg`; first-run project default is enabled
   - keyboard rebinding for menu and active `1-2P` gameplay actions
-  - controller button / axis rebinding for menu and active `1-2P` gameplay actions
+  - controller button / axis rebinding for menu and Player 1 gameplay actions
+  - Player 2 is temporarily keyboard-only; P2 controller bind buttons are disabled and stale P2 pad bindings are stripped on startup/reset
   - saved runtime bindings via `user://input_bindings.cfg`
   - reset to default bindings
 - structured runs use a `2-act` branching map:
@@ -57,7 +59,8 @@ enabled in normal boss rooms with a `25` non-boss enemy cap that includes pendin
 ## Loadout / Combat
 
 - every player always has:
-  - stronger starter `Rifle` (`20` damage, `6.5` shots/sec)
+  - one active weapon, starting with `Rifle`
+  - shared weapon level `1-5` that is preserved when changing weapons
   - faster base movement (`488` default speed)
   - `1 OFF` ability slot on `LT`
   - `1 DEF` ability slot on `RT`
@@ -92,6 +95,15 @@ enabled in normal boss rooms with a `25` non-boss enemy cap that includes pendin
   - enemy pool escalation remains the old act-based step; pool ramp is an explicit follow-up, not part of round 8
   - player/enemy/projectile/VFX colors use render-local `x1.45` over-bright bloom without mutating source tints or UI colors
   - generated SFX stay procedural through `AudioStreamGenerator`, with richer frame synthesis and an idempotent `SFX` bus limiter/reverb chain
+- current round-9 tuning changed:
+  - player HP is now `100`; enemy HP/damage and flat ability damage were rescaled around the new weapon model
+  - active weapons are `Rifle`, `Rocket Launcher`, `Scattergun`, `Cannon`, and `Railgun`
+  - reward screens can show `Level Up Weapon` common cards and rare `Change Weapon` cards
+  - old weapon-shape mutations (`Split Shot`, `Big Shot`, `Pierce`, `Explosive Rounds`) were removed and folded into weapon identities
+  - upgrade cards are grouped as `Weapon`, `Effect`, `Attribute`, and `Ability`
+  - `High Caliber` and `Range` were added as attribute commons
+  - seven new loadout-gated ability signatures were added: `Shockdash`, `Twin Charge`, `Aegis Burst`, `Volatile Decoy`, `Twin Turret`, `Expanding Orbit`, and `Extra Mines`
+  - Player 2 controller gameplay input is disabled for now to prevent one controller from driving both local players
 - player mutation visuals are now partially wired:
   - projectile streaks for high `Rapid Fire` / `Velocity`
   - speed-line feedback for `Move Speed`
@@ -102,26 +114,37 @@ enabled in normal boss rooms with a `25` non-boss enemy cap that includes pendin
 ## Content State
 
 - live common mutations:
-  - `split_shot`
-  - `pierce`
-  - `big_shot`
   - `rapid_fire`
   - `knockback`
   - `velocity`
+  - `high_caliber`
+  - `range`
   - `quick_reflexes`
   - `wide_pulse`
   - `duration`
   - `move_speed`
   - `tough`
+- live weapons:
+  - `Rifle`
+  - `Rocket Launcher`
+  - `Scattergun`
+  - `Cannon`
+  - `Railgun`
 - live universal weapon rares:
   - `ricochet`
   - `fire_trail`
-  - `explosive_rounds`
   - `freeze_shot`
   - `poison`
-- live loadout-gated ability rare pilots:
+- live loadout-gated ability rares:
   - `oc_piercing_overdrive` requires `Overcharge`
   - `sw_resonance` requires `Shockwave`
+  - `dash_shockdash` requires `Dash`
+  - `blink_twin_charge` requires `Blink`
+  - `shield_aegis_burst` requires `Shield`
+  - `decoy_volatile` requires `Decoy`
+  - `turret_twin` requires `Turret`
+  - `orbit_expanding` requires `Orbit`
+  - `mf_extra_mines` requires `Minefield`
 - live enemy roster:
   - `Chaser`
   - `Charger`
@@ -253,6 +276,7 @@ enabled in normal boss rooms with a `25` non-boss enemy cap that includes pendin
   - modifier assignment
   - side-objective assignment
   - player inventory and loadout state
+  - active weapon id and shared weapon level
 - `CoopManager.gd`
   - room runtime
   - continuous time-based spawning
@@ -274,6 +298,8 @@ enabled in normal boss rooms with a `25` non-boss enemy cap that includes pendin
   - boss escalation logic, phase telegraphs, round-5 boss behavior reworks, boss deflector state, elite pressure patterns, elite Act 2 scaling, and staggered target refresh
 - `MutationSystem.gd`
   - mutation compilation
+  - weapon card generation for level-up and weapon swap rewards
+  - active weapon stat compilation
   - loadout-gated ability rare filtering
   - ability rare effect compilation for equipped ability ids
   - act-weighted rare rolls
@@ -282,6 +308,7 @@ enabled in normal boss rooms with a `25` non-boss enemy cap that includes pendin
   - run setup
   - per-player ability selection
   - main-menu VSync setting and runtime input rebinding
+  - temporary P2 keyboard-only enforcement
   - encounter builder wiring
 - `RunFlow.gd`
   - structured map flow
@@ -291,8 +318,8 @@ enabled in normal boss rooms with a `25` non-boss enemy cap that includes pendin
 ## Deferred / Missing
 
 - no meta progression
-- no multiple starting weapons
-- no expanded ability-specific rare mutation pass beyond the two round-7 pilots
+- no pre-run weapon selection or meta weapon unlocks
+- no additional ability signatures beyond the round-9 set
 - no `3-4` player support
 - no final art pass
 - no formal automated gameplay validation
@@ -300,7 +327,7 @@ enabled in normal boss rooms with a `25` non-boss enemy cap that includes pendin
 ## Known Risks
 
 - full live playtesting and balance validation still have not been run after the full V3 integration
-- round-2 through round-7 tuning have passed headless validation; round-6 also has non-headless profiling harness data and a strong live performance report, but round-7 still needs full balance/readability/performance playtesting
+- round-2 through round-9 tuning have passed headless validation; round-6 also has non-headless profiling harness data and a strong live performance report, but round-9 still needs full balance/readability/performance playtesting
 - boss and elite behavior is implemented, but still likely needs feel tuning against real runs
 - modifier stacking, projectile pooling, AI time-slicing, new boss add pressure, homing orbs, and endless pressure have not been manually stress-tested yet
 - the rebuilt pause menu, new VFX density, swarm performance optimization, slot-colored HUD, Build HUD overhaul, and input binding menu have passed parse validation but still need controller/manual readability testing
@@ -317,10 +344,12 @@ enabled in normal boss rooms with a `25` non-boss enemy cap that includes pendin
 - B3 Pulsar deflector-spawned adds remain unimplemented until the desired Pulsar deflector count/pattern is specified; B2 Pulsar spitter add-waves are shipped
 - enemy visual draw reduction needs a manual readability check because shadow/outline nodes were removed
 - `FireTrailZone` distance checks passed parse validation and warning cleanup but still need focused in-game correctness validation for player Fire Bullets damaging enemies and no friendly fire
+- round-9 weapon cards, active weapon switching, shared weapon level, weapon-specific fire patterns, and ability signatures are implemented but still need manual `1P` / `2P` feel validation
+- Player 2 is keyboard-only for now; controller support should stay disabled until per-player controller device/binding ownership is redesigned
 
 ## Next Step
 
-Run manual validation for the current round-7 local build. Use `docs/development/playtest-round-7-plan.md` verification and checklist sections as the active playtest guide.
+Run manual validation for the current round-9 local build. Use `docs/development/playtest-round-9-plan.md` verification and checklist sections as the active playtest guide.
 
 - continuous spawn pacing in `1P` and `2P` — does `35-45s` room duration feel right?
 - first `30s` pressure — do the opening burst, `~5/s` rifle, spawn ramp, and multi-edge spawns feel active without overwhelming?
@@ -342,4 +371,7 @@ Run manual validation for the current round-7 local build. Use `docs/development
 - projectile pooling / AI time-slicing / boss entity-load performance at `100-150+` enemies/projectiles
 - ability selection usability on controller
 - remapped keyboard/controller binding behavior from main-menu Settings
+- P2 keyboard-only behavior; one controller must not move/control both players
+- weapon level-up cards, weapon swap cards, shared weapon level preservation, and all five weapon firing profiles
+- new ability signatures: Shockdash, Twin Charge, Aegis Burst, Volatile Decoy, Twin Turret, Expanding Orbit, Extra Mines
 - map node readability at the new compact size

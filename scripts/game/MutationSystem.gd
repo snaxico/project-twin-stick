@@ -36,6 +36,12 @@ func _load_definitions() -> void:
 		_definition_map[mutation_id] = mutation
 
 func apply_mutation(player_index: int, mutation_id: String) -> void:
+	if mutation_id == "__weapon_levelup":
+		RunState.level_up_weapon(player_index)
+		return
+	if mutation_id.begins_with("__weapon_change__"):
+		RunState.set_active_weapon(player_index, mutation_id.trim_prefix("__weapon_change__"))
+		return
 	if not _definition_map.has(mutation_id):
 		return
 	if not _can_still_pick(player_index, mutation_id):
@@ -65,33 +71,29 @@ func get_active_mutations(player_index: int) -> Array:
 			active.append((_definition_map[str(mutation_id)] as Dictionary).duplicate(true))
 	return active
 
+func get_definition(mutation_id: String) -> Dictionary:
+	if not _definition_map.has(mutation_id):
+		return {}
+	return (_definition_map[mutation_id] as Dictionary).duplicate(true)
+
 func get_compiled_weapon_stats(player_index: int, base_stats: Dictionary) -> Dictionary:
 	var compiled: Dictionary = base_stats.duplicate(true)
-	var split_count := get_mutation_level(player_index, "split_shot")
-	if split_count > 0:
-		compiled["split_extra_count"] = split_count * int(_get_param("split_shot", "extra_count", 1))
-		compiled["split_spread_degrees"] = float(_get_param("split_shot", "spread_degrees", 15.0))
-		_apply_projectile_visual_fields(compiled, "split_shot")
-	var big_shot_count := get_mutation_level(player_index, "big_shot")
-	if big_shot_count > 0:
-		var size_mult := 1.0 + float(big_shot_count) * float(_get_param("big_shot", "size_bonus_per_level", 0.333))
-		compiled["area"] = float(compiled.get("area", 4.0)) * size_mult
-		_apply_projectile_visual_fields(compiled, "big_shot")
 	var rapid_fire_count := get_mutation_level(player_index, "rapid_fire")
 	compiled["rapid_fire_level"] = rapid_fire_count
 	if rapid_fire_count > 0:
-		compiled["fire_rate"] = float(compiled.get("fire_rate", 1.0)) * (1.0 + float(rapid_fire_count) * float(_get_param("rapid_fire", "fire_rate_bonus_per_level", 0.333)))
+		compiled["fire_rate"] = float(compiled.get("fire_rate", 1.0)) * (1.0 + float(rapid_fire_count) * float(_get_param("rapid_fire", "fire_rate_bonus_per_level", 0.30)))
 	var velocity_count := get_mutation_level(player_index, "velocity")
 	compiled["velocity_level"] = velocity_count
 	if velocity_count > 0:
 		compiled["projectile_speed"] = float(compiled.get("projectile_speed", 850.0)) * (1.0 + float(velocity_count) * float(_get_param("velocity", "speed_bonus_per_level", 0.333)))
-	var pierce_count := get_mutation_level(player_index, "pierce")
-	if pierce_count > 0:
-		compiled["pierce_count"] = pierce_count * int(_get_param("pierce", "pierce_count", 1))
-		_apply_projectile_visual_fields(compiled, "pierce")
-	var ricochet_count := get_mutation_level(player_index, "ricochet")
-	if ricochet_count > 0:
-		compiled["ricochet_count"] = ricochet_count * int(_get_param("ricochet", "bounce_count", 1))
+	var high_caliber_count := get_mutation_level(player_index, "high_caliber")
+	if high_caliber_count > 0:
+		compiled["damage"] = float(compiled.get("damage", 10.0)) * (1.0 + float(high_caliber_count) * float(_get_param("high_caliber", "damage_bonus_per_level", 0.20)))
+	var range_count := get_mutation_level(player_index, "range")
+	if range_count > 0:
+		compiled["range"] = float(compiled.get("range", 950.0)) * (1.0 + float(range_count) * float(_get_param("range", "range_bonus_per_level", 0.20)))
+	if has_mutation(player_index, "ricochet"):
+		compiled["ricochet_count"] = int(_get_param("ricochet", "bounce_count", 1))
 		compiled["ricochet_range"] = float(_get_param("ricochet", "bounce_range", 200.0))
 		_apply_projectile_visual_fields(compiled, "ricochet")
 	if has_mutation(player_index, "fire_trail"):
@@ -103,12 +105,9 @@ func get_compiled_weapon_stats(player_index: int, base_stats: Dictionary) -> Dic
 		compiled["impact_pool_lifetime"] = float(_get_param("fire_trail", "impact_pool_lifetime", 3.0))
 		compiled["impact_pool_damage_percent"] = float(_get_param("fire_trail", "impact_pool_damage_percent", 0.5))
 		_apply_projectile_visual_fields(compiled, "fire_trail")
-	if has_mutation(player_index, "explosive_rounds"):
-		compiled["explosion_radius"] = float(_get_param("explosive_rounds", "explosion_radius", 82.0))
-		compiled["explosion_damage_percent"] = float(_get_param("explosive_rounds", "damage_percent", 0.65))
-		_apply_projectile_visual_fields(compiled, "explosive_rounds")
 	if has_mutation(player_index, "freeze_shot"):
-		compiled["slow_multiplier"] = float(_get_param("freeze_shot", "slow_multiplier", 0.5))
+		compiled["slow_step"] = float(_get_param("freeze_shot", "slow_step", 0.8))
+		compiled["slow_floor"] = float(_get_param("freeze_shot", "slow_floor", 0.15))
 		compiled["slow_duration"] = float(_get_param("freeze_shot", "slow_duration", 1.0))
 		_apply_projectile_visual_fields(compiled, "freeze_shot")
 	if has_mutation(player_index, "poison"):
@@ -117,8 +116,11 @@ func get_compiled_weapon_stats(player_index: int, base_stats: Dictionary) -> Dic
 		_apply_projectile_visual_fields(compiled, "poison")
 	var knockback_count := get_mutation_level(player_index, "knockback")
 	compiled["knockback_level"] = knockback_count
-	if knockback_count > 0:
-		compiled["knockback_force"] = 300.0 * (1.0 + float(knockback_count) * float(_get_param("knockback", "force_bonus_per_level", 0.333)))
+	var base_knockback := float(compiled.get("knockback", compiled.get("knockback_force", 0.0)))
+	var knockback_bonus := get_knockback_bonus(player_index)
+	if base_knockback + knockback_bonus > 0.0:
+		compiled["knockback_force"] = base_knockback + knockback_bonus
+	_map_weapon_stats_to_projectile_keys(compiled)
 	return compiled
 
 func get_ability_rare_effects(player_index: int, ability_id: String) -> Dictionary:
@@ -167,11 +169,14 @@ func get_max_health_multiplier(player_index: int) -> float:
 	var values: Array = _get_param("tough", "max_health_values", [0.2, 0.4, 0.6]) as Array
 	return 1.0 + float(values[mini(level - 1, values.size() - 1)])
 
-func get_knockback_multiplier(player_index: int) -> float:
+func get_knockback_multiplier(_player_index: int) -> float:
+	return 1.0
+
+func get_knockback_bonus(player_index: int) -> float:
 	var level := get_mutation_level(player_index, "knockback")
 	if level <= 0:
-		return 1.0
-	return 1.0 + float(level) * float(_get_param("knockback", "force_bonus_per_level", 0.333))
+		return 0.0
+	return float(level) * float(_get_param("knockback", "force_per_level", 120.0))
 
 func roll_mutation_options(player_index: int, count: int, rare_chance: float = 0.0, force_rare: bool = false) -> Array:
 	var common_pool: Array = []
@@ -187,6 +192,11 @@ func roll_mutation_options(player_index: int, count: int, rare_chance: float = 0
 			rare_pool.append(mutation_dict.duplicate(true))
 		else:
 			common_pool.append(mutation_dict.duplicate(true))
+	var weapon_cards := _build_weapon_cards(player_index)
+	for weapon_common in (weapon_cards.get("common", []) as Array):
+		common_pool.append((weapon_common as Dictionary).duplicate(true))
+	for weapon_rare in (weapon_cards.get("rare", []) as Array):
+		rare_pool.append((weapon_rare as Dictionary).duplicate(true))
 	common_pool.shuffle()
 	rare_pool.shuffle()
 	var selected: Array = []
@@ -259,6 +269,80 @@ func _apply_projectile_visual_fields(compiled: Dictionary, mutation_id: String) 
 	compiled["trail_style"] = str(definition.get("trail_style", compiled.get("trail_style", "default")))
 	compiled["impact_sfx"] = str(definition.get("impact_sfx", compiled.get("impact_sfx", "hit")))
 	compiled["accent_color"] = _parse_color(definition.get("accent_color", compiled.get("accent_color", Color.WHITE)), Color.WHITE)
+
+func _map_weapon_stats_to_projectile_keys(compiled: Dictionary) -> void:
+	if compiled.has("pellet_count"):
+		compiled["split_extra_count"] = maxi(0, int(compiled.get("pellet_count", 1)) - 1)
+	if compiled.has("spread_degrees"):
+		compiled["split_spread_degrees"] = float(compiled.get("spread_degrees", 0.0))
+	if compiled.has("pierce"):
+		compiled["pierce_count"] = int(compiled.get("pierce", 0))
+	if compiled.has("blast_radius"):
+		compiled["explosion_radius"] = float(compiled.get("blast_radius", 0.0))
+	if compiled.has("blast_damage_percent"):
+		compiled["explosion_damage_percent"] = float(compiled.get("blast_damage_percent", 0.0))
+	if compiled.has("knockback") and not compiled.has("knockback_force"):
+		compiled["knockback_force"] = float(compiled.get("knockback", 0.0))
+	var projectile_kind := str(compiled.get("projectile_kind", "bullet"))
+	match projectile_kind:
+		"bullet":
+			compiled["projectile_shape"] = "small_orb"
+			compiled["trail_style"] = "thin"
+			compiled["impact_sfx"] = "hit"
+		"pellet":
+			compiled["projectile_shape"] = "small_orb"
+			compiled["trail_style"] = "short"
+			compiled["impact_sfx"] = "spread"
+		"slug":
+			compiled["projectile_shape"] = "large_orb"
+			compiled["trail_style"] = "heavy_slow"
+			compiled["impact_sfx"] = "thump"
+		"lance":
+			compiled["projectile_shape"] = "lance"
+			compiled["trail_style"] = "sharp"
+			compiled["impact_sfx"] = "zip"
+		"rocket":
+			compiled["projectile_shape"] = "ember_orb"
+			compiled["trail_style"] = "embers"
+			compiled["impact_sfx"] = "boom"
+
+func _build_weapon_cards(player_index: int) -> Dictionary:
+	var common: Array = []
+	var rare: Array = []
+	var weapon_level := RunState.get_weapon_level(player_index)
+	var active_weapon_id := RunState.get_active_weapon_id(player_index)
+	var active_weapon_name := _get_weapon_name(active_weapon_id)
+	if weapon_level < 5:
+		common.append({
+			"id": "__weapon_levelup",
+			"name": "Level Up Weapon",
+			"description": "Raise %s to Lv%d. Weapon level carries when switching." % [active_weapon_name, weapon_level + 1],
+			"icon": active_weapon_id,
+			"category": "weapon",
+			"group": "weapon",
+			"rarity": "common",
+		})
+	for weapon in RunState.get_weapon_catalog():
+		var weapon_id := str((weapon as Dictionary).get("id", ""))
+		if weapon_id.is_empty() or weapon_id == active_weapon_id:
+			continue
+		rare.append({
+			"id": "__weapon_change__%s" % weapon_id,
+			"name": "Switch: %s" % str((weapon as Dictionary).get("name", weapon_id)),
+			"description": "Switch to %s at Lv%d." % [str((weapon as Dictionary).get("name", weapon_id)), weapon_level],
+			"icon": weapon_id,
+			"category": "weapon",
+			"group": "weapon",
+			"rarity": "rare",
+		})
+	return {"common": common, "rare": rare}
+
+func _get_weapon_name(weapon_id: String) -> String:
+	for weapon in RunState.get_weapon_catalog():
+		var weapon_dict: Dictionary = weapon as Dictionary
+		if str(weapon_dict.get("id", "")) == weapon_id:
+			return str(weapon_dict.get("name", weapon_id))
+	return weapon_id.capitalize()
 
 func _parse_color(value: Variant, fallback: Color) -> Color:
 	if value is Color:

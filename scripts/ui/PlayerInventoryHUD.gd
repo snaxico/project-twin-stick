@@ -109,6 +109,6 @@ func _update_mutation_icons(mutations: Array) -> void:
 		icon.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		icon.texture = IconFactoryData.get_mutation_icon(str((mutation as Dictionary).get("id", "")))
+		icon.texture = IconFactoryData.get_mutation_icon(str((mutation as Dictionary).get("id", "")), str((mutation as Dictionary).get("group", "attribute")))
 		chip.add_child(icon)
 		_mutation_row.add_child(chip)

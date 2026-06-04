@@ -8,6 +8,7 @@ var fire_rate := 3.2
 var damage := 12
 var attack_range := 780.0
 var projectile_speed := 760.0
+var gun_count := 1
 var tint := Color(0.9, 0.95, 1.0, 1.0)
 var _next_fire_at := 0.0
 
@@ -17,6 +18,7 @@ func configure(duration: float, stats: Dictionary, color: Color) -> void:
 	damage = int(stats.get("damage", damage))
 	attack_range = float(stats.get("range", attack_range))
 	projectile_speed = float(stats.get("projectile_speed", projectile_speed))
+	gun_count = maxi(1, int(stats.get("gun_count", 1)))
 	tint = color
 	set_physics_process(true)
 	queue_redraw()
@@ -33,17 +35,22 @@ func _physics_process(delta: float) -> void:
 		if now >= _next_fire_at:
 			_next_fire_at = now + 1.0 / max(fire_rate, 0.1)
 			var direction := (target.global_position - global_position).normalized()
-			fire_requested.emit(global_position + direction * 18.0, direction, {
-				"speed": projectile_speed,
-				"damage": damage,
-				"color": tint,
-				"feedback_profile": "rifle",
-				"impact_weight": 0.9,
-				"max_distance": attack_range,
-				"collision_half_width": 4.0,
-				"source_type": "ability",
-				"weapon_id": "turret",
-			})
+			var perpendicular := direction.orthogonal().normalized()
+			for gun_index in range(gun_count):
+				var offset := 0.0
+				if gun_count > 1:
+					offset = (float(gun_index) - (float(gun_count - 1) * 0.5)) * 16.0
+				fire_requested.emit(global_position + direction * 18.0 + perpendicular * offset, direction, {
+					"speed": projectile_speed,
+					"damage": damage,
+					"color": tint,
+					"feedback_profile": "rifle",
+					"impact_weight": 0.9,
+					"max_distance": attack_range,
+					"collision_half_width": 4.0,
+					"source_type": "ability",
+					"weapon_id": "turret",
+				})
 	queue_redraw()
 
 func _find_target() -> Node2D:
@@ -74,4 +81,8 @@ func _find_target() -> Node2D:
 func _draw() -> void:
 	draw_circle(Vector2.ZERO, 18.0, Color(tint.r, tint.g, tint.b, 0.3))
 	draw_arc(Vector2.ZERO, 18.0, 0.0, TAU, 20, Color(tint.r, tint.g, tint.b, 0.88), 3.0)
-	draw_line(Vector2.ZERO, Vector2.RIGHT * 24.0, Color(1.0, 1.0, 1.0, 0.9), 4.0)
+	for gun_index in range(gun_count):
+		var offset := 0.0
+		if gun_count > 1:
+			offset = (float(gun_index) - (float(gun_count - 1) * 0.5)) * 8.0
+		draw_line(Vector2(0.0, offset), Vector2.RIGHT * 24.0 + Vector2(0.0, offset), Color(1.0, 1.0, 1.0, 0.9), 4.0)

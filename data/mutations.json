@@ -1,66 +1,26 @@
 {
   "mutations": [
     {
-      "id": "split_shot",
-      "name": "Split Shot",
-      "description": "Fire 1 extra projectile per level.",
-      "icon": "split_shot",
-      "category": "weapon",
-      "rarity": "common",
-      "max_level": 3,
-      "projectile_shape": "small_orb",
-      "trail_style": "short_green",
-      "accent_color": [0.45, 1.3, 0.52, 1.0],
-      "impact_sfx": "spread",
-      "params": { "extra_count": 1, "spread_degrees": 10.0 }
-    },
-    {
-      "id": "pierce",
-      "name": "Pierce",
-      "description": "Projectiles pass through 1 extra enemy per level.",
-      "icon": "pierce",
-      "category": "weapon",
-      "rarity": "common",
-      "max_level": 3,
-      "projectile_shape": "lance",
-      "trail_style": "sharp_green",
-      "accent_color": [0.2, 1.25, 1.35, 1.0],
-      "impact_sfx": "zip",
-      "params": { "pierce_count": 1 }
-    },
-    {
-      "id": "big_shot",
-      "name": "Big Shot",
-      "description": "Projectile size grows by 33% per level.",
-      "icon": "big_shot",
-      "category": "weapon",
-      "rarity": "common",
-      "max_level": 3,
-      "projectile_shape": "large_orb",
-      "trail_style": "heavy_slow",
-      "accent_color": [0.7, 1.25, 0.58, 1.0],
-      "impact_sfx": "thump",
-      "params": { "size_bonus_per_level": 0.333 }
-    },
-    {
       "id": "rapid_fire",
       "name": "Rapid Fire",
-      "description": "Fire rate increases by 33% per level.",
+      "description": "Fire rate increases by 30% per level.",
       "icon": "rapid_fire",
       "category": "weapon",
+      "group": "attribute",
       "rarity": "common",
       "max_level": 3,
-      "params": { "fire_rate_bonus_per_level": 0.333 }
+      "params": { "fire_rate_bonus_per_level": 0.30 }
     },
     {
       "id": "knockback",
       "name": "Knockback",
-      "description": "Weapon and pulse hits push 33% harder per level.",
+      "description": "Weapon and pulse hits gain flat knockback per level.",
       "icon": "knockback",
       "category": "weapon",
+      "group": "attribute",
       "rarity": "common",
       "max_level": 3,
-      "params": { "force_bonus_per_level": 0.333 }
+      "params": { "force_per_level": 120.0 }
     },
     {
       "id": "velocity",
@@ -68,9 +28,32 @@
       "description": "Projectile speed increases by 33% per level.",
       "icon": "velocity",
       "category": "weapon",
+      "group": "attribute",
       "rarity": "common",
       "max_level": 3,
       "params": { "speed_bonus_per_level": 0.333 }
+    },
+    {
+      "id": "high_caliber",
+      "name": "High Caliber",
+      "description": "Weapon damage increases by 20% per level.",
+      "icon": "high_caliber",
+      "category": "weapon",
+      "group": "attribute",
+      "rarity": "common",
+      "max_level": 3,
+      "params": { "damage_bonus_per_level": 0.20 }
+    },
+    {
+      "id": "range",
+      "name": "Range",
+      "description": "Weapon range increases by 20% per level.",
+      "icon": "range",
+      "category": "weapon",
+      "group": "attribute",
+      "rarity": "common",
+      "max_level": 3,
+      "params": { "range_bonus_per_level": 0.20 }
     },
     {
       "id": "quick_reflexes",
@@ -78,6 +61,7 @@
       "description": "Ability cooldowns recharge 20%, 35%, then 50% faster.",
       "icon": "quick_reflexes",
       "category": "ability",
+      "group": "ability",
       "rarity": "common",
       "max_level": 3,
       "params": { "cooldown_values": [0.2, 0.35, 0.5] }
@@ -85,12 +69,13 @@
     {
       "id": "wide_pulse",
       "name": "Wide Pulse",
-      "description": "Ability area and range increase by 33% per level.",
+      "description": "Ability area and range increase by 25% per level.",
       "icon": "wide_pulse",
       "category": "ability",
+      "group": "ability",
       "rarity": "common",
       "max_level": 3,
-      "params": { "area_bonus_per_level": 0.333 }
+      "params": { "area_bonus_per_level": 0.25 }
     },
     {
       "id": "duration",
@@ -98,6 +83,7 @@
       "description": "Sustained ability uptime increases by 33% per level.",
       "icon": "duration",
       "category": "ability",
+      "group": "ability",
       "rarity": "common",
       "max_level": 3,
       "params": { "duration_bonus_per_level": 0.333 }
@@ -108,6 +94,7 @@
       "description": "Move 15%, 30%, then 45% faster.",
       "icon": "move_speed",
       "category": "survival",
+      "group": "attribute",
       "rarity": "common",
       "max_level": 3,
       "params": { "move_speed_values": [0.15, 0.3, 0.45] }
@@ -118,6 +105,7 @@
       "description": "Max HP increases by 20%, 40%, then 60%.",
       "icon": "tough",
       "category": "survival",
+      "group": "attribute",
       "rarity": "common",
       "max_level": 3,
       "params": { "max_health_values": [0.2, 0.4, 0.6] }
@@ -128,6 +116,7 @@
       "description": "Projectiles bounce to a nearby enemy after impact.",
       "icon": "ricochet",
       "category": "weapon",
+      "group": "effect",
       "rarity": "rare",
       "projectile_shape": "diamond",
       "trail_style": "sparks",
@@ -141,6 +130,7 @@
       "description": "Projectiles ignite a burning pool where they hit.",
       "icon": "fire_trail",
       "category": "weapon",
+      "group": "effect",
       "rarity": "rare",
       "projectile_shape": "ember_orb",
       "trail_style": "embers",
@@ -149,30 +139,18 @@
       "params": { "impact_pool_radius": 50.0, "impact_pool_lifetime": 2.0, "impact_pool_damage_percent": 0.4 }
     },
     {
-      "id": "explosive_rounds",
-      "name": "Explosive Rounds",
-      "description": "Projectiles explode on hit for a small area burst.",
-      "icon": "explosive_rounds",
-      "category": "weapon",
-      "rarity": "rare",
-      "projectile_shape": "bomb",
-      "trail_style": "smoke",
-      "accent_color": [1.35, 0.28, 0.1, 1.0],
-      "impact_sfx": "boom",
-      "params": { "explosion_radius": 82.0, "damage_percent": 0.65 }
-    },
-    {
       "id": "freeze_shot",
       "name": "Freeze Shot",
-      "description": "Projectiles slow enemies by 50% for 1 second.",
+      "description": "Repeated hits stack a deep slow, down to a near-stop.",
       "icon": "freeze_shot",
       "category": "weapon",
+      "group": "effect",
       "rarity": "rare",
       "projectile_shape": "shard",
       "trail_style": "frost",
       "accent_color": [0.38, 1.05, 1.45, 1.0],
       "impact_sfx": "chime",
-      "params": { "slow_multiplier": 0.5, "slow_duration": 1.0 }
+      "params": { "slow_step": 0.8, "slow_floor": 0.15, "slow_duration": 1.5 }
     },
     {
       "id": "poison",
@@ -180,12 +158,13 @@
       "description": "Projectiles apply a stacking damage-over-time effect.",
       "icon": "poison",
       "category": "weapon",
+      "group": "effect",
       "rarity": "rare",
       "projectile_shape": "blob",
       "trail_style": "bubbles",
       "accent_color": [0.65, 1.35, 0.22, 1.0],
       "impact_sfx": "squelch",
-      "params": { "poison_dps": 8.0, "poison_duration": 2.5 }
+      "params": { "poison_dps": 5.0, "poison_duration": 3.0 }
     },
     {
       "id": "oc_piercing_overdrive",
@@ -193,6 +172,7 @@
       "description": "While Overcharge is active, projectiles pierce +2 enemies and travel 20% faster.",
       "icon": "overcharge",
       "category": "ability",
+      "group": "ability",
       "rarity": "rare",
       "requires_ability": "overcharge",
       "params": { "pierce_bonus": 2, "projectile_speed_mult": 1.2 }
@@ -203,9 +183,87 @@
       "description": "Shockwave emits 2 extra pulses, staggered by 0.15 seconds.",
       "icon": "shockwave",
       "category": "ability",
+      "group": "ability",
       "rarity": "rare",
       "requires_ability": "shockwave",
       "params": { "extra_pulses": 2, "pulse_interval": 0.15 }
+    },
+    {
+      "id": "dash_shockdash",
+      "name": "Shockdash",
+      "description": "Dash damages and knocks back enemies you pass through.",
+      "icon": "dash",
+      "category": "ability",
+      "group": "ability",
+      "rarity": "rare",
+      "requires_ability": "dash",
+      "params": { "passthrough_damage": 20, "knockback_force": 600.0 }
+    },
+    {
+      "id": "blink_twin_charge",
+      "name": "Twin Charge",
+      "description": "Blink stores one extra charge.",
+      "icon": "blink",
+      "category": "ability",
+      "group": "ability",
+      "rarity": "rare",
+      "requires_ability": "blink",
+      "params": { "extra_charges": 1 }
+    },
+    {
+      "id": "shield_aegis_burst",
+      "name": "Aegis Burst",
+      "description": "When Shield expires, it releases a fixed-damage burst.",
+      "icon": "shield",
+      "category": "ability",
+      "group": "ability",
+      "rarity": "rare",
+      "requires_ability": "shield",
+      "params": { "burst_radius": 200.0, "burst_damage": 40 }
+    },
+    {
+      "id": "decoy_volatile",
+      "name": "Volatile Decoy",
+      "description": "Decoy explodes when it expires or dies.",
+      "icon": "decoy",
+      "category": "ability",
+      "group": "ability",
+      "rarity": "rare",
+      "requires_ability": "decoy",
+      "params": { "death_blast_damage": 30, "death_blast_radius": 160.0 }
+    },
+    {
+      "id": "turret_twin",
+      "name": "Twin Turret",
+      "description": "Turret fires from twin barrels.",
+      "icon": "turret",
+      "category": "ability",
+      "group": "ability",
+      "rarity": "rare",
+      "requires_ability": "turret",
+      "params": { "gun_count": 2 }
+    },
+    {
+      "id": "orbit_expanding",
+      "name": "Expanding Orbit",
+      "description": "Orbit gains two orbs and pulses outward.",
+      "icon": "orbit",
+      "category": "ability",
+      "group": "ability",
+      "rarity": "rare",
+      "requires_ability": "orbit",
+      "params": { "expand_interval": 2.0, "expand_bonus_radius": 120.0, "extra_orbs": 2 }
+    },
+    {
+      "id": "mf_extra_mines",
+      "name": "Extra Mines",
+      "description": "Minefield drops three extra mines.",
+      "icon": "minefield",
+      "category": "ability",
+      "group": "ability",
+      "rarity": "rare",
+      "requires_ability": "minefield",
+      "params": { "mine_count_bonus": 3 }
     }
   ]
 }

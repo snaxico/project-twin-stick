@@ -22,8 +22,8 @@ Read this first to restore project context quickly, then read `current-state.md`
 - Same-screen local co-op twin-stick roguelite prototype in Godot `4.6.2`.
 - Current target is the active `1-2` player V3 runtime.
 - The live runtime now follows the `Feature Roadmap V3` redesign captured in `current-state.md`.
-- Current stable runtime includes the round-8 offense / cadence / over-bright bloom / generated-SFX patch on top of the round-7 spectacle and OFF/DEF ability-slot baseline.
-- Current focus is manual round-8 validation, especially level-1 offense feel, smoother cadence ramp, over-bright bloom readability/performance, generated SFX quality, unchanged enemy-pool Act 2 step, and shipped boss add-wave performance.
+- Current stable runtime includes the round-9 Mutation-to-Weapon system rework on top of the round-8 offense / cadence / over-bright bloom / generated-SFX patch.
+- Current focus is manual round-9 validation, especially weapon cards, shared weapon level, all five weapon profiles, ability signatures, P2 keyboard-only controls, and continued boss/add-wave performance.
 
 ## Live Runtime Summary
 
@@ -34,14 +34,16 @@ Read this first to restore project context quickly, then read `current-state.md`
   - `Structured`
   - `Endless`
 - Current live loadout structure:
-  - auto-firing `Rifle`
-  - starter Rifle uses `20` damage and `6.5` shots/sec
+  - one auto-firing active weapon, starting with `Rifle`
+  - five peer weapons: `Rifle`, `Rocket Launcher`, `Scattergun`, `Cannon`, `Railgun`
+  - shared weapon level `1-5`, preserved when changing weapons
   - `1 OFF` ability on `LT`
   - `1 DEF` ability on `RT`
 - Current main-menu settings:
   - VSync toggle persisted in `user://video_settings.cfg`; first-run project default is enabled
   - keybinding editor
-  - controller binding editor for active `1-2P` gameplay actions
+  - controller binding editor for menu and Player 1 gameplay actions
+  - Player 2 is temporarily keyboard-only; stale P2 controller bindings are stripped on startup/reset
   - binding persistence in `user://input_bindings.cfg`
 - Current in-run pause menu:
   - build summary only
@@ -94,6 +96,14 @@ Read this first to restore project context quickly, then read `current-state.md`
   - enemy pools still swap by act; pool ramp is deferred by plan
   - player core, projectiles, enemy visuals, and generated VFX use render-local `x1.45` over-bright bloom
   - generated SFX stay on `AudioStreamGenerator` with richer synthesis and an idempotent `SFX` bus limiter/reverb chain
+- Current round-9 state:
+  - HP/damage model is rescaled around player HP `100` and lower base weapon damage
+  - reward cards now include weapon level-up and rare weapon swap cards
+  - old weapon-shape mutations became weapon identities
+  - upgrades are visually grouped as `Weapon`, `Effect`, `Attribute`, and `Ability`
+  - `High Caliber` and `Range` are new attribute commons
+  - ability signatures are live for Dash, Blink, Shield, Decoy, Turret, Orbit, Minefield, Overcharge, and Shockwave
+  - Player 2 controller gameplay input is disabled for now because shared pad bindings could control both players
 - Current live progression loop:
   - enemy kills feed one shared XP bar
   - level-ups bank room-end pick rounds
@@ -116,7 +126,7 @@ Read this first to restore project context quickly, then read `current-state.md`
 
 - Preserve the approved V3 core loop.
 - Favor validation, tuning, and readability over adding more systems.
-- Validate the current round-8 local build in live play:
+- Validate the current round-9 local build in live play:
   - shared XP and room-end pick cadence
   - structured map flow pacing
   - endless scaling past room `20`
@@ -130,12 +140,13 @@ Read this first to restore project context quickly, then read `current-state.md`
   - boss HP bar readability
   - mutation projectile readability and SFX distinctness
   - ability rare pilot behavior
-  - level-1 Rifle offense feel at `20` damage / `6.5` shots/sec
-  - smooth cadence progression without the old Act 2 spawn-rate cliff
-  - residual Act 2 enemy-pool step, because pool ramp is deferred
-  - over-bright bloom readability and performance
-  - generated SFX quality and repetition fatigue
-  - controller usability in ability select, map UI, pause menu, and remapped bindings
+  - weapon level-up cards and rare weapon swap cards
+  - shared weapon level persistence when switching weapons
+  - all five weapon profiles and their projectile visuals/SFX
+  - new ability signatures and loadout gating
+  - P2 keyboard-only behavior; one controller must not drive both players
+  - smooth cadence progression, over-bright bloom readability/performance, and generated SFX fatigue from the round-8 baseline
+  - controller usability for P1/menu only; P2 controller remains intentionally disabled
 - Tune:
   - rifle cadence (`6.5` shots/sec in the current build)
   - room duration / spawn interval pressure
@@ -171,6 +182,7 @@ Read this first to restore project context quickly, then read `current-state.md`
   - shared XP and banked pick progression
   - boss / modifier / side-objective assignment
   - per-player inventory state
+  - active weapon id and shared weapon level
   - single-room debug setup for Encounter Builder runs
 - `scripts/game/CoopManager.gd`:
   - room runtime
@@ -194,6 +206,7 @@ Read this first to restore project context quickly, then read `current-state.md`
   - automatic target selection
 - `scripts/game/MutationSystem.gd`:
   - live mutation compilation
+  - weapon card generation and active weapon stat compilation
   - loadout-gated ability rare filtering and effect exposure
   - act-weighted rare rolls
   - elite `force_rare` support
@@ -212,12 +225,13 @@ Read this first to restore project context quickly, then read `current-state.md`
   - player setup
   - run-mode / ability selection
   - main-menu VSync setting and input remapping
+  - temporary Player 2 keyboard-only enforcement
   - run launch
 
 ## Round-4 + Round-5 Build Notes
 
 - Round-4 and round-5 code are the previous stable baseline on `v3/main`.
-- Round-6 is now the current stable baseline for future work.
+- Round-6 is a historical stable baseline, now superseded by Round 9.
 - Headless parse passed after implementation, Hive safeguard cleanup, and unused-parameter warning cleanup.
 - `docs/development/playtest-round-4-plan.md` is the historical round-4 plan that was implemented.
 - `docs/development/playtest-round-5-plan.md` is the historical round-5 plan that was implemented.
@@ -231,7 +245,7 @@ Read this first to restore project context quickly, then read `current-state.md`
 
 - `docs/development/playtest-round-6-plan.md` is the round-6 implementation plan.
 - `docs/development/playtest-round-6-validation.md` is the active manual validation checklist for this patch.
-- Treat the round-6 patch as the current stable branch state for future work.
+- Treat the round-6 patch as historical context; the current stable branch state is Round 9.
 - Heavy boss add-waves are enabled in normal boss rooms and capped at `25` non-boss enemies including pending spawns.
 - Live playtest feedback after the patch reported a massive performance improvement.
 - B3 Pulsar deflector-spawned adds are still open because the plan does not specify the desired Pulsar deflector count/pattern.
@@ -246,7 +260,7 @@ Read this first to restore project context quickly, then read `current-state.md`
 ## Current Round-7 Build Notes
 
 - `docs/development/playtest-round-7-plan.md` is the round-7 implementation and validation guide.
-- Treat the round-7 patch as the current stable branch state for future work.
+- Treat the round-7 patch as historical context; the current stable branch state is Round 9.
 - A8 fire-rate bump remains deferred by plan.
 - Expansion ability rares remain deferred; only the two pilot rares are live.
 - Manual validation still needs to cover `1P` and `2P` feel/performance with DebugOverlay F3.
@@ -255,7 +269,7 @@ Read this first to restore project context quickly, then read `current-state.md`
 ## Current Round-8 Build Notes
 
 - `docs/development/playtest-round-8-plan.md` is the round-8 implementation and validation guide.
-- Treat the round-8 patch as the current stable branch state for future work.
+- Treat the round-8 patch as historical context; the current stable branch state is Round 9.
 - Starting Rifle is now `20` damage / `6.5` shots/sec; projectile speed and range are unchanged.
 - Cadence ramp uses normalized progress:
   - structured depth over last combat-row depth
@@ -269,6 +283,36 @@ Read this first to restore project context quickly, then read `current-state.md`
   - `git diff --check`
   - headless project parse
   - headless main scene boot with `--quit-after 1`
+
+## Current Round-9 Build Notes
+
+- `docs/development/playtest-round-9-plan.md` is the round-9 implementation and validation guide.
+- Treat the round-9 patch as the current stable branch state for future work.
+- Weapons are now first-class runtime state:
+  - `Rifle`
+  - `Rocket Launcher`
+  - `Scattergun`
+  - `Cannon`
+  - `Railgun`
+- Reward screens can include `Level Up Weapon` and rare `Change Weapon` cards.
+- Shared weapon level is global per player and stays when switching weapons.
+- Upgrade cards are grouped as `Weapon`, `Effect`, `Attribute`, and `Ability`.
+- Player 2 controller gameplay input is disabled for now:
+  - P2 setup is keyboard-only
+  - P2 controller binding buttons are disabled
+  - stale P2 controller events are stripped after loading/resetting input bindings
+- Validation passed:
+  - `git diff --check`
+  - headless project parse
+  - headless main scene boot with `--quit-after 1`
+
+## Round-9 Open Validation
+
+- Manual playtest must validate weapon card frequency, weapon swap readability, shared level preservation, and all five weapon profiles.
+- Validate all ability signatures: Shockdash, Twin Charge, Aegis Burst, Volatile Decoy, Twin Turret, Expanding Orbit, Extra Mines, plus the existing Overcharge/Shockwave pilots.
+- Validate the new HP/damage model in `1P` and `2P`.
+- Validate that one controller no longer controls Player 2.
+- Continue checking bloom, SFX, projectile pooling, boss add-wave performance, and dense-room readability.
 
 ## Validation Reminder
 

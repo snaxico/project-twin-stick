@@ -9,6 +9,8 @@ var orb_count := 3
 var orbit_radius := 84.0
 var damage := 18
 var rotation_speed := 2.6
+var expand_interval := 0.0
+var expand_bonus_radius := 0.0
 var tint := Color(0.56, 0.92, 1.0, 1.0)
 var _angle := 0.0
 var _hit_cooldowns: Dictionary = {}
@@ -16,10 +18,12 @@ var _hit_cooldowns: Dictionary = {}
 func configure(orbit_owner: Node2D, duration: float, stats: Dictionary, color: Color) -> void:
 	owner_node = orbit_owner
 	lifetime = duration
-	orb_count = int(stats.get("orb_count", orb_count))
+	orb_count = int(stats.get("orb_count", orb_count)) + int(stats.get("extra_orbs", 0))
 	orbit_radius = float(stats.get("orbit_radius", orbit_radius))
 	damage = int(stats.get("damage", damage))
 	rotation_speed = float(stats.get("rotation_speed", rotation_speed))
+	expand_interval = maxf(0.0, float(stats.get("expand_interval", 0.0)))
+	expand_bonus_radius = maxf(0.0, float(stats.get("expand_bonus_radius", 0.0)))
 	tint = color
 	set_physics_process(true)
 	queue_redraw()
@@ -35,10 +39,11 @@ func _physics_process(delta: float) -> void:
 	global_position = owner_node.global_position
 	_angle = fmod(_angle + rotation_speed * delta, TAU)
 	var now := Time.get_ticks_msec() / 1000.0
-	for enemy in _get_candidate_enemies(orbit_radius + 32.0):
+	var effective_radius := _current_orbit_radius(now)
+	for enemy in _get_candidate_enemies(effective_radius + 32.0):
 		if enemy == null or not is_instance_valid(enemy) or not enemy.has_method("is_alive") or not enemy.is_alive():
 			continue
-		for orb_position in _get_orb_positions():
+		for orb_position in _get_orb_positions(effective_radius):
 			if enemy.global_position.distance_to(orb_position) <= 28.0:
 				if float(_hit_cooldowns.get(enemy, 0.0)) > now:
 					break
@@ -50,18 +55,27 @@ func _physics_process(delta: float) -> void:
 				break
 	queue_redraw()
 
-func _get_orb_positions() -> Array:
+func _get_orb_positions(effective_radius: float = -1.0) -> Array:
 	var points: Array = []
+	var radius := orbit_radius if effective_radius < 0.0 else effective_radius
 	for index in range(max(orb_count, 1)):
 		var angle := _angle + TAU * float(index) / float(max(orb_count, 1))
-		points.append(global_position + Vector2.RIGHT.rotated(angle) * orbit_radius)
+		points.append(global_position + Vector2.RIGHT.rotated(angle) * radius)
 	return points
 
 func _draw() -> void:
-	for orb_position in _get_orb_positions():
+	var effective_radius := _current_orbit_radius(Time.get_ticks_msec() / 1000.0)
+	for orb_position in _get_orb_positions(effective_radius):
 		var local_position: Vector2 = orb_position - global_position
 		draw_circle(local_position, 10.0, Color(tint.r, tint.g, tint.b, 0.34))
 		draw_arc(local_position, 12.0, 0.0, TAU, 16, Color(tint.r, tint.g, tint.b, 0.92), 3.0)
+
+func _current_orbit_radius(now: float) -> float:
+	if expand_interval <= 0.0 or expand_bonus_radius <= 0.0:
+		return orbit_radius
+	var phase := fmod(now, expand_interval) / expand_interval
+	var pulse := sin(phase * PI)
+	return orbit_radius + expand_bonus_radius * pulse
 
 func _get_candidate_enemies(radius: float) -> Array:
 	var tree := get_tree()
