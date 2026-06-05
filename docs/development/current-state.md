@@ -349,7 +349,7 @@ normal boss rooms with a `25` non-boss enemy cap that includes pending spawns.
 
 ## Next Step
 
-Run manual validation for the current round-9 local build. Use `docs/development/playtest-round-9-plan.md` verification and checklist sections as the active playtest guide.
+Run manual validation for the round-9 build (shipped). Its plan/checklist is archived at `docs/archive/development/playtest-round-9-plan.md`. The next patch is specced in `docs/development/playtest-round-10-plan.md` (map, bug/perf, UI, combat feel, audio).
 
 - continuous spawn pacing in `1P` and `2P` — does `35-45s` room duration feel right?
 - first `30s` pressure — do the opening burst, `~5/s` rifle, spawn ramp, and multi-edge spawns feel active without overwhelming?

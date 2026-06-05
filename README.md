@@ -4,99 +4,63 @@ Same-screen local co-op neon auto-attack roguelite prototype built in Godot 4.6.
 
 ## Current Direction
 
-This is a **neon auto-attack co-op survivor roguelite**. The player auto-attacks the nearest enemy. Skill expression comes from movement, positioning, shockwave timing, dash usage, route choice, and gold spending.
-
-Reference mix: Vampire Survivors (auto-attack escalation), Brotato (wave structure, camera zoom), Geometry Wars (neon aesthetic).
+A **neon auto-attack co-op survivor roguelite**. Your weapon auto-fires at the nearest enemy;
+skill expression comes from movement, positioning, ability timing (OFF/DEF), **Upgrade** choices at
+level-ups, and route choice. Reference mix: Vampire Survivors, Brotato, Geometry Wars.
 
 ## Stack
 
-- Engine: Godot 4.6.2 stable
-- Language: GDScript
-- Data: JSON content definitions
-- Platform target: Windows desktop
+- Engine: Godot 4.6.2 stable · GDScript · JSON content · Windows desktop.
 
-## Current Runtime
+## Run Loop
 
-1. Open the project in Godot 4.6.2 and run the main scene.
-2. Front menu: `Play` or `Encounter Builder`.
-3. `Play` opens run setup: 1-2 players, per-player control source, Normal/Easy mode.
-4. Run flow uses a node map: combat, elite, rest, shop, boss.
-5. Combat and elite rooms use `survive` as the room objective, with hold-zone as a parallel side objective.
-6. Auto-attack fires at the nearest enemy. Player focuses on movement, dash, shockwave, and room pressure.
-7. Enemies drop gold. Gold buys room-end mutations and shop services.
-8. Repeat until boss.
+1. Open in Godot 4.6.2 and run the main scene. Front menu: `Play` or `Encounter Builder`.
+2. Setup: 1–2 players, per-player control source, Structured or Endless.
+3. Auto-fire handles the basic combat; you focus on movement + your two abilities.
+4. Kills feed one **shared XP bar**; level-ups bank room-end **Reward screens** (pick one Upgrade).
+5. Health resets each room. Push toward the boss. (No gold/shop economy — that was removed in V3.)
 
-## Active Loadout
+## Weapons (round-9 system)
 
-Each player has:
-- **Weapon: Rifle** (auto-fire) — 3 shots/sec, glowing orb projectiles, pure nearest targeting
-- **Primary Skill: Shockwave** (RT / Space) — expanding ring, 5s cooldown, 950 knockback, centered on player
-- **Secondary Skill: Dash** (LT / B / Ctrl) — movement burst in move direction, 5s cooldown, shield on activation, `+33%` tuned travel range
-- **Mutations** — bought after combat with shared-drop/personal-wallet gold flow
+5 peer weapons — **Rifle, Rocket Launcher, Scattergun, Cannon, Railgun**. One active at a time;
+a single shared **weapon level (1–5)** preserved when switching. Chosen at the Reward screen via
+**Level Up Weapon** (common) and **Change Weapon** (rare) cards.
 
-## Mutations
+## Abilities & Upgrades
 
-Mutations are now split into:
-- **Commons** — upgradable to `Lv3`, shown in normal combat rewards
-- **Rares** — one-off effects, shown in elite rewards
+- **Abilities:** `1 OFF` (LT) + `1 DEF` (RT) from 9 — Shockwave, Dash, Overcharge, Blink, Shield,
+  Decoy, Turret, Minefield, Orbit. Each has a rare **Signature** upgrade.
+- **Upgrade categories:** Weapon · Effect (burn/frost/venom/bounce) · Attribute (damage/fire-rate/
+  HP/…) · Ability.
 
-Current common effects include:
-- pierce
-- rapid fire
-- big shot
-- split shot
-- skill range
-- skill cooldown
-- knockback
+## Run Structure
 
-Current rare effects include:
-- ricochet
-- fire trail
-- dash damage
+- **Structured:** 2-act branching route (combat + optional elites + mid-boss + final boss).
+- **Endless:** sequential rooms, boss every 5, score = rooms cleared.
 
-## Enemies
+## Enemies & Bosses
 
-- **Chaser** (triangle) — fast melee swarmers, HP 21, speed 292.5
-- **Charger** (pentagon) — telegraph + dash attack, HP 40, speed 247.5
-- **Spitter** (hex) — ranged kiting enemy, 1 projectile, 1.0s fire interval
-- **Boss** (star/crown) — projectile bursts, HP 180, speed 157.5
-- **Elite mini-bosses** — elite charger, elite spitter, elite support
+- Enemies: Chaser, Charger, Spitter, Splitter, Splitter Mini, Bomber.
+- Elites: Elite Charger, Elite Spitter, Elite Support.
+- Bosses: Warden, Hydra, Hive, Pulsar.
 
-## Visual Style
+## Co-Op
 
-Neon geometric: dark background, glowing Polygon2D shapes, Line2D grid floor, color shifts per room depth via HSV hue rotation. Player is a chevron (P1 cyan, P2 magenta). Procedural placeholder visuals remain acceptable while gameplay tuning stays the priority.
-
-## Controls
-
-Gamepad (P1 default):
-- Left stick: move
-- LT / B: secondary skill (dash)
-- RT: primary skill (shockwave)
-- Start: pause
-
-Keyboard (P2 default):
-- WASD: move
-- Ctrl: secondary skill (dash)
-- Space: primary skill (shockwave)
-
-Weapon auto-fires at the nearest enemy — no input needed.
+- 1–2 players, same-screen, dynamic zoom camera, no split-screen. P2 is keyboard-only for now.
 
 ## Branch
 
-- `v2/core-refactor` — active branch and GitHub default branch
+- `v3/main` — active branch and GitHub default.
 
 ## What's Deferred
 
-- Boss redesign
-- 3-4 player support
-- Audio pass
-- Meta progression
-- Large art-production pass
+- A dedicated performance round (~200-entity ceiling: MultiMesh + caps) · split-screen · real audio
+  assets · meta progression · `3-4` players · large art pass.
 
 ## Documentation
 
 - Design direction: `docs/design/game-direction.md`
-- Roadmap: `docs/design/roadmap.md`
-- Implementation plan: `docs/design/implementation-plan.md`
-- Current state: `docs/development/current-state.md`
-- Process docs: `docs/process/`
+- Current runtime state: `docs/development/current-state.md` · session refresher: `docs/development/start-of-day.md`
+- Process / rules / architecture: `docs/process/`
+- Active patch plan: `docs/development/playtest-round-10-plan.md`
+- Shipped round plans + superseded docs: `docs/archive/`

@@ -13,7 +13,7 @@ Read this first to restore project context quickly, then read `current-state.md`
 ## Source Of Truth
 
 - `docs/development/current-state.md` is the compact source of truth for the active runtime on `v3/main`.
-- `docs/design/roadmap.md` is the source of truth for locked feature design and open design questions.
+- `docs/design/game-direction.md` is the source of truth for game direction. The old V2 `roadmap.md` is archived under `docs/archive/design/` (superseded).
 - `history/` records what changed, why, and what remains open.
 - If `start-of-day.md` and `current-state.md` ever disagree, treat `current-state.md` as correct and update this file.
 
@@ -24,6 +24,9 @@ Read this first to restore project context quickly, then read `current-state.md`
 - The live runtime now follows the `Feature Roadmap V3` redesign captured in `current-state.md`.
 - Current stable runtime includes the round-9 Mutation-to-Weapon system rework on top of the round-8 offense / cadence / over-bright bloom / generated-SFX patch.
 - Current focus is manual round-9 validation, especially weapon cards, shared weapon level, all five weapon profiles, ability signatures, P2 keyboard-only controls, and continued boss/add-wave performance.
+- **Active patch plan:** `docs/development/playtest-round-10-plan.md` (Codex build spec) — map → next-choices cards, room-end freeze, Hive offense buff, boss windups, rarity rework, minefield stacking, UI trims, starting-weapon loadout, Debug Menu, 2P camera, audio. Not yet implemented; round 9 is the committed baseline.
+- **Perf Runner** (`scripts/dev/PerfRunner.gd`, committed) profiles any scenario unattended (`--profile=boss:<id>|room:<type>|entity_ramp`). Known ~200-entity FPS ceiling is parked for a dedicated perf round.
+- Shipped round plans/validations now live in `docs/archive/`; `history/` is the canonical change log.
 
 ## Live Runtime Summary
 
@@ -326,14 +329,15 @@ Read this first to restore project context quickly, then read `current-state.md`
 
 ## Development Guidelines
 
-- Build one vertical slice at a time.
-- Prefer the smallest testable version of a system.
-- Expand only after the current slice is runnable and documented.
-- Give AI one bounded task at a time.
-- Do not modify multiple untested systems in one pass unless the dependency chain requires it and the result is validated together.
-- Review generated code before treating it as accepted.
-- Record important AI-assisted design or architecture changes in docs.
-- Commit only after a patch or sub-feature is working.
+Canonical guidelines live in `docs/process/solo-dev-rules.md`. Key rules:
+
+- **Workspace:** work in `D:\GameDev\Project_Twin_stick` on `v3/main`; **no new worktrees**; keep
+  all output on `D:` (never write to the small `C:` SSD).
+- Build one vertical slice at a time; give AI one bounded task at a time; review generated code.
+- **Terminology:** "Upgrade" (= Weapon + Effect + Attribute + Ability) is the player/doc word;
+  "mutation" is code-only.
+- **Performance:** use the Perf Runner for perf tests; the ~200-entity ceiling is the known bottleneck.
+- Commit only after a slice works + validation passes; don't push unless asked.
 - Never treat a broken intermediate state as done.
 
 ## Documentation Guidelines
@@ -341,8 +345,8 @@ Read this first to restore project context quickly, then read `current-state.md`
 - `start-of-day.md` is the fast refresher.
 - `current-state.md` is the runtime source of truth for the live `v3/main` runtime.
 - `history/` records what changed, why, and what remains open.
-- `docs/design/roadmap.md` currently serves as archived V2 reference unless/until a new V3 roadmap pass is written.
-- `docs/process/` stays the source of truth for scope, roadmap, architecture, and workflow rules.
+- `docs/design/game-direction.md` is the current direction doc; shipped round plans + the V2 `roadmap.md` are archived under `docs/archive/`.
+- `docs/process/` stays the source of truth for scope, architecture, and workflow rules.
 - Write for continuation, not presentation.
 - Keep entries short, factual, and useful for the next session.
 - After meaningful work:
@@ -356,5 +360,6 @@ Read this first to restore project context quickly, then read `current-state.md`
   - `start-of-day.md`
   - `current-state.md`
   - latest file in `docs/development/history/`
-  - `docs/design/roadmap.md` if the task touches mutations, encounters, side objectives, buffs, or economy
+  - `docs/design/game-direction.md` if the task touches direction, economy, weapons, or upgrades
+  - the active `docs/development/playtest-round-10-plan.md` if implementing the current patch
   - any process doc that the task touches

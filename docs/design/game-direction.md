@@ -2,121 +2,80 @@
 
 ## Scope Note
 
-- This file describes the active direction on `v3/main`.
+- Describes the active direction on `v3/main`. Runtime detail of record is `docs/development/current-state.md`.
+- This supersedes the old gold/shop economy direction (removed in the V3 redesign).
 
 ## One-Line Pitch
 
-Same-screen co-op roguelite where your rifle auto-fires, you focus on movement and timing, and the run grows through gold, mutation buys, and route choices.
+Same-screen local co-op roguelite where your weapon auto-fires, you focus on movement and timing,
+and the run grows through an XP economy of weapons, effects, attributes, and ability upgrades.
 
 ## The Feel
 
-You move first. The weapon handles the basic fire loop. The decisions come from:
-
-- where to stand
-- when to shockwave
-- when to dash
-- whether to spend or save gold
-- whether to route toward safety or pressure
-
-The run should feel readable first and explosive second.
+You move first; the weapon handles the basic fire loop. Decisions come from where to stand, when
+to use your OFF/DEF abilities, which **Upgrades** to take at level-ups, and which route to push.
+Readable first, explosive second — spectacle must never bury enemy/projectile/HUD readability.
 
 ## Core Loop
 
-1. Pick a node on the map.
-2. Enter the room.
-3. Survive while auto-fire, dash, and shockwave handle combat.
-4. Collect gold through combat.
-5. Buy room-end mutations or use a shop node when available.
-6. Route toward the boss.
-7. Repeat until the run ends.
+1. Choose the next room (route choice).
+2. Survive the room while auto-fire + your two abilities handle combat.
+3. Kills feed one shared XP bar; level-ups bank room-end **Reward screens**.
+4. Pick one Upgrade per Reward screen (elite rooms grant a bonus guaranteed-rare round).
+5. Health resets at the start of every room.
+6. Push toward the boss. Repeat until the run ends.
 
 ## Combat Direction
 
-### Weapon
-
-- Auto-firing `Rifle`
-- Nearest-enemy targeting
-- Baseline cadence is intentionally readable, not hyper-dense
-- Mutations should visibly change projectile behavior
-
-### Primary Skill
-
-- `Shockwave`
-- Player-centered panic / space-making tool
-- Distinct from the weapon because it creates breathing room rather than sustained DPS
-
-### Secondary Skill
-
-- `Dash`
-- Repositioning and survival tool
-- Not a replacement for normal movement
-
-## Current Live Runtime Assumptions
-
-- `1-2` players only
-- same-screen dynamic zoom camera
-- local co-op only
-- current live enemies:
-  - `Chaser`
-  - `Charger`
-  - `Spitter`
-  - `Boss`
-- current live room types:
-  - `combat`
-  - `elite`
-  - `rest`
-  - `shop`
-  - `boss`
-- current live room objective:
-  - `survive`
+- **Weapons (new — the round-9 system):** 5 peer weapons — `Rifle`, `Rocket Launcher`,
+  `Scattergun`, `Cannon`, `Railgun`. One active at a time; a single shared `weapon_level` (1–5)
+  preserved when changing weapons. Weapons are chosen at the Reward screen (Level Up / Change cards).
+  Weapon level is the primary offense axis.
+- **Abilities:** `1 OFF` (LT) + `1 DEF` (RT) from the 9-ability roster (Shockwave, Dash, Overcharge,
+  Blink, Shield, Decoy, Turret, Minefield, Orbit). Each ability has a rare **Signature** upgrade.
+- **Upgrade categories:** Weapon · Effect (burn/frost/venom/bounce on-hit riders) · Attribute
+  (damage/fire-rate/HP/…) · Ability. Build identity should come from visible projectile/effect
+  changes, not spreadsheet reading.
 
 ## Progression Direction
 
-- Gold is the active run currency.
-- Gold comes from enemy deaths and room clear payout.
-- Mutations are not free anymore.
-- Room-end mutation buying and shop spending are both part of the live loop.
-- Build identity should come from visible projectile/skill changes, not spreadsheet reading.
+- **XP economy** (gold/shops/rest rooms are removed). Shared XP bar; banked room-end picks.
+- Rare weighting scales by act/progress; pity protection guarantees rares aren't starved.
+- Health resets per room (no carried-over health economy).
+
+## Run Structure
+
+- **Structured:** 2-act branching route (combat rows + optional elites + mid-boss + final boss),
+  presented as next-choice route cards with real risk/reward.
+- **Endless:** sequential rooms, boss every 5, score = rooms cleared.
+
+## Enemies & Bosses
+
+- Enemies: Chaser, Charger, Spitter, Splitter, Splitter Mini, Bomber.
+- Elites: Elite Charger, Elite Spitter, Elite Support.
+- Bosses: Warden, Hydra, Hive, Pulsar — each with phase escalation, telegraphed heavy attacks, and
+  add pressure.
 
 ## Co-Op Direction
 
-- Same-screen only
-- No split-screen
-- Shared combat space, but each player has their own wallet copy and their own mutation-buy decisions
-- Co-op expression should come from movement overlap, revive moments, and route tension more than from role specialization
+- `1-2` players, same-screen only, **no split-screen** (dynamic zoom camera). `3-4` deferred.
+- Shared combat space + shared XP; each player picks their own Upgrades.
+- Co-op expression comes from movement overlap, revives, and route tension — not role specialization.
 
-## Visual Direction
+## Visual / Audio Direction
 
-- Dark arena
-- readable neon combat contrast
-- geometric placeholder visuals are acceptable while tuning remains the priority
-- spectacle should never bury enemy, projectile, or HUD readability
+- Dark arena, readable neon contrast, render-local over-bright bloom. Geometric placeholder visuals
+  acceptable while tuning is the priority.
+- Audio is procedural (generated SFX + adaptive music); spectacle never buries readability.
 
-## Combat HUD Direction
+## Current Priorities
 
-- combat-critical player info should read as lightweight player-space feedback, not as a boxed HUD panel
-- shared room state should stay on the screen frame
-- active combat should prioritize HP and cooldown readability over inventory detail or slot display
-- the default combat HUD state should stay quiet and only become loud when health or recovery urgency matters
-- future `4` player local support should not depend on corner-owned HUD panels
+- Validate and tune the round-9 weapon system + the round-10 patch (see `playtest-round-10-plan.md`).
+- Boss feel/fairness (windups, telegraphs), rarity feel, readability (cards, ability text, scanlines).
+- A dedicated **performance round** for the ~200-entity ceiling (MultiMesh + caps), driven by the Perf Runner.
 
 ## What This Direction Is Not
 
-- It is not the old manual-fire twin-stick version.
-- It is not currently a modifier-heavy, layout-heavy, objective-heavy build.
-- It is not a `3-4` player target yet.
-
-## Current Design Priorities
-
-- validate the current run loop in live play
-- balance economy values
-- tune modifier readability and pressure
-- validate elite reward identity and side-objective payoff
-- redesign the boss around the current branch runtime
-
-## Next Expansion Areas
-
-- side challenges beyond `hold_zone`
-- elite reward identity follow-up
-- encounter-depth reintroduction
-- boss redesign
+- Not the old gold/shop/mutation-buy economy.
+- Not a `3-4`-player or split-screen target.
+- Not manual-fire twin-stick.

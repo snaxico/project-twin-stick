@@ -2,23 +2,22 @@
 
 Read order for planning and implementation:
 
-1. `prototype-scope.md`
-2. `prototype-roadmap.md`
-3. `architecture.md`
-4. `readiness-checklist.md`
-5. `solo-dev-rules.md`
-6. `decisions/`
+1. `architecture.md`
+2. `solo-dev-rules.md`
+3. `decisions/`
 
 Runtime truth lives outside this folder:
 
 - `docs/development/current-state.md`
 - `docs/development/start-of-day.md`
+- `docs/design/game-direction.md`
 
 ## Purpose
 
-- `prototype-scope.md` locks the current prototype target and exclusions.
-- `prototype-roadmap.md` defines current branch follow-up order.
 - `architecture.md` defines live runtime ownership boundaries and data contracts.
-- `readiness-checklist.md` records why the project is ready to build.
-- `solo-dev-rules.md` defines change control for AI-assisted implementation.
+- `solo-dev-rules.md` defines workspace/git rules, the round workflow, terminology, validation,
+  performance testing, and change control for AI-assisted implementation.
 - `decisions/` stores accepted scope, architecture, tooling, and workflow decisions.
+
+> The prototype-era docs (`prototype-scope.md`, `prototype-roadmap.md`, `readiness-checklist.md`)
+> are archived under `docs/archive/process/` — the prototype phase is long past.
