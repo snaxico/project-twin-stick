@@ -4,11 +4,13 @@ const PlayerConfigData = preload("res://scripts/player/PlayerConfig.gd")
 const AbilityRegistryData = preload("res://scripts/game/AbilityRegistry.gd")
 const HudPaletteData = preload("res://scripts/game/HudPalette.gd")
 const IconFactoryData = preload("res://scripts/ui/IconFactory.gd")
+const AudioBusConfigData = preload("res://scripts/juice/AudioBusConfig.gd")
 const RUN_FLOW_SCENE = preload("res://scenes/ui/RunFlow.tscn")
 const MUTATIONS_DATA_PATH := "res://data/mutations.json"
 const MODIFIERS_DATA_PATH := "res://data/modifiers.json"
 const INPUT_BINDINGS_PATH := "user://input_bindings.cfg"
 const VIDEO_SETTINGS_PATH := "user://video_settings.cfg"
+const AUDIO_SETTINGS_PATH := "user://audio_settings.cfg"
 const INPUT_BINDING_ACTIONS := [
 	{"label": "Move Left", "suffix": "move_left"},
 	{"label": "Move Right", "suffix": "move_right"},
@@ -22,6 +24,7 @@ const INPUT_BINDING_ACTIONS := [
 const MENU_BINDING_ACTIONS := [
 	{"label": "Menu Accept", "action": "ui_accept"},
 	{"label": "Menu Back", "action": "ui_cancel"},
+	{"label": "Debug Overlay", "action": "debug_overlay_toggle"},
 ]
 
 @onready var game_container: Control = $GameContainer
@@ -90,12 +93,18 @@ var _mutation_definitions: Array = []
 var _debug_mutation_toggles: Array = []
 var _modifier_definitions: Array = []
 var _debug_modifier_toggles: Array = []
+var _debug_perf_option: OptionButton = null
+var _debug_perf_button: Button = null
+var _debug_start_level_spinbox: SpinBox = null
+var _debug_start_xp_spinbox: SpinBox = null
 var _setup_mode: String = "play"
 var _ability_registry = AbilityRegistryData.new()
+var _weapon_rows: Array = []
 var _ability_rows: Array = []
 var _settings_binding_buttons: Dictionary = {}
 var _settings_return_panel: Control = null
 var _settings_vsync_check: CheckBox = null
+var _settings_audio_sliders: Dictionary = {}
 var _pending_binding_action := ""
 var _pending_binding_kind := ""
 var _pending_binding_button: Button = null
@@ -103,10 +112,12 @@ var _default_input_events: Dictionary = {}
 
 func _ready() -> void:
 	_ensure_default_controller_bindings()
+	_ensure_debug_input_binding()
 	_cache_default_input_events()
 	_load_input_bindings()
 	_strip_player_2_controller_bindings()
 	_load_video_settings()
+	_load_audio_settings()
 	_load_mutation_definitions()
 	_load_modifier_definitions()
 	_populate_menu()
@@ -139,9 +150,11 @@ func _ready() -> void:
 	settings_player_4_row.visible = false
 	_configure_settings_panel()
 	home_debug_button.text = "Encounter Builder"
+	home_debug_button.visible = _is_debug_menu_enabled()
 	home_panel.visible = true
 	menu_panel.visible = false
 	settings_panel.visible = false
+	_set_music_context("menu")
 	_refresh_menu_state()
 	_refresh_home_panel()
 	call_deferred("_focus_home_panel")
@@ -179,7 +192,12 @@ func _populate_menu() -> void:
 	_populate_control_option(player_1_control_option, "gamepad")
 	_populate_player_2_control_option()
 	_populate_profile_option(debug_primary_option, [{"label": "Rifle", "value": "rifle"}], "rifle")
-	_populate_profile_option(debug_secondary_option, [{"label": "Mixed", "value": "mixed"}], "mixed")
+	_populate_profile_option(debug_secondary_option, [
+		{"label": "Warden", "value": "warden"},
+		{"label": "Hydra", "value": "hydra"},
+		{"label": "Hive", "value": "hive"},
+		{"label": "Pulsar", "value": "pulsar"},
+	], "warden")
 	_populate_profile_option(debug_room_type_option, [
 		{"label": "Combat", "value": "combat"},
 		{"label": "Elite", "value": "elite"},
@@ -198,6 +216,7 @@ func _populate_menu() -> void:
 	debug_step_spinbox.step = 1
 	debug_step_spinbox.value = 0
 	_build_ability_rows()
+	_build_weapon_rows()
 
 func _populate_control_option(option_button: OptionButton, default_value: String) -> void:
 	option_button.clear()
@@ -230,13 +249,19 @@ func _refresh_menu_state(_unused: Variant = null) -> void:
 	run_mode_row.visible = not encounter_builder_mode
 	player_2_control_option.get_parent().visible = player_count > 1
 	debug_primary_row.visible = encounter_builder_mode
-	debug_secondary_row.visible = false
+	debug_secondary_row.visible = encounter_builder_mode and str(debug_room_type_option.get_selected_metadata()) == "boss"
 	debug_room_type_row.visible = encounter_builder_mode
 	debug_room_objective_row.visible = encounter_builder_mode and str(debug_room_type_option.get_selected_metadata()) == "combat"
 	debug_step_row.visible = encounter_builder_mode
 	debug_room_modifiers_row.visible = encounter_builder_mode
 	debug_modifier_row.visible = encounter_builder_mode
 	debug_layout_row.visible = encounter_builder_mode and str(debug_room_type_option.get_selected_metadata()) == "combat"
+	var perf_row := menu_layout.get_node_or_null("PerfScenarioRow")
+	if perf_row != null:
+		perf_row.visible = encounter_builder_mode and _is_debug_menu_enabled()
+	var launch_cheat_row := menu_layout.get_node_or_null("LaunchCheatRow")
+	if launch_cheat_row != null:
+		launch_cheat_row.visible = encounter_builder_mode and _is_debug_menu_enabled()
 	settings_player_2_row.visible = false
 	setup_title_label.text = "Encounter Builder" if encounter_builder_mode else "Run Setup"
 	setup_subtitle_label.text = "Pick one room, one objective, and iterate fast." if encounter_builder_mode else "Choose players, controls, and run mode before the run starts."
@@ -247,6 +272,8 @@ func _refresh_menu_state(_unused: Variant = null) -> void:
 		summary_lines.append("Focus: bigger arena, one weapon, mutation snowball.")
 	else:
 		summary_lines.append("Encounter: %s" % debug_room_type_option.get_item_text(debug_room_type_option.selected))
+		if debug_secondary_row.visible:
+			summary_lines.append("Boss: %s" % debug_secondary_option.get_item_text(debug_secondary_option.selected))
 		if debug_room_objective_row.visible:
 			summary_lines.append("Objective: %s" % debug_room_objective_option.get_item_text(debug_room_objective_option.selected))
 		if debug_layout_row.visible:
@@ -254,9 +281,11 @@ func _refresh_menu_state(_unused: Variant = null) -> void:
 		summary_lines.append("Room Modifiers: %d" % _get_selected_room_modifiers().size())
 		var selected_mutations: Array = _get_selected_starting_mutations()
 		summary_lines.append("Starting Mutations: %d" % selected_mutations.size())
+		summary_lines.append("Starting Level/XP: %d / %d" % [_get_debug_start_level(), _get_debug_start_xp()])
 		summary_lines.append("Depth: %d" % int(debug_step_spinbox.value))
 	for player_index in range(player_count):
 		var selected_abilities := _get_player_ability_pair(player_index)
+		summary_lines.append("P%d Weapon: %s" % [player_index + 1, _format_name(_get_player_weapon_selection(player_index))])
 		summary_lines.append("P%d Abilities: LT OFF %s / RT DEF %s" % [player_index + 1, _format_name(selected_abilities[0]), _format_name(selected_abilities[1])])
 	status_label.text = "\n".join(summary_lines)
 	start_button.text = "Launch Encounter" if encounter_builder_mode else "Start Run"
@@ -265,6 +294,11 @@ func _refresh_menu_state(_unused: Variant = null) -> void:
 		var container: Control = row_data["container"]
 		container.visible = row_index < player_count
 		_sync_ability_row_buttons(row_index)
+	for row_index in range(_weapon_rows.size()):
+		var row_data: Dictionary = _weapon_rows[row_index]
+		var container: Control = row_data["container"]
+		container.visible = row_index < player_count
+		_sync_weapon_row_buttons(row_index)
 	start_button.disabled = not _can_start_run(player_count)
 	_refresh_home_panel()
 
@@ -273,6 +307,12 @@ func get_selected_player_count() -> int:
 
 func _on_debug_step_changed(_value: float) -> void:
 	_refresh_menu_state()
+
+func _get_debug_start_level() -> int:
+	return int(_debug_start_level_spinbox.value) if _debug_start_level_spinbox != null else 0
+
+func _get_debug_start_xp() -> int:
+	return int(_debug_start_xp_spinbox.value) if _debug_start_xp_spinbox != null else 0
 
 func _on_start_pressed() -> void:
 	_launch_game(_build_player_configs())
@@ -302,6 +342,7 @@ func _build_debug_start_options() -> Dictionary:
 		"secondary_profile": "mixed",
 		"enemy_mix": "mixed",
 		"starting_mutations": [],
+		"player_weapons": _build_player_weapon_selection(),
 		"player_abilities": _build_player_ability_selection(),
 	}
 	if not options["enabled"]:
@@ -310,13 +351,18 @@ func _build_debug_start_options() -> Dictionary:
 	options["room_type"] = str(debug_room_type_option.get_selected_metadata())
 	options["room_objective"] = str(debug_room_objective_option.get_selected_metadata())
 	options["enemy_mix"] = str(debug_layout_option.get_selected_metadata())
+	if str(options["room_type"]) == "boss":
+		options["boss_type"] = str(debug_secondary_option.get_selected_metadata())
 	options["modifiers"] = _get_selected_room_modifiers()
 	options["starting_mutations"] = _get_selected_starting_mutations()
+	options["starting_level"] = _get_debug_start_level()
+	options["starting_xp"] = _get_debug_start_xp()
 	return options
 
 func _launch_game(player_configs: Array) -> void:
 	if _active_game != null and is_instance_valid(_active_game):
 		_active_game.queue_free()
+	_set_music_context("map")
 	RunState.start_new_run(player_configs, _build_debug_start_options())
 	_active_game = RUN_FLOW_SCENE.instantiate()
 	_active_game.return_to_menu_requested.connect(_on_return_to_menu_requested)
@@ -338,6 +384,7 @@ func _on_setup_back_button_pressed() -> void:
 	_open_home_panel()
 
 func _open_home_panel() -> void:
+	_set_music_context("menu")
 	_refresh_menu_state()
 	_set_panel_state(menu_panel, false)
 	_set_panel_state(settings_panel, false)
@@ -346,6 +393,7 @@ func _open_home_panel() -> void:
 
 func _open_setup_panel(mode: String) -> void:
 	_setup_mode = mode
+	_set_music_context("menu")
 	_refresh_menu_state()
 	_set_panel_state(home_panel, false)
 	_set_panel_state(settings_panel, false)
@@ -359,6 +407,7 @@ func _open_settings_from_setup() -> void:
 	_open_settings_panel(menu_panel)
 
 func _open_settings_panel(return_panel: Control) -> void:
+	_set_music_context("menu")
 	_settings_return_panel = return_panel
 	_cancel_pending_binding()
 	_refresh_binding_buttons()
@@ -408,6 +457,7 @@ func _configure_settings_panel() -> void:
 	if settings_layout.get_node_or_null("BindingScroll") != null:
 		return
 	_add_video_settings_rows()
+	_add_audio_settings_rows()
 	var scroll := ScrollContainer.new()
 	scroll.name = "BindingScroll"
 	scroll.custom_minimum_size = Vector2(0.0, 430.0)
@@ -457,6 +507,38 @@ func _add_video_settings_rows() -> void:
 	_settings_vsync_check.text = "On" if _settings_vsync_check.button_pressed else "Off"
 	_settings_vsync_check.toggled.connect(_on_vsync_toggled)
 	row.add_child(_settings_vsync_check)
+
+func _add_audio_settings_rows() -> void:
+	var section_label := Label.new()
+	section_label.text = "Audio"
+	section_label.add_theme_font_size_override("font_size", 15)
+	section_label.add_theme_color_override("font_color", Color(0.84, 0.92, 1.0, 0.92))
+	settings_layout.add_child(section_label)
+	settings_layout.move_child(section_label, settings_back_button.get_index())
+	_add_audio_slider_row("Master", AudioBusConfigData.MASTER_BUS)
+	_add_audio_slider_row("Music", AudioBusConfigData.MUSIC_BUS)
+	_add_audio_slider_row("SFX", AudioBusConfigData.SFX_BUS)
+
+func _add_audio_slider_row(label_text: String, bus_name: String) -> void:
+	var row := HBoxContainer.new()
+	row.name = "%sVolumeRow" % bus_name
+	row.add_theme_constant_override("separation", 12)
+	settings_layout.add_child(row)
+	settings_layout.move_child(row, settings_back_button.get_index())
+	var label := Label.new()
+	label.text = "%s Volume" % label_text
+	label.custom_minimum_size = Vector2(160.0, 0.0)
+	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(label)
+	var slider := HSlider.new()
+	slider.min_value = 0.0
+	slider.max_value = 1.0
+	slider.step = 0.01
+	slider.custom_minimum_size = Vector2(220.0, 0.0)
+	slider.value = AudioBusConfigData.get_bus_volume(bus_name, _get_default_audio_volume(bus_name))
+	slider.value_changed.connect(_on_audio_volume_changed.bind(bus_name))
+	row.add_child(slider)
+	_settings_audio_sliders[bus_name] = slider
 
 func _add_settings_section(parent: VBoxContainer, title: String) -> void:
 	var label := Label.new()
@@ -597,6 +679,14 @@ func _get_binding_kind(event: InputEvent) -> String:
 func _is_player_2_action(action: String) -> bool:
 	return action.begins_with("p2_")
 
+func _is_debug_menu_enabled() -> bool:
+	if OS.is_debug_build():
+		return true
+	for arg in OS.get_cmdline_user_args():
+		if arg == "--debug-menu":
+			return true
+	return false
+
 func _joy_button_name(button_index: int) -> String:
 	var names := {
 		JOY_BUTTON_A: "A",
@@ -633,6 +723,15 @@ func _ensure_default_controller_bindings() -> void:
 		_add_default_controller_motion("p%d_move_down" % player_id, JOY_AXIS_LEFT_Y, 1.0)
 		_add_default_controller_motion("p%d_secondary" % player_id, JOY_AXIS_TRIGGER_LEFT, 1.0)
 		_add_default_controller_motion("p%d_dash" % player_id, JOY_AXIS_TRIGGER_RIGHT, 1.0)
+
+func _ensure_debug_input_binding() -> void:
+	if not InputMap.has_action("debug_overlay_toggle"):
+		InputMap.add_action("debug_overlay_toggle")
+	if InputMap.action_get_events("debug_overlay_toggle").is_empty():
+		var key_event := InputEventKey.new()
+		key_event.keycode = KEY_F4
+		key_event.physical_keycode = KEY_F4
+		InputMap.action_add_event("debug_overlay_toggle", key_event)
 
 func _add_default_controller_motion(action: String, axis: JoyAxis, axis_value: float) -> void:
 	if _action_has_matching_controller_motion(action, axis, axis_value):
@@ -733,10 +832,30 @@ func _load_video_settings() -> void:
 		enabled = bool(config.get_value("display", "vsync_enabled", true))
 	_apply_vsync(enabled)
 
+func _load_audio_settings() -> void:
+	AudioBusConfigData.ensure_audio_buses()
+	var config := ConfigFile.new()
+	var values := {
+		AudioBusConfigData.MASTER_BUS: AudioBusConfigData.DEFAULT_MASTER_VOLUME,
+		AudioBusConfigData.MUSIC_BUS: AudioBusConfigData.DEFAULT_MUSIC_VOLUME,
+		AudioBusConfigData.SFX_BUS: AudioBusConfigData.DEFAULT_SFX_VOLUME,
+	}
+	if config.load(AUDIO_SETTINGS_PATH) == OK:
+		for bus_name in values.keys():
+			values[bus_name] = float(config.get_value("audio", str(bus_name).to_lower(), values[bus_name]))
+	for bus_name in values.keys():
+		AudioBusConfigData.set_bus_volume(str(bus_name), float(values[bus_name]))
+
 func _save_video_settings() -> void:
 	var config := ConfigFile.new()
 	config.set_value("display", "vsync_enabled", _is_vsync_enabled())
 	config.save(VIDEO_SETTINGS_PATH)
+
+func _save_audio_settings() -> void:
+	var config := ConfigFile.new()
+	for bus_name in [AudioBusConfigData.MASTER_BUS, AudioBusConfigData.MUSIC_BUS, AudioBusConfigData.SFX_BUS]:
+		config.set_value("audio", str(bus_name).to_lower(), AudioBusConfigData.get_bus_volume(bus_name, _get_default_audio_volume(bus_name)))
+	config.save(AUDIO_SETTINGS_PATH)
 
 func _on_vsync_toggled(enabled: bool) -> void:
 	_apply_vsync(enabled)
@@ -744,11 +863,28 @@ func _on_vsync_toggled(enabled: bool) -> void:
 		_settings_vsync_check.text = "On" if enabled else "Off"
 	_save_video_settings()
 
+func _on_audio_volume_changed(value: float, bus_name: String) -> void:
+	AudioBusConfigData.set_bus_volume(bus_name, value)
+	_save_audio_settings()
+
 func _apply_vsync(enabled: bool) -> void:
 	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_ENABLED if enabled else DisplayServer.VSYNC_DISABLED)
 
 func _is_vsync_enabled() -> bool:
 	return DisplayServer.window_get_vsync_mode() != DisplayServer.VSYNC_DISABLED
+
+func _get_default_audio_volume(bus_name: String) -> float:
+	match bus_name:
+		AudioBusConfigData.MUSIC_BUS:
+			return AudioBusConfigData.DEFAULT_MUSIC_VOLUME
+		AudioBusConfigData.SFX_BUS:
+			return AudioBusConfigData.DEFAULT_SFX_VOLUME
+		_:
+			return AudioBusConfigData.DEFAULT_MASTER_VOLUME
+
+func _set_music_context(context: String) -> void:
+	if MusicEngine != null and MusicEngine.has_method("set_context"):
+		MusicEngine.set_context(context)
 
 func _encode_input_event(event: InputEvent) -> Dictionary:
 	if event is InputEventKey:
@@ -838,6 +974,158 @@ func _configure_debug_builder_rows() -> void:
 		toggle.toggled.connect(_on_debug_mutation_toggled)
 		mutation_grid.add_child(toggle)
 		_debug_mutation_toggles.append(toggle)
+	_create_launch_cheat_row()
+	_create_perf_launcher_row()
+
+func _create_launch_cheat_row() -> void:
+	if _debug_start_level_spinbox != null and is_instance_valid(_debug_start_level_spinbox):
+		return
+	var row := HBoxContainer.new()
+	row.name = "LaunchCheatRow"
+	row.add_theme_constant_override("separation", 10)
+	menu_layout.add_child(row)
+	menu_layout.move_child(row, status_label.get_index())
+	var label := Label.new()
+	label.text = "Launch Cheats"
+	label.custom_minimum_size = Vector2(160.0, 0.0)
+	row.add_child(label)
+	_debug_start_level_spinbox = SpinBox.new()
+	_debug_start_level_spinbox.min_value = 0
+	_debug_start_level_spinbox.max_value = 20
+	_debug_start_level_spinbox.step = 1
+	_debug_start_level_spinbox.prefix = "Level "
+	_debug_start_level_spinbox.value_changed.connect(_refresh_menu_state)
+	row.add_child(_debug_start_level_spinbox)
+	_debug_start_xp_spinbox = SpinBox.new()
+	_debug_start_xp_spinbox.min_value = 0
+	_debug_start_xp_spinbox.max_value = 5000
+	_debug_start_xp_spinbox.step = 50
+	_debug_start_xp_spinbox.prefix = "XP "
+	_debug_start_xp_spinbox.value_changed.connect(_refresh_menu_state)
+	row.add_child(_debug_start_xp_spinbox)
+
+func _create_perf_launcher_row() -> void:
+	if _debug_perf_option != null and is_instance_valid(_debug_perf_option):
+		return
+	var row := HBoxContainer.new()
+	row.name = "PerfScenarioRow"
+	row.add_theme_constant_override("separation", 10)
+	menu_layout.add_child(row)
+	menu_layout.move_child(row, status_label.get_index())
+	var label := Label.new()
+	label.text = "Perf Scenario"
+	label.custom_minimum_size = Vector2(160.0, 0.0)
+	row.add_child(label)
+	_debug_perf_option = OptionButton.new()
+	_debug_perf_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_populate_profile_option(_debug_perf_option, [
+		{"label": "Boss Hive Heavy", "value": "boss:hive|heavy"},
+		{"label": "Boss Pulsar Heavy", "value": "boss:pulsar|heavy"},
+		{"label": "Combat Base", "value": "room:combat|base"},
+		{"label": "Elite Base", "value": "room:elite|base"},
+	], "boss:hive|heavy")
+	row.add_child(_debug_perf_option)
+	_debug_perf_button = Button.new()
+	_debug_perf_button.text = "Run Perf"
+	_debug_perf_button.pressed.connect(_on_debug_perf_pressed)
+	row.add_child(_debug_perf_button)
+
+func _on_debug_perf_pressed() -> void:
+	if _debug_perf_option == null:
+		return
+	var value := str(_debug_perf_option.get_selected_metadata())
+	var parts := value.split("|")
+	var scenario := str(parts[0]) if parts.size() > 0 else "boss:hive"
+	var build := str(parts[1]) if parts.size() > 1 else "base"
+	if PerfRunner != null and PerfRunner.has_method("run_from_menu"):
+		PerfRunner.run_from_menu(scenario, get_selected_player_count(), build)
+
+func _build_weapon_rows() -> void:
+	if not _weapon_rows.is_empty():
+		return
+	var insert_before := status_label
+	var weapon_defs := RunState.get_weapon_catalog()
+	if weapon_defs.is_empty():
+		weapon_defs = [{"id": "rifle", "name": "Rifle", "description": "Reliable default weapon."}]
+	for player_index in range(2):
+		var container := VBoxContainer.new()
+		container.name = "WeaponRowsP%d" % (player_index + 1)
+		container.add_theme_constant_override("separation", 8)
+		menu_layout.add_child(container)
+		menu_layout.move_child(container, insert_before.get_index())
+		var header := Label.new()
+		header.text = "Player %d Starting Weapon" % (player_index + 1)
+		header.add_theme_font_size_override("font_size", 17)
+		container.add_child(header)
+		var grid := GridContainer.new()
+		grid.columns = 3
+		grid.add_theme_constant_override("h_separation", 10)
+		grid.add_theme_constant_override("v_separation", 10)
+		container.add_child(grid)
+		var cards: Dictionary = {}
+		for weapon_def in weapon_defs:
+			var weapon := weapon_def as Dictionary
+			var weapon_id := str(weapon.get("id", ""))
+			if weapon_id.is_empty():
+				continue
+			var card := Button.new()
+			card.toggle_mode = true
+			card.custom_minimum_size = Vector2(0.0, 42.0)
+			card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			card.alignment = HORIZONTAL_ALIGNMENT_LEFT
+			card.text = str(weapon.get("name", _format_name(weapon_id)))
+			card.tooltip_text = str(weapon.get("description", ""))
+			card.toggled.connect(_on_weapon_card_toggled.bind(player_index, weapon_id))
+			grid.add_child(card)
+			cards[weapon_id] = card
+		var summary := Label.new()
+		summary.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		container.add_child(summary)
+		_weapon_rows.append({
+			"container": container,
+			"cards": cards,
+			"summary": summary,
+			"selection": "rifle",
+		})
+		_sync_weapon_row_buttons(player_index)
+
+func _build_player_weapon_selection() -> Array:
+	var selections: Array = []
+	for player_index in range(get_selected_player_count()):
+		selections.append(_get_player_weapon_selection(player_index))
+	return selections
+
+func _get_player_weapon_selection(player_index: int) -> String:
+	if player_index < 0 or player_index >= _weapon_rows.size():
+		return "rifle"
+	var row_data: Dictionary = _weapon_rows[player_index]
+	return str(row_data.get("selection", "rifle"))
+
+func _on_weapon_card_toggled(pressed: bool, player_index: int, weapon_id: String) -> void:
+	if not pressed or player_index < 0 or player_index >= _weapon_rows.size():
+		return
+	var row_data: Dictionary = _weapon_rows[player_index]
+	row_data["selection"] = weapon_id
+	_weapon_rows[player_index] = row_data
+	_sync_weapon_row_buttons(player_index)
+	_refresh_menu_state()
+
+func _sync_weapon_row_buttons(player_index: int) -> void:
+	if player_index < 0 or player_index >= _weapon_rows.size():
+		return
+	var row_data: Dictionary = _weapon_rows[player_index]
+	var cards: Dictionary = row_data.get("cards", {}) as Dictionary
+	var selection := str(row_data.get("selection", "rifle"))
+	for weapon_id_variant in cards.keys():
+		var weapon_id := str(weapon_id_variant)
+		var button: Button = cards[weapon_id]
+		if button == null:
+			continue
+		button.set_pressed_no_signal(weapon_id == selection)
+	var summary: Label = row_data.get("summary", null)
+	if summary != null:
+		summary.text = "Selected weapon: %s" % _format_name(selection)
+		summary.modulate = Color(0.84, 0.92, 1.0, 0.92)
 
 func _build_ability_rows() -> void:
 	if not _ability_rows.is_empty():
@@ -978,9 +1266,11 @@ func _sync_ability_row_buttons(player_index: int) -> void:
 	var summary: Label = row_data.get("summary", null)
 	if summary != null:
 		if not off_selection.is_empty() and not def_selection.is_empty():
-			summary.text = "Selected: LT OFF %s  |  RT DEF %s" % [
+			summary.text = "Selected: LT OFF %s  |  RT DEF %s\nOFF: %s\nDEF: %s" % [
 				_format_name(str(selected_pair[0])),
 				_format_name(str(selected_pair[1])),
+				_get_ability_description(str(selected_pair[0])),
+				_get_ability_description(str(selected_pair[1])),
 			]
 			summary.modulate = Color(0.84, 0.92, 1.0, 0.92)
 		else:
@@ -994,6 +1284,10 @@ func _format_ability_card_text(button: Button, slot_index: int) -> String:
 	if slot_index == 1:
 		return "RT DEF - %s" % card_text
 	return card_text
+
+func _get_ability_description(ability_id: String) -> String:
+	var definition := _ability_registry.get_definition(ability_id)
+	return str(definition.get("description", ""))
 
 func _style_ability_card(button: Button, slot_index: int, player_tint: Color) -> void:
 	var normal := StyleBoxFlat.new()

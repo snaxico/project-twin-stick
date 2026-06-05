@@ -137,6 +137,13 @@ func _build() -> void:
 		state_label.add_theme_font_size_override("font_size", 12)
 		player_panel.add_child(state_label)
 
+		var hint_label := Label.new()
+		hint_label.text = "Move to choose. Confirm locks the highlighted card."
+		hint_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		hint_label.add_theme_font_size_override("font_size", 11)
+		hint_label.modulate = Color(0.78, 0.86, 0.96, 0.7)
+		player_panel.add_child(hint_label)
+
 		var inventory_label := Label.new()
 		inventory_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		inventory_label.add_theme_font_size_override("font_size", 11)
@@ -191,7 +198,7 @@ func _refresh_panels() -> void:
 func _build_card(player_index: int, option_index: int) -> Control:
 	var option: Dictionary = (_options_by_player[player_index] as Array)[option_index] as Dictionary
 	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(132.0, 204.0)
+	panel.custom_minimum_size = Vector2(132.0, 184.0)
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color(0.08, 0.1, 0.14, 0.94)
 	style.border_color = Color(0.38, 0.44, 0.52, 0.46)
@@ -223,23 +230,16 @@ func _build_card(player_index: int, option_index: int) -> Control:
 	panel.add_child(margin)
 
 	var layout := VBoxContainer.new()
-	layout.add_theme_constant_override("separation", 8)
+	layout.add_theme_constant_override("separation", 6)
 	margin.add_child(layout)
 
-	var rarity_label := Label.new()
-	rarity_label.text = "RARE" if is_rare else "COMMON"
-	rarity_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	rarity_label.add_theme_font_size_override("font_size", 10)
-	rarity_label.modulate = Color(1.0, 0.82, 0.28, 0.9) if is_rare else Color(0.74, 0.82, 0.94, 0.72)
-	layout.add_child(rarity_label)
-
 	var group := str(option.get("group", "attribute"))
-	var group_label := Label.new()
-	group_label.text = group.to_upper()
-	group_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	group_label.add_theme_font_size_override("font_size", 9)
-	group_label.modulate = IconFactoryData.get_group_color(group).lightened(0.18)
-	layout.add_child(group_label)
+	var meta_label := Label.new()
+	meta_label.text = "%s | %s" % ["RARE" if is_rare else "COMMON", group.to_upper()]
+	meta_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	meta_label.add_theme_font_size_override("font_size", 10)
+	meta_label.modulate = Color(1.0, 0.82, 0.28, 0.9) if is_rare else IconFactoryData.get_group_color(group).lightened(0.18)
+	layout.add_child(meta_label)
 
 	var icon := TextureRect.new()
 	icon.custom_minimum_size = Vector2(64.0, 64.0)
@@ -273,19 +273,6 @@ func _build_card(player_index: int, option_index: int) -> Control:
 	description.add_theme_font_size_override("font_size", 11)
 	description.modulate = Color(0.82, 0.86, 0.94, 0.92)
 	layout.add_child(description)
-
-	var footer := Label.new()
-	footer.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	footer.add_theme_font_size_override("font_size", 11)
-	if is_locked:
-		footer.text = "Selected"
-		footer.modulate = Color(0.46, 0.98, 0.72, 0.95)
-	elif is_cursor and not bool(_confirmed[player_index]):
-		footer.text = "Press Confirm"
-		footer.modulate = Color(0.96, 0.98, 1.0, 0.92)
-	else:
-		footer.text = ""
-	layout.add_child(footer)
 
 	return panel
 

@@ -22,9 +22,9 @@ Read this first to restore project context quickly, then read `current-state.md`
 - Same-screen local co-op twin-stick roguelite prototype in Godot `4.6.2`.
 - Current target is the active `1-2` player V3 runtime.
 - The live runtime now follows the `Feature Roadmap V3` redesign captured in `current-state.md`.
-- Current stable runtime includes the round-9 Mutation-to-Weapon system rework on top of the round-8 offense / cadence / over-bright bloom / generated-SFX patch.
-- Current focus is manual round-9 validation, especially weapon cards, shared weapon level, all five weapon profiles, ability signatures, P2 keyboard-only controls, and continued boss/add-wave performance.
-- **Active patch plan:** `docs/development/playtest-round-10-plan.md` (Codex build spec) — map → next-choices cards, room-end freeze, Hive offense buff, boss windups, rarity rework, minefield stacking, UI trims, starting-weapon loadout, Debug Menu, 2P camera, audio. Not yet implemented; round 9 is the committed baseline.
+- Current local runtime includes the round-10 implementation on top of the round-9 Mutation-to-Weapon system rework.
+- Current focus is manual round-10 validation, especially route cards, room-end freeze, Hive pressure, boss windups/tells, rare pity, Minefield stacking, audio fatigue, debug gating/overlay, starting weapon selection, and 2P camera feel.
+- **Active patch plan:** `docs/development/playtest-round-10-plan.md` has been implemented locally and awaits playtest approval; do not treat it as fully stable until the manual playtest passes.
 - **Perf Runner** (`scripts/dev/PerfRunner.gd`, committed) profiles any scenario unattended (`--profile=boss:<id>|room:<type>|entity_ramp`). Known ~200-entity FPS ceiling is parked for a dedicated perf round.
 - Shipped round plans/validations now live in `docs/archive/`; `history/` is the canonical change log.
 
@@ -44,8 +44,10 @@ Read this first to restore project context quickly, then read `current-state.md`
   - `1 DEF` ability on `RT`
 - Current main-menu settings:
   - VSync toggle persisted in `user://video_settings.cfg`; first-run project default is enabled
+  - Master / Music / SFX audio sliders persisted in `user://audio_settings.cfg`
   - keybinding editor
   - controller binding editor for menu and Player 1 gameplay actions
+  - rebindable debug overlay toggle, default `F4`
   - Player 2 is temporarily keyboard-only; stale P2 controller bindings are stripped on startup/reset
   - binding persistence in `user://input_bindings.cfg`
 - Current in-run pause menu:
@@ -107,6 +109,17 @@ Read this first to restore project context quickly, then read `current-state.md`
   - `High Caliber` and `Range` are new attribute commons
   - ability signatures are live for Dash, Blink, Shield, Decoy, Turret, Orbit, Minefield, Overcharge, and Shockwave
   - Player 2 controller gameplay input is disabled for now because shared pad bindings could control both players
+- Current round-10 state:
+  - route selection uses next-choice cards instead of the dense full graph
+  - room clear pauses active runtime hazards/enemies/projectiles during reward/map UI
+  - rare odds are `15%` Act 1, `25%` Act 2, `35%` Endless, with per-player pity after `4` dry pick rounds
+  - Minefield is instant/stacking with `7s` cooldown and `mine_lifetime`
+  - generated adaptive music uses the `Music` bus and procedural SFX are softened on `SFX`
+  - Hive gets extra target-position pressure adds under the boss add cap
+  - bosses have a `2.5s` invulnerable entrance windup plus delayed heavy attack tells
+  - Scanline sweeps are capped/spaced out with wider gaps
+  - starting weapon selection is in setup/debug launch
+  - debug menu is available only in debug builds or `--debug-menu`; in-room overlay toggles with `F4`
 - Current live progression loop:
   - enemy kills feed one shared XP bar
   - level-ups bank room-end pick rounds

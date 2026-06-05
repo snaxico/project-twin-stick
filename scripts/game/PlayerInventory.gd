@@ -7,6 +7,7 @@ var weapon_level: int = 1
 var ability_slot_1: String = "overcharge"
 var ability_slot_2: String = "dash"
 var mutations: Array = []
+var rare_dry_streak: int = 0
 
 func get_selected_weapon() -> Dictionary:
 	return {

@@ -20,6 +20,7 @@ ProfileState="*res://scripts/meta/ProfileState.gd"
 RunState="*res://scripts/game/RunState.gd"
 DebugOverlay="*res://scripts/dev/DebugOverlay.gd"
 PerfRunner="*res://scripts/dev/PerfRunner.gd"
+MusicEngine="*res://scripts/juice/MusicEngine.gd"
 
 [display]
 

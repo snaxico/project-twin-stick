@@ -65,11 +65,16 @@ func start_new_run(configs: Array, debug_options: Dictionary = {}) -> void:
 	current_node_id = ""
 	visited_node_ids.clear()
 	player_health_states.clear()
-	player_inventories = _build_default_player_inventories(player_configs.size(), debug_run_setup.get("player_abilities", []) as Array)
+	player_inventories = _build_default_player_inventories(
+		player_configs.size(),
+		debug_run_setup.get("player_abilities", []) as Array,
+		debug_run_setup.get("player_weapons", []) as Array
+	)
 	xp_current = 0
 	xp_level = 0
 	xp_to_next_level = 200
 	xp_pending_levelups = 0
+	_apply_debug_starting_progress()
 	current_act = 1
 	endless_room_index = 1
 	_structured_total_combat_depth = 1
@@ -239,6 +244,7 @@ func get_weapon_catalog() -> Array:
 		catalog.append({
 			"id": str(weapon.get("id", weapon_id_variant)),
 			"name": str(weapon.get("name", weapon_id_variant)),
+			"description": str(weapon.get("description", "")),
 		})
 	catalog.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
 		return str(a.get("name", "")).naturalnocasecmp_to(str(b.get("name", ""))) < 0
@@ -369,12 +375,16 @@ func _resolve_weapon_stats(weapon_def: Dictionary, weapon_level: int) -> Diction
 	resolved["projectile_kind"] = str(weapon_def.get("projectile_kind", resolved.get("projectile_kind", "bullet")))
 	return resolved
 
-func _build_default_player_inventories(player_count: int, selected_abilities: Array) -> Array:
+func _build_default_player_inventories(player_count: int, selected_abilities: Array, selected_weapons: Array = []) -> Array:
 	var inventories: Array = []
 	for index in range(player_count):
 		var inventory := PlayerInventoryData.new()
 		inventory.player_index = index
 		inventory.weapon_id = "rifle"
+		if index < selected_weapons.size():
+			var selected_weapon := str(selected_weapons[index])
+			if _weapons_by_id.has(selected_weapon):
+				inventory.weapon_id = selected_weapon
 		var chosen: Array = []
 		if index < selected_abilities.size() and selected_abilities[index] is Array:
 			chosen = (selected_abilities[index] as Array).duplicate()
@@ -720,6 +730,9 @@ func _build_default_debug_run_setup() -> Dictionary:
 		"enemy_mix": "mixed",
 		"modifiers": [],
 		"starting_mutations": [],
+		"starting_level": 0,
+		"starting_xp": 0,
+		"player_weapons": [],
 		"player_abilities": [],
 		"step_index": 0,
 	}
@@ -735,6 +748,18 @@ func _apply_debug_starting_mutations() -> void:
 			continue
 		for mutation_id in starting_mutations:
 			inventory.mutations.append(str(mutation_id))
+
+func _apply_debug_starting_progress() -> void:
+	if not bool(debug_run_setup.get("enabled", false)):
+		return
+	xp_level = max(int(debug_run_setup.get("starting_level", 0)), 0)
+	xp_to_next_level = 200 + (xp_level * 150)
+	xp_current = max(int(debug_run_setup.get("starting_xp", 0)), 0)
+	while xp_current >= xp_to_next_level:
+		xp_current -= xp_to_next_level
+		xp_level += 1
+		xp_pending_levelups += 1
+		xp_to_next_level = 200 + (xp_level * 150)
 
 func _build_outcome(title: String, summary: String, post_action: String, button_text: String = "Continue") -> Dictionary:
 	return {

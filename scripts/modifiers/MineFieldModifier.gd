@@ -8,8 +8,9 @@ const HIT_HALF_WIDTH := 34.0
 const PLAYER_HIT_COOLDOWN := 0.6
 const GAP_COUNT_MIN := 2
 const GAP_COUNT_MAX := 3
-const GAP_WIDTH_MIN := 150.0
-const GAP_WIDTH_MAX := 180.0
+const MAX_ACTIVE_SWEEPS := 2
+const GAP_WIDTH_MIN := 200.0
+const GAP_WIDTH_MAX := 240.0
 const EDGE_PADDING := 100.0
 
 var _arena_rect := Rect2()
@@ -28,8 +29,9 @@ func setup(arena_rect: Rect2, player_nodes: Array) -> void:
 func _physics_process(delta: float) -> void:
 	_spawn_at -= delta
 	if _spawn_at <= 0.0:
-		_spawn_sweep()
-		_spawn_at = 5.0 + randf_range(0.0, 1.0)
+		if _sweeps.size() < MAX_ACTIVE_SWEEPS:
+			_spawn_sweep()
+		_spawn_at = 8.0 + randf_range(0.0, 1.5)
 	var expired: Array = []
 	for sweep in _sweeps:
 		sweep["time"] = float(sweep.get("time", 0.0)) + delta

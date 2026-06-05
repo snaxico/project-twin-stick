@@ -40,6 +40,7 @@ func _ready() -> void:
 	_show_map()
 
 func _show_map() -> void:
+	_set_music_context("map")
 	if RunState.is_run_complete():
 		_show_resolution("Run Victory", RunState.get_run_summary_text(), "Return to Menu")
 		_post_resolution_action = "return_to_menu"
@@ -73,34 +74,26 @@ func _refresh_map_panel() -> void:
 func _rebuild_map_graph() -> void:
 	_clear_map_graph()
 	_map_buttons.clear()
-	var map_rows: Array = RunState.get_map_rows()
-	if map_rows.is_empty():
+	var options: Array = RunState.get_current_options()
+	if options.is_empty():
 		return
-	_virtual_graph_height = _get_virtual_graph_height(map_rows)
-	_graph_scroll_offset = _get_graph_scroll_offset(map_rows, _virtual_graph_height)
-	var node_positions: Dictionary = {}
-	for row in map_rows:
-		for node in row:
-			if node is Dictionary:
-				node_positions[str(node.get("id", ""))] = _get_node_graph_position(node, map_rows)
-	for row in map_rows:
-		for node in row:
-			if not (node is Dictionary):
-				continue
-			var from_id := str(node.get("id", ""))
-			var from_position: Vector2 = node_positions.get(from_id, Vector2.ZERO)
-			for next_node_id in node.get("next_node_ids", []):
-				var to_id := str(next_node_id)
-				if node_positions.has(to_id):
-					_add_connection_line(from_position, node_positions[to_id], _get_connection_color(from_id, to_id))
-	for row in map_rows:
-		for node in row:
-			if not (node is Dictionary):
-				continue
-			var node_id := str(node.get("id", ""))
-			var button := _build_map_button(node, node_positions[node_id], RunState.get_reachable_node_ids().has(node_id))
-			map_button_layer.add_child(button)
-			_map_buttons[node_id] = button
+	var margin := MarginContainer.new()
+	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	margin.add_theme_constant_override("margin_left", 24)
+	margin.add_theme_constant_override("margin_top", 24)
+	margin.add_theme_constant_override("margin_right", 24)
+	margin.add_theme_constant_override("margin_bottom", 24)
+	map_button_layer.add_child(margin)
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 18)
+	margin.add_child(row)
+	for option in options:
+		var node := option as Dictionary
+		var node_id := str(node.get("id", ""))
+		var button := _build_route_card(node)
+		row.add_child(button)
+		_map_buttons[node_id] = button
 
 func _clear_map_graph() -> void:
 	for child in map_line_layer.get_children():
@@ -197,6 +190,40 @@ func _build_map_button(node: Dictionary, button_center: Vector2, is_reachable: b
 	)
 	return button
 
+func _build_route_card(node: Dictionary) -> Button:
+	var button := Button.new()
+	button.custom_minimum_size = Vector2(220.0, 168.0)
+	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	button.focus_mode = Control.FOCUS_ALL
+	button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	var room_type := str(node.get("room_type", "combat"))
+	var tag := room_type.to_upper()
+	if room_type == "boss":
+		tag = "BOSS: %s" % str(node.get("boss_type", "Boss")).capitalize()
+	elif room_type == "elite":
+		tag = "ELITE"
+	var modifiers: Array = node.get("modifiers", []) as Array
+	var modifier_text := "None" if modifiers.is_empty() else _build_modifier_badge_text(modifiers)
+	var enemies: Array = node.get("enemy_pool", []) as Array
+	var enemy_text := "Boss" if room_type == "boss" else ", ".join(enemies)
+	var side_objective := str(node.get("side_objective", ""))
+	var objective_text := "Objective: %s" % _format_modifier_name(side_objective) if not side_objective.is_empty() else "Objective: Clear"
+	button.text = "%s\n%s\nAct %d Depth %d\n%s\nMods: %s\nEnemies: %s\n%s" % [
+		str(node.get("title", "Room")),
+		tag,
+		int(node.get("act", 1)),
+		int(node.get("depth", 1)),
+		objective_text,
+		modifier_text,
+		enemy_text,
+		str(node.get("description", "")),
+	]
+	button.mouse_entered.connect(_on_map_node_hovered.bind(str(node.get("id", ""))))
+	button.focus_entered.connect(_on_map_node_hovered.bind(str(node.get("id", ""))))
+	button.pressed.connect(_on_map_node_pressed.bind(str(node.get("id", ""))))
+	return button
+
 func _get_modifier_dot_color(mod_id: String) -> Color:
 	var minor_ids := ["accelerating_waves", "enemy_speed", "swarm", "shielded", "explosive_death"]
 	if minor_ids.has(mod_id):
@@ -273,6 +300,8 @@ func _on_map_node_pressed(node_id: String) -> void:
 			_show_outcome(RunState.resolve_current_noncombat_node())
 
 func _launch_room(node: Dictionary) -> void:
+	var room_type := str(node.get("room_type", "combat"))
+	_set_music_context(room_type if room_type == "boss" or room_type == "elite" else "combat")
 	map_panel.visible = false
 	resolution_panel.visible = false
 	_clear_active_game()
@@ -305,6 +334,7 @@ func _show_outcome(outcome: Dictionary) -> void:
 	_show_resolution(str(outcome.get("title", "Result")), str(outcome.get("summary", "")), str(outcome.get("button_text", "Continue")))
 
 func _show_resolution(title: String, detail: String, button_text: String) -> void:
+	_set_music_context("map")
 	map_panel.visible = false
 	resolution_panel.visible = true
 	run_summary_panel.visible = false
@@ -354,6 +384,10 @@ func _clear_active_game() -> void:
 	if _active_game != null and is_instance_valid(_active_game):
 		_active_game.queue_free()
 	_active_game = null
+
+func _set_music_context(context: String) -> void:
+	if MusicEngine != null and MusicEngine.has_method("set_context"):
+		MusicEngine.set_context(context)
 
 func _format_objective(_objective: String) -> String:
 	return "Kill All"

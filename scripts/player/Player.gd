@@ -699,10 +699,15 @@ func _try_activate_ability(slot_index: int, now: float) -> void:
 			_set_slot_active(slot_index, now)
 			_set_slot_cooldown(slot_index, now)
 			_emit_ability(slot_index, direction)
-		"overcharge", "turret", "minefield", "orbit":
+		"overcharge", "turret", "orbit":
 			if not _is_slot_ready(slot_index, now):
 				return
 			_set_slot_active(slot_index, now)
+			_set_slot_cooldown(slot_index, now)
+			_emit_ability(slot_index, direction)
+		"minefield":
+			if not _is_slot_ready(slot_index, now):
+				return
 			_set_slot_cooldown(slot_index, now)
 			_emit_ability(slot_index, direction)
 		_:

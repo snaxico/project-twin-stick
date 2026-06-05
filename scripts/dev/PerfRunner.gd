@@ -27,6 +27,9 @@ func _ready() -> void:
 	var build := _read_arg("--build=", "base")
 	call_deferred("_run", scenario, players, build)
 
+func run_from_menu(scenario: String, players: int, build: String) -> void:
+	call_deferred("_run", scenario, clampi(players, 1, 2), build)
+
 func _read_arg(prefix: String, fallback: String) -> String:
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with(prefix):
@@ -101,7 +104,6 @@ class _Profiler extends Node:
 	var _phys_sum := 0.0
 	var _draw_sum := 0.0
 	var _node_sum := 0.0
-	var _printed_header := false
 
 	func _ready() -> void:
 		print("=== PERF RUNNER: %s (warmup %.0fs, sample %.0fs, vsync off) ===" % [scenario, WARMUP_SECONDS, SAMPLE_SECONDS])

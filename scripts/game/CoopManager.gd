@@ -179,6 +179,8 @@ var _active_mines: Array = []
 var _next_hud_refresh_at := 0.0
 var _scheduled_enemy_shockwaves: Array = []
 var _scheduled_player_shockwaves: Array = []
+var _scheduled_enemy_hazards: Array = []
+var _scheduled_pulsar_emps: Array = []
 var _enemy_separation_grid: Dictionary = {}
 var _enemy_separation_grid_frame := -1
 var _game_paused := false
@@ -188,6 +190,9 @@ var _active_projectiles: Array = []
 var _active_homing_projectiles: Array = []
 var _screen_effect_level := "full"
 var _hit_stop_manager = null
+var _debug_overlay_panel: PanelContainer = null
+var _debug_spawn_option: OptionButton = null
+var _debug_god_check: CheckBox = null
 
 func configure_players(configs: Array) -> void:
 	_player_configs = configs.duplicate()
@@ -196,6 +201,7 @@ func configure_room(room_config: Dictionary) -> void:
 	_room_config = room_config.duplicate(true)
 
 func _ready() -> void:
+	_ensure_debug_overlay_action()
 	if player_scene == null:
 		player_scene = load("res://scenes/player/Player.tscn")
 	_hit_stop_manager = HitStopManagerData.new()
@@ -207,6 +213,7 @@ func _ready() -> void:
 	_load_modifier_definitions()
 	_rebuild_arena()
 	_build_hud()
+	_build_debug_overlay()
 	_spawn_players()
 	_start_room()
 
@@ -471,6 +478,57 @@ func _build_hud() -> void:
 			"slot_2_bar": slot_2_bar,
 		})
 
+func _build_debug_overlay() -> void:
+	if not _is_debug_menu_enabled():
+		return
+	_debug_overlay_panel = PanelContainer.new()
+	_debug_overlay_panel.visible = false
+	_debug_overlay_panel.position = Vector2(28.0, 136.0)
+	_debug_overlay_panel.size = Vector2(320.0, 268.0)
+	ui_layer.add_child(_debug_overlay_panel)
+	var margin := MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 12)
+	margin.add_theme_constant_override("margin_top", 12)
+	margin.add_theme_constant_override("margin_right", 12)
+	margin.add_theme_constant_override("margin_bottom", 12)
+	_debug_overlay_panel.add_child(margin)
+	var layout := VBoxContainer.new()
+	layout.add_theme_constant_override("separation", 8)
+	margin.add_child(layout)
+	var title := Label.new()
+	title.text = "Debug Overlay"
+	title.add_theme_font_size_override("font_size", 17)
+	layout.add_child(title)
+	_debug_spawn_option = OptionButton.new()
+	for entry in [
+		{"label": "Chaser", "value": "chaser"},
+		{"label": "Spitter", "value": "spitter"},
+		{"label": "Charger", "value": "charger"},
+		{"label": "Elite Charger", "value": "elite_charger"},
+		{"label": "Boss Warden", "value": "boss_warden"},
+		{"label": "Boss Hive", "value": "boss_hive"},
+	]:
+		_debug_spawn_option.add_item(str(entry["label"]))
+		_debug_spawn_option.set_item_metadata(_debug_spawn_option.item_count - 1, str(entry["value"]))
+	layout.add_child(_debug_spawn_option)
+	var spawn_button := Button.new()
+	spawn_button.text = "Spawn Selected"
+	spawn_button.pressed.connect(_on_debug_spawn_pressed)
+	layout.add_child(spawn_button)
+	var level_button := Button.new()
+	level_button.text = "Give P1 Weapon Level"
+	level_button.pressed.connect(_on_debug_give_weapon_level_pressed)
+	layout.add_child(level_button)
+	var clear_button := Button.new()
+	clear_button.text = "Clear Enemies"
+	clear_button.pressed.connect(_on_debug_clear_enemies_pressed)
+	layout.add_child(clear_button)
+	_debug_god_check = CheckBox.new()
+	_debug_god_check.text = "God Mode"
+	_debug_god_check.button_pressed = RunState.debug_profiling
+	_debug_god_check.toggled.connect(_on_debug_god_toggled)
+	layout.add_child(_debug_god_check)
+
 func _build_objective_panel() -> void:
 	_objective_panel = PanelContainer.new()
 	_objective_panel.position = Vector2(24.0, 20.0)
@@ -621,6 +679,8 @@ func _build_runtime_ability(player_index: int, ability_definition: Dictionary) -
 	for stat_key in ["duration", "trail_duration"]:
 		if scales_duration and stats.has(stat_key):
 			stats[stat_key] = float(stats[stat_key]) * duration_mult
+	if ability_id == "minefield" and stats.has("mine_lifetime"):
+		stats["mine_lifetime"] = float(stats["mine_lifetime"]) * duration_mult
 	return {
 		"id": ability_id,
 		"name": str(ability_definition.get("name", "Ability")),
@@ -793,6 +853,8 @@ func _clear_runtime_nodes() -> void:
 	_shrinking_arena_modifier = null
 	_scheduled_enemy_shockwaves.clear()
 	_scheduled_player_shockwaves.clear()
+	_scheduled_enemy_hazards.clear()
+	_scheduled_pulsar_emps.clear()
 	_enemy_separation_grid.clear()
 	_enemy_separation_grid_frame = -1
 	_hold_buff_offer.clear()
@@ -851,6 +913,8 @@ func _physics_process(delta: float) -> void:
 	_room_elapsed += delta
 	_update_scheduled_enemy_shockwaves()
 	_update_scheduled_player_shockwaves()
+	_update_scheduled_enemy_hazards()
+	_update_scheduled_pulsar_emps()
 	_update_homing_projectiles(delta)
 	_update_elite_add_waves()
 	_update_boss_add_waves()
@@ -1075,6 +1139,9 @@ func _spawn_boss() -> void:
 		if RunState.is_endless_mode():
 			var room_scale := 1.0 + float(max(_room_depth - 1, 0)) * 0.1
 			boss.apply_room_modifier({"health_multiplier": room_scale})
+	if boss != null and boss.has_method("begin_boss_windup"):
+		boss.begin_boss_windup(2.5)
+	_next_boss_add_spawn_at = _room_elapsed + 2.5 + randf_range(0.4, 0.8)
 	_spawn_boss_entrance_vfx()
 
 func _roll_wave_enemy_type(pool: Array) -> String:
@@ -1100,6 +1167,7 @@ func _handle_room_clear() -> void:
 	if _room_clear_started:
 		return
 	_room_clear_started = true
+	_set_runtime_pause_state(true)
 	_lock_player_input(true)
 	_pending_clear_summary = _build_clear_summary()
 	_show_progression_pick_if_needed()
@@ -1121,7 +1189,15 @@ func _show_mutation_pick(force_rare: bool, title: String, subtitle: String) -> v
 		_mutation_pick_ui.queue_free()
 	var options_by_player: Array = []
 	for player_index in range(_player_nodes.size()):
-		options_by_player.append(_mutation_system.roll_mutation_options(player_index, 3, _get_current_rare_chance(), force_rare))
+		var inventory: PlayerInventory = RunState.get_player_inventory(player_index)
+		var force_player_rare: bool = force_rare or (inventory != null and inventory.rare_dry_streak >= 4)
+		var options: Array = _mutation_system.roll_mutation_options(player_index, 3, _get_current_rare_chance(), force_player_rare)
+		if inventory != null:
+			if _options_contain_rare(options):
+				inventory.rare_dry_streak = 0
+			else:
+				inventory.rare_dry_streak += 1
+		options_by_player.append(options)
 	_mutation_pick_ui = MutationPickUIScene.instantiate()
 	_mutation_pick_ui.configure_for_players(_player_configs, options_by_player, title, subtitle)
 	_mutation_pick_ui.selections_confirmed.connect(_on_mutation_selections_confirmed)
@@ -1129,6 +1205,13 @@ func _show_mutation_pick(force_rare: bool, title: String, subtitle: String) -> v
 	_awaiting_mutation_pick = true
 	if _hit_stop_manager != null and _hit_stop_manager.has_method("request_dilation"):
 		_hit_stop_manager.request_dilation(70, 0.18)
+
+func _options_contain_rare(options: Array) -> bool:
+	for option_variant in options:
+		var option := option_variant as Dictionary
+		if str(option.get("rarity", "common")) == "rare":
+			return true
+	return false
 
 func _on_mutation_selections_confirmed(selections_per_player: Array) -> void:
 	for player_index in range(min(selections_per_player.size(), _player_nodes.size())):
@@ -1320,7 +1403,7 @@ func _spawn_ability_mines(origin: Vector2, stats: Dictionary) -> void:
 	var radius := float(stats.get("radius", 100.0))
 	var trigger_radius := float(stats.get("trigger_radius", 52.0))
 	var damage := int(stats.get("damage", 42))
-	var duration := float(stats.get("duration", 8.0))
+	var duration := float(stats.get("mine_lifetime", 8.0))
 	var tint: Color = stats.get("color", Color.WHITE)
 	for mine_index in range(mine_count):
 		var angle := TAU * float(mine_index) / float(max(mine_count, 1))
@@ -1762,8 +1845,8 @@ func _format_boss_type() -> String:
 
 func _get_current_rare_chance() -> float:
 	if RunState.is_endless_mode():
-		return 0.30
-	return 0.10 if RunState.get_current_act() <= 1 else 0.20
+		return 0.35
+	return 0.15 if RunState.get_current_act() <= 1 else 0.25
 
 func _format_objective_text() -> String:
 	if _side_objective_completed:
@@ -2105,6 +2188,37 @@ func _update_scheduled_player_shockwaves() -> void:
 			remaining.append(scheduled)
 	_scheduled_player_shockwaves = remaining
 
+func schedule_enemy_hazard_zone(origin: Vector2, radius: float, duration: float, damage: int, color: Color, delay: float) -> void:
+	if delay <= 0.0:
+		spawn_enemy_hazard_zone(origin, radius, duration, damage, color)
+		return
+	_scheduled_enemy_hazards.append({
+		"trigger_at": _room_elapsed + delay,
+		"origin": origin,
+		"radius": radius,
+		"duration": duration,
+		"damage": damage,
+		"color": color,
+	})
+
+func _update_scheduled_enemy_hazards() -> void:
+	if _scheduled_enemy_hazards.is_empty():
+		return
+	var remaining: Array = []
+	for scheduled in _scheduled_enemy_hazards:
+		var entry := scheduled as Dictionary
+		if _room_elapsed >= float(entry.get("trigger_at", INF)):
+			spawn_enemy_hazard_zone(
+				entry.get("origin", Vector2.ZERO),
+				float(entry.get("radius", 0.0)),
+				float(entry.get("duration", 0.0)),
+				int(entry.get("damage", 0)),
+				entry.get("color", Color.WHITE)
+			)
+		else:
+			remaining.append(scheduled)
+	_scheduled_enemy_hazards = remaining
+
 func spawn_enemy_hazard_zone(origin: Vector2, radius: float, duration: float, damage: int, color: Color) -> void:
 	var zone := HazardZoneData.new()
 	zone.global_position = origin
@@ -2132,6 +2246,22 @@ func spawn_enemy_minion_mix(origin: Vector2, count: int, types: Array) -> void:
 		var angle := TAU * float(index) / float(max(count, 1))
 		_queue_boss_budgeted_enemy_spawn(enemy_type, origin + Vector2.RIGHT.rotated(angle) * 112.0)
 
+func spawn_hive_pressure_adds(target_position: Vector2, count: int, phase: float) -> void:
+	var types := ["spitter", "chaser"]
+	if phase >= 0.33:
+		types.append("charger")
+	if phase >= 0.66:
+		types.append("bomber")
+	var spawn_count := clampi(count, 1, 4)
+	for index in range(spawn_count):
+		if _get_boss_add_budget_remaining() <= 0:
+			return
+		var enemy_type := str(types[index % types.size()])
+		var angle := randf_range(0.0, TAU)
+		var distance := randf_range(260.0, 420.0)
+		var spawn_position := (target_position + Vector2.RIGHT.rotated(angle) * distance).clamp(ARENA_RECT.position + Vector2.ONE * 160.0, ARENA_RECT.end - Vector2.ONE * 160.0)
+		_queue_boss_budgeted_enemy_spawn(enemy_type, spawn_position)
+
 func spawn_boss_deflector_minions(origin: Vector2, count: int) -> Array:
 	var shield_nodes: Array = []
 	for index in range(count):
@@ -2152,6 +2282,33 @@ func spawn_pulsar_emp(origin: Vector2, lockout_seconds: float, color: Color) -> 
 			player.apply_ability_lockout(lockout_seconds)
 	spawn_enemy_shockwave(origin, 520.0, 0, 420.0, color, false)
 	_spawn_screen_flash(Color(color.r, color.g, color.b, 0.18), 0.22)
+
+func schedule_pulsar_emp(origin: Vector2, lockout_seconds: float, color: Color, delay: float) -> void:
+	if delay <= 0.0:
+		spawn_pulsar_emp(origin, lockout_seconds, color)
+		return
+	_scheduled_pulsar_emps.append({
+		"trigger_at": _room_elapsed + delay,
+		"origin": origin,
+		"lockout_seconds": lockout_seconds,
+		"color": color,
+	})
+
+func _update_scheduled_pulsar_emps() -> void:
+	if _scheduled_pulsar_emps.is_empty():
+		return
+	var remaining: Array = []
+	for scheduled in _scheduled_pulsar_emps:
+		var entry := scheduled as Dictionary
+		if _room_elapsed >= float(entry.get("trigger_at", INF)):
+			spawn_pulsar_emp(
+				entry.get("origin", Vector2.ZERO),
+				float(entry.get("lockout_seconds", 0.0)),
+				entry.get("color", Color.WHITE)
+			)
+		else:
+			remaining.append(scheduled)
+	_scheduled_pulsar_emps = remaining
 
 func spawn_enemy_burst(origin: Vector2, count: int, phase: float) -> void:
 	for index in range(count):
@@ -2371,6 +2528,10 @@ func _on_main_menu_pressed() -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if _awaiting_mutation_pick:
 		return
+	if _is_debug_menu_enabled() and event.is_action_pressed("debug_overlay_toggle"):
+		_toggle_debug_overlay()
+		get_viewport().set_input_as_handled()
+		return
 	if event.is_action_pressed("pause"):
 		if pause_panel.visible:
 			_on_resume_pressed()
@@ -2381,6 +2542,53 @@ func _unhandled_input(event: InputEvent) -> void:
 func _on_pause_proxy_pressed() -> void:
 	if _game_paused:
 		_on_resume_pressed()
+
+func _toggle_debug_overlay() -> void:
+	if _debug_overlay_panel == null or not is_instance_valid(_debug_overlay_panel):
+		return
+	_debug_overlay_panel.visible = not _debug_overlay_panel.visible
+
+func _on_debug_spawn_pressed() -> void:
+	if _debug_spawn_option == null:
+		return
+	var enemy_type := str(_debug_spawn_option.get_selected_metadata())
+	var spawn_position := ARENA_CENTER
+	var target: Node2D = _get_nearest_player_to(ARENA_CENTER)
+	if target != null and is_instance_valid(target):
+		spawn_position = target.global_position + Vector2.RIGHT.rotated(randf_range(0.0, TAU)) * 360.0
+	var spawned := _spawn_enemy_instance(enemy_type, spawn_position)
+	if spawned != null and spawned.has_method("apply_boss_scale") and enemy_type.begins_with("boss_"):
+		spawned.apply_boss_scale(_player_nodes.size())
+
+func _on_debug_give_weapon_level_pressed() -> void:
+	RunState.level_up_weapon(0)
+	_rebuild_player_loadouts()
+	_refresh_hud()
+
+func _on_debug_clear_enemies_pressed() -> void:
+	for enemy in _enemy_nodes.duplicate():
+		if enemy != null and is_instance_valid(enemy) and enemy.has_method("apply_damage"):
+			enemy.apply_damage(999999)
+
+func _on_debug_god_toggled(pressed: bool) -> void:
+	RunState.debug_profiling = pressed
+
+func _is_debug_menu_enabled() -> bool:
+	if OS.is_debug_build():
+		return true
+	for arg in OS.get_cmdline_user_args():
+		if arg == "--debug-menu":
+			return true
+	return false
+
+func _ensure_debug_overlay_action() -> void:
+	if not InputMap.has_action("debug_overlay_toggle"):
+		InputMap.add_action("debug_overlay_toggle")
+	if InputMap.action_get_events("debug_overlay_toggle").is_empty():
+		var key_event := InputEventKey.new()
+		key_event.keycode = KEY_F4
+		key_event.physical_keycode = KEY_F4
+		InputMap.action_add_event("debug_overlay_toggle", key_event)
 
 func _populate_pause_build_overlay() -> void:
 	var pause_layout := pause_panel.get_node_or_null("CenterContainer/PauseLayout")

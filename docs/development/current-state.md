@@ -13,19 +13,21 @@ The live runtime is now aligned to the `Feature Roadmap V3` redesign:
 - meta progression and pre-run weapon unlock/selection remain deferred
 - the round-9 weapon system is live: five peer weapons, one active weapon, shared weapon level, and categorized upgrade cards
 
-Current stable runtime includes the playtest round-9 Mutation-to-Weapon system rework on top of the
-round-8 offense / cadence / bloom / generated-SFX patch. Heavy boss add-waves remain enabled in
-normal boss rooms with a `25` non-boss enemy cap that includes pending spawns.
+Current local runtime includes the playtest round-10 implementation on top of the round-9
+Mutation-to-Weapon system rework. Heavy boss add-waves remain enabled in normal boss rooms with a
+`25` non-boss enemy cap that includes pending spawns. Round 10 is implemented locally and awaiting
+manual playtest approval.
 
 ## Current Runtime
 
 - front menu paths:
   - `Play`
   - `Settings`
-  - `Encounter Builder`
+  - `Encounter Builder` in debug builds or when launched with `--debug-menu`
 - pre-run setup now supports:
   - `1P` or `2P`
   - `Structured` or `Endless`
+  - per-player starting weapon selection
   - per-player ability loadouts restricted to `1 OFF + 1 DEF`
   - slot order is fixed: `LT = OFF`, `RT = DEF`
 - main-menu settings now support:
@@ -35,6 +37,8 @@ normal boss rooms with a `25` non-boss enemy cap that includes pending spawns.
   - Player 2 is temporarily keyboard-only; P2 controller bind buttons are disabled and stale P2 pad bindings are stripped on startup/reset
   - saved runtime bindings via `user://input_bindings.cfg`
   - reset to default bindings
+  - audio sliders for Master / Music / SFX
+  - rebindable debug overlay toggle, default `F4`
 - structured runs use a `2-act` branching map:
   - Act 1 combat rows + optional elites + mid-boss
   - Act 2 combat rows + optional elites + final boss
@@ -50,8 +54,10 @@ normal boss rooms with a `25` non-boss enemy cap that includes pending spawns.
 - level-ups bank room-end pick rounds
 - in co-op, both players level together and each gets an independent pick per round
 - rare weighting is act-based:
-  - Act 1: `10%`
-  - Act 2: `20%`
+  - Act 1: `15%`
+  - Act 2: `25%`
+  - Endless: `35%`
+- rare bad-luck protection is per-player and forces rare options after `4` non-rare pick rounds
 - elite rooms grant one additional free pick round after XP picks resolve
 - elite bonus rounds force at least one rare option per player if any legal rare remains
 - gold, shops, rest nodes, and the old purchase loop are removed from the live runtime
@@ -104,6 +110,18 @@ normal boss rooms with a `25` non-boss enemy cap that includes pending spawns.
   - `High Caliber` and `Range` were added as attribute commons
   - seven new loadout-gated ability signatures were added: `Shockdash`, `Twin Charge`, `Aegis Burst`, `Volatile Decoy`, `Twin Turret`, `Expanding Orbit`, and `Extra Mines`
   - Player 2 controller gameplay input is disabled for now to prevent one controller from driving both local players
+- current round-10 tuning changed:
+  - room clear freezes runtime hazards/enemies/projectiles while reward/map UI is active
+  - generated adaptive music runs on a dedicated `Music` bus; SFX are softer and routed through `SFX`
+  - reward cards are denser and use a shared confirm hint
+  - map route selection now shows only current route-choice cards with boss/elite/modifier/objective/enemy details
+  - starting weapon selection is available before launch
+  - `Minefield` is now instant, has `7s` cooldown, stacks mines, and uses `mine_lifetime` for duration scaling
+  - Hive applies extra player-position pressure adds while respecting the boss add cap
+  - bosses have a `2.5s` invulnerable entrance windup and delayed heavy attack tells
+  - `Scanline` density is capped at `2` active sweeps with wider safe gaps and longer intervals
+  - 2P camera tuning allows closer zoom and less padding
+  - debug menu is gated by debug build / `--debug-menu`; in-room debug overlay supports live spawn, clear enemies, god mode, and weapon-level cheat
 - player mutation visuals are now partially wired:
   - projectile streaks for high `Rapid Fire` / `Velocity`
   - speed-line feedback for `Move Speed`

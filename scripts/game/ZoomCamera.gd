@@ -4,8 +4,8 @@ extends Camera2D
 const MIN_PLAYER_SEPARATION := 320.0
 
 @export var zoom_min: float = 0.35
-@export var zoom_max: float = 0.7
-@export var padding: Vector2 = Vector2(260.0, 220.0)
+@export var zoom_max: float = 1.0
+@export var padding: Vector2 = Vector2(160.0, 140.0)
 @export var follow_speed: float = 8.0
 @export var arena_margin: float = 96.0
 
