@@ -111,9 +111,11 @@ asked. **Round 9 (weapon system) is committed/pushed and is the stable baseline.
 - **Fix direction (general, not Pulsar-specific):** round-6-deferred **MultiMesh rendering** for
   projectiles/enemies (biggest win — ~3 draw calls/entity), tighter caps (projectile / add-wave /
   fire-pool), draw-call reduction. Boss-windup also spreads burst spawns.
-- **DECISION: perf fix DEFERRED** to a dedicated perf round. **Round 10 ships only the room-end
-  freeze fix + the Perf Runner tool** (which makes that future perf round easy to drive). The
-  MultiMesh/caps work is parked, not dropped.
+- **DECISION: the entity-count perf fix is DEFERRED** to a dedicated perf round (MultiMesh + caps).
+  For the **bug/perf cluster**, Round 10 ships the **room-end freeze fix + the Perf Runner tool**
+  and **no entity-ceiling optimization**. This does NOT limit the rest of Round 10 — the UI, combat,
+  audio, map, and debug clusters all still ship (see the Build Order). The MultiMesh/caps work is
+  parked, not dropped.
 
 ### UI & features
 
@@ -146,9 +148,15 @@ full description in the **shared detail panel** on focus, starts at **Lv1**. Thr
 through `debug_start_options` (`player_weapons: [id,…]`) → `_build_default_player_inventories`
 sets `inventory.weapon_id`. Applies to both Play and Encounter Builder.
 
-**Debug Menu (consolidates the "debug menu" + "Encounter Builder rework" findings).** A dedicated
-dev hub, opened from a **main-menu Debug button shown only when a dev flag is on** (hidden in
-normal builds). Contents:
+**Debug Menu (consolidates the "debug menu" + "Encounter Builder rework" findings).** A dev hub with
+**two surfaces**, both gated by a **dev flag** defined as: `OS.is_debug_build()` (true in the editor
+and in debug exports; false in release builds), with an optional force-on via a `--debug-menu`
+command-line user arg (read like PerfRunner's args) for testing in a release export. When the flag is
+off, the main-menu button is hidden and the in-room overlay hotkey is inert. Surfaces:
+1. **Main-menu Debug button** — pre-run setup: room/boss launcher + perf scenarios + launch-time setup.
+2. **In-room dev overlay** — opened by a **rebindable debug hotkey** during play: live-spawn + in-run cheats.
+
+Contents:
 - **Room/boss launcher** = the **reworked Encounter Builder**: configure room type, boss, modifiers,
   enemy mix, player count, AND the new round-9 systems (starting weapon + level, abilities, optional
   starting upgrades). Reuses the existing debug single-room path.
@@ -157,12 +165,15 @@ normal builds). Contents:
   `PerfRunner` so the `_ready()` `--profile=` path and a new **`PerfRunner.run_from_menu(profile,
   players, build)`** share a common `_run(profile, players, build)` core; the menu calls
   `run_from_menu(...)`. The command-line `--profile=` path stays for unattended automation.
-- **Player cheats (launch-time only)** — applied when launching a room from the Debug Menu (access
-  is main-menu-only): god mode (reuse `debug_profiling`), set starting XP/level, grant a weapon +
-  level, grant specific starting upgrades. These configure the run at launch, not mid-room.
-- **Live spawn controls — DEFERRED (cut from Round 10).** Spawning into a *running* room needs
-  in-room access, which conflicts with the main-menu-only decision. Revisit with a dedicated in-room
-  dev panel in a later round.
+- **Launch-time cheats (main-menu surface)** — god mode (reuse `debug_profiling`), starting XP/level,
+  grant a weapon + level, grant starting upgrades — configure the run at launch.
+- **In-room dev overlay (rebindable hotkey surface)** — **live-spawn** a chosen enemy/elite/boss into
+  the running room on demand (the primary use: testing enemy behaviors), plus **in-run cheats**: give
+  weapon + level, give upgrade, set XP/level, god mode, clear enemies (for fast weapon testing). Calls
+  CoopManager's existing spawn/loadout hooks; dev-flag gated.
+- **Keybindings:** add the debug-overlay toggle (and any overlay actions) as **rebindable input
+  actions in the main-menu settings keybinding editor** (`Bootstrap.gd`), alongside the gameplay
+  bindings — so the debug hotkey is configurable. Default e.g. `F4` to toggle the overlay.
 
 **2P camera tuning** (`scripts/game/ZoomCamera.gd`). Empty-middle/edge-pinning comes from staying
 zoomed out even when players are close (`zoom_max 0.7`) + large padding. Tune (no new system):
@@ -275,7 +286,7 @@ matching section above. Build in this order (low-risk/foundational first; Debug 
    *Accept:* parse + by-ear in playtest (less harsh, less repetitive).
 4. **Generated adaptive music** — procedural base loop + combat/boss intensity layers on Music bus.
    *Accept:* music plays, layers shift on context, respects Music slider.
-5. **Rarity rework** — rare chance 15/25/35 + `RunState.rare_dry_streak` pity-after-4.
+5. **Rarity rework** — rare chance 15/25/35 + **per-player** `PlayerInventory.rare_dry_streak` pity-after-4.
    *Accept:* more rares; a forced rare appears after 4 rare-less rounds.
 6. **Minefield stacking** — instant cast, CD 7s, mine lifetime 14s, mines stack, no cap.
    *Accept:* re-cast while old mines live; both sets armed.
@@ -293,10 +304,14 @@ matching section above. Build in this order (low-risk/foundational first; Debug 
 12. **2P camera tuning** — zoom_max→1.0, padding→(160,140). *Accept:* fills view when players near.
 13. **Map → next-choices cards** — replace the graph; 2–3 route cards + Floor X/Y; real risk/reward.
     *Accept:* no overlap/scroll; route choice works; boss/elite/modifier shown per card.
-14. **Debug Menu** (last; consolidates Encounter Builder rework) — dev-flag main-menu button →
-    room/boss launcher + **Perf scenario launcher (drives PerfRunner)** + cheats + live spawn.
-    *Accept:* launch any room/boss; run a perf scenario from the menu; cheats work.
+14. **Debug Menu** (last; consolidates Encounter Builder rework) — two dev-flag surfaces:
+    (a) **main-menu button** → room/boss launcher + **Perf scenario launcher** (`PerfRunner.run_from_menu`)
+    + launch-time cheats; (b) **in-room overlay** on a **rebindable hotkey** (added to the settings
+    keybinding editor, default `F4`) → live-spawn enemies/elites/bosses + in-run cheats (give weapon/
+    level, give upgrade, set XP, god mode, clear enemies).
+    *Accept:* launch any room/boss; run a perf scenario from the menu; toggle the in-room overlay via
+    the (rebindable) hotkey and live-spawn an enemy + apply a cheat.
 
 **Parked:** entity-count perf ceiling (MultiMesh + caps) → dedicated perf round (Perf Runner ready
-to drive it). Working tree currently holds only the Perf Runner (uncommitted); everything else above
-is unbuilt spec. Round 9 is the committed baseline.
+to drive it). Round 9 + the Perf Runner + docs are committed; all Round-10 gameplay above is unbuilt
+spec on a clean tree.
