@@ -19,6 +19,21 @@
   dependency chain requires it and the result is validated together.
 - Review generated code before treating it as accepted.
 
+## Codex Implementation Rules
+
+- **Stick to the approved plan.** Implement the current build spec as written; do not add extra
+  systems, tuning, polish, or "obvious" improvements unless the plan explicitly asks for them.
+- **Do not invent assumptions.** If a value, behavior, ownership rule, or integration path is not
+  specified and cannot be verified from existing code/docs, flag it as unclear instead of choosing.
+- **Do not silently deviate.** If implementation requires changing the plan, stop and explain the
+  required deviation before making that change.
+- **Keep unclear items visible.** If a plan item cannot be implemented because the spec is unclear,
+  record exactly what was unclear and leave the item unimplemented until clarified.
+- **Summarize after implementation.** Every implementation handoff should state whether anything was
+  unclear, skipped, or implemented differently from the plan.
+- **Treat review findings as blockers when marked P1/P2.** Fix the plan before implementation if a
+  review says a step is ambiguous, contradictory, or technically unsafe.
+
 ## Round Workflow
 
 The project iterates in numbered playtest rounds:

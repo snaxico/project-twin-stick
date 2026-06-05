@@ -334,6 +334,9 @@ Canonical guidelines live in `docs/process/solo-dev-rules.md`. Key rules:
 - **Workspace:** work in `D:\GameDev\Project_Twin_stick` on `v3/main`; **no new worktrees**; keep
   all output on `D:` (never write to the small `C:` SSD).
 - Build one vertical slice at a time; give AI one bounded task at a time; review generated code.
+- **Codex implementation rule:** stick to the approved plan, do not invent assumptions, do not
+  silently deviate, flag unclear items before implementing, and summarize any unclear/skipped/deviated
+  work after implementation.
 - **Terminology:** "Upgrade" (= Weapon + Effect + Attribute + Ability) is the player/doc word;
   "mutation" is code-only.
 - **Performance:** use the Perf Runner for perf tests; the ~200-entity ceiling is the known bottleneck.
