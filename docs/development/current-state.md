@@ -13,10 +13,10 @@ The live runtime is now aligned to the `Feature Roadmap V3` redesign:
 - meta progression and pre-run weapon unlock/selection remain deferred
 - the round-9 weapon system is live: five peer weapons, one active weapon, shared weapon level, and categorized upgrade cards
 
-Current local runtime includes the playtest round-10 implementation on top of the round-9
-Mutation-to-Weapon system rework. Heavy boss add-waves remain enabled in normal boss rooms with a
-`25` non-boss enemy cap that includes pending spawns. Round 10 is implemented locally and awaiting
-manual playtest approval.
+Current local runtime includes the playtest round-11 implementation on top of the round-10
+polish/perf baseline and the round-9 Mutation-to-Weapon system rework. Heavy boss add-waves remain
+enabled in normal boss rooms with a `25` non-boss enemy cap that includes pending spawns. Round 11 is
+implemented and tool-validated; manual playtest is still pending.
 
 ## Current Runtime
 
@@ -122,6 +122,16 @@ manual playtest approval.
   - `Scanline` density is capped at `2` active sweeps with wider safe gaps and longer intervals
   - 2P camera tuning allows closer zoom and less padding
   - debug menu is gated by debug build / `--debug-menu`; in-room debug overlay supports live spawn, clear enemies, god mode, and weapon-level cheat
+- current round-11 tuning changed:
+  - arena size is reduced to `3000x1700`
+  - shared 2P camera zoom is retuned to `0.60-0.80` while keeping padding unchanged
+  - route options are guarded against identical room/enemy/modifier signatures
+  - in-room debug overlay lists the full enemy/elite/boss roster and can set Player 1's active weapon live
+  - boss rooms show an edge indicator when the active boss is off-screen
+  - loadout ability cards are name-only while the selected summary keeps full descriptions
+  - reward-card descriptions are one-line ellipsized
+  - projectile visuals are rendered by reusable `ProjectileRenderer` MultiMesh batches keyed by `projectile_shape`
+  - per-projectile `Visual` / `Outline` drawing and `GPUParticles2D` projectile trails are disabled; collision/state remain on pooled projectile nodes
 - player mutation visuals are now partially wired:
   - projectile streaks for high `Rapid Fire` / `Velocity`
   - speed-line feedback for `Move Speed`
@@ -262,13 +272,14 @@ manual playtest approval.
   - rare highlighting
   - current mutation inventory per player
   - leveled common progression (`Lv X -> Lv Y`)
+  - one-line ellipsized reward descriptions
 - map UI now shows:
   - vertical bottom-to-top branching paths
   - custom-drawn combat / elite / boss nodes
   - colored modifier dots below nodes
   - per-node modifier shorthand on hover detail panel
   - nodes positioned by actual row membership (not fixed 5-column grid)
-- pre-run UI now shows compact text-only ability selection with inline descriptions, `LT` / `RT` selected-slot labels, and slot-colored selected cards
+- pre-run UI now shows compact text-only ability selection with name-only cards, `LT` / `RT` selected-slot labels, slot-colored selected cards, and selected OFF/DEF summary descriptions
 - pre-run ability UI is split into `LT / OFF` and `RT / DEF` pickers per player
 - arena visuals now use:
   - pure black floor
@@ -283,7 +294,7 @@ manual playtest approval.
   - round-7 level-ups now use a lightweight screen flash and procedural sting without mid-combat slow-mo
   - bloom/glow is enabled through HDR 2D plus a `WorldEnvironment`
   - managed hit-stop is routed through `HitStopManager.gd`; trash kills do not trigger it
-  - projectile mutation shapes/trails/SFX make weapon mutations read more distinctly
+  - projectile mutation shapes/SFX make weapon mutations read more distinctly; projectile trails are currently removed for readability/performance
 
 ## Active Systems
 
@@ -302,6 +313,7 @@ manual playtest approval.
   - pooled projectile activation/deactivation
   - dedicated slow homing projectile path for Hydra orbs
   - capped boss add-wave budget for normal boss rooms
+  - boss off-screen indicator
   - ability dispatch
   - reward sequencing
   - boss helper attacks
@@ -336,7 +348,7 @@ manual playtest approval.
 ## Deferred / Missing
 
 - no meta progression
-- no pre-run weapon selection or meta weapon unlocks
+- no meta weapon unlocks
 - no additional ability signatures beyond the round-9 set
 - no `3-4` player support
 - no final art pass
@@ -345,7 +357,7 @@ manual playtest approval.
 ## Known Risks
 
 - full live playtesting and balance validation still have not been run after the full V3 integration
-- round-2 through round-9 tuning have passed headless validation; round-6 also has non-headless profiling harness data and a strong live performance report, but round-9 still needs full balance/readability/performance playtesting
+- round-2 through round-11 tuning have passed headless validation; round-6 and round-11 also have non-headless profiling data, but round-11 still needs full balance/readability/performance playtesting
 - boss and elite behavior is implemented, but still likely needs feel tuning against real runs
 - modifier stacking, projectile pooling, AI time-slicing, new boss add pressure, homing orbs, and endless pressure have not been manually stress-tested yet
 - the rebuilt pause menu, new VFX density, swarm performance optimization, slot-colored HUD, Build HUD overhaul, and input binding menu have passed parse validation but still need controller/manual readability testing
@@ -364,10 +376,11 @@ manual playtest approval.
 - `FireTrailZone` distance checks passed parse validation and warning cleanup but still need focused in-game correctness validation for player Fire Bullets damaging enemies and no friendly fire
 - round-9 weapon cards, active weapon switching, shared weapon level, weapon-specific fire patterns, and ability signatures are implemented but still need manual `1P` / `2P` feel validation
 - Player 2 is keyboard-only for now; controller support should stay disabled until per-player controller device/binding ownership is redesigned
+- round-11 `entity_ramp` at `200 enemies + 200 projectiles` still reports `~50 FPS` because enemies remain per-node; real `boss:pulsar --players=2 --build=heavy` measured far above target, so enemy MultiMesh remains deferred unless live playtest contradicts the real-room result
 
 ## Next Step
 
-Run manual validation for the round-9 build (shipped). Its plan/checklist is archived at `docs/archive/development/playtest-round-9-plan.md`. The next patch is specced in `docs/development/playtest-round-10-plan.md` (map, bug/perf, UI, combat feel, audio).
+Run manual validation for the round-11 build using `docs/development/playtest-round-11-plan.md` as the checklist. Focus on camera/arena feel, boss indicator readability, reduced UI text density, Encounter Builder completeness, route-card differentiation, and real-room projectile performance.
 
 - continuous spawn pacing in `1P` and `2P` — does `35-45s` room duration feel right?
 - first `30s` pressure — do the opening burst, `~5/s` rifle, spawn ramp, and multi-edge spawns feel active without overwhelming?
@@ -393,3 +406,9 @@ Run manual validation for the round-9 build (shipped). Its plan/checklist is arc
 - weapon level-up cards, weapon swap cards, shared weapon level preservation, and all five weapon firing profiles
 - new ability signatures: Shockdash, Twin Charge, Aegis Burst, Volatile Decoy, Twin Turret, Expanding Orbit, Extra Mines
 - map node readability at the new compact size
+- Round 11 arena shrink + camera retune in `1P` and `2P`
+- boss off-screen indicator direction/visibility
+- Encounter Builder full spawn list and live weapon selector
+- loadout/reward text density after truncation
+- route choices are actually differentiated
+- real Pulsar-heavy projectile performance after MultiMesh projectile rendering

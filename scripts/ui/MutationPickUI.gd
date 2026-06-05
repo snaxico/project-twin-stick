@@ -269,7 +269,9 @@ func _build_card(player_index: int, option_index: int) -> Control:
 	var description := Label.new()
 	description.text = str(option.get("description", ""))
 	description.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	description.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	description.autowrap_mode = TextServer.AUTOWRAP_OFF
+	description.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	description.max_lines_visible = 1
 	description.add_theme_font_size_override("font_size", 11)
 	description.modulate = Color(0.82, 0.86, 0.94, 0.92)
 	layout.add_child(description)

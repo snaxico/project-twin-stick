@@ -3,6 +3,7 @@ extends Node2D
 const EnemySceneData = preload("res://scenes/enemies/Enemy.tscn")
 const ProjectileSceneData = preload("res://scenes/weapons/Projectile.tscn")
 const PlayerCombatIndicatorData = preload("res://scripts/ui/PlayerCombatIndicator.gd")
+const ProjectileRendererData = preload("res://scripts/weapons/ProjectileRenderer.gd")
 const MutationSystemData = preload("res://scripts/game/MutationSystem.gd")
 const AbilityRegistryData = preload("res://scripts/game/AbilityRegistry.gd")
 const HudPaletteData = preload("res://scripts/game/HudPalette.gd")
@@ -28,7 +29,7 @@ const PauseInputProxyData = preload("res://scripts/ui/PauseInputProxy.gd")
 
 const MODIFIERS_DATA_PATH := "res://data/modifiers.json"
 
-const ARENA_SIZE := Vector2(4800.0, 2700.0)
+const ARENA_SIZE := Vector2(3000.0, 1700.0)
 const ARENA_RECT := Rect2(Vector2.ZERO, ARENA_SIZE)
 const ARENA_CENTER := Vector2(ARENA_SIZE.x * 0.5, ARENA_SIZE.y * 0.5)
 const ARENA_MARGIN := 72.0
@@ -53,6 +54,21 @@ const HUD_HEALTH_COLOR := Color(0.24, 0.92, 0.34, 1.0)
 const HUD_SLOT_2_COLOR := HudPaletteData.SLOT_2_COLOR
 const ENEMY_PROJECTILE_COLOR := Color(1.0, 0.0, 0.0, 1.0)
 const COMBAT_VFX_LOAD_THRESHOLD := 150
+const DEBUG_ENEMY_SPAWN_CATALOG := [
+	{"label": "Chaser", "value": "chaser"},
+	{"label": "Charger", "value": "charger"},
+	{"label": "Spitter", "value": "spitter"},
+	{"label": "Splitter", "value": "splitter"},
+	{"label": "Splitter Mini", "value": "splitter_mini"},
+	{"label": "Bomber", "value": "bomber"},
+	{"label": "Elite Charger", "value": "elite_charger"},
+	{"label": "Elite Spitter", "value": "elite_spitter"},
+	{"label": "Elite Support", "value": "elite_support"},
+	{"label": "Boss Warden", "value": "boss_warden"},
+	{"label": "Boss Hydra", "value": "boss_hydra"},
+	{"label": "Boss Hive", "value": "boss_hive"},
+	{"label": "Boss Pulsar", "value": "boss_pulsar"},
+]
 
 const XP_PER_ENEMY_TYPE := {
 	"chaser": 10,
@@ -146,6 +162,7 @@ var _objective_progress_label: Label = null
 var _objective_progress_bar: ProgressBar = null
 var _boss_health_bar = null
 var _boss_phase_label: Label = null
+var _boss_offscreen_indicator: Label = null
 var _mutation_pick_ui = null
 var _active_modifiers: Array = []
 var _modifier_definitions: Dictionary = {}
@@ -192,7 +209,9 @@ var _screen_effect_level := "full"
 var _hit_stop_manager = null
 var _debug_overlay_panel: PanelContainer = null
 var _debug_spawn_option: OptionButton = null
+var _debug_weapon_option: OptionButton = null
 var _debug_god_check: CheckBox = null
+var _projectile_renderer = null
 
 func configure_players(configs: Array) -> void:
 	_player_configs = configs.duplicate()
@@ -319,6 +338,16 @@ func _build_hud() -> void:
 	_boss_phase_label.add_theme_color_override("font_color", Color(1.0, 0.72, 0.54, 0.92))
 	_boss_phase_label.visible = false
 	_hud_root.add_child(_boss_phase_label)
+	_boss_offscreen_indicator = Label.new()
+	_boss_offscreen_indicator.text = ">"
+	_boss_offscreen_indicator.size = Vector2(32.0, 32.0)
+	_boss_offscreen_indicator.pivot_offset = Vector2(16.0, 16.0)
+	_boss_offscreen_indicator.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_boss_offscreen_indicator.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_boss_offscreen_indicator.add_theme_font_size_override("font_size", 30)
+	_boss_offscreen_indicator.add_theme_color_override("font_color", Color(1.0, 0.34, 0.18, 0.96))
+	_boss_offscreen_indicator.visible = false
+	_hud_root.add_child(_boss_offscreen_indicator)
 
 	_objective_label = Label.new()
 	_objective_label.position = Vector2(24.0, 24.0)
@@ -484,7 +513,7 @@ func _build_debug_overlay() -> void:
 	_debug_overlay_panel = PanelContainer.new()
 	_debug_overlay_panel.visible = false
 	_debug_overlay_panel.position = Vector2(28.0, 136.0)
-	_debug_overlay_panel.size = Vector2(320.0, 268.0)
+	_debug_overlay_panel.custom_minimum_size = Vector2(360.0, 0.0)
 	ui_layer.add_child(_debug_overlay_panel)
 	var margin := MarginContainer.new()
 	margin.add_theme_constant_override("margin_left", 12)
@@ -499,22 +528,36 @@ func _build_debug_overlay() -> void:
 	title.text = "Debug Overlay"
 	title.add_theme_font_size_override("font_size", 17)
 	layout.add_child(title)
+	var spawn_row := HBoxContainer.new()
+	spawn_row.add_theme_constant_override("separation", 8)
+	layout.add_child(spawn_row)
 	_debug_spawn_option = OptionButton.new()
-	for entry in [
-		{"label": "Chaser", "value": "chaser"},
-		{"label": "Spitter", "value": "spitter"},
-		{"label": "Charger", "value": "charger"},
-		{"label": "Elite Charger", "value": "elite_charger"},
-		{"label": "Boss Warden", "value": "boss_warden"},
-		{"label": "Boss Hive", "value": "boss_hive"},
-	]:
+	_debug_spawn_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	for entry in DEBUG_ENEMY_SPAWN_CATALOG:
 		_debug_spawn_option.add_item(str(entry["label"]))
 		_debug_spawn_option.set_item_metadata(_debug_spawn_option.item_count - 1, str(entry["value"]))
-	layout.add_child(_debug_spawn_option)
+	spawn_row.add_child(_debug_spawn_option)
 	var spawn_button := Button.new()
 	spawn_button.text = "Spawn Selected"
 	spawn_button.pressed.connect(_on_debug_spawn_pressed)
-	layout.add_child(spawn_button)
+	spawn_row.add_child(spawn_button)
+	var weapon_row := HBoxContainer.new()
+	weapon_row.add_theme_constant_override("separation", 8)
+	layout.add_child(weapon_row)
+	_debug_weapon_option = OptionButton.new()
+	_debug_weapon_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	for weapon in RunState.get_weapon_catalog():
+		var weapon_dict: Dictionary = weapon as Dictionary
+		var weapon_id := str(weapon_dict.get("id", ""))
+		if weapon_id.is_empty():
+			continue
+		_debug_weapon_option.add_item(str(weapon_dict.get("name", weapon_id.capitalize())))
+		_debug_weapon_option.set_item_metadata(_debug_weapon_option.item_count - 1, weapon_id)
+	weapon_row.add_child(_debug_weapon_option)
+	var set_weapon_button := Button.new()
+	set_weapon_button.text = "Set Weapon"
+	set_weapon_button.pressed.connect(_on_debug_set_weapon_pressed)
+	weapon_row.add_child(set_weapon_button)
 	var level_button := Button.new()
 	level_button.text = "Give P1 Weapon Level"
 	level_button.pressed.connect(_on_debug_give_weapon_level_pressed)
@@ -778,6 +821,7 @@ func _set_wall_rect(node: CollisionShape2D, wall_position: Vector2, size: Vector
 
 func _start_room() -> void:
 	_clear_runtime_nodes()
+	_ensure_projectile_renderer()
 	_set_game_paused(false)
 	_rebuild_player_loadouts()
 	_room_clear_started = false
@@ -858,7 +902,16 @@ func _clear_runtime_nodes() -> void:
 	_enemy_separation_grid.clear()
 	_enemy_separation_grid_frame = -1
 	_hold_buff_offer.clear()
+	_projectile_renderer = null
 	_invalidate_runtime_caches()
+
+func _ensure_projectile_renderer() -> void:
+	if _projectile_renderer != null and is_instance_valid(_projectile_renderer):
+		return
+	_projectile_renderer = ProjectileRendererData.new()
+	_projectile_renderer.name = "ProjectileRenderer"
+	_projectile_renderer.set_projectile_container(projectiles)
+	projectiles.add_child(_projectile_renderer)
 
 func _setup_side_objective() -> void:
 	_side_objective_id = str(_room_config.get("side_objective", ""))
@@ -923,6 +976,7 @@ func _physics_process(delta: float) -> void:
 	_update_revives(delta)
 	_clamp_runtime_nodes()
 	_check_wave_progress()
+	_update_boss_offscreen_indicator()
 	var now := _current_time_seconds()
 	if now >= _next_hud_refresh_at:
 		_next_hud_refresh_at = now + HUD_REFRESH_INTERVAL
@@ -959,6 +1013,42 @@ func _update_hazards(delta: float) -> void:
 		if hazard != null and is_instance_valid(hazard):
 			hazard.update_zone(delta, _player_nodes)
 	_cleanup_helpers()
+
+func _update_boss_offscreen_indicator() -> void:
+	if _boss_offscreen_indicator == null:
+		return
+	if _active_boss == null or not is_instance_valid(_active_boss) or not (_active_boss is Node2D):
+		_boss_offscreen_indicator.visible = false
+		return
+	if _active_boss.has_method("is_alive") and not _active_boss.is_alive():
+		_boss_offscreen_indicator.visible = false
+		return
+	var viewport_size := get_viewport_rect().size
+	if viewport_size.x <= 0.0 or viewport_size.y <= 0.0:
+		_boss_offscreen_indicator.visible = false
+		return
+	var zoom_value := camera.zoom.x if camera != null else 1.0
+	var camera_center := camera.get_screen_center_position() if camera != null else ARENA_CENTER
+	var world_half_extents := viewport_size * zoom_value * 0.5
+	var top_left := camera_center - world_half_extents
+	var boss_screen_position: Vector2 = ((_active_boss as Node2D).global_position - top_left) / maxf(zoom_value, 0.001)
+	var screen_rect := Rect2(Vector2.ZERO, viewport_size)
+	if screen_rect.has_point(boss_screen_position):
+		_boss_offscreen_indicator.visible = false
+		return
+	var center := viewport_size * 0.5
+	var direction_to_boss := (boss_screen_position - center).normalized()
+	if direction_to_boss.length() <= 0.0:
+		_boss_offscreen_indicator.visible = false
+		return
+	var edge_margin := 42.0
+	var clamped_position := Vector2(
+		clampf(boss_screen_position.x, edge_margin, viewport_size.x - edge_margin),
+		clampf(boss_screen_position.y, edge_margin, viewport_size.y - edge_margin)
+	)
+	_boss_offscreen_indicator.position = clamped_position - _boss_offscreen_indicator.size * 0.5
+	_boss_offscreen_indicator.rotation = direction_to_boss.angle()
+	_boss_offscreen_indicator.visible = true
 
 func _update_elite_add_waves() -> void:
 	if _room_type != "elite" or _room_clear_started:
@@ -2562,6 +2652,16 @@ func _on_debug_spawn_pressed() -> void:
 
 func _on_debug_give_weapon_level_pressed() -> void:
 	RunState.level_up_weapon(0)
+	_rebuild_player_loadouts()
+	_refresh_hud()
+
+func _on_debug_set_weapon_pressed() -> void:
+	if _debug_weapon_option == null:
+		return
+	var weapon_id := str(_debug_weapon_option.get_selected_metadata())
+	if weapon_id.is_empty():
+		return
+	RunState.set_active_weapon(0, weapon_id)
 	_rebuild_player_loadouts()
 	_refresh_hud()
 

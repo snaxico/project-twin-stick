@@ -1,10 +1,7 @@
 extends Area2D
 
-const ParticleFactoryData = preload("res://scripts/juice/ParticleFactory.gd")
 const FireTrailZoneData = preload("res://scripts/weapons/FireTrailZone.gd")
 const BASE_COLLISION_HALF_WIDTH := 4.0
-const TRAIL_PARTICLE_SOFT_CAP := 90
-const ENEMY_TRAIL_PARTICLE_SOFT_CAP := 36
 const BLOOM_COLOR_MULTIPLIER := 1.45
 
 @export var lifetime: float = 1.8
@@ -59,7 +56,6 @@ var _shooter_node: Node = null
 @onready var collision_shape: CollisionShape2D = $CollisionShape2D
 
 var _expires_at := 0.0
-var _trail_particles: GPUParticles2D = null
 var _spawn_position := Vector2.ZERO
 var _base_collision_radius := 0.0
 var _base_visual_scale := Vector2.ONE
@@ -196,12 +192,6 @@ func _activate_projectile_runtime() -> void:
 	rotation = direction.angle()
 	_spawn_position = global_position
 	_apply_visual_state()
-	if _trail_particles != null and is_instance_valid(_trail_particles):
-		_trail_particles.queue_free()
-	_trail_particles = null
-	if _should_spawn_trail_particles():
-		_trail_particles = ParticleFactoryData.create_projectile_trail(_get_trail_color(), trail_style)
-		add_child(_trail_particles)
 
 func _physics_process(delta: float) -> void:
 	if not _active:
@@ -289,9 +279,6 @@ func _finish_projectile() -> void:
 	set_physics_process(false)
 	if collision_shape != null:
 		collision_shape.set_deferred("disabled", true)
-	if _trail_particles != null and is_instance_valid(_trail_particles):
-		_trail_particles.queue_free()
-	_trail_particles = null
 	projectile_deactivated.emit(self)
 
 func _redirect_to_ricochet_target(previous_target: Node) -> bool:
@@ -329,27 +316,27 @@ func _current_time_seconds() -> float:
 	return Time.get_ticks_msec() / 1000.0
 
 func _apply_visual_state() -> void:
-	if visual == null:
-		return
-	var projectile_color: Color = _get_projectile_color()
-	var enemy_shot: bool = team == "enemy"
 	var size_scale: float = maxf(collision_half_width / BASE_COLLISION_HALF_WIDTH, 0.25)
-	var streak_scale: float = 1.0 + 0.18 * float(max(rapid_fire_level - 1, 0)) + 0.22 * float(max(velocity_level - 1, 0))
-	if enemy_shot:
-		visual.color = _bloom_color(projectile_color)
-		visual.scale = Vector2(_base_visual_scale.x * 1.36 * size_scale * streak_scale, _base_visual_scale.y * 1.36 * size_scale)
-		visual.polygon = _build_orb_polygon(8.0)
-	else:
-		visual.color = _bloom_color(projectile_color.lightened(0.05))
-		visual.scale = _get_shape_scale(size_scale, streak_scale)
-		visual.polygon = _build_shape_polygon(projectile_shape)
+	if visual != null:
+		visual.visible = false
 	if outline != null:
-		outline.visible = true
-		outline.color = _bloom_color(projectile_color.darkened(0.25)) if enemy_shot else _bloom_color(accent_color)
-		outline.scale = Vector2(visual.scale.x * 1.16, visual.scale.y * 1.24)
-		outline.polygon = visual.polygon
+		outline.visible = false
 	if collision_shape != null and collision_shape.shape is CircleShape2D:
 		(collision_shape.shape as CircleShape2D).radius = _base_collision_radius * size_scale
+
+func get_render_scale() -> Vector2:
+	var size_scale: float = maxf(collision_half_width / BASE_COLLISION_HALF_WIDTH, 0.25)
+	var streak_scale: float = 1.0 + 0.18 * float(max(rapid_fire_level - 1, 0)) + 0.22 * float(max(velocity_level - 1, 0))
+	if team == "enemy":
+		var enemy_orb_scale := 1.36 * (8.0 / 6.0)
+		return Vector2(_base_visual_scale.x * enemy_orb_scale * size_scale * streak_scale, _base_visual_scale.y * enemy_orb_scale * size_scale)
+	return _get_shape_scale(size_scale, streak_scale)
+
+func get_render_color() -> Color:
+	var projectile_color: Color = _get_projectile_color()
+	if team == "enemy":
+		return _bloom_color(projectile_color)
+	return _bloom_color(projectile_color.lightened(0.05))
 
 func _get_projectile_color() -> Color:
 	return tint_color
@@ -357,26 +344,8 @@ func _get_projectile_color() -> Color:
 func _get_impact_color() -> Color:
 	return accent_color if team == "player" else tint_color
 
-func _get_trail_color() -> Color:
-	if team == "enemy":
-		return tint_color
-	return accent_color
-
 func _bloom_color(color: Color) -> Color:
 	return Color(color.r * BLOOM_COLOR_MULTIPLIER, color.g * BLOOM_COLOR_MULTIPLIER, color.b * BLOOM_COLOR_MULTIPLIER, color.a)
-
-func _should_spawn_trail_particles() -> bool:
-	if trail_style == "default" and rapid_fire_level < 2 and velocity_level < 2:
-		return false
-	var parent_node := get_parent()
-	if parent_node == null:
-		return false
-	var sibling_count := parent_node.get_child_count()
-	if sibling_count >= TRAIL_PARTICLE_SOFT_CAP:
-		return false
-	if team == "enemy" and sibling_count >= ENEMY_TRAIL_PARTICLE_SOFT_CAP:
-		return false
-	return true
 
 func _get_shape_scale(size_scale: float, streak_scale: float) -> Vector2:
 	match projectile_shape:
@@ -397,7 +366,7 @@ func _get_shape_scale(size_scale: float, streak_scale: float) -> Vector2:
 		_:
 			return Vector2(_base_visual_scale.x * 1.18 * size_scale * streak_scale, _base_visual_scale.y * 1.18 * size_scale)
 
-func _build_shape_polygon(shape: String) -> PackedVector2Array:
+static func build_shape_polygon(shape: String) -> PackedVector2Array:
 	match shape:
 		"lance":
 			return PackedVector2Array([Vector2(10.0, 0.0), Vector2(1.5, 5.0), Vector2(-8.0, 3.0), Vector2(-8.0, -3.0), Vector2(1.5, -5.0)])
@@ -408,15 +377,15 @@ func _build_shape_polygon(shape: String) -> PackedVector2Array:
 		"blob":
 			return PackedVector2Array([Vector2(7.0, -1.0), Vector2(3.0, 6.0), Vector2(-5.5, 5.0), Vector2(-8.0, -1.0), Vector2(-2.0, -6.5), Vector2(5.0, -5.0)])
 		"bomb":
-			return _build_orb_polygon(7.0, 10)
+			return build_orb_polygon(7.0, 10)
 		"large_orb", "ember_orb":
-			return _build_orb_polygon(7.0, 10)
+			return build_orb_polygon(7.0, 10)
 		"small_orb":
-			return _build_orb_polygon(5.2, 8)
+			return build_orb_polygon(5.2, 8)
 		_:
-			return _build_orb_polygon(6.0)
+			return build_orb_polygon(6.0)
 
-func _build_orb_polygon(radius: float, point_count: int = 8) -> PackedVector2Array:
+static func build_orb_polygon(radius: float, point_count: int = 8) -> PackedVector2Array:
 	var points := PackedVector2Array()
 	for index in range(point_count):
 		var angle := TAU * float(index) / float(point_count)

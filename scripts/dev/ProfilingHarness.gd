@@ -8,6 +8,7 @@ extends Node2D
 
 const EnemyScene := preload("res://scenes/enemies/Enemy.tscn")
 const ProjectileScene := preload("res://scenes/weapons/Projectile.tscn")
+const ProjectileRendererData := preload("res://scripts/weapons/ProjectileRenderer.gd")
 const MineFieldModifierScene := preload("res://scripts/modifiers/MineFieldModifier.gd")
 
 const ARENA_SIZE := Vector2(4800.0, 2700.0)
@@ -25,6 +26,7 @@ const INCLUDE_MINEFIELD := false
 
 var _enemies_container: Node2D
 var _projectiles_container: Node2D
+var _projectile_renderer = null
 var _targets: Array = []
 var _enemies: Array = []
 
@@ -54,6 +56,9 @@ func _ready() -> void:
 	add_child(_enemies_container)
 	_projectiles_container = Node2D.new()
 	add_child(_projectiles_container)
+	_projectile_renderer = ProjectileRendererData.new()
+	_projectile_renderer.set_projectile_container(_projectiles_container)
+	_projectiles_container.add_child(_projectile_renderer)
 	for i in range(2):
 		var t := ProfTarget.new()
 		t.global_position = ARENA_CENTER + Vector2(randf_range(-500.0, 500.0), randf_range(-300.0, 300.0))
@@ -168,7 +173,7 @@ func _prune_dead() -> void:
 func _count_live(container: Node) -> int:
 	var n := 0
 	for c in container.get_children():
-		if is_instance_valid(c):
+		if is_instance_valid(c) and c.has_method("is_projectile_active") and c.is_projectile_active():
 			n += 1
 	return n
 

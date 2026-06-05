@@ -4,10 +4,10 @@ Single self-contained build doc for Round 11. Built collaboratively, point by po
 `v3/main` in `D:\GameDev\Project_Twin_stick` (main checkout, no new worktrees). Do not commit unless
 asked. **Round 10 (`b8ae383`) is committed/pushed and is the baseline.**
 
-> STATUS: **DESIGN COMPLETE.** Clusters: arena shrink + 2P camera, map-gen differentiation,
+> STATUS: **IMPLEMENTED + TOOL-VALIDATED; MANUAL PLAYTEST PENDING.** Clusters: arena shrink + 2P camera, map-gen differentiation,
 > Encounter Builder HUD, boss telegraph verify + off-screen indicator, UI text-trim, and the
 > **performance cluster** (MultiMesh projectiles + drop trails + caps, Perf Runner-driven).
-> **9 build slices.** Ready to implement as a Codex build spec. (VFX-throttle readability tuning →
+> **9 build slices implemented.** (VFX-throttle readability tuning →
 > playtest; MultiMesh-enemies → only if the projectile pass doesn't clear the ceiling.)
 
 ## Findings
@@ -207,4 +207,18 @@ against live code**. Build in this order:
 > the trail-drop + arena/camera changes.
 
 **Deferred:** MultiMesh **enemies** — only if projectiles alone don't clear the ceiling. Round 10
-(`b8ae383`) is the committed baseline; all Round-11 work above is unbuilt spec.
+(`b8ae383`) was the committed baseline; Round 11 is now implemented locally and awaiting manual playtest.
+
+---
+
+## Implementation Results
+
+- Plan committed first as `bd705cb Add playtest round 11 plan`.
+- Implemented all 9 build slices.
+- No caps were changed; the cap step stayed measure/report-only.
+- Deferred items remain deferred: VFX-throttle tuning and MultiMesh enemies.
+- Validation passed:
+  - headless parse
+  - headless main-scene boot with `--quit-after 1`
+  - `entity_ramp`: at `200 enemies + 200 projectiles`, `50.4 avg FPS`, `261 draw calls`
+  - `boss:pulsar --players=2 --build=heavy`: `643.4 avg FPS`, `625 min FPS`, `94 draw calls`

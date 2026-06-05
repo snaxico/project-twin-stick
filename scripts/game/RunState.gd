@@ -656,7 +656,52 @@ func _assign_modifiers_to_map(rows: Array) -> void:
 			var node: Dictionary = row[node_index]
 			node["modifiers"] = _roll_modifiers_for_node(node)
 			row[node_index] = node
+		_ensure_route_options_differ(row)
 		rows[row_index] = row
+
+func _ensure_route_options_differ(row: Array) -> void:
+	var seen_signatures: Dictionary = {}
+	for node_index in range(row.size()):
+		if not (row[node_index] is Dictionary):
+			continue
+		var node: Dictionary = row[node_index]
+		var signature := _build_route_option_signature(node)
+		if not seen_signatures.has(signature):
+			seen_signatures[signature] = true
+			continue
+		var replacement_modifiers := _build_distinct_modifier_load(node, seen_signatures)
+		if not replacement_modifiers.is_empty():
+			node["modifiers"] = replacement_modifiers
+			row[node_index] = node
+			seen_signatures[_build_route_option_signature(node)] = true
+
+func _build_route_option_signature(node: Dictionary) -> String:
+	var enemy_pool: Array = (node.get("enemy_pool", []) as Array).duplicate()
+	enemy_pool.sort()
+	var modifiers: Array = (node.get("modifiers", []) as Array).duplicate()
+	modifiers.sort()
+	return "%s|%s|%s" % [
+		str(node.get("room_type", "combat")),
+		",".join(PackedStringArray(enemy_pool)),
+		",".join(PackedStringArray(modifiers)),
+	]
+
+func _build_distinct_modifier_load(node: Dictionary, seen_signatures: Dictionary) -> Array:
+	var base_modifiers: Array = (node.get("modifiers", []) as Array).duplicate()
+	var candidate_ids := _get_modifier_ids_by_category("minor")
+	candidate_ids.append_array(_get_modifier_ids_by_category("major"))
+	candidate_ids.sort()
+	for modifier_id in candidate_ids:
+		if base_modifiers.has(modifier_id):
+			continue
+		var candidate_modifiers := base_modifiers.duplicate()
+		candidate_modifiers.append(modifier_id)
+		var candidate_node := node.duplicate(true)
+		candidate_node["modifiers"] = candidate_modifiers
+		var signature := _build_route_option_signature(candidate_node)
+		if not seen_signatures.has(signature):
+			return candidate_modifiers
+	return []
 
 func _roll_modifiers_for_node(node: Dictionary) -> Array:
 	var room_type := str(node.get("room_type", "combat"))

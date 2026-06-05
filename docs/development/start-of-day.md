@@ -22,9 +22,9 @@ Read this first to restore project context quickly, then read `current-state.md`
 - Same-screen local co-op twin-stick roguelite prototype in Godot `4.6.2`.
 - Current target is the active `1-2` player V3 runtime.
 - The live runtime now follows the `Feature Roadmap V3` redesign captured in `current-state.md`.
-- Current local runtime includes the round-10 implementation on top of the round-9 Mutation-to-Weapon system rework.
-- Current focus is manual round-10 validation, especially route cards, room-end freeze, Hive pressure, boss windups/tells, rare pity, Minefield stacking, audio fatigue, debug gating/overlay, starting weapon selection, and 2P camera feel.
-- **Active patch plan:** `docs/development/playtest-round-10-plan.md` has been implemented locally and awaits playtest approval; do not treat it as fully stable until the manual playtest passes.
+- Current local runtime includes the round-11 implementation on top of the round-10 polish/perf baseline and round-9 Mutation-to-Weapon system rework.
+- Current focus is manual round-11 validation, especially 2P camera/arena feel, map density, boss off-screen indicator, Encounter Builder completeness, UI text density, and Pulsar/projectile performance.
+- **Active patch plan:** `docs/development/playtest-round-11-plan.md` has been implemented locally and awaits playtest approval; do not treat it as fully stable until the manual playtest passes.
 - **Perf Runner** (`scripts/dev/PerfRunner.gd`, committed) profiles any scenario unattended (`--profile=boss:<id>|room:<type>|entity_ramp`). Known ~200-entity FPS ceiling is parked for a dedicated perf round.
 - Shipped round plans/validations now live in `docs/archive/`; `history/` is the canonical change log.
 
@@ -120,6 +120,15 @@ Read this first to restore project context quickly, then read `current-state.md`
   - Scanline sweeps are capped/spaced out with wider gaps
   - starting weapon selection is in setup/debug launch
   - debug menu is available only in debug builds or `--debug-menu`; in-room overlay toggles with `F4`
+- Current round-11 state:
+  - arena size is now `3000x1700`
+  - shared camera zoom is `0.60-0.80` with padding unchanged
+  - route cards are guarded against identical room/enemy/modifier signatures
+  - in-room debug overlay includes the full enemy/elite/boss spawn roster and a live Player 1 weapon selector
+  - boss rooms show an edge indicator when the active boss is off-screen
+  - reward descriptions are one-line ellipsized and loadout ability cards are name-only
+  - projectile visuals use `ProjectileRenderer.gd` MultiMesh batches keyed by `projectile_shape`
+  - per-projectile `Visual` / `Outline` drawing and `GPUParticles2D` projectile trails are disabled
 - Current live progression loop:
   - enemy kills feed one shared XP bar
   - level-ups bank room-end pick rounds
@@ -142,7 +151,13 @@ Read this first to restore project context quickly, then read `current-state.md`
 
 - Preserve the approved V3 core loop.
 - Favor validation, tuning, and readability over adding more systems.
-- Validate the current round-9 local build in live play:
+- Validate the current round-11 local build in live play:
+  - arena shrink + shared camera feel in `1P` and `2P`
+  - boss off-screen indicator readability
+  - Encounter Builder full spawn list and live weapon selector
+  - loadout/reward text density after truncation
+  - route choice differentiation
+  - real-room Pulsar/projectile performance after MultiMesh projectile rendering
   - shared XP and room-end pick cadence
   - structured map flow pacing
   - endless scaling past room `20`
@@ -230,6 +245,9 @@ Read this first to restore project context quickly, then read `current-state.md`
   - live projectile behavior
   - rare effect delivery
   - pooled activation/deactivation
+- `scripts/weapons/ProjectileRenderer.gd`:
+  - batched MultiMesh projectile visuals keyed by `projectile_shape`
+  - used by both `CoopManager` and `ProfilingHarness`
 - `scripts/weapons/FireTrailZone.gd`:
   - Fire Bullets impact pools
   - team-dependent distance-check damage
@@ -261,7 +279,7 @@ Read this first to restore project context quickly, then read `current-state.md`
 
 - `docs/development/playtest-round-6-plan.md` is the round-6 implementation plan.
 - `docs/development/playtest-round-6-validation.md` is the active manual validation checklist for this patch.
-- Treat the round-6 patch as historical context; the current stable branch state is Round 9.
+- Treat the round-6 patch as historical context; the current branch state is now Round 11.
 - Heavy boss add-waves are enabled in normal boss rooms and capped at `25` non-boss enemies including pending spawns.
 - Live playtest feedback after the patch reported a massive performance improvement.
 - B3 Pulsar deflector-spawned adds are still open because the plan does not specify the desired Pulsar deflector count/pattern.
@@ -276,7 +294,7 @@ Read this first to restore project context quickly, then read `current-state.md`
 ## Current Round-7 Build Notes
 
 - `docs/development/playtest-round-7-plan.md` is the round-7 implementation and validation guide.
-- Treat the round-7 patch as historical context; the current stable branch state is Round 9.
+- Treat the round-7 patch as historical context; the current branch state is now Round 11.
 - A8 fire-rate bump remains deferred by plan.
 - Expansion ability rares remain deferred; only the two pilot rares are live.
 - Manual validation still needs to cover `1P` and `2P` feel/performance with DebugOverlay F3.
@@ -285,7 +303,7 @@ Read this first to restore project context quickly, then read `current-state.md`
 ## Current Round-8 Build Notes
 
 - `docs/development/playtest-round-8-plan.md` is the round-8 implementation and validation guide.
-- Treat the round-8 patch as historical context; the current stable branch state is Round 9.
+- Treat the round-8 patch as historical context; the current branch state is now Round 11.
 - Starting Rifle is now `20` damage / `6.5` shots/sec; projectile speed and range are unchanged.
 - Cadence ramp uses normalized progress:
   - structured depth over last combat-row depth
@@ -377,5 +395,5 @@ Canonical guidelines live in `docs/process/solo-dev-rules.md`. Key rules:
   - `current-state.md`
   - latest file in `docs/development/history/`
   - `docs/design/game-direction.md` if the task touches direction, economy, weapons, or upgrades
-  - the active `docs/development/playtest-round-10-plan.md` if implementing the current patch
+  - the active `docs/development/playtest-round-11-plan.md` if implementing or validating the current patch
   - any process doc that the task touches

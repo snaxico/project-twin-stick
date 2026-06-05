@@ -432,9 +432,13 @@ func _refresh_home_panel() -> void:
 	]
 
 func _focus_home_panel() -> void:
+	if not is_inside_tree():
+		return
 	home_play_button.grab_focus()
 
 func _focus_menu_panel() -> void:
+	if not is_inside_tree():
+		return
 	if _setup_mode == "encounter_builder":
 		debug_room_type_option.grab_focus()
 	else:
@@ -1144,7 +1148,7 @@ func _build_ability_rows() -> void:
 		header.add_theme_font_size_override("font_size", 17)
 		container.add_child(header)
 		var helper := Label.new()
-		helper.text = "Pick one OFF for LT and one DEF for RT."
+		helper.text = "Pick OFF + DEF."
 		helper.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		helper.modulate = Color(0.82, 0.88, 0.96, 0.82)
 		container.add_child(helper)
@@ -1183,10 +1187,7 @@ func _build_ability_rows() -> void:
 			card.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 			card.icon = null
 			var ability_name := str(ability_definition.get("name", _format_name(ability_id)))
-			var card_text := "%s - %s" % [
-				ability_name,
-				_shorten_text(str(ability_definition.get("description", "")), 40),
-			]
+			var card_text := ability_name
 			card.text = card_text
 			card.set_meta("ability_name", ability_name)
 			card.set_meta("card_text", card_text)
