@@ -19,6 +19,7 @@ config/features=PackedStringArray("4.6")
 ProfileState="*res://scripts/meta/ProfileState.gd"
 RunState="*res://scripts/game/RunState.gd"
 DebugOverlay="*res://scripts/dev/DebugOverlay.gd"
+PerfRunner="*res://scripts/dev/PerfRunner.gd"
 
 [display]
 

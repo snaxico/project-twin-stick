@@ -27,6 +27,7 @@ var rooms_completed: int = 0
 var run_outcome: String = "in_progress"
 var run_mode: String = "structured"
 var debug_run_setup: Dictionary = {}
+var debug_profiling: bool = false  # dev: PerfRunner sets this so players are immortal during a profile run
 var player_inventories: Array = []
 var xp_current: int = 0
 var xp_level: int = 0

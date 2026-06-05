@@ -273,6 +273,8 @@ func heal(amount: int) -> bool:
 func apply_damage(amount: int) -> void:
 	if _is_downed or amount <= 0:
 		return
+	if RunState.debug_profiling:
+		return
 	var now := _current_time_seconds()
 	if _is_damage_immune(now):
 		return
