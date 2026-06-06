@@ -162,11 +162,48 @@ func _build() -> void:
 		cards.add_theme_constant_override("separation", 10)
 		player_panel.add_child(cards)
 
+		var detail_panel := PanelContainer.new()
+		detail_panel.custom_minimum_size = Vector2(0.0, 118.0)
+		var detail_style := StyleBoxFlat.new()
+		detail_style.bg_color = Color(0.055, 0.07, 0.1, 0.94)
+		detail_style.border_color = Color(0.26, 0.34, 0.44, 0.76)
+		detail_style.set_border_width_all(1)
+		detail_style.corner_radius_top_left = 8
+		detail_style.corner_radius_top_right = 8
+		detail_style.corner_radius_bottom_left = 8
+		detail_style.corner_radius_bottom_right = 8
+		detail_panel.add_theme_stylebox_override("panel", detail_style)
+		player_panel.add_child(detail_panel)
+		var detail_margin := MarginContainer.new()
+		detail_margin.add_theme_constant_override("margin_left", 12)
+		detail_margin.add_theme_constant_override("margin_top", 10)
+		detail_margin.add_theme_constant_override("margin_right", 12)
+		detail_margin.add_theme_constant_override("margin_bottom", 10)
+		detail_panel.add_child(detail_margin)
+		var detail_layout := VBoxContainer.new()
+		detail_layout.add_theme_constant_override("separation", 5)
+		detail_margin.add_child(detail_layout)
+		var detail_title := Label.new()
+		detail_title.add_theme_font_size_override("font_size", 15)
+		detail_layout.add_child(detail_title)
+		var detail_meta := Label.new()
+		detail_meta.add_theme_font_size_override("font_size", 11)
+		detail_meta.modulate = Color(0.82, 0.9, 1.0, 0.72)
+		detail_layout.add_child(detail_meta)
+		var detail_description := Label.new()
+		detail_description.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		detail_description.add_theme_font_size_override("font_size", 12)
+		detail_description.modulate = Color(0.9, 0.93, 1.0, 0.9)
+		detail_layout.add_child(detail_description)
+
 		_player_views.append({
 			"title": player_title,
 			"state": state_label,
 			"inventory_flow": inventory_flow,
 			"cards": cards,
+			"detail_title": detail_title,
+			"detail_meta": detail_meta,
+			"detail_description": detail_description,
 		})
 
 func _refresh_panels() -> void:
@@ -194,19 +231,20 @@ func _refresh_panels() -> void:
 		var options: Array = _options_by_player[player_index]
 		for option_index in range(options.size()):
 			cards.add_child(_build_card(player_index, option_index))
+		_refresh_detail_panel(view, player_index)
 
 func _build_card(player_index: int, option_index: int) -> Control:
 	var option: Dictionary = (_options_by_player[player_index] as Array)[option_index] as Dictionary
 	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(132.0, 184.0)
+	panel.custom_minimum_size = Vector2(132.0, 144.0)
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color(0.08, 0.1, 0.14, 0.94)
 	style.border_color = Color(0.38, 0.44, 0.52, 0.46)
 	style.set_border_width_all(1)
-	style.corner_radius_top_left = 10
-	style.corner_radius_top_right = 10
-	style.corner_radius_bottom_left = 10
-	style.corner_radius_bottom_right = 10
+	style.corner_radius_top_left = 8
+	style.corner_radius_top_right = 8
+	style.corner_radius_bottom_left = 8
+	style.corner_radius_bottom_right = 8
 	var is_cursor := option_index == int(_selected_indices[player_index]) and not bool(_confirmed[player_index])
 	var is_locked := str(_locked_selection_ids[player_index]) == str(option.get("id", ""))
 	var is_rare := str(option.get("rarity", "common")) == "rare"
@@ -266,17 +304,35 @@ func _build_card(player_index: int, option_index: int) -> Control:
 		level_label.modulate = Color(0.86, 0.94, 1.0, 0.84)
 		layout.add_child(level_label)
 
-	var description := Label.new()
-	description.text = str(option.get("description", ""))
-	description.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	description.autowrap_mode = TextServer.AUTOWRAP_OFF
-	description.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	description.max_lines_visible = 1
-	description.add_theme_font_size_override("font_size", 11)
-	description.modulate = Color(0.82, 0.86, 0.94, 0.92)
-	layout.add_child(description)
-
 	return panel
+
+func _refresh_detail_panel(view: Dictionary, player_index: int) -> void:
+	var detail_title: Label = view["detail_title"]
+	var detail_meta: Label = view["detail_meta"]
+	var detail_description: Label = view["detail_description"]
+	var options: Array = _options_by_player[player_index]
+	if options.is_empty():
+		detail_title.text = "No Upgrade"
+		detail_meta.text = ""
+		detail_description.text = ""
+		return
+	var selected_index := clampi(int(_selected_indices[player_index]), 0, options.size() - 1)
+	if bool(_confirmed[player_index]) and not str(_locked_selection_ids[player_index]).is_empty():
+		for index in range(options.size()):
+			if str((options[index] as Dictionary).get("id", "")) == str(_locked_selection_ids[player_index]):
+				selected_index = index
+				break
+	var option: Dictionary = options[selected_index] as Dictionary
+	var group := str(option.get("group", "attribute"))
+	var is_rare := str(option.get("rarity", "common")) == "rare"
+	detail_title.text = str(option.get("name", "Upgrade"))
+	detail_title.modulate = Color(1.0, 0.86, 0.3, 0.98) if is_rare else Color(0.92, 0.98, 1.0, 0.96)
+	var meta_parts: Array = ["Rare" if is_rare else "Common", group.capitalize()]
+	if not is_rare and group != "weapon":
+		var current_level := _get_current_mutation_level(player_index, str(option.get("id", "")))
+		meta_parts.append("Lv %d -> Lv %d" % [current_level, current_level + 1])
+	detail_meta.text = " | ".join(meta_parts)
+	detail_description.text = str(option.get("description", ""))
 
 func _populate_inventory_flow(flow: FlowContainer, player_index: int) -> void:
 	var entries := _build_inventory_entries(player_index)

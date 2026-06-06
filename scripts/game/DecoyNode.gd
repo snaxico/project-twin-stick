@@ -8,6 +8,8 @@ var current_health := 120
 var tint := Color(0.8, 0.9, 1.0, 0.9)
 var death_blast_damage := 0
 var death_blast_radius := 0.0
+var taunt_radius := 700.0
+var invincible := true
 var _alive := true
 
 func configure(duration: float, color: Color, health_amount: int, stats: Dictionary = {}) -> void:
@@ -16,8 +18,11 @@ func configure(duration: float, color: Color, health_amount: int, stats: Diction
 	current_health = health_amount
 	death_blast_damage = int(stats.get("death_blast_damage", 0))
 	death_blast_radius = float(stats.get("death_blast_radius", 0.0))
+	taunt_radius = float(stats.get("taunt_radius", taunt_radius))
+	invincible = not stats.has("decoy_health") or bool(stats.get("invincible", false))
 	_alive = true
 	add_to_group("player_target")
+	add_to_group("decoy_taunt")
 	set_process(true)
 	queue_redraw()
 
@@ -34,8 +39,16 @@ func is_targetable() -> bool:
 func is_alive() -> bool:
 	return _alive
 
+func is_taunting() -> bool:
+	return _alive
+
+func get_taunt_radius() -> float:
+	return taunt_radius
+
 func apply_damage(amount: int) -> void:
 	if not _alive:
+		return
+	if invincible:
 		return
 	current_health = max(current_health - amount, 0)
 	if current_health <= 0:
@@ -49,6 +62,8 @@ func _expire() -> void:
 	_trigger_death_blast()
 	if is_in_group("player_target"):
 		remove_from_group("player_target")
+	if is_in_group("decoy_taunt"):
+		remove_from_group("decoy_taunt")
 	queue_free()
 
 func _trigger_death_blast() -> void:

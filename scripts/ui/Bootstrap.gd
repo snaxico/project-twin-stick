@@ -5,6 +5,7 @@ const AbilityRegistryData = preload("res://scripts/game/AbilityRegistry.gd")
 const HudPaletteData = preload("res://scripts/game/HudPalette.gd")
 const IconFactoryData = preload("res://scripts/ui/IconFactory.gd")
 const AudioBusConfigData = preload("res://scripts/juice/AudioBusConfig.gd")
+const EncyclopediaUIData = preload("res://scripts/ui/EncyclopediaUI.gd")
 const RUN_FLOW_SCENE = preload("res://scenes/ui/RunFlow.tscn")
 const MUTATIONS_DATA_PATH := "res://data/mutations.json"
 const MODIFIERS_DATA_PATH := "res://data/modifiers.json"
@@ -36,6 +37,7 @@ const MENU_BINDING_ACTIONS := [
 @onready var home_settings_button: Button = $HomePanel/MarginContainer/HomeLayout/SettingsButton
 @onready var home_debug_button: Button = $HomePanel/MarginContainer/HomeLayout/DebugButton
 @onready var menu_panel: Panel = $MenuPanel
+@onready var menu_scroll: ScrollContainer = $MenuPanel/MarginContainer/MenuScroll
 @onready var menu_layout: VBoxContainer = $MenuPanel/MarginContainer/MenuScroll/MenuLayout
 @onready var setup_title_label: Label = $MenuPanel/MarginContainer/MenuScroll/MenuLayout/Title
 @onready var setup_subtitle_label: Label = $MenuPanel/MarginContainer/MenuScroll/MenuLayout/Subtitle
@@ -95,8 +97,7 @@ var _modifier_definitions: Array = []
 var _debug_modifier_toggles: Array = []
 var _debug_perf_option: OptionButton = null
 var _debug_perf_button: Button = null
-var _debug_start_level_spinbox: SpinBox = null
-var _debug_start_xp_spinbox: SpinBox = null
+var _home_encyclopedia_button: Button = null
 var _setup_mode: String = "play"
 var _ability_registry = AbilityRegistryData.new()
 var _weapon_rows: Array = []
@@ -105,6 +106,7 @@ var _settings_binding_buttons: Dictionary = {}
 var _settings_return_panel: Control = null
 var _settings_vsync_check: CheckBox = null
 var _settings_audio_sliders: Dictionary = {}
+var _loadout_columns: HBoxContainer = null
 var _pending_binding_action := ""
 var _pending_binding_kind := ""
 var _pending_binding_button: Button = null
@@ -121,14 +123,15 @@ func _ready() -> void:
 	_load_mutation_definitions()
 	_load_modifier_definitions()
 	_populate_menu()
+	_configure_setup_panel_layout()
 	home_play_button.pressed.connect(_on_home_play_button_pressed)
 	home_settings_button.pressed.connect(_open_settings_from_home)
 	home_debug_button.pressed.connect(_on_home_debug_button_pressed)
+	_add_home_encyclopedia_button()
 	player_count_option.item_selected.connect(_refresh_menu_state)
 	run_mode_option.item_selected.connect(_refresh_menu_state)
 	debug_room_type_option.item_selected.connect(_refresh_menu_state)
 	debug_room_objective_option.item_selected.connect(_refresh_menu_state)
-	debug_step_spinbox.value_changed.connect(_on_debug_step_changed)
 	setup_back_button.pressed.connect(_on_setup_back_button_pressed)
 	settings_button.pressed.connect(_open_settings_from_setup)
 	settings_back_button.pressed.connect(_on_settings_back_pressed)
@@ -146,6 +149,8 @@ func _ready() -> void:
 	debug_room_modifiers_row.visible = false
 	debug_modifier_row.visible = false
 	debug_layout_row.visible = false
+	debug_primary_row.visible = false
+	debug_step_row.visible = false
 	settings_player_3_row.visible = false
 	settings_player_4_row.visible = false
 	_configure_settings_panel()
@@ -215,8 +220,35 @@ func _populate_menu() -> void:
 	debug_step_spinbox.max_value = 12
 	debug_step_spinbox.step = 1
 	debug_step_spinbox.value = 0
-	_build_ability_rows()
 	_build_weapon_rows()
+	_build_ability_rows()
+
+func _configure_setup_panel_layout() -> void:
+	menu_panel.anchor_left = 0.0
+	menu_panel.anchor_top = 0.0
+	menu_panel.anchor_right = 1.0
+	menu_panel.anchor_bottom = 1.0
+	menu_panel.offset_left = 30.0
+	menu_panel.offset_top = 18.0
+	menu_panel.offset_right = -30.0
+	menu_panel.offset_bottom = -18.0
+	menu_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	menu_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	menu_layout.add_theme_constant_override("separation", 7)
+	setup_title_label.add_theme_font_size_override("font_size", 22)
+	setup_subtitle_label.add_theme_font_size_override("font_size", 12)
+	status_label.add_theme_font_size_override("font_size", 11)
+	status_label.custom_minimum_size = Vector2.ZERO
+
+func _add_home_encyclopedia_button() -> void:
+	if _home_encyclopedia_button != null and is_instance_valid(_home_encyclopedia_button):
+		return
+	_home_encyclopedia_button = Button.new()
+	_home_encyclopedia_button.name = "EncyclopediaButton"
+	_home_encyclopedia_button.text = "Encyclopedia"
+	_home_encyclopedia_button.pressed.connect(_open_encyclopedia_overlay)
+	home_debug_button.get_parent().add_child(_home_encyclopedia_button)
+	home_debug_button.get_parent().move_child(_home_encyclopedia_button, home_settings_button.get_index())
 
 func _populate_control_option(option_button: OptionButton, default_value: String) -> void:
 	option_button.clear()
@@ -248,20 +280,20 @@ func _refresh_menu_state(_unused: Variant = null) -> void:
 	var player_count := get_selected_player_count()
 	run_mode_row.visible = not encounter_builder_mode
 	player_2_control_option.get_parent().visible = player_count > 1
-	debug_primary_row.visible = encounter_builder_mode
+	debug_primary_row.visible = false
 	debug_secondary_row.visible = encounter_builder_mode and str(debug_room_type_option.get_selected_metadata()) == "boss"
 	debug_room_type_row.visible = encounter_builder_mode
 	debug_room_objective_row.visible = encounter_builder_mode and str(debug_room_type_option.get_selected_metadata()) == "combat"
-	debug_step_row.visible = encounter_builder_mode
+	debug_step_row.visible = false
 	debug_room_modifiers_row.visible = encounter_builder_mode
-	debug_modifier_row.visible = encounter_builder_mode
+	debug_modifier_row.visible = false
 	debug_layout_row.visible = encounter_builder_mode and str(debug_room_type_option.get_selected_metadata()) == "combat"
 	var perf_row := menu_layout.get_node_or_null("PerfScenarioRow")
 	if perf_row != null:
 		perf_row.visible = encounter_builder_mode and _is_debug_menu_enabled()
 	var launch_cheat_row := menu_layout.get_node_or_null("LaunchCheatRow")
 	if launch_cheat_row != null:
-		launch_cheat_row.visible = encounter_builder_mode and _is_debug_menu_enabled()
+		launch_cheat_row.visible = false
 	settings_player_2_row.visible = false
 	setup_title_label.text = "Encounter Builder" if encounter_builder_mode else "Run Setup"
 	setup_subtitle_label.text = "Pick one room, one objective, and iterate fast." if encounter_builder_mode else "Choose players, controls, and run mode before the run starts."
@@ -279,14 +311,7 @@ func _refresh_menu_state(_unused: Variant = null) -> void:
 		if debug_layout_row.visible:
 			summary_lines.append("Enemy Mix: %s" % debug_layout_option.get_item_text(debug_layout_option.selected))
 		summary_lines.append("Room Modifiers: %d" % _get_selected_room_modifiers().size())
-		var selected_mutations: Array = _get_selected_starting_mutations()
-		summary_lines.append("Starting Mutations: %d" % selected_mutations.size())
-		summary_lines.append("Starting Level/XP: %d / %d" % [_get_debug_start_level(), _get_debug_start_xp()])
-		summary_lines.append("Depth: %d" % int(debug_step_spinbox.value))
-	for player_index in range(player_count):
-		var selected_abilities := _get_player_ability_pair(player_index)
-		summary_lines.append("P%d Weapon: %s" % [player_index + 1, _format_name(_get_player_weapon_selection(player_index))])
-		summary_lines.append("P%d Abilities: LT OFF %s / RT DEF %s" % [player_index + 1, _format_name(selected_abilities[0]), _format_name(selected_abilities[1])])
+	summary_lines.append("Pick each player's weapon and LT/RT abilities, then start.")
 	status_label.text = "\n".join(summary_lines)
 	start_button.text = "Launch Encounter" if encounter_builder_mode else "Start Run"
 	for row_index in range(_ability_rows.size()):
@@ -299,6 +324,7 @@ func _refresh_menu_state(_unused: Variant = null) -> void:
 		var container: Control = row_data["container"]
 		container.visible = row_index < player_count
 		_sync_weapon_row_buttons(row_index)
+	_sync_loadout_columns(player_count)
 	start_button.disabled = not _can_start_run(player_count)
 	_refresh_home_panel()
 
@@ -309,10 +335,10 @@ func _on_debug_step_changed(_value: float) -> void:
 	_refresh_menu_state()
 
 func _get_debug_start_level() -> int:
-	return int(_debug_start_level_spinbox.value) if _debug_start_level_spinbox != null else 0
+	return 0
 
 func _get_debug_start_xp() -> int:
-	return int(_debug_start_xp_spinbox.value) if _debug_start_xp_spinbox != null else 0
+	return 0
 
 func _on_start_pressed() -> void:
 	_launch_game(_build_player_configs())
@@ -341,22 +367,17 @@ func _build_debug_start_options() -> Dictionary:
 		"primary_profile": "rifle",
 		"secondary_profile": "mixed",
 		"enemy_mix": "mixed",
-		"starting_mutations": [],
 		"player_weapons": _build_player_weapon_selection(),
 		"player_abilities": _build_player_ability_selection(),
 	}
 	if not options["enabled"]:
 		return options
-	options["step_index"] = int(debug_step_spinbox.value)
 	options["room_type"] = str(debug_room_type_option.get_selected_metadata())
 	options["room_objective"] = str(debug_room_objective_option.get_selected_metadata())
 	options["enemy_mix"] = str(debug_layout_option.get_selected_metadata())
 	if str(options["room_type"]) == "boss":
 		options["boss_type"] = str(debug_secondary_option.get_selected_metadata())
 	options["modifiers"] = _get_selected_room_modifiers()
-	options["starting_mutations"] = _get_selected_starting_mutations()
-	options["starting_level"] = _get_debug_start_level()
-	options["starting_xp"] = _get_debug_start_xp()
 	return options
 
 func _launch_game(player_configs: Array) -> void:
@@ -405,6 +426,14 @@ func _open_settings_from_home() -> void:
 
 func _open_settings_from_setup() -> void:
 	_open_settings_panel(menu_panel)
+
+func _open_encyclopedia_overlay() -> void:
+	var existing := get_node_or_null("EncyclopediaUI")
+	if existing != null:
+		existing.queue_free()
+	var encyclopedia := EncyclopediaUIData.new()
+	encyclopedia.name = "EncyclopediaUI"
+	add_child(encyclopedia)
 
 func _open_settings_panel(return_panel: Control) -> void:
 	_set_music_context("menu")
@@ -951,62 +980,11 @@ func _configure_debug_builder_rows() -> void:
 	if debug_room_modifiers_spinbox != null:
 		debug_room_modifiers_spinbox.visible = false
 	_create_modifier_selector()
-	debug_modifier_label.text = "Starting Mutations"
-	debug_modifier_option.visible = false
-	if debug_modifier_row.get_node_or_null("MutationScroll") != null:
-		return
-	var mutation_scroll := ScrollContainer.new()
-	mutation_scroll.name = "MutationScroll"
-	mutation_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	mutation_scroll.custom_minimum_size = Vector2(0.0, 156.0)
-	debug_modifier_row.add_child(mutation_scroll)
-	var mutation_grid := GridContainer.new()
-	mutation_grid.name = "MutationGrid"
-	mutation_grid.columns = 2
-	mutation_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	mutation_grid.add_theme_constant_override("h_separation", 10)
-	mutation_grid.add_theme_constant_override("v_separation", 6)
-	mutation_scroll.add_child(mutation_grid)
 	_debug_mutation_toggles.clear()
-	for mutation in _mutation_definitions:
-		var mutation_id: String = str((mutation as Dictionary).get("id", ""))
-		var mutation_name: String = str((mutation as Dictionary).get("name", mutation_id.capitalize()))
-		var toggle := CheckBox.new()
-		toggle.text = mutation_name
-		toggle.tooltip_text = str((mutation as Dictionary).get("description", ""))
-		toggle.set_meta("mutation_id", mutation_id)
-		toggle.toggled.connect(_on_debug_mutation_toggled)
-		mutation_grid.add_child(toggle)
-		_debug_mutation_toggles.append(toggle)
-	_create_launch_cheat_row()
 	_create_perf_launcher_row()
 
 func _create_launch_cheat_row() -> void:
-	if _debug_start_level_spinbox != null and is_instance_valid(_debug_start_level_spinbox):
-		return
-	var row := HBoxContainer.new()
-	row.name = "LaunchCheatRow"
-	row.add_theme_constant_override("separation", 10)
-	menu_layout.add_child(row)
-	menu_layout.move_child(row, status_label.get_index())
-	var label := Label.new()
-	label.text = "Launch Cheats"
-	label.custom_minimum_size = Vector2(160.0, 0.0)
-	row.add_child(label)
-	_debug_start_level_spinbox = SpinBox.new()
-	_debug_start_level_spinbox.min_value = 0
-	_debug_start_level_spinbox.max_value = 20
-	_debug_start_level_spinbox.step = 1
-	_debug_start_level_spinbox.prefix = "Level "
-	_debug_start_level_spinbox.value_changed.connect(_refresh_menu_state)
-	row.add_child(_debug_start_level_spinbox)
-	_debug_start_xp_spinbox = SpinBox.new()
-	_debug_start_xp_spinbox.min_value = 0
-	_debug_start_xp_spinbox.max_value = 5000
-	_debug_start_xp_spinbox.step = 50
-	_debug_start_xp_spinbox.prefix = "XP "
-	_debug_start_xp_spinbox.value_changed.connect(_refresh_menu_state)
-	row.add_child(_debug_start_xp_spinbox)
+	pass
 
 func _create_perf_launcher_row() -> void:
 	if _debug_perf_option != null and is_instance_valid(_debug_perf_option):
@@ -1044,27 +1022,52 @@ func _on_debug_perf_pressed() -> void:
 	if PerfRunner != null and PerfRunner.has_method("run_from_menu"):
 		PerfRunner.run_from_menu(scenario, get_selected_player_count(), build)
 
+func _ensure_loadout_columns() -> void:
+	if _loadout_columns != null and is_instance_valid(_loadout_columns):
+		return
+	_loadout_columns = HBoxContainer.new()
+	_loadout_columns.name = "LoadoutColumns"
+	_loadout_columns.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_loadout_columns.add_theme_constant_override("separation", 12)
+	menu_layout.add_child(_loadout_columns)
+	menu_layout.move_child(_loadout_columns, status_label.get_index())
+	for player_index in range(2):
+		var column := VBoxContainer.new()
+		column.name = "LoadoutColumnP%d" % (player_index + 1)
+		column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		column.add_theme_constant_override("separation", 6)
+		_loadout_columns.add_child(column)
+
+func _get_loadout_column(player_index: int) -> VBoxContainer:
+	_ensure_loadout_columns()
+	return _loadout_columns.get_child(player_index) as VBoxContainer
+
+func _sync_loadout_columns(player_count: int) -> void:
+	if _loadout_columns == null or not is_instance_valid(_loadout_columns):
+		return
+	for index in range(_loadout_columns.get_child_count()):
+		(_loadout_columns.get_child(index) as Control).visible = index < player_count
+
 func _build_weapon_rows() -> void:
 	if not _weapon_rows.is_empty():
 		return
-	var insert_before := status_label
+	_ensure_loadout_columns()
 	var weapon_defs := RunState.get_weapon_catalog()
 	if weapon_defs.is_empty():
 		weapon_defs = [{"id": "rifle", "name": "Rifle", "description": "Reliable default weapon."}]
 	for player_index in range(2):
 		var container := VBoxContainer.new()
 		container.name = "WeaponRowsP%d" % (player_index + 1)
-		container.add_theme_constant_override("separation", 8)
-		menu_layout.add_child(container)
-		menu_layout.move_child(container, insert_before.get_index())
+		container.add_theme_constant_override("separation", 5)
+		_get_loadout_column(player_index).add_child(container)
 		var header := Label.new()
-		header.text = "Player %d Starting Weapon" % (player_index + 1)
-		header.add_theme_font_size_override("font_size", 17)
+		header.text = "P%d Weapon" % (player_index + 1)
+		header.add_theme_font_size_override("font_size", 13)
 		container.add_child(header)
 		var grid := GridContainer.new()
 		grid.columns = 3
-		grid.add_theme_constant_override("h_separation", 10)
-		grid.add_theme_constant_override("v_separation", 10)
+		grid.add_theme_constant_override("h_separation", 6)
+		grid.add_theme_constant_override("v_separation", 5)
 		container.add_child(grid)
 		var cards: Dictionary = {}
 		for weapon_def in weapon_defs:
@@ -1074,7 +1077,7 @@ func _build_weapon_rows() -> void:
 				continue
 			var card := Button.new()
 			card.toggle_mode = true
-			card.custom_minimum_size = Vector2(0.0, 42.0)
+			card.custom_minimum_size = Vector2(0.0, 30.0)
 			card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			card.alignment = HORIZONTAL_ALIGNMENT_LEFT
 			card.text = str(weapon.get("name", _format_name(weapon_id)))
@@ -1083,7 +1086,8 @@ func _build_weapon_rows() -> void:
 			grid.add_child(card)
 			cards[weapon_id] = card
 		var summary := Label.new()
-		summary.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		summary.add_theme_font_size_override("font_size", 10)
+		summary.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 		container.add_child(summary)
 		_weapon_rows.append({
 			"container": container,
@@ -1128,47 +1132,43 @@ func _sync_weapon_row_buttons(player_index: int) -> void:
 		button.set_pressed_no_signal(weapon_id == selection)
 	var summary: Label = row_data.get("summary", null)
 	if summary != null:
-		summary.text = "Selected weapon: %s" % _format_name(selection)
+		summary.text = "Weapon: %s" % _format_name(selection)
 		summary.modulate = Color(0.84, 0.92, 1.0, 0.92)
 
 func _build_ability_rows() -> void:
 	if not _ability_rows.is_empty():
 		return
-	var insert_before := status_label
+	_ensure_loadout_columns()
 	var ability_defs := _ability_registry.get_all()
 	var default_loadout := _ability_registry.get_default_loadout()
 	for player_index in range(2):
 		var container := VBoxContainer.new()
 		container.name = "AbilityRowsP%d" % (player_index + 1)
-		container.add_theme_constant_override("separation", 10)
-		menu_layout.add_child(container)
-		menu_layout.move_child(container, insert_before.get_index())
+		container.add_theme_constant_override("separation", 5)
+		_get_loadout_column(player_index).add_child(container)
 		var header := Label.new()
-		header.text = "Player %d Abilities" % (player_index + 1)
-		header.add_theme_font_size_override("font_size", 17)
+		header.text = "P%d Abilities" % (player_index + 1)
+		header.add_theme_font_size_override("font_size", 13)
 		container.add_child(header)
-		var helper := Label.new()
-		helper.text = "Pick OFF + DEF."
-		helper.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		helper.modulate = Color(0.82, 0.88, 0.96, 0.82)
-		container.add_child(helper)
 		var off_label := Label.new()
 		off_label.text = "LT / OFF"
+		off_label.add_theme_font_size_override("font_size", 10)
 		off_label.modulate = Color(0.95, 1.0, 0.84, 0.92)
 		container.add_child(off_label)
 		var off_grid := GridContainer.new()
-		off_grid.columns = 2
-		off_grid.add_theme_constant_override("h_separation", 10)
-		off_grid.add_theme_constant_override("v_separation", 10)
+		off_grid.columns = 4
+		off_grid.add_theme_constant_override("h_separation", 6)
+		off_grid.add_theme_constant_override("v_separation", 5)
 		container.add_child(off_grid)
 		var def_label := Label.new()
 		def_label.text = "RT / DEF"
+		def_label.add_theme_font_size_override("font_size", 10)
 		def_label.modulate = Color(0.84, 0.92, 1.0, 0.92)
 		container.add_child(def_label)
 		var def_grid := GridContainer.new()
-		def_grid.columns = 3
-		def_grid.add_theme_constant_override("h_separation", 10)
-		def_grid.add_theme_constant_override("v_separation", 10)
+		def_grid.columns = 5
+		def_grid.add_theme_constant_override("h_separation", 6)
+		def_grid.add_theme_constant_override("v_separation", 5)
 		container.add_child(def_grid)
 		var cards: Dictionary = {}
 		for ability_def in ability_defs:
@@ -1181,10 +1181,10 @@ func _build_ability_rows() -> void:
 				continue
 			var card := Button.new()
 			card.toggle_mode = true
-			card.custom_minimum_size = Vector2(0.0, 44.0)
+			card.custom_minimum_size = Vector2(0.0, 30.0)
 			card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			card.alignment = HORIZONTAL_ALIGNMENT_LEFT
-			card.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			card.autowrap_mode = TextServer.AUTOWRAP_OFF
 			card.icon = null
 			var ability_name := str(ability_definition.get("name", _format_name(ability_id)))
 			var card_text := ability_name
@@ -1200,7 +1200,8 @@ func _build_ability_rows() -> void:
 				def_grid.add_child(card)
 			cards[ability_id] = card
 		var summary := Label.new()
-		summary.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		summary.add_theme_font_size_override("font_size", 10)
+		summary.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 		container.add_child(summary)
 		_ability_rows.append({
 			"container": container,
@@ -1267,23 +1268,21 @@ func _sync_ability_row_buttons(player_index: int) -> void:
 	var summary: Label = row_data.get("summary", null)
 	if summary != null:
 		if not off_selection.is_empty() and not def_selection.is_empty():
-			summary.text = "Selected: LT OFF %s  |  RT DEF %s\nOFF: %s\nDEF: %s" % [
+			summary.text = "LT %s  |  RT %s" % [
 				_format_name(str(selected_pair[0])),
 				_format_name(str(selected_pair[1])),
-				_get_ability_description(str(selected_pair[0])),
-				_get_ability_description(str(selected_pair[1])),
 			]
 			summary.modulate = Color(0.84, 0.92, 1.0, 0.92)
 		else:
-			summary.text = "Select one OFF and one DEF ability to finish the loadout."
+			summary.text = "Select one OFF and one DEF."
 			summary.modulate = Color(1.0, 0.8, 0.42, 0.96)
 
 func _format_ability_card_text(button: Button, slot_index: int) -> String:
 	var card_text := str(button.get_meta("card_text", button.text))
 	if slot_index == 0:
-		return "LT OFF - %s" % card_text
+		return "LT - %s" % card_text
 	if slot_index == 1:
-		return "RT DEF - %s" % card_text
+		return "RT - %s" % card_text
 	return card_text
 
 func _get_ability_description(ability_id: String) -> String:
@@ -1295,11 +1294,11 @@ func _style_ability_card(button: Button, slot_index: int, player_tint: Color) ->
 	normal.bg_color = Color(0.07, 0.09, 0.13, 0.96)
 	normal.border_color = Color(0.24, 0.3, 0.4, 0.72)
 	normal.set_border_width_all(1)
-	normal.corner_radius_top_left = 10
-	normal.corner_radius_top_right = 10
-	normal.corner_radius_bottom_left = 10
-	normal.corner_radius_bottom_right = 10
-	normal.set_content_margin_all(10)
+	normal.corner_radius_top_left = 8
+	normal.corner_radius_top_right = 8
+	normal.corner_radius_bottom_left = 8
+	normal.corner_radius_bottom_right = 8
+	normal.set_content_margin_all(5)
 	var hover := normal.duplicate()
 	hover.border_color = Color(0.42, 0.5, 0.64, 0.9)
 	var pressed := normal.duplicate()

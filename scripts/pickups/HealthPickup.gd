@@ -6,7 +6,7 @@ const MAGNET_ACCELERATION := 1200.0
 const MAGNET_MAX_SPEED := 600.0
 const COLLECT_RADIUS := 48.0
 
-var heal_amount: int = 5
+var heal_amount: int = 10
 var magnet_speed: float = 0.0
 var _collected := false
 

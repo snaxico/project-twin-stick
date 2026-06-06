@@ -26,10 +26,12 @@ const IconFactoryData = preload("res://scripts/ui/IconFactory.gd")
 const HealthBarHUDData = preload("res://scripts/juice/HealthBarHUD.gd")
 const HitStopManagerData = preload("res://scripts/juice/HitStopManager.gd")
 const PauseInputProxyData = preload("res://scripts/ui/PauseInputProxy.gd")
+const ReviveProgressMarkerData = preload("res://scripts/ui/ReviveProgressMarker.gd")
+const EncyclopediaUIData = preload("res://scripts/ui/EncyclopediaUI.gd")
 
 const MODIFIERS_DATA_PATH := "res://data/modifiers.json"
 
-const ARENA_SIZE := Vector2(3000.0, 1700.0)
+const ARENA_SIZE := Vector2(3600.0, 2100.0)
 const ARENA_RECT := Rect2(Vector2.ZERO, ARENA_SIZE)
 const ARENA_CENTER := Vector2(ARENA_SIZE.x * 0.5, ARENA_SIZE.y * 0.5)
 const ARENA_MARGIN := 72.0
@@ -131,6 +133,7 @@ var _room_duration := 45.0
 var _room_elapsed := 0.0
 var _spawn_interval := 1.6
 var _next_spawn_at := 0.0
+var _spawn_count_accumulator := 0.0
 var _enemies_spawned := 0
 var _enemies_killed := 0
 var _pending_enemy_spawns := 0
@@ -147,6 +150,7 @@ var _next_boss_add_spawn_at := 0.0
 var _revive_progress_by_player_id: Dictionary = {}
 var _hud_root: Control = null
 var _player_combat_indicators: Array = []
+var _revive_markers: Array = []
 var _bottom_hud: HBoxContainer = null
 var _bottom_player_hud_cards: Array = []
 var _objective_label: Label = null
@@ -163,6 +167,7 @@ var _objective_progress_bar: ProgressBar = null
 var _boss_health_bar = null
 var _boss_phase_label: Label = null
 var _boss_offscreen_indicator: Label = null
+var _boss_indicator_phase := 0.0
 var _mutation_pick_ui = null
 var _active_modifiers: Array = []
 var _modifier_definitions: Dictionary = {}
@@ -340,12 +345,15 @@ func _build_hud() -> void:
 	_hud_root.add_child(_boss_phase_label)
 	_boss_offscreen_indicator = Label.new()
 	_boss_offscreen_indicator.text = ">"
-	_boss_offscreen_indicator.size = Vector2(32.0, 32.0)
-	_boss_offscreen_indicator.pivot_offset = Vector2(16.0, 16.0)
+	_boss_offscreen_indicator.size = Vector2(58.0, 58.0)
+	_boss_offscreen_indicator.pivot_offset = Vector2(29.0, 29.0)
 	_boss_offscreen_indicator.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_boss_offscreen_indicator.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_boss_offscreen_indicator.add_theme_font_size_override("font_size", 30)
+	_boss_offscreen_indicator.add_theme_font_size_override("font_size", 54)
 	_boss_offscreen_indicator.add_theme_color_override("font_color", Color(1.0, 0.34, 0.18, 0.96))
+	_boss_offscreen_indicator.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.86))
+	_boss_offscreen_indicator.add_theme_constant_override("shadow_offset_x", 3)
+	_boss_offscreen_indicator.add_theme_constant_override("shadow_offset_y", 3)
 	_boss_offscreen_indicator.visible = false
 	_hud_root.add_child(_boss_offscreen_indicator)
 
@@ -388,6 +396,7 @@ func _build_hud() -> void:
 	_hud_root.add_child(_bottom_hud)
 
 	_player_combat_indicators.clear()
+	_revive_markers.clear()
 	_bottom_player_hud_cards.clear()
 	for index in range(_player_configs.size()):
 		var indicator := PlayerCombatIndicatorData.new()
@@ -397,6 +406,10 @@ func _build_hud() -> void:
 		indicator.configure_player(tint, slot_1_color, slot_2_color)
 		_hud_root.add_child(indicator)
 		_player_combat_indicators.append(indicator)
+		var revive_marker := ReviveProgressMarkerData.new()
+		revive_marker.set_state(false, 0.0, tint)
+		_hud_root.add_child(revive_marker)
+		_revive_markers.append(revive_marker)
 
 		var card := PanelContainer.new()
 		card.custom_minimum_size = Vector2(card_width, 72.0)
@@ -822,6 +835,7 @@ func _set_wall_rect(node: CollisionShape2D, wall_position: Vector2, size: Vector
 func _start_room() -> void:
 	_clear_runtime_nodes()
 	_ensure_projectile_renderer()
+	_prewarm_combat_vfx()
 	_set_game_paused(false)
 	_rebuild_player_loadouts()
 	_room_clear_started = false
@@ -839,6 +853,7 @@ func _start_room() -> void:
 	_room_duration = _get_room_duration()
 	_spawn_interval = _get_spawn_interval()
 	_next_spawn_at = 0.4
+	_spawn_count_accumulator = 0.0
 	_enemies_spawned = 0
 	_enemies_killed = 0
 	_pending_enemy_spawns = 0
@@ -913,6 +928,76 @@ func _ensure_projectile_renderer() -> void:
 	_projectile_renderer.set_projectile_container(projectiles)
 	projectiles.add_child(_projectile_renderer)
 
+func _prewarm_combat_vfx() -> void:
+	var prewarm_position := ARENA_CENTER
+	var samples: Array = [
+		ParticleFactoryData.create_muzzle_flash(Color(1.0, 0.76, 0.48, 0.82), Vector2.RIGHT, "enemy", 1.0),
+		ParticleFactoryData.create_projectile_trail(Color(1.0, 0.76, 0.48, 0.82), "default"),
+		ParticleFactoryData.create_impact_ring(Color(1.0, 0.76, 0.48, 0.82), 64.0, 3.0),
+		ParticleFactoryData.create_impact_ring(Color(1.0, 0.76, 0.48, 0.82), 220.0, 3.4),
+		ParticleFactoryData.create_impact_ring(Color(0.46, 0.9, 1.0, 0.82), 240.0, 3.4),
+		ParticleFactoryData.create_explosion_ring(Color(1.0, 0.78, 0.48, 0.88), 180.0, 4.0),
+		ParticleFactoryData.create_explosion_ring(Color(1.0, 0.78, 0.48, 0.88), 260.0, 4.0),
+		ParticleFactoryData.create_explosion_ring(Color(0.72, 0.55, 1.0, 0.82), 520.0, 4.0),
+		ParticleFactoryData.create_explosion_burst(Color(1.0, 0.54, 0.22, 1.0), 1.1),
+		ParticleFactoryData.create_death_burst(Color(1.0, 0.54, 0.22, 1.0), 1.0),
+		ParticleFactoryData.create_impact_sparks(Color(1.0, 0.76, 0.48, 0.82), Vector2.RIGHT, 1.0),
+		ParticleFactoryData.create_attack_trail(Color(1.0, 0.76, 0.48, 0.82), Vector2.RIGHT, 1.0),
+		ParticleFactoryData.create_dash_burst(Color(1.0, 0.76, 0.48, 0.82), Vector2.RIGHT, 1.0),
+		ParticleFactoryData.create_debris_ring(Color(1.0, 0.76, 0.48, 0.82), 96.0, 12, 0.24),
+	]
+	var rendered_samples: Array = []
+	for sample in samples:
+		_add_combat_prewarm_sample(rendered_samples, sample, effects, prewarm_position)
+	var hazard := HazardZoneData.new()
+	hazard.configure(80.0, 0.1, 0, Color(1.0, 0.4, 0.2, 0.1))
+	_add_combat_prewarm_sample(rendered_samples, hazard, effects, prewarm_position + Vector2(28.0, 0.0))
+	var poison_hazard := HazardZoneData.new()
+	poison_hazard.configure(160.0, 0.1, 0, Color(0.38, 0.9, 0.24, 0.12))
+	_add_combat_prewarm_sample(rendered_samples, poison_hazard, effects, prewarm_position + Vector2(-28.0, 0.0))
+	var projectile = ProjectileSceneData.instantiate()
+	_add_combat_prewarm_sample(rendered_samples, projectile, projectiles, prewarm_position + Vector2(0.0, 28.0))
+	var flash := ColorRect.new()
+	flash.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	flash.color = Color(0.72, 0.55, 1.0, 0.08)
+	_add_combat_prewarm_sample(rendered_samples, flash, ui_layer, Vector2.ZERO)
+	var deflector = EnemySceneData.instantiate()
+	deflector.setup("splitter_mini", self)
+	deflector.process_mode = Node.PROCESS_MODE_DISABLED
+	var collision := deflector.get_node_or_null("CollisionShape2D")
+	if collision != null:
+		collision.set_deferred("disabled", true)
+	_add_combat_prewarm_sample(rendered_samples, deflector, enemies, prewarm_position + Vector2(0.0, -28.0))
+	for index in range(["chaser", "charger", "spitter"].size()):
+		var enemy_type := str(["chaser", "charger", "spitter"][index])
+		var enemy_sample = EnemySceneData.instantiate()
+		enemy_sample.setup(enemy_type, self)
+		enemy_sample.process_mode = Node.PROCESS_MODE_DISABLED
+		var enemy_collision := enemy_sample.get_node_or_null("CollisionShape2D")
+		if enemy_collision != null:
+			enemy_collision.set_deferred("disabled", true)
+		_add_combat_prewarm_sample(rendered_samples, enemy_sample, enemies, prewarm_position + Vector2(32.0 * float(index - 1), -64.0))
+	if DisplayServer.get_name() == "headless":
+		await get_tree().process_frame
+	else:
+		await RenderingServer.frame_post_draw
+	for sample in rendered_samples:
+		if sample != null and is_instance_valid(sample):
+			sample.queue_free()
+
+func _add_combat_prewarm_sample(rendered_samples: Array, sample: Node, parent: Node, sample_position: Vector2) -> void:
+	if sample == null:
+		return
+	if sample is Node2D:
+		(sample as Node2D).global_position = sample_position
+	if sample is CanvasItem:
+		var canvas_item := sample as CanvasItem
+		canvas_item.visible = true
+		canvas_item.modulate = Color(1.0, 1.0, 1.0, 0.025)
+	parent.add_child(sample)
+	rendered_samples.append(sample)
+
 func _setup_side_objective() -> void:
 	_side_objective_id = str(_room_config.get("side_objective", ""))
 	if _side_objective_id.is_empty():
@@ -976,7 +1061,7 @@ func _physics_process(delta: float) -> void:
 	_update_revives(delta)
 	_clamp_runtime_nodes()
 	_check_wave_progress()
-	_update_boss_offscreen_indicator()
+	_update_boss_offscreen_indicator(delta)
 	var now := _current_time_seconds()
 	if now >= _next_hud_refresh_at:
 		_next_hud_refresh_at = now + HUD_REFRESH_INTERVAL
@@ -1014,7 +1099,7 @@ func _update_hazards(delta: float) -> void:
 			hazard.update_zone(delta, _player_nodes)
 	_cleanup_helpers()
 
-func _update_boss_offscreen_indicator() -> void:
+func _update_boss_offscreen_indicator(delta: float) -> void:
 	if _boss_offscreen_indicator == null:
 		return
 	if _active_boss == null or not is_instance_valid(_active_boss) or not (_active_boss is Node2D):
@@ -1041,14 +1126,32 @@ func _update_boss_offscreen_indicator() -> void:
 	if direction_to_boss.length() <= 0.0:
 		_boss_offscreen_indicator.visible = false
 		return
-	var edge_margin := 42.0
+	var edge_margin := 64.0
 	var clamped_position := Vector2(
 		clampf(boss_screen_position.x, edge_margin, viewport_size.x - edge_margin),
 		clampf(boss_screen_position.y, edge_margin, viewport_size.y - edge_margin)
 	)
+	_boss_indicator_phase = fmod(_boss_indicator_phase + delta * 5.8, TAU)
+	var pulse := 1.0 + sin(_boss_indicator_phase) * 0.16
+	var boss_color := _get_active_boss_indicator_color()
+	_boss_offscreen_indicator.add_theme_color_override("font_color", boss_color)
+	_boss_offscreen_indicator.scale = Vector2.ONE * pulse
 	_boss_offscreen_indicator.position = clamped_position - _boss_offscreen_indicator.size * 0.5
 	_boss_offscreen_indicator.rotation = direction_to_boss.angle()
 	_boss_offscreen_indicator.visible = true
+
+func _get_active_boss_indicator_color() -> Color:
+	if _active_boss != null and is_instance_valid(_active_boss) and _active_boss.has_method("get_type_name"):
+		match str(_active_boss.get_type_name()):
+			"boss_hydra":
+				return Color(0.46, 0.9, 1.0, 0.98)
+			"boss_hive":
+				return Color(0.92, 0.74, 0.28, 0.98)
+			"boss_pulsar":
+				return Color(0.72, 0.55, 1.0, 0.98)
+			_:
+				return Color(1.0, 0.34, 0.18, 0.98)
+	return Color(1.0, 0.34, 0.18, 0.98)
 
 func _update_elite_add_waves() -> void:
 	if _room_type != "elite" or _room_clear_started:
@@ -1058,7 +1161,7 @@ func _update_elite_add_waves() -> void:
 	if _room_elapsed < _next_elite_add_spawn_at:
 		return
 	_next_elite_add_spawn_at = _room_elapsed + randf_range(6.0, 8.0)
-	var count := randi_range(2, 3)
+	var count := _scale_spawn_count(randi_range(2, 3))
 	var start_edge := randi() % 4
 	var health_multiplier := 0.5 if bool(_minor_modifier_flags["swarm"]) else 1.0
 	for index in range(count):
@@ -1082,7 +1185,7 @@ func _update_boss_add_waves() -> void:
 	if boss_type == "hive":
 		_next_boss_add_spawn_at = _room_elapsed + randf_range(5.0, 6.0)
 		return
-	var count := mini(randi_range(BOSS_ADD_WAVE_MIN, BOSS_ADD_WAVE_MAX), remaining_budget)
+	var count := mini(_scale_spawn_count(randi_range(BOSS_ADD_WAVE_MIN, BOSS_ADD_WAVE_MAX)), remaining_budget)
 	var enemy_type := _get_boss_add_enemy_type(boss_type)
 	var start_edge := randi() % 4
 	var health_multiplier := 0.5 if bool(_minor_modifier_flags["swarm"]) else 1.0
@@ -1113,7 +1216,7 @@ func _get_boss_add_budget_remaining() -> int:
 		if enemy.has_method("get_type_name") and str(enemy.get_type_name()).begins_with("boss_"):
 			continue
 		live_non_boss += 1
-	return maxi(BOSS_ADD_CAP - live_non_boss - _pending_enemy_spawns, 0)
+	return maxi(_get_boss_add_cap() - live_non_boss - _pending_enemy_spawns, 0)
 
 func _check_wave_progress() -> void:
 	if _room_clear_started:
@@ -1140,7 +1243,7 @@ func _continuous_spawn() -> void:
 			var ramp := clampf(_room_elapsed / min(_room_duration, 25.0), 0.0, 1.0)
 			current_interval = lerpf(current_interval, current_interval * 0.6, ramp)
 		_next_spawn_at = _room_elapsed + current_interval
-		var batch := 2 if bool(_minor_modifier_flags["swarm"]) else 1
+		var batch := _consume_scaled_stream_count(2 if bool(_minor_modifier_flags["swarm"]) else 1)
 		var stream_start_edge := randi() % 4 if batch > 1 else 0
 		for index in range(batch):
 			var enemy_type := _roll_wave_enemy_type(_room_enemy_pool)
@@ -1152,6 +1255,7 @@ func _continuous_spawn() -> void:
 		var burst_size := int(round(lerpf(4.0, 9.0, RunState.get_run_progress())))
 		if bool(_minor_modifier_flags["swarm"]):
 			burst_size *= 2
+		burst_size = _scale_spawn_count(burst_size)
 		var burst_start_edge := randi() % 4
 		for index in range(burst_size):
 			var enemy_type := _roll_wave_enemy_type(_room_enemy_pool)
@@ -1163,6 +1267,7 @@ func _spawn_opening_burst() -> void:
 	var burst_size := int(round(lerpf(4.0, 9.0, RunState.get_run_progress())))
 	if bool(_minor_modifier_flags["swarm"]):
 		burst_size *= 2
+	burst_size = _scale_spawn_count(burst_size)
 	var health_multiplier := 0.5 if bool(_minor_modifier_flags["swarm"]) else 1.0
 	var start_edge := randi() % 4
 	for index in range(burst_size):
@@ -1189,6 +1294,21 @@ func _spawn_enemy_instance(enemy_type: String, spawn_position: Vector2, health_m
 	enemy.hit_received.connect(_on_enemy_hit_received)
 	_enemy_nodes.append(enemy)
 	return enemy
+
+func _get_enemy_count_multiplier() -> float:
+	return 1.5 if _player_configs.size() >= 2 else 1.0
+
+func _scale_spawn_count(base_count: int) -> int:
+	return maxi(0, int(round(float(base_count) * _get_enemy_count_multiplier())))
+
+func _consume_scaled_stream_count(base_batch: int) -> int:
+	_spawn_count_accumulator += float(base_batch) * _get_enemy_count_multiplier()
+	var spawn_count := int(floor(_spawn_count_accumulator))
+	_spawn_count_accumulator -= float(spawn_count)
+	return maxi(spawn_count, 0)
+
+func _get_boss_add_cap() -> int:
+	return int(round(float(BOSS_ADD_CAP) * _get_enemy_count_multiplier()))
 
 func _queue_enemy_spawn(enemy_type: String, spawn_position: Vector2, health_multiplier: float = 1.0) -> void:
 	_pending_enemy_spawns += 1
@@ -1280,7 +1400,7 @@ func _show_mutation_pick(force_rare: bool, title: String, subtitle: String) -> v
 	var options_by_player: Array = []
 	for player_index in range(_player_nodes.size()):
 		var inventory: PlayerInventory = RunState.get_player_inventory(player_index)
-		var force_player_rare: bool = force_rare or (inventory != null and inventory.rare_dry_streak >= 4)
+		var force_player_rare: bool = force_rare or (inventory != null and inventory.rare_dry_streak >= 3)
 		var options: Array = _mutation_system.roll_mutation_options(player_index, 3, _get_current_rare_chance(), force_player_rare)
 		if inventory != null:
 			if _options_contain_rare(options):
@@ -1935,8 +2055,8 @@ func _format_boss_type() -> String:
 
 func _get_current_rare_chance() -> float:
 	if RunState.is_endless_mode():
-		return 0.35
-	return 0.15 if RunState.get_current_act() <= 1 else 0.25
+		return 0.40
+	return 0.20 if RunState.get_current_act() <= 1 else 0.30
 
 func _format_objective_text() -> String:
 	if _side_objective_completed:
@@ -2032,6 +2152,11 @@ func _update_player_combat_indicators() -> void:
 			str(slot_1_hud_data.get("name", "")),
 			str(slot_2_hud_data.get("name", ""))
 		)
+		if index < _revive_markers.size():
+			var marker = _revive_markers[index]
+			if marker != null and is_instance_valid(marker):
+				var progress := float(_revive_progress_by_player_id.get(player.player_id, 0.0)) / REVIVE_HOLD_DURATION
+				marker.set_state(player.is_downed(), progress, _player_configs[index].tint)
 
 func _refresh_bottom_hud() -> void:
 	for index in range(min(_bottom_player_hud_cards.size(), _player_nodes.size())):
@@ -2082,6 +2207,14 @@ func _update_player_combat_indicator_positions() -> void:
 		top_left.x = clampf(top_left.x, 8.0, viewport_size.x - indicator_size.x - 8.0)
 		top_left.y = clampf(top_left.y, 8.0, viewport_size.y - indicator_size.y - 8.0)
 		indicator.position = top_left.round()
+		if index < _revive_markers.size():
+			var marker = _revive_markers[index]
+			if marker != null and is_instance_valid(marker):
+				var marker_size: Vector2 = marker.custom_minimum_size
+				var marker_position := screen_position + Vector2(-marker_size.x * 0.5, indicator_size.y - 6.0)
+				marker_position.x = clampf(marker_position.x, 8.0, viewport_size.x - marker_size.x - 8.0)
+				marker_position.y = clampf(marker_position.y, 8.0, viewport_size.y - marker_size.y - 8.0)
+				marker.position = marker_position.round()
 
 func _populate_modifier_hud() -> void:
 	if _modifier_hud == null:
@@ -2458,6 +2591,9 @@ func get_arena_rect() -> Rect2:
 func get_player_target_nodes() -> Array:
 	return _player_nodes
 
+func get_projectile_nodes() -> Array:
+	return projectiles.get_children()
+
 func get_enemy_target_nodes() -> Array:
 	return _enemy_nodes
 
@@ -2570,6 +2706,7 @@ func _set_game_paused(paused: bool) -> void:
 	_set_runtime_pause_state(paused)
 	get_tree().paused = paused
 	if paused:
+		_ensure_pause_encyclopedia_button()
 		resume_button.grab_focus()
 		_populate_pause_build_overlay()
 
@@ -2614,6 +2751,26 @@ func _on_resume_pressed() -> void:
 func _on_main_menu_pressed() -> void:
 	_set_game_paused(false)
 	return_to_menu_requested.emit()
+
+func _ensure_pause_encyclopedia_button() -> void:
+	var pause_layout := pause_panel.get_node_or_null("CenterContainer/PauseLayout")
+	if pause_layout == null or pause_layout.get_node_or_null("EncyclopediaButton") != null:
+		return
+	var button := Button.new()
+	button.name = "EncyclopediaButton"
+	button.text = "Encyclopedia"
+	button.pressed.connect(_open_encyclopedia_overlay)
+	pause_layout.add_child(button)
+	var retry_index := pause_retry_button.get_index() if pause_retry_button != null else pause_layout.get_child_count() - 1
+	pause_layout.move_child(button, retry_index)
+
+func _open_encyclopedia_overlay() -> void:
+	var existing := ui_layer.get_node_or_null("EncyclopediaUI")
+	if existing != null:
+		existing.queue_free()
+	var encyclopedia := EncyclopediaUIData.new()
+	encyclopedia.name = "EncyclopediaUI"
+	ui_layer.add_child(encyclopedia)
 
 func _unhandled_input(event: InputEvent) -> void:
 	if _awaiting_mutation_pick:

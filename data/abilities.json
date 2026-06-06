@@ -9,7 +9,7 @@
       "cooldown": 5.0,
       "duration": 0.0,
       "stats": {
-        "damage": 15.0,
+        "damage": 22.0,
         "radius": 250.0,
         "knockback_force": 950.0,
         "expand_duration": 0.15
@@ -32,13 +32,13 @@
     {
       "id": "overcharge",
       "name": "Overcharge",
-      "description": "For a short burst, your weapon fires 30% faster.",
+      "description": "For a short burst, your weapon fires 50% faster.",
       "slot": "off",
       "type": "sustained",
       "cooldown": 22.0,
-      "duration": 4.0,
+      "duration": 6.0,
       "stats": {
-        "fire_rate_multiplier": 1.3,
+        "fire_rate_multiplier": 1.5,
         "projectile_multiplier": 1
       }
     },
@@ -54,7 +54,7 @@
         "distance": 340.0,
         "arrival_iframes": 0.2,
         "detonation_radius": 120.0,
-        "detonation_damage": 12
+        "detonation_damage": 22
       }
     },
     {
@@ -63,7 +63,7 @@
       "description": "Blocks all damage for a short duration but prevents attacking.",
       "slot": "def",
       "type": "sustained",
-      "cooldown": 12.0,
+      "cooldown": 9.0,
       "duration": 3.0,
       "stats": {
         "radius": 78.0
@@ -76,10 +76,10 @@
       "slot": "def",
       "type": "sustained",
       "cooldown": 10.0,
-      "duration": 5.0,
+      "duration": 3.0,
       "stats": {
         "invisibility_duration": 1.2,
-        "decoy_health": 120
+        "taunt_radius": 700.0
       }
     },
     {
@@ -91,7 +91,7 @@
       "cooldown": 12.0,
       "duration": 9.0,
       "stats": {
-        "damage": 10,
+        "damage": 18,
         "fire_rate": 4.5,
         "range": 780.0,
         "projectile_speed": 760.0
@@ -124,9 +124,11 @@
       "duration": 5.0,
       "stats": {
         "orb_count": 3,
-        "orbit_radius": 84.0,
+        "orbit_radius": 150.0,
         "damage": 9,
-        "rotation_speed": 2.6
+        "rotation_speed": 2.6,
+        "orb_visual_scale": 1.5,
+        "blocks_projectiles": true
       }
     }
   ]

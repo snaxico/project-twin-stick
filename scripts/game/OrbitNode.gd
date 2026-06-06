@@ -11,6 +11,8 @@ var damage := 18
 var rotation_speed := 2.6
 var expand_interval := 0.0
 var expand_bonus_radius := 0.0
+var orb_visual_scale := 1.0
+var blocks_projectiles := false
 var tint := Color(0.56, 0.92, 1.0, 1.0)
 var _angle := 0.0
 var _hit_cooldowns: Dictionary = {}
@@ -24,6 +26,8 @@ func configure(orbit_owner: Node2D, duration: float, stats: Dictionary, color: C
 	rotation_speed = float(stats.get("rotation_speed", rotation_speed))
 	expand_interval = maxf(0.0, float(stats.get("expand_interval", 0.0)))
 	expand_bonus_radius = maxf(0.0, float(stats.get("expand_bonus_radius", 0.0)))
+	orb_visual_scale = maxf(0.1, float(stats.get("orb_visual_scale", orb_visual_scale)))
+	blocks_projectiles = bool(stats.get("blocks_projectiles", blocks_projectiles))
 	tint = color
 	set_physics_process(true)
 	queue_redraw()
@@ -40,11 +44,12 @@ func _physics_process(delta: float) -> void:
 	_angle = fmod(_angle + rotation_speed * delta, TAU)
 	var now := Time.get_ticks_msec() / 1000.0
 	var effective_radius := _current_orbit_radius(now)
+	var orb_positions := _get_orb_positions(effective_radius)
 	for enemy in _get_candidate_enemies(effective_radius + 32.0):
 		if enemy == null or not is_instance_valid(enemy) or not enemy.has_method("is_alive") or not enemy.is_alive():
 			continue
-		for orb_position in _get_orb_positions(effective_radius):
-			if enemy.global_position.distance_to(orb_position) <= 28.0:
+		for orb_position in orb_positions:
+			if enemy.global_position.distance_to(orb_position) <= _orb_hit_radius():
 				if float(_hit_cooldowns.get(enemy, 0.0)) > now:
 					break
 				_hit_cooldowns[enemy] = now + 0.22
@@ -53,6 +58,8 @@ func _physics_process(delta: float) -> void:
 				if enemy.has_method("apply_knockback"):
 					enemy.apply_knockback((enemy.global_position - global_position).normalized(), 180.0)
 				break
+	if blocks_projectiles:
+		_block_enemy_projectiles(orb_positions)
 	queue_redraw()
 
 func _get_orb_positions(effective_radius: float = -1.0) -> Array:
@@ -67,8 +74,8 @@ func _draw() -> void:
 	var effective_radius := _current_orbit_radius(Time.get_ticks_msec() / 1000.0)
 	for orb_position in _get_orb_positions(effective_radius):
 		var local_position: Vector2 = orb_position - global_position
-		draw_circle(local_position, 10.0, Color(tint.r, tint.g, tint.b, 0.34))
-		draw_arc(local_position, 12.0, 0.0, TAU, 16, Color(tint.r, tint.g, tint.b, 0.92), 3.0)
+		draw_circle(local_position, 10.0 * orb_visual_scale, Color(tint.r, tint.g, tint.b, 0.34))
+		draw_arc(local_position, 12.0 * orb_visual_scale, 0.0, TAU, 16, Color(tint.r, tint.g, tint.b, 0.92), 3.0)
 
 func _current_orbit_radius(now: float) -> float:
 	if expand_interval <= 0.0 or expand_bonus_radius <= 0.0:
@@ -85,6 +92,37 @@ func _get_candidate_enemies(radius: float) -> Array:
 	if combat_owner != null and combat_owner.has_method("get_nearby_enemy_target_nodes"):
 		return combat_owner.get_nearby_enemy_target_nodes(global_position, radius)
 	return tree.get_nodes_in_group("aim_target")
+
+func _block_enemy_projectiles(orb_positions: Array) -> void:
+	var tree := get_tree()
+	if tree == null:
+		return
+	var combat_owner := tree.current_scene
+	var candidates: Array = []
+	if combat_owner != null and combat_owner.has_method("get_projectile_nodes"):
+		candidates = combat_owner.get_projectile_nodes()
+	else:
+		var projectile_root := get_node_or_null("../Projectiles")
+		if projectile_root != null:
+			candidates = projectile_root.get_children()
+	for projectile in candidates:
+		if projectile == null or not is_instance_valid(projectile):
+			continue
+		if projectile.has_method("is_projectile_active") and not projectile.is_projectile_active():
+			continue
+		if not ("team" in projectile) or str(projectile.team) != "enemy":
+			continue
+		for orb_position in orb_positions:
+			if projectile.global_position.distance_to(orb_position) <= _orb_hit_radius():
+				_spawn_hit_sparks(projectile.global_position, projectile.global_position - orb_position)
+				if projectile.has_method("_finish_projectile"):
+					projectile._finish_projectile()
+				else:
+					projectile.queue_free()
+				break
+
+func _orb_hit_radius() -> float:
+	return 28.0 * orb_visual_scale
 
 func _spawn_hit_sparks(hit_position: Vector2, direction: Vector2) -> void:
 	var parent_node := get_parent()

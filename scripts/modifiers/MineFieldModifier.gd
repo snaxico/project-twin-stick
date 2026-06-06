@@ -17,7 +17,6 @@ var _arena_rect := Rect2()
 var _player_nodes: Array = []
 var _sweeps: Array = []
 var _spawn_at := 0.0
-var _direction_index := 0
 
 func setup(arena_rect: Rect2, player_nodes: Array) -> void:
 	_arena_rect = arena_rect
@@ -45,9 +44,7 @@ func _physics_process(delta: float) -> void:
 		_sweeps.erase(sweep)
 
 func _spawn_sweep() -> void:
-	var directions := ["left", "right", "top", "bottom"]
-	var dir: String = str(directions[_direction_index % directions.size()])
-	_direction_index += 1
+	var dir := _pick_sweep_direction()
 	var sweep := {
 		"direction": dir,
 		"time": 0.0,
@@ -57,6 +54,21 @@ func _spawn_sweep() -> void:
 		"player_hit_times": {},
 	}
 	_sweeps.append(sweep)
+
+func _pick_sweep_direction() -> String:
+	var has_vertical := false
+	var has_horizontal := false
+	for sweep in _sweeps:
+		var direction := str((sweep as Dictionary).get("direction", "left"))
+		if direction == "left" or direction == "right":
+			has_vertical = true
+		else:
+			has_horizontal = true
+	if has_vertical and not has_horizontal:
+		return ["top", "bottom"].pick_random()
+	if has_horizontal and not has_vertical:
+		return ["left", "right"].pick_random()
+	return ["left", "right", "top", "bottom"].pick_random()
 
 func _build_gaps(direction: String) -> Array:
 	var lane_length := _arena_rect.size.y if direction == "left" or direction == "right" else _arena_rect.size.x

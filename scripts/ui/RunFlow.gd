@@ -2,6 +2,7 @@ extends Control
 
 const GAME_WORLD_SCENE = preload("res://scenes/game/GameWorld.tscn")
 const MapNodeButtonData = preload("res://scripts/ui/MapNodeButton.gd")
+const MODIFIERS_DATA_PATH := "res://data/modifiers.json"
 
 signal return_to_menu_requested(open_meta_menu: bool)
 
@@ -26,8 +27,10 @@ var _map_buttons: Dictionary = {}
 var _map_button_size := Vector2(92.0, 88.0)
 var _virtual_graph_height := 0.0
 var _graph_scroll_offset := 0.0
+var _modifier_definitions: Dictionary = {}
 
 func _ready() -> void:
+	_load_modifier_definitions()
 	run_summary_panel.visible = false
 	resolution_button.pressed.connect(_on_resolution_button_pressed)
 	map_graph_area.resized.connect(_refresh_map_panel)
@@ -393,6 +396,9 @@ func _format_objective(_objective: String) -> String:
 	return "Kill All"
 
 func _format_modifier_name(mod_id: String) -> String:
+	var definition := _modifier_definitions.get(mod_id, {}) as Dictionary
+	if not definition.is_empty():
+		return str(definition.get("name", mod_id))
 	var words := mod_id.split("_")
 	var parts: Array = []
 	for word in words:
@@ -400,6 +406,25 @@ func _format_modifier_name(mod_id: String) -> String:
 			continue
 		parts.append(word.capitalize())
 	return " ".join(parts)
+
+func _load_modifier_definitions() -> void:
+	_modifier_definitions.clear()
+	if not FileAccess.file_exists(MODIFIERS_DATA_PATH):
+		return
+	var file := FileAccess.open(MODIFIERS_DATA_PATH, FileAccess.READ)
+	if file == null:
+		return
+	var parsed: Variant = JSON.parse_string(file.get_as_text())
+	if not (parsed is Dictionary):
+		return
+	for entry in ((parsed as Dictionary).get("modifiers", []) as Array):
+		if not (entry is Dictionary):
+			continue
+		var definition: Dictionary = (entry as Dictionary).duplicate(true)
+		var modifier_id := str(definition.get("id", ""))
+		if modifier_id.is_empty():
+			continue
+		_modifier_definitions[modifier_id] = definition
 
 func _focus_resolution_panel() -> void:
 	resolution_button.grab_focus()
