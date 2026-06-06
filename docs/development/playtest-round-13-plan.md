@@ -60,10 +60,14 @@ Per `docs/process/solo-dev-rules.md`:
   `zoom_min` stays **`0.45`**.
 - **Player sprite scale** (`Player.gd` `_base_visual_scale` / shadow, currently `* 1.3`): → **`* 1.5`**
   (visual + shadow).
-- **Enemy sprite scale:** apply **`× 1.3`** to the enemy visual/body scale at init (mirror the Player
-  chevron approach in `Enemy.gd`; scale the visual + shadow, not collision). Apply to all enemy types
-  including elites/bosses unless a boss already sets its own scale — if so, leave boss scale and only
-  flag it.
+- **Enemy sprite scale:** apply **`× 1.3`** as a **readability multiplier on the visual + shadow
+  only** — it must **not** change collision/contact size (P2 fix). Note `_refresh_static_visuals()`
+  currently drives the collision radius from the enemy's gameplay visual scale, so do **not** route the
+  ×1.3 through that gameplay-scale path. Add a **separate, dedicated readability constant** (e.g.
+  `READABILITY_VISUAL_SCALE := 1.3`) multiplied into the visual/shadow draw scale at render time, while
+  the collision shape keeps using the existing gameplay scale. Verify in code that contact/hitbox size
+  is unchanged after the bump. Apply to all enemy types; if a boss already sets its own scale, leave
+  the boss and flag it.
 
 ### B. Tuning & reworks
 
@@ -86,11 +90,22 @@ Per `docs/process/solo-dev-rules.md`:
     of seeking a nearby enemy.
   - `mutations.json`: update description to wall-bounce; set bounce count to **2**; the
     enemy-seek `bounce_range` param is no longer used (remove or leave unused).
-  - `Projectile.gd`: replace the enemy-seeking `_redirect_to_ricochet_target` path with
-    **wall reflection** — when the projectile reaches the arena bounds (from
-    `combat_owner.get_arena_rect()`), reflect its velocity across the hit wall normal, decrement the
-    bounce counter; expire normally when bounces are used up. Pierce is unaffected (pierce continues
-    after a bounce).
+  - `Projectile.gd` — **reflect in the wall-collision callback, not in `_physics_process` (P2 fix):**
+    arena walls are `StaticBody2D`, and `_on_body_entered(body)` currently calls `_finish_projectile()`
+    immediately on any `StaticBody2D`. Change it so that **if the body is an arena wall and
+    `ricochet_remaining > 0`**, the projectile **reflects instead of finishing**: compute the wall
+    normal (walls are axis-aligned — derive the normal from which arena-rect edge was hit via
+    `get_arena_rect()`), set `velocity = velocity.bounce(normal)` (and update `direction`/rotation),
+    nudge the position just inside the wall to avoid re-triggering, decrement `ricochet_remaining`.
+    Only `_finish_projectile()` when `ricochet_remaining == 0`. Retire the old enemy-seeking
+    `_redirect_to_ricochet_target` path.
+  - **Range/lifetime on bounce (P2 fix):** projectile expiry is distance-based
+    (`global_position.distance_squared_to(_spawn_position) >= max_distance²`, `Projectile.gd:201`).
+    On each wall bounce, **reset `_spawn_position = global_position`** so the post-bounce segment gets a
+    fresh `max_distance` budget (otherwise a shot that banked near max range would expire instantly).
+    Total reach stays bounded by the 2-bounce cap. `max_distance` itself is unchanged.
+  - **Pierce is unaffected** — pierce continues after a bounce; reflection only changes direction +
+    resets the range origin.
   - **Interaction:** Railgun (unlimited pierce) + Ricochet = pierce the aimed line, **bank off a wall,
     keep piercing** a new line. Orthogonal axes — pierce = enemies-per-line, ricochet = bounces off
     geometry. No enemy-targeting/end-of-life logic. **Report how you handled the reflect + pierce
@@ -102,10 +117,22 @@ Replace the dedicated empty boss arena with a **normal combat room that spawns t
 through**, so the boss is fought amid continuous adds.
 
 - **Trigger:** boss spawns once at **`_room_elapsed >= 25.0s`** (add `const BOSS_SPAWN_DELAY := 25.0`).
-- **During the room:** run the **normal continuous spawn** (stream + bursts) for the whole room so adds
-  keep coming before and after the boss appears.
-- **Room clear:** the room ends **only when the boss is dead** (not when `_enemy_nodes` is empty). Adds
-  keep spawning until the boss dies.
+- **Add spawning ignores `_room_duration` until the boss dies (P1 fix):** today `_continuous_spawn()`
+  permanently sets `_spawning_done = true` at `_room_elapsed >= _room_duration` (~32s in early rooms),
+  which would choke adds shortly after the 25s boss spawn. In boss rooms, **do not end spawning on
+  `_room_duration`** — keep the continuous stream + bursts running the entire time the boss is alive.
+  Gate the duration-based `_spawning_done` so it only applies to non-boss rooms (or skip it while a
+  boss is alive / pending). Adds run continuously from room start through boss death.
+- **Room clear:** the room ends **only when the boss is dead** (not when `_enemy_nodes` is empty, and
+  not on `_room_duration`). Once the boss dies, stop spawning new adds and clear normally.
+- **Enemy pool / room config for boss rooms (P1 fix):** boss map nodes currently set `enemy_pool = []`
+  (`RunState.gd` ~466/490/566), so `_roll_wave_enemy_type([])` would fall back to default rather than
+  the intended mix. **Populate boss-node `enemy_pool` with the normal combat pool for that act/depth**
+  — campaign boss nodes use `_build_enemy_pool(act, row, total)`; endless boss rooms use
+  `_get_endless_enemy_pool(room_number)` — the same call the adjacent combat room would use. Keep the
+  boss node's existing metadata: `boss_type`, the "BOSS" map label, and boss HUD. **No side objective**
+  on boss rooms (the boss is the objective). Modifiers: leave whatever the boss node already carries
+  (don't add new ones). The room is still `room_type == "boss"`; it just now also runs combat spawns.
 - **Reconcile with existing boss systems (report):** the current separate boss flow uses
   `_spawn_boss`, boss-add-waves (`_update_boss_add_waves`, `BOSS_ADD_CAP`), and the `"boss"` room type.
   With continuous spawn now providing adds, the **boss-add-wave system is likely redundant** — Codex
@@ -120,13 +147,18 @@ through**, so the boss is fought amid continuous adds.
 
 ### E. 2P reward screen — switchable until all confirm
 
-- **Rule:** the pick round **finalizes only when ALL players have confirmed.** While any player is
-  unconfirmed, every player (including ones who already confirmed) can still change their selection.
-- **Un-confirm interaction:** a confirmed player presses **back/cancel (`ui_cancel`)** to un-confirm
-  and re-pick.
+- **Rule:** the pick round **finalizes only when ALL players have confirmed.** A single player's
+  confirm no longer locks the round in — it stays changeable as long as anyone is still unconfirmed.
+- **Un-confirm is cancel-first, NOT auto-on-move (P2 clarification):** a confirmed player's card
+  navigation stays **locked** while confirmed. To change, they press **back/cancel (`ui_cancel`)**,
+  which un-confirms them and re-enables navigation; they then re-pick and re-confirm. Moving the cursor
+  does **not** auto-un-confirm (this matches the earlier decision: "back/cancel un-confirms," not
+  "selecting another card auto-un-confirms"). So "can still change" = "is not permanently locked in,"
+  reached via cancel — not a direct switch while confirmed.
 - **`MutationPickUI.gd`:** do not apply/close on a single player's confirm; gate finalize on
-  `all(_confirmed)`. Allow `ui_cancel` to clear that player's `_confirmed`/`_locked_selection_ids` and
-  re-enable navigation. The selected-card detail panel (R12) should reflect the re-opened state.
+  `all(_confirmed)`. While confirmed, ignore navigation input for that player; on `ui_cancel`, clear
+  that player's `_confirmed`/`_locked_selection_ids` and re-enable navigation. The selected-card detail
+  panel (R12) should reflect the re-opened state.
 
 ### F. UI / Encyclopedia
 
