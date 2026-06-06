@@ -123,8 +123,11 @@ through**, so the boss is fought amid continuous adds.
   `_room_duration`** — keep the continuous stream + bursts running the entire time the boss is alive.
   Gate the duration-based `_spawning_done` so it only applies to non-boss rooms (or skip it while a
   boss is alive / pending). Adds run continuously from room start through boss death.
-- **Room clear:** the room ends **only when the boss is dead** (not when `_enemy_nodes` is empty, and
-  not on `_room_duration`). Once the boss dies, stop spawning new adds and clear normally.
+- **Room clear:** the room ends **the moment the boss dies** — it is an **immediate boss-objective
+  clear, NOT "wait for all remaining adds."** Boss death triggers room clear right away; do **not**
+  gate clear on `_enemy_nodes.is_empty()` or on `_room_duration`. On boss death: stop spawning new
+  adds and run the room-clear flow immediately (leftover adds are cleaned up / despawned by the normal
+  clear path, they must not block or delay the clear).
 - **Enemy pool / room config for boss rooms (P1 fix):** boss map nodes currently set `enemy_pool = []`
   (`RunState.gd` ~466/490/566), so `_roll_wave_enemy_type([])` would fall back to default rather than
   the intended mix. **Populate boss-node `enemy_pool` with the normal combat pool for that act/depth**
