@@ -417,6 +417,9 @@ func _build_single_room_map() -> Array:
 	node["wave_count"] = 1 if room_type == "boss" else max(int(debug_run_setup.get("wave_count", node.get("wave_count", 3))), 1)
 	if room_type == "boss":
 		node["boss_type"] = str(debug_run_setup.get("boss_type", "warden"))
+		node["side_objective"] = ""
+		if debug_run_setup.has("boss_spawn_delay"):
+			node["boss_spawn_delay"] = maxf(0.0, float(debug_run_setup.get("boss_spawn_delay", 0.0)))
 	return [[node]]
 
 func _generate_node_map() -> Array:
@@ -427,13 +430,13 @@ func _generate_node_map() -> Array:
 	for act_row_index in range(act_1_rows):
 		rows.append(_build_branching_row(rows.size(), 1, act_row_index, act_1_rows, global_depth))
 		global_depth += 1
-	rows.append([_build_boss_node(rows.size(), 1, global_depth, true)])
+	rows.append([_build_boss_node(rows.size(), 1, global_depth, true, maxi(act_1_rows - 1, 0), act_1_rows)])
 	global_depth += 1
 	for act_row_index in range(act_2_rows):
 		rows.append(_build_branching_row(rows.size(), 2, act_row_index, act_2_rows, global_depth))
 		global_depth += 1
 	_structured_total_combat_depth = maxi(global_depth - 1, 1)
-	rows.append([_build_boss_node(rows.size(), 2, global_depth, false)])
+	rows.append([_build_boss_node(rows.size(), 2, global_depth, false, maxi(act_2_rows - 1, 0), act_2_rows)])
 	_link_rows(rows)
 	_assign_modifiers_to_map(rows)
 	return rows
@@ -456,14 +459,13 @@ func _build_branching_row(row_index: int, act: int, act_row_index: int, act_tota
 		nodes_in_row.append(_build_map_node(row_index, column, room_type, act, depth, act_row_index, act_total_rows))
 	return nodes_in_row
 
-func _build_boss_node(row_index: int, act: int, depth: int, is_mid_boss: bool) -> Dictionary:
+func _build_boss_node(row_index: int, act: int, depth: int, is_mid_boss: bool, act_row_index: int, act_total_rows: int) -> Dictionary:
 	var boss_type := _structured_mid_boss_type if is_mid_boss else _structured_final_boss_type
-	var node := _build_map_node(row_index, 2, "boss", act, depth, 0, 1)
+	var node := _build_map_node(row_index, 2, "boss", act, depth, act_row_index, act_total_rows)
 	node["title"] = ("%s Mid-Boss" if is_mid_boss else "%s Final Boss") % _format_name(boss_type)
 	node["description"] = "Break through the act gate." if is_mid_boss else "Finish the run."
 	node["boss_type"] = boss_type
 	node["wave_count"] = 1
-	node["enemy_pool"] = []
 	node["side_objective"] = ""
 	return node
 
@@ -487,7 +489,7 @@ func _build_endless_node(room_number: int) -> Dictionary:
 		"side_objective": "" if is_boss else _roll_side_objective("combat"),
 		"depth": room_number,
 		"wave_count": _get_endless_wave_count(room_number, is_boss),
-		"enemy_pool": [] if is_boss else _get_endless_enemy_pool(room_number),
+		"enemy_pool": _get_endless_enemy_pool(room_number),
 		"boss_type": _roll_boss_type() if is_boss else "",
 		"modifiers": _roll_endless_modifiers(room_number, is_boss),
 		"next_node_ids": [],

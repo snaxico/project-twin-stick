@@ -113,7 +113,7 @@
     {
       "id": "ricochet",
       "name": "Ricochet",
-      "description": "Projectiles bounce to a nearby enemy after impact.",
+      "description": "Projectiles bounce off arena walls up to 2 times.",
       "icon": "ricochet",
       "category": "weapon",
       "group": "effect",
@@ -122,7 +122,7 @@
       "trail_style": "sparks",
       "accent_color": [1.35, 1.08, 0.22, 1.0],
       "impact_sfx": "ping",
-      "params": { "bounce_count": 1, "bounce_range": 220.0 }
+      "params": { "bounce_count": 2 }
     },
     {
       "id": "fire_trail",
@@ -180,13 +180,13 @@
     {
       "id": "sw_resonance",
       "name": "Shockwave Resonance",
-      "description": "Shockwave emits 2 extra pulses, staggered by 0.15 seconds.",
+      "description": "Shockwave emits 2 extra pulses, staggered by 0.4 seconds.",
       "icon": "shockwave",
       "category": "ability",
       "group": "ability",
       "rarity": "rare",
       "requires_ability": "shockwave",
-      "params": { "extra_pulses": 2, "pulse_interval": 0.15 }
+      "params": { "extra_pulses": 2, "pulse_interval": 0.4 }
     },
     {
       "id": "dash_shockdash",

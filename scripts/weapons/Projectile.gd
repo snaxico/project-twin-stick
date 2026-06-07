@@ -3,6 +3,7 @@ extends Area2D
 const FireTrailZoneData = preload("res://scripts/weapons/FireTrailZone.gd")
 const BASE_COLLISION_HALF_WIDTH := 4.0
 const BLOOM_COLOR_MULTIPLIER := 1.45
+const WALL_BOUNCE_NUDGE := 4.0
 
 @export var lifetime: float = 1.8
 
@@ -19,6 +20,7 @@ var feedback_profile: String = "rifle"
 var impact_weight: float = 1.0
 var max_distance: float = 0.0
 var collision_half_width: float = BASE_COLLISION_HALF_WIDTH
+var infinite_pierce := false
 var pierce_count: int = 0
 var pierce_remaining: int = 0
 var ricochet_remaining: int = 0
@@ -75,6 +77,7 @@ func setup(projectile_team: String, projectile_direction: Vector2, projectile_sp
 	impact_weight = projectile_impact_weight
 	max_distance = 0.0
 	collision_half_width = BASE_COLLISION_HALF_WIDTH
+	infinite_pierce = false
 	pierce_count = 0
 	pierce_remaining = 0
 	ricochet_remaining = 0
@@ -121,6 +124,7 @@ func setup_from_config(projectile_team: String, projectile_direction: Vector2, c
 	)
 	max_distance = max(0.0, float(config.get("max_distance", max_distance)))
 	collision_half_width = max(0.1, float(config.get("collision_half_width", collision_half_width)))
+	infinite_pierce = bool(config.get("infinite_pierce", infinite_pierce))
 	pierce_count = max(0, int(config.get("pierce_count", pierce_count)))
 	pierce_remaining = pierce_count
 	ricochet_remaining = max(0, int(config.get("ricochet_count", 0)))
@@ -209,6 +213,9 @@ func _physics_process(delta: float) -> void:
 func _on_body_entered(body: Node) -> void:
 	if body is StaticBody2D:
 		impact_requested.emit(global_position, -direction, team, _get_impact_color(), impact_sfx, impact_weight, body, _build_combat_context(body))
+		if ricochet_remaining > 0 and _try_wall_ricochet():
+			ricochet_remaining -= 1
+			return
 		_spawn_impact_fire_pool()
 		_finish_projectile()
 		return
@@ -240,11 +247,10 @@ func _attempt_hit_target(target: Node) -> void:
 		target.apply_poison(poison_dps, poison_duration)
 	_hit_targets.append(target)
 	impact_requested.emit(global_position, -direction, team, _get_impact_color(), impact_sfx, impact_weight, target, _build_combat_context(target))
+	if infinite_pierce:
+		return
 	if pierce_remaining > 0:
 		pierce_remaining -= 1
-		return
-	if ricochet_remaining > 0 and _redirect_to_ricochet_target(target):
-		ricochet_remaining -= 1
 		return
 	_spawn_impact_fire_pool()
 	_finish_projectile()
@@ -281,34 +287,36 @@ func _finish_projectile() -> void:
 		collision_shape.set_deferred("disabled", true)
 	projectile_deactivated.emit(self)
 
-func _redirect_to_ricochet_target(previous_target: Node) -> bool:
+func _try_wall_ricochet() -> bool:
 	var tree := get_tree()
 	if tree == null:
 		return false
-	var best_target: Node2D = null
-	var best_distance_sq := INF
-	var range_sq := ricochet_range * ricochet_range
-	var candidates: Array = []
 	var combat_owner := tree.current_scene
-	if combat_owner != null and combat_owner.has_method("get_nearby_enemy_target_nodes"):
-		candidates = combat_owner.get_nearby_enemy_target_nodes(global_position, ricochet_range)
-	else:
-		candidates = tree.get_nodes_in_group("aim_target")
-	for candidate in candidates:
-		if candidate == null or not is_instance_valid(candidate) or candidate == previous_target:
-			continue
-		if _hit_targets.has(candidate):
-			continue
-		if not (candidate is Node2D):
-			continue
-		var distance_sq := global_position.distance_squared_to((candidate as Node2D).global_position)
-		if distance_sq > range_sq or distance_sq >= best_distance_sq:
-			continue
-		best_distance_sq = distance_sq
-		best_target = candidate as Node2D
-	if best_target == null:
+	if combat_owner == null or not combat_owner.has_method("get_arena_rect"):
 		return false
-	direction = (best_target.global_position - global_position).normalized()
+	var arena_rect: Rect2 = combat_owner.get_arena_rect()
+	if arena_rect.size.x <= 0.0 or arena_rect.size.y <= 0.0:
+		return false
+	var distances := {
+		Vector2.RIGHT: absf(global_position.x - arena_rect.position.x),
+		Vector2.LEFT: absf(global_position.x - arena_rect.end.x),
+		Vector2.DOWN: absf(global_position.y - arena_rect.position.y),
+		Vector2.UP: absf(global_position.y - arena_rect.end.y),
+	}
+	var normal := Vector2.RIGHT
+	var best_distance := INF
+	for candidate_normal in distances.keys():
+		var distance := float(distances[candidate_normal])
+		if distance < best_distance:
+			best_distance = distance
+			normal = candidate_normal
+	direction = direction.bounce(normal).normalized()
+	global_position = global_position.clamp(
+		arena_rect.position + Vector2.ONE * WALL_BOUNCE_NUDGE,
+		arena_rect.end - Vector2.ONE * WALL_BOUNCE_NUDGE
+	)
+	global_position += normal * WALL_BOUNCE_NUDGE
+	_spawn_position = global_position
 	rotation = direction.angle()
 	return true
 

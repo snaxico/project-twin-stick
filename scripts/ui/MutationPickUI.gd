@@ -43,6 +43,10 @@ func configure_for_players(configs: Array, options_by_player: Array, round_title
 func _unhandled_input(event: InputEvent) -> void:
 	for player_index in range(_player_configs.size()):
 		if _confirmed[player_index]:
+			if _is_player_cancel_pressed(event, player_index):
+				_unconfirm_player_selection(player_index)
+				get_viewport().set_input_as_handled()
+				return
 			continue
 		var move_direction := _get_player_menu_direction(event, player_index)
 		if move_direction != 0:
@@ -72,6 +76,14 @@ func _confirm_player_selection(player_index: int) -> void:
 	_refresh_panels()
 	if _all_confirmed():
 		selections_confirmed.emit(_build_final_selections())
+
+func _unconfirm_player_selection(player_index: int) -> void:
+	var options: Array = _options_by_player[player_index]
+	if options.is_empty():
+		return
+	_confirmed[player_index] = false
+	_locked_selection_ids[player_index] = ""
+	_refresh_panels()
 
 func _build_final_selections() -> Array:
 	var selections_per_player: Array = []
@@ -468,6 +480,12 @@ func _is_player_confirm_pressed(event: InputEvent, player_index: int) -> bool:
 		var joy_button := event as InputEventJoypadButton
 		return joy_button.pressed and joy_button.button_index == JOY_BUTTON_A
 	return _event_matches_action(event, "p%d_secondary" % int(config.player_id))
+
+func _is_player_cancel_pressed(event: InputEvent, player_index: int) -> bool:
+	var config = _player_configs[player_index]
+	if config.control_source == "gamepad":
+		return _gamepad_direction_button(event, config, JOY_BUTTON_B)
+	return _event_matches_action(event, "ui_cancel")
 
 func _event_matches_action(event: InputEvent, action_name: String) -> bool:
 	if not (event is InputEventKey):

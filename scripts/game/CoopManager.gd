@@ -39,10 +39,13 @@ const BOSS_PLAYER_SPAWN_DISTANCE := 720.0
 const FLOOR_GRID_SPACING := 160.0
 const FLOOR_GRID_MAJOR_INTERVAL := 4
 const ARENA_WALL_VISUAL_WIDTH := 18.0
-const REVIVE_RADIUS := 96.0
+const REVIVE_RADIUS := 150.0
 const REVIVE_HOLD_DURATION := 1.2
 const MAX_ACTIVE_PROJECTILES := 180
 const HUD_REFRESH_INTERVAL := 0.08
+const BOSS_MARKER_VISIBILITY_MARGIN := 140.0
+const BOSS_SPAWN_DELAY := 25.0
+const BOSS_HIT_FEEDBACK_INTERVAL := 0.22
 const COLLECTOR_TARGET := 8
 const COLLECTOR_TOTAL_SPAWN := 12
 const COLLECTOR_SPAWN_INTERVAL := 2.5
@@ -147,6 +150,7 @@ var _active_boss = null
 var _active_elite = null
 var _next_elite_add_spawn_at := 0.0
 var _next_boss_add_spawn_at := 0.0
+var _next_boss_hit_feedback_at := 0.0
 var _revive_progress_by_player_id: Dictionary = {}
 var _hud_root: Control = null
 var _player_combat_indicators: Array = []
@@ -844,8 +848,10 @@ func _start_room() -> void:
 	_pending_elite_bonus_pick = false
 	_active_boss = null
 	_active_elite = null
+	_boss_spawned = false
 	_next_elite_add_spawn_at = 0.0
 	_next_boss_add_spawn_at = 0.0
+	_next_boss_hit_feedback_at = 0.0
 	_room_elapsed = 0.0
 	_room_type = str(_room_config.get("room_type", "combat"))
 	_room_enemy_pool = ( _room_config.get("enemy_pool", []) as Array).duplicate()
@@ -883,12 +889,9 @@ func _start_room() -> void:
 		player.global_position = _get_player_spawn_position(int(player.player_index))
 	_setup_side_objective()
 	_apply_active_modifiers()
-	if _room_type == "boss":
-		_spawn_boss()
-	elif _room_type == "elite":
+	if _room_type == "elite":
 		_spawn_elite_miniboss()
-	if _room_type != "boss":
-		_spawn_opening_burst()
+	_spawn_opening_burst()
 	_refresh_hud()
 
 func _clear_runtime_nodes() -> void:
@@ -1055,7 +1058,6 @@ func _physics_process(delta: float) -> void:
 	_update_scheduled_pulsar_emps()
 	_update_homing_projectiles(delta)
 	_update_elite_add_waves()
-	_update_boss_add_waves()
 	_update_side_objectives(delta)
 	_update_hazards(delta)
 	_update_revives(delta)
@@ -1118,7 +1120,7 @@ func _update_boss_offscreen_indicator(delta: float) -> void:
 	var top_left := camera_center - world_half_extents
 	var boss_screen_position: Vector2 = ((_active_boss as Node2D).global_position - top_left) / maxf(zoom_value, 0.001)
 	var screen_rect := Rect2(Vector2.ZERO, viewport_size)
-	if screen_rect.has_point(boss_screen_position):
+	if screen_rect.grow(BOSS_MARKER_VISIBILITY_MARGIN).has_point(boss_screen_position):
 		_boss_offscreen_indicator.visible = false
 		return
 	var center := viewport_size * 0.5
@@ -1222,7 +1224,13 @@ func _check_wave_progress() -> void:
 	if _room_clear_started:
 		return
 	if _room_type == "boss":
-		if _enemy_nodes.is_empty() and _pending_enemy_spawns <= 0:
+		if not _boss_spawned and _room_elapsed >= _get_boss_spawn_delay():
+			_spawn_boss()
+		if not _spawning_done:
+			_continuous_spawn()
+		if _boss_spawned and (_active_boss == null or not is_instance_valid(_active_boss)):
+			_clear_remaining_boss_room_adds()
+			_spawning_done = true
 			_handle_room_clear()
 		return
 	if not _spawning_done:
@@ -1231,7 +1239,7 @@ func _check_wave_progress() -> void:
 		_handle_room_clear()
 
 func _continuous_spawn() -> void:
-	if _room_elapsed >= _room_duration:
+	if _room_type != "boss" and _room_elapsed >= _room_duration:
 		_spawning_done = true
 		return
 	var health_multiplier := 0.5 if bool(_minor_modifier_flags["swarm"]) else 1.0
@@ -1337,6 +1345,8 @@ func _spawn_elite_miniboss() -> void:
 	_spawn_elite_entrance_vfx(spawn_position)
 
 func _spawn_boss() -> void:
+	if _boss_spawned or _room_clear_started:
+		return
 	_boss_spawned = true
 	var boss_type := str(_room_config.get("boss_type", "warden"))
 	var full_boss_id := "boss_%s" % boss_type
@@ -1353,6 +1363,17 @@ func _spawn_boss() -> void:
 		boss.begin_boss_windup(2.5)
 	_next_boss_add_spawn_at = _room_elapsed + 2.5 + randf_range(0.4, 0.8)
 	_spawn_boss_entrance_vfx()
+
+func _clear_remaining_boss_room_adds() -> void:
+	for enemy in _enemy_nodes.duplicate():
+		if enemy == null or not is_instance_valid(enemy):
+			_enemy_nodes.erase(enemy)
+			continue
+		if enemy.has_method("get_type_name") and str(enemy.get_type_name()).begins_with("boss_"):
+			continue
+		_enemy_nodes.erase(enemy)
+		enemy.queue_free()
+	_pending_enemy_spawns = 0
 
 func _roll_wave_enemy_type(pool: Array) -> String:
 	if pool.is_empty():
@@ -1372,6 +1393,9 @@ func _get_spawn_interval() -> float:
 	if _room_type == "elite":
 		base -= 0.07
 	return maxf(base, 0.30)
+
+func _get_boss_spawn_delay() -> float:
+	return maxf(0.0, float(_room_config.get("boss_spawn_delay", BOSS_SPAWN_DELAY)))
 
 func _handle_room_clear() -> void:
 	if _room_clear_started:
@@ -1879,6 +1903,7 @@ func _should_suppress_combat_vfx() -> bool:
 
 func _on_enemy_died(enemy) -> void:
 	_enemy_nodes.erase(enemy)
+	var was_active_boss: bool = enemy == _active_boss
 	if enemy == _active_boss:
 		_active_boss = null
 	_enemies_killed += 1
@@ -1900,15 +1925,25 @@ func _on_enemy_died(enemy) -> void:
 		_kill_streak_progress += 1
 		if _kill_streak_progress >= _kill_streak_target:
 			_complete_side_objective()
+	if was_active_boss and _room_type == "boss" and not _room_clear_started:
+		_clear_remaining_boss_room_adds()
+		_spawning_done = true
+		_handle_room_clear()
 
 func _on_enemy_hit_received(_enemy, _damage_amount: int, _lethal: bool) -> void:
 	if _enemy == null or not is_instance_valid(_enemy):
 		return
 	var is_big_hit: bool = _damage_amount >= 90
 	var is_boss_hit: bool = _enemy.has_method("is_boss") and bool(_enemy.is_boss())
-	if is_big_hit or is_boss_hit:
+	var should_play_feedback := is_big_hit
+	if is_boss_hit:
+		var now := _current_time_seconds()
+		if now >= _next_boss_hit_feedback_at:
+			_next_boss_hit_feedback_at = now + BOSS_HIT_FEEDBACK_INTERVAL
+			should_play_feedback = true
+	if should_play_feedback:
 		if _screen_effects_enabled() and screen_shake != null and screen_shake.has_method("add_trauma"):
-			screen_shake.add_trauma(0.08 if not is_boss_hit else 0.12)
+			screen_shake.add_trauma(0.08 if not is_boss_hit else 0.10)
 		if not _lethal:
 			_request_hit_stop(0.45 if not is_boss_hit else 0.55, 35)
 	_play_sfx("play_impact_profile", [0.85, "hit"])

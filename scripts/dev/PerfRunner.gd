@@ -76,6 +76,7 @@ func _run(scenario: String, players: int, build: String) -> void:
 	}
 	if room_type == "boss":
 		options["boss_type"] = boss_type
+		options["boss_spawn_delay"] = 1.0
 	RunState.start_new_run(configs, options)
 
 	# Heavy build: worst-case projectile + burning-pool load from auto-fire (no input needed).

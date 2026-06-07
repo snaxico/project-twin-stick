@@ -192,7 +192,22 @@ func _build_meta_line(entry: Dictionary) -> String:
 	for key in ["slot", "type", "group", "rarity", "category"]:
 		if entry.has(key):
 			parts.append(str(entry[key]).capitalize())
+	if _active_category == "Abilities":
+		parts.append(_format_ability_duration(entry))
+		if entry.has("cooldown"):
+			parts.append("Cooldown: %s" % _format_seconds(float(entry.get("cooldown", 0.0))))
 	return " | ".join(parts)
+
+func _format_ability_duration(entry: Dictionary) -> String:
+	var duration := float(entry.get("duration", 0.0))
+	if duration <= 0.0:
+		return "Instant"
+	return "Active: %s" % _format_seconds(duration)
+
+func _format_seconds(value: float) -> String:
+	if is_equal_approx(value, roundf(value)):
+		return "%ds" % int(roundf(value))
+	return "%.1fs" % value
 
 func _build_body_text(entry: Dictionary) -> String:
 	var lines: Array = [str(entry.get("description", "No description available."))]

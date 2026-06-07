@@ -277,6 +277,8 @@ func _map_weapon_stats_to_projectile_keys(compiled: Dictionary) -> void:
 		compiled["split_spread_degrees"] = float(compiled.get("spread_degrees", 0.0))
 	if compiled.has("pierce"):
 		compiled["pierce_count"] = int(compiled.get("pierce", 0))
+	if bool(compiled.get("infinite_pierce", false)):
+		compiled["infinite_pierce"] = true
 	if compiled.has("blast_radius"):
 		compiled["explosion_radius"] = float(compiled.get("blast_radius", 0.0))
 	if compiled.has("blast_damage_percent"):

@@ -75,11 +75,11 @@
         "fire_rate": 4.0,
         "projectile_speed": 1400.0,
         "range": 950.0,
-        "area": 3.0
+        "area": 3.0,
+        "infinite_pierce": true
       },
       "per_level": {
-        "damage": [16, 22, 28, 34, 40],
-        "pierce": [3, 3, 4, 4, 5]
+        "damage": [16, 22, 28, 34, 40]
       }
     },
     {

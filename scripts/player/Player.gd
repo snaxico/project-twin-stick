@@ -102,10 +102,10 @@ func _ready() -> void:
 	add_to_group("player_target")
 	current_health = max_health
 	if visual != null:
-		_base_visual_scale = visual.scale * 1.3
+		_base_visual_scale = visual.scale * 1.5
 		visual.scale = _base_visual_scale
 	if shadow != null:
-		_base_shadow_scale = shadow.scale * 1.3
+		_base_shadow_scale = shadow.scale * 1.5
 		shadow.scale = _base_shadow_scale
 	health_changed.emit(current_health, max_health)
 	_apply_visual_state(_current_time_seconds())

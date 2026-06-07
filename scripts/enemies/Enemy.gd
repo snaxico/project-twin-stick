@@ -7,6 +7,7 @@ const PULSAR_REACTIVE_TELEPORT_DISTANCE := 250.0
 const SEPARATION_RADIUS := 64.0
 const SEPARATION_STRENGTH := 120.0
 const BLOOM_COLOR_MULTIPLIER := 1.45
+const READABILITY_VISUAL_SCALE := 1.3
 
 signal enemy_died(enemy)
 signal fire_requested(origin, direction, speed, damage, team, color, projectile_scale)
@@ -1252,7 +1253,7 @@ func _refresh_static_visuals() -> void:
 			scale_mult = 1.2
 		EnemyType.SPLITTER:
 			scale_mult = 1.1
-	visual.scale = _base_visual_scale * scale_mult
+	visual.scale = _base_visual_scale * scale_mult * READABILITY_VISUAL_SCALE
 	visual.color = _bloom_color(_feedback_color.lightened(0.24)) if _shield_active else _bloom_color(_feedback_color)
 	if collision_shape != null and collision_shape.shape is CircleShape2D:
 		(collision_shape.shape as CircleShape2D).radius = _base_collision_radius * max(0.7, scale_mult)

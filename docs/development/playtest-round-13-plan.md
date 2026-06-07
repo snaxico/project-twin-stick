@@ -4,7 +4,7 @@ Single self-contained build doc for Round 13. Built collaboratively, point by po
 `v3/main` in `D:\GameDev\Project_Twin_stick` (main checkout, no new worktrees). Do not commit unless
 asked.
 
-> STATUS: **PLAN ONLY — NOT YET IMPLEMENTED.**
+> STATUS: **IMPLEMENTED LOCALLY — TOOL-VALIDATED, MANUAL PLAYTEST STILL REQUIRED.**
 > **Baseline = the Round 12 implementation currently in the working tree** (weapon/ability rebalance,
 > 2P count scaling, arena 3600×2100, zoom 0.45–0.65, Scanline/Decoy/Orbit/Pulsar changes, prewarm,
 > PerfRunner worst-frame instrumentation, encyclopedia, revive HUD, Encounter Builder cleanup). Round
@@ -228,3 +228,39 @@ Each cluster: implement → headless-validate → continue.
 - Boss screen-shake measured cause and the fix applied.
 - Enemy sprite scaling: whether any boss/elite already sets its own scale (left as-is if so).
 - Anything unclear, skipped, or deviated, with the reason.
+
+---
+
+## Implementation Notes
+
+- Railgun is represented with explicit `infinite_pierce: true`; damage stays `[16,22,28,34,40]`.
+- Ricochet now spends `ricochet_remaining` only on `StaticBody2D` arena-wall hits. The wall normal is
+  derived from the nearest `get_arena_rect()` edge, the projectile direction is reflected, and
+  `_spawn_position` resets on each bounce. Railgun + Ricochet therefore pierces each straight segment,
+  banks off a wall, and keeps piercing the next segment.
+- Boss rooms now run opening burst plus continuous normal room spawns from room start. The boss spawns
+  after `25s` in normal runs; `PerfRunner` uses a debug-only `1s` boss-spawn delay override so boss
+  profiling still samples real boss combat.
+- Generic boss add-waves were disabled to avoid double-spawning; boss-specific scripted minion attacks
+  still use the existing budgeted spawn helper.
+- Boss rooms clear immediately on active boss death. Remaining non-boss enemies are despawned and
+  pending add spawns are cancelled so adds do not delay reward/progression.
+- Enemy readability scaling uses `READABILITY_VISUAL_SCALE := 1.3` on the enemy visual draw scale only.
+  Existing elite/boss gameplay scale and collision-radius logic are left unchanged.
+- Screen-shake profiling did not show a sustained render/CPU FPS collapse. The matching playtest
+  symptom was repeated boss-hit feedback under sustained fire, so boss-hit shake/hit-stop feedback is
+  throttled to `0.22s` and boss-hit trauma was reduced from `0.12` to `0.10`.
+
+### Round 13 Validation
+
+- `Godot_v4.6.2-stable_win64_console.exe --headless --path D:\GameDev\Project_Twin_stick --quit`
+  - Passed after implementation clusters and after the boss-hit feedback throttle.
+- Non-headless heavy 2P boss profiles before the boss-hit feedback throttle:
+  - Warden: `27.840 max_frame_ms`; Warden slam/ground-pound marker `36.322 ms`
+  - Hydra: `14.766 max_frame_ms`
+  - Hive: `16.524 max_frame_ms`
+  - Pulsar: `16.658 max_frame_ms`
+- Representative post-throttle profile:
+  - Warden: `17.424 max_frame_ms`; Warden slam/ground-pound marker `17.987 ms`
+
+Manual playtest is still required before Round 13 is treated as approved/stable.

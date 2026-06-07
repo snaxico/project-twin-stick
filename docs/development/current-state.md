@@ -13,11 +13,11 @@ The live runtime is now aligned to the `Feature Roadmap V3` redesign:
 - meta progression and pre-run weapon unlock/selection remain deferred
 - the round-9 weapon system is live: five peer weapons, one active weapon, shared weapon level, and categorized upgrade cards
 
-Current local runtime includes the playtest round-12 implementation on top of the round-11
-readability/perf baseline and the round-9 Mutation-to-Weapon system rework. Heavy boss add-waves
-remain enabled in normal boss rooms with a `25` non-boss enemy cap in 1P and a `38` cap in 2P,
-including pending spawns. Round 12 is implemented and tool-validated; manual playtest is still
-pending.
+Current local runtime includes the playtest round-13 implementation on top of the round-12
+tool-validated baseline and the round-9 Mutation-to-Weapon system rework. Boss rooms now run as
+normal combat rooms with continuous add spawns, spawn the boss after `25s`, and clear immediately when
+the boss dies. Generic boss add-waves are disabled; boss-specific scripted minion attacks remain.
+Round 13 is implemented and tool-validated; manual playtest is still pending.
 
 ## Current Runtime
 
@@ -144,6 +144,22 @@ pending.
   - reward cards are compact with a selected-upgrade detail panel; Encyclopedia opens from the main menu and pause menu
   - boss off-screen marker is larger, pulsing, and boss-colored; downed players show an explicit revive progress marker
   - Encounter Builder removes starting-primary, room-step, starting mutation, starting level/XP, and launch-cheat controls
+- current round-13 tuning changed:
+  - camera padding is wider and close-player zoom is lowered to `0.52`; player visuals are `1.5x`
+    and enemy visuals gain a draw-only `1.3x` readability multiplier
+  - Overcharge cooldown is `16s`; Shockwave Resonance pulses are staggered by `0.4s`
+  - revive radius is `150`
+  - Ice Zone uses one shared `ice_zone` slow source so overlapping patches do not stack
+  - Railgun uses explicit infinite pierce, and Ricochet now grants `2` arena-wall bounces instead of
+    enemy seeking
+  - boss rooms spawn normal adds continuously, delay boss spawn by `25s`, disable generic boss
+    add-waves, and clear immediately on boss death
+  - reward picks stay locked per confirmed player until `ui_cancel` unconfirms them; finalization still
+    requires all players confirmed
+  - Encyclopedia ability entries show active duration/cooldown, and the boss marker waits until the
+    boss is outside an inflated viewport margin
+  - boss-hit shake/hit-stop feedback is throttled to reduce perceived screen-shake stutter under
+    sustained fire
 - player mutation visuals are now partially wired:
   - projectile streaks for high `Rapid Fire` / `Velocity`
   - speed-line feedback for `Move Speed`
@@ -369,7 +385,9 @@ pending.
 ## Known Risks
 
 - full live playtesting and balance validation still have not been run after the full V3 integration
-- round-2 through round-12 tuning have passed headless validation; round-6, round-11, and round-12 also have non-headless profiling data, but round-12 still needs full balance/readability/performance playtesting
+- round-2 through round-13 tuning have passed headless validation; round-6, round-11, round-12, and
+  round-13 also have non-headless profiling data, but round-13 still needs full
+  balance/readability/performance playtesting
 - boss and elite behavior is implemented, but still likely needs feel tuning against real runs
 - modifier stacking, projectile pooling, AI time-slicing, new boss add pressure, homing orbs, and endless pressure have not been manually stress-tested yet
 - the rebuilt pause menu, new VFX density, swarm performance optimization, slot-colored HUD, Build HUD overhaul, and input binding menu have passed parse validation but still need controller/manual readability testing
@@ -392,7 +410,7 @@ pending.
 
 ## Next Step
 
-Run manual validation for the round-12 build using `docs/development/playtest-round-12-plan.md` as the checklist. Focus on arena/camera space, reward detail readability, Encyclopedia access, revive HUD clarity, Pulsar pressure, boss marker visibility, 2P spawn pressure, and Encounter Builder cleanup.
+Run manual validation for the round-13 build using `docs/development/playtest-round-13-plan.md` as the checklist. Focus on camera/scale readability, Railgun/Ricochet behavior, delayed boss combat-room pressure, reward cancel/unconfirm UX, Ice Zone no-stack behavior, revive radius, boss marker visibility, and screen-shake feel.
 
 - continuous spawn pacing in `1P` and `2P` — does `35-45s` room duration feel right?
 - first `30s` pressure — do the opening burst, `~5/s` rifle, spawn ramp, and multi-edge spawns feel active without overwhelming?
@@ -404,7 +422,7 @@ Run manual validation for the round-12 build using `docs/development/playtest-ro
 - Fire Floor `280px` / `7` zone pressure
 - Blink movement-direction, arrival i-frames, and detonation feel
 - Fire Bullets impact-pool balance, correctness, and performance
-- real boss-room stress validation for shipped capped boss add-waves in `1P` and `2P`
+- real boss-room stress validation for delayed boss combat rooms in `1P` and `2P`
 - boss HP bar visibility, phase pips, and readability in `1P` and `2P`
 - OFF/DEF picker usability and `LT = OFF` / `RT = DEF` mapping for both players
 - hit-stop feel, especially that trash kills do not stutter dense rooms

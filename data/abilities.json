@@ -35,7 +35,7 @@
       "description": "For a short burst, your weapon fires 50% faster.",
       "slot": "off",
       "type": "sustained",
-      "cooldown": 22.0,
+      "cooldown": 16.0,
       "duration": 6.0,
       "stats": {
         "fire_rate_multiplier": 1.5,
