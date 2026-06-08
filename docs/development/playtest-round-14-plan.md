@@ -1,300 +1,226 @@
-# Playtest Round 14 + Content Vision — Plan & Design Notes
+# Project Twin-Stick — Content Vision & Patch 1 Plan
 
-Captured from a long collaborative design session. **Baseline = Round 13 (commit `3c37ec7`).**
-Work on `v3/main` in `D:\GameDev\Project_Twin_stick`. Do not commit unless asked.
+Single source-of-truth doc for the current content effort. **Baseline = Round 13 (commit `3c37ec7`).**
+Work on `v3/main` in `D:\GameDev\Project_Twin_stick` (main checkout, no new worktrees). Do not commit
+unless asked.
 
-> STATUS: **DESIGN / PLANNING — NOT all implementation-ready.**
-> This doc has three parts:
-> - **Part 1 — Round 14 tuning:** near-term, implementable patch (concrete values).
-> - **Part 2 — Content vision:** the bigger "quality over quantity" redesign (manual aim + new
->   weapons/abilities/bosses/biomes). Concepts + identities are locked; **most stats are NOT yet
->   designed**, so this is a multi-round vision, not a single Codex hand-off.
-> - **Part 3 — Open items:** things we explicitly deferred to keep discussing.
+**Structure:**
+- **Part A — Patch 1 (build now; Codex-ready):** tuning + manual aim + weapon roster + Momentum/Flow.
+  This is the "one big patch."
+- **Part B — Content vision (future patches; design locked, most stats TBD):** abilities, bosses/
+  enemies, biomes, and build sequencing.
+- **Part C — Parked ideas.**
+- **Part D — Open items.**
 
-> **Design north star (from this session):** *quality over quantity.* We can't out-quantity big
-> studios, so every new thing must feel **genuinely different**, not marginally different. Cut anything
-> redundant. Every weapon must **work in auto-aim AND be better (not required) in manual.**
+> **Codex rules (apply to Part A):** Stick to this plan. **Do not invent assumptions. Do not silently
+> deviate** — flag unclear values first. After implementing, **summarize anything unclear, skipped, or
+> deviated.** Report your approach **before/with** the items marked **[REPORT]**. "Upgrade" is the
+> player/doc word; "mutation" is code-only. Validate headless after each cluster. Keep output on `D:`.
 
-> **Art direction:** the current neon-geometric look (Geometry-Wars-ish) is an **explicit
-> placeholder.** The intended final style is **rubberhose** (1930s cartoon, Cuphead lineage) — a full
-> restyle, deferred because **gameplay is the priority.** Consequences: build on the neon placeholder;
-> do rubberhose later as a **re-skin of stable mechanics** (consistent with "art last"); keep visuals
-> **parameterized / data-driven** (shape/color/particle params per weapon) so the rubberhose pass
-> swaps the skin, not the logic; and **don't over-polish neon** — it's scaffolding.
+> **Design north star:** *quality over quantity.* We can't out-quantity big studios, so every new thing
+> must feel **genuinely different**, not marginally different. Cut anything redundant.
 
----
-
-# Part 1 — Round 14 tuning (implementable now)
-
-From the Round-13 playtest. Concrete values; safe to build.
-
-### Scale / speed / camera (R13 zoom-out overshot + felt slow)
-- **`Player.move_speed`** `488` → **`560`**.
-- **`ZoomCamera.zoom_max`** `0.52` → **`0.56`** (keep `zoom_min 0.45`, `padding (440,380)`).
-- **Player visual scale** `1.5` → **`1.35`** (`Player.gd` `_base_visual_scale`). Collision unchanged
-  (already decoupled).
-- **Enemy `READABILITY_VISUAL_SCALE`** `1.3` → **`1.2`** (`Enemy.gd`). Collision unchanged (already
-  decoupled — confirmed `_refresh_static_visuals` excludes it).
-- **Hitbox note:** confirmed visual ≠ hitbox for both player and enemies; the "too big" feel is purely
-  visual, addressed by the scale trims above.
-
-### Grid flicker
-- Arena grid `Line2D`s are not antialiased (`CoopManager._rebuild_floor_grid` ~779; only walls are).
-  **Set `antialiased = true`** on the grid lines (and consider a small width bump) to stop the shimmer
-  at the zoomed-out scale.
-
-### Boss off-screen indicator
-- **Remove it entirely.** At this zoom the arena is nearly always fully on-screen, so the edge marker
-  is noise (and it was showing on-screen anyway). Revisit only if we ever zoom in significantly.
-
-### Dash (differentiate from Blink)
-- Blink is the better tool (moves through enemies) and stays as-is. **Dash → high-frequency dodge:**
-  lower cooldown (`3.0` → **`~1.5s`**), **drop the marginal dash-through damage**, keep i-frames.
-  Identity = "always have a dodge."
-
-### Ricochet mutation → Split (R13 wall-bounce failed)
-- Wall-bounce never triggers because auto-aim sends shots straight at enemies, not walls. **Replace
-  with split:** on hit, spawn **1** new projectile aimed at the **nearest *other* enemy**; splits do
-  **not** re-split (no infinite chain). (`mutations.json` `ricochet` + `Projectile.gd`.)
-
-### Shotgun
-- **Tighter spread:** `spread_degrees` `[18,17,16,15,14]` → **`[12,11,10,9,8]`**.
-
-### Knockback — dropped entirely (weapons + mutation)
-- **Remove `knockback` from Cannon (`320`→none) and Shotgun (`150`→none).** "Knockback feels useless"
-  (trash one-shots, bosses immune, elites barely react). Shotgun loses its self-defense push — accepted
-  as brawler risk.
-- **Remove the Knockback mutation entirely** (`mutations.json` `knockback`). No forced replacement —
-  the hit-effect category is crowded and every proposed swap felt redundant; a tighter pool beats
-  filler (quality over quantity).
-
-### Overcharge cooldown
-- **`cooldown` `16` → `12`** (`data/abilities.json` overcharge). Duration 6s / 1.5× fire rate
-  unchanged — ~50% uptime so the burst comes around often.
-
-### Strategic direction
-- **Structured (acts + map) is the MAIN mode**; endless is a secondary/score mode. New content is
-  designed around the structured arc.
+> **Art direction:** the current neon-geometric look is an **explicit placeholder.** The intended final
+> style is **rubberhose** (1930s cartoon, Cuphead lineage) — a full restyle, deferred because
+> **gameplay is the priority.** Build on the neon placeholder; do rubberhose later as a **re-skin of
+> stable mechanics**; keep visuals **parameterized/data-driven** so the re-skin swaps the look, not the
+> logic; **don't over-polish neon** (it's scaffolding).
 
 ---
 
-# Part 2 — Content vision (design locked, stats TBD)
+# PART A — PATCH 1 — "core feel" (Codex-ready, build now)
 
-The "need more content" answer, built to the quality north star. **Identities/mechanics are decided;
-numbers are not** (a future design+build effort, sequenced over multiple rounds — manual aim first
-since it's foundational).
+The single big patch: **tuning + manual aim + the full weapon roster + the Momentum/Flow system.**
+No new abilities/bosses/biomes; **no enemy re-tune** (that's post-playtest).
 
-## Aiming model — auto default + seamless manual override
-- **Default behaviour:** **auto-aim with a seamless manual override** — NOT a hard mode toggle.
-  - **No aim input** (right stick centered) → **auto-targets nearest** (today's game). Pure
-    accessibility floor; a left-stick-only player gets full auto forever.
-  - **Push the right stick** → **manual takes over that instant** (deflect-to-fire in the aimed
-    direction). **Release → snaps back to auto.** Manual is always one flick away, never a commitment.
-- **Deflect-to-fire:** the aim stick **aims AND fires** (no separate fire button — you fire near-
-  constantly anyway). **KB+M:** moving the mouse / firing engages manual aim at the cursor; otherwise
-  auto. (KB+M override details → implementation.)
-- **Settings:** a **"Manual only"** option for purists (auto never engages). Default = auto + override.
-- Bind the already-defined-but-unbound **`pX_aim_*`** actions to the right stick; produce an
-  `_aim_facing` separate from `_move_facing`; fire toward `_aim_facing` when aim input is present, else
-  auto-target.
-- **Every weapon works in both, moment-to-moment.** **Manual upside = a MODERATE edge** (reach, target
-  selection, sweeping) — **not a damage gap** — so auto never becomes a trap. **No manual-only
-  weapons.** Auto remains the best/default option ongoing; manual layers on as skill expression.
-- **Manual aim is WEAPON-ONLY.** Abilities are not aimed by the right stick:
-  - **Movement abilities (Dash, Blink) follow the MOVEMENT direction (left stick)** — "left stick =
-    where I go." Edge case (no movement input while aiming): fall back to aim direction, else last
-    facing.
-  - **Placed/centered abilities** (turret, minefield, decoy, shockwave, shield, dome, orbit) are
-    **unaffected** — drop at/around the player as today.
+**Weapon roster after this patch (7, each a distinct delivery; all work in auto + manual):**
 
-## Core — Momentum / Flow system (new core-feel feature)
-Pulled from the parked combo idea, but **only the moment-to-moment flow part** — NOT the score / heat-
-escalation / endless arcade layers (those stay parked). Goal: reward aggressive, flawless play with an
-"in the zone" feel.
-- **Build:** killing builds momentum (rapid kills faster). Builds on the existing
-  `_kill_streak_progress`.
-- **Grants:** escalating **move speed + fire rate** as momentum climbs — literally feeling snappier/in
-  the zone. **Distinct from Overcharge** (Overcharge = active burst ability; momentum = passive,
-  *earned* by play).
-- **Loss:** **drops hard on hit** (Returnal-style) — rewards flawless aggression. **No idle decay** →
-  "kill to build it, don't get hit to keep it."
-- **Defense preserves it:** only hits that actually **deal damage** drop momentum. A hit **prevented**
-  by dodge i-frames / Shield / Barrier dome does **NOT** cost momentum — defensive skill protects your
-  flow.
-- **Co-op:** **per-player meter** (your own hits drop your own momentum) — fair, individual.
-- **Feedback:** visible escalating aura (neon placeholder now; reads as "fired up," re-skins to
-  rubberhose later).
-- **Stats TBD:** tier thresholds, speed/fire-rate per tier, build rate, on-hit loss amount.
+| Weapon | Delivery | Change in Patch 1 |
+|---|---|---|
+| Rifle | Sustained single-target | none |
+| Shotgun | Short cone burst | tighter spread; knockback removed |
+| Rocket | Direct AoE | none |
+| Cannon | Biggest single hit (boss-killer) | remove pierce + knockback; slower + heavier |
+| Railgun | Unlimited pierce line | none (Lance concept folded into it) |
+| **Beam** ✨ | Continuous, per-target dwell-ramp | **new** |
+| **Boomerang** ✨ | Returning double-hit | **new** |
 
-## Balance & difficulty principles
-- **Fire-rate (and power) sources ADD, and are UNCAPPED.** Momentum + Overcharge + Root stance +
-  fire-rate mutations + weapon levels all **stack additively with no cap.** The player is *meant* to be
-  able to become OP — that's the power fantasy. **Balance via the individual values, not via caps.**
-- **Difficulty is re-tuned by HAND, AFTER playtest.** The player gets much stronger (momentum +
-  uncapped stacking + new kit), but we **don't pre-tune enemies blind.** Patch 1 ships with **current
-  enemy values unchanged**; then a **manual re-tune pass** (trash + elites, and bosses) is done based on
-  how the stronger player actually feels in playtest. No formula/auto-scaling. The likely direction
-  (given momentum makes the game about *not getting hit*) is **threat over HP** — but that's confirmed
-  in playtest, not pre-committed.
+## A1 — Data tuning (`data/*.json`)
 
-## Weapon roster (7 — each a distinct delivery)
-| Weapon | Delivery | Auto | Manual upside | Change from today |
-|---|---|---|---|---|
-| **Rifle** | Sustained single-target | Fires at nearest | Choose which target to focus | Keep |
-| **Shotgun** | Short cone burst | Cone at nearest | Aim the cone at the pack/fleer | Tighter spread (Part 1) |
-| **Rocket** | Direct AoE | Blast at nearest | Aim blast at densest spot | Keep |
-| **Cannon** | Biggest single hit (boss-killer) | Big shot at nearest | Place the big shot on an elite/boss | **Remove pierce + knockback; keep simple** |
-| **Railgun** | Unlimited pierce line | Line at nearest | **Line up max enemies** (showcase manual payoff) | Keep; **Lance folded in** |
-| **Beam** ✨ | Continuous, per-target dwell-ramp | Locks nearest, ramps | Sweep to spread, or hold on a boss | **New.** Ramp ~8→40 dmg/s over ~1.5s, **resets instantly** on leaving target |
-| **Boomerang** ✨ | Returning double-hit | Throws at nearest | Aim path so out + back both rake | **New.** Full-stream (fires freely); hits on both legs |
+**`data/weapons.json`:**
+- **Cannon:** `fire_rate` `2.0` → **`1.5`**; `per_level.damage` `[40,55,70,85,100]` →
+  **`[55,75,95,115,135]`**; **remove `pierce`** and **remove `knockback`**.
+- **Shotgun:** `per_level.spread_degrees` `[18,17,16,15,14]` → **`[12,11,10,9,8]`**; **remove
+  `knockback`** (the `150` from R13).
+- **Railgun:** no change.
+- **Add Beam:** `projectile_kind "beam"`; stats `range 750`; `per_level.max_damage_per_second
+  [120,140,160,180,200]`; `ramp_seconds 1.5`; `ramp_start_fraction 0.30`.
+- **Add Boomerang:** `projectile_kind "boomerang"`; stats `fire_rate 3.0`, `travel_distance 480`,
+  `projectile_speed ~700`; `per_level.damage [16,20,24,29,34]`.
 
-**Cut:** Lance (merged into Railgun), Arc, Flamethrower, Pilot, Gravity Well.
-
-## Abilities (3 new)
-- **Stance toggle — "Root for Power":** toggle on → you can't move (or move very slowly) but fire
-  rate + damage + range spike hugely. Commit-to-a-spot turret mode; pairs with Barrier/positioning. An
-  ongoing trade-off, not a timed burst.
-- **Persistent companion — combat drone:** an always-on auto-firing drone that follows you the **whole
-  run** (not a timed turret, no cooldown, no command input). Picking it dedicates an ability slot to a
-  permanent second gun.
-- **Barrier — dome:** a timed bubble around you that **blocks incoming projectiles only** (not bodies);
-  **you can still shoot out**; lasts longer than Shield. Distinct from **Shield** (which is total
-  invuln, short, *can't* attack). Roles: dome = bullet-cover you fight from; Shield = panic invuln.
-
-## Bosses / enemies (4 concepts — mechanics TBD)
-- **Arena-altering boss** — reshapes the battlefield mid-fight (raises walls, floods zones, shrinks the
-  space). The arena becomes part of the fight.
-- **Weakpoint / puzzle boss** — must be beaten a specific way (expose/hit cores, or reflect its own
-  attack). Directly targets the recurring "bosses too easy/samey."
-- **Conditional enemies** — demand tactics, not more HP: directional shield (must flank),
-  movement-mirror, and an "anchor" that buffs others (kill-priority).
-- **Combiner enemies** — small enemies that **merge into a big threat** if not cleared fast (urgency +
-  target priority).
-
-## Modifiers / map — physical biomes (rule-modifiers parked)
-Clear signal: change the **space**, not the **rules**.
-- **Destructible cover** — breakable cover you *and* enemies use; turns the open arena tactical (pairs
-  with manual aim).
-- **Pits / gaps** — fall hazards; deadly to step in, but you can knock enemies in and dash/blink
-  across.
-- **Pinball bumpers** — physics bumpers that bounce enemies (and you) around.
-- *Parked (no strong interest):* rule modifiers (vampirism, overheat, bullet-time dodge, no-auto-aim,
-  glass cannon, bouncing projectiles, darkness), and other biomes (ice/low-friction, wind currents).
-
----
-
-# Patch 1 — Implementation spec (in progress)
-
-Concrete, Codex-bound values, locked chunk by chunk. This becomes the Round-15 Codex plan.
-
-## Chunk 1 — Weapons (`data/weapons.json`)
-- **Cannon:** `fire_rate` 2.0 → **1.5**; `damage` per_level `[40,55,70,85,100]` → **`[55,75,95,115,135]`**;
-  **remove `pierce` and `knockback`.** (Slow, heavy, biggest single hit — boss-killer.)
-- **Railgun:** **no change** (`damage [16,22,28,34,40]`, `fire_rate 4.0`, unlimited pierce from R13).
-- **Beam (new):** continuous beam, **range 750**. Per-target **dwell ramp**: starts at **30% of max**,
-  ramps to max over **1.5s** on the same target, **resets instantly** on leaving. Max dmg/s per_level
-  **`[120,140,160,180,200]`**. Auto: locks nearest; Manual: aim/sweep. (Damage applied as ticks; tick
-  rate set in impl.)
-- **Boomerang (new):** `damage` **`[16,20,24,29,34]`**, `fire_rate` **3.0**, travel **~480** out then
-  returns to player; **double-hits** (out + back); full stream (no in-flight cap). Auto: throws
-  nearest; Manual: aim the path.
-
-## Chunk 2 — Manual aim
-- **Gamepad input:** bind `pX_aim_*` to the right stick (`JOY_AXIS_RIGHT_X/Y`); compute `_aim_facing`
-  from the stick vector when magnitude **> 0.35** (deadzone).
-- **Fire logic:** aim magnitude > deadzone → **manual** (fire toward `_aim_facing`, deflect-to-fire,
-  continuous at weapon cadence, **no aim-assist** — pure direction); else → **auto** (nearest, current).
-  Movement abilities still use the left stick; placed abilities still drop at the player.
-- **KB+M:** **auto + override** (consistent with gamepad) — auto by default; moving the mouse / firing
-  engages manual aim at the cursor, reverts to auto when idle.
-- **Reticle:** a neon **directional line/arc** from the player toward the aim direction, out to weapon
-  range, shown while manual-aiming.
-- **Settings:** `aim_mode` adds **"Manual only"** (weapon fires *only* while aiming; no auto-fallback).
-  Default = auto + override.
-
-## Chunk 3 — Momentum / Flow
-- 4-tier meter; **per-player**; **resets at room start**; aura intensifies per tier. Builds on existing
-  `_kill_streak_progress`.
-- **Tier buffs (additive, uncapped, stack with Overcharge/Root/mutations):**
-  - T1 **+10% move / +15% fire**
-  - T2 **+20% move / +30% fire**
-  - T3 **+35% move / +50% fire**
-  - T4 **+50% move / +75% fire**
-- **Build — kills per tier, escalating & cumulative (placeholder, to balance):** T1 = **10** kills,
-  T2 = **+15** (25 total), T3 = **+20** (45 total), T4 = **+25** (70 total).
-- **Loss:** a **damaging** hit drops **2 tiers**. Hits **prevented** by i-frames / Shield / Barrier dome
-  cost nothing. **No idle decay.**
-
-## Chunk 4 — Part 1 tuning (exact values)
-- `Player.move_speed` **488 → 560** (base; momentum adds on top).
-- `ZoomCamera.zoom_max` **0.52 → 0.56** (zoom_min 0.45, padding (440,380) unchanged).
-- Player visual scale **1.5 → 1.35**; enemy `READABILITY_VISUAL_SCALE` **1.3 → 1.2** (collision
-  unchanged for both).
-- Grid `Line2D`s **`antialiased = true`** (flicker fix).
-- **Remove** the boss off-screen indicator.
-- **Dash:** `cooldown` **3.0 → 1.5**; **remove the dash-through damage**; i-frames/speed/duration
+**`data/abilities.json`:**
+- **Overcharge:** `cooldown` `16` → **`12`**.
+- **Dash:** `cooldown` `3.0` → **`1.5`**; **remove the dash-through damage**; i-frames/speed/duration
   unchanged.
-- **Ricochet mutation → split** (on hit, spawn 1 bolt at nearest *other* enemy; no re-split).
-- Shotgun `spread_degrees` **[18..14] → [12,11,10,9,8]**.
-- **Remove `knockback`** from Cannon + Shotgun; **remove the Knockback mutation**.
-- Overcharge `cooldown` **16 → 12**.
 
-## Chunk 5 — Enemy re-tune
-- **No enemy changes in Patch 1.** Ship the stronger player against **current enemy values**, then
-  **hand-tune trash/elites (and bosses) after playtest.** (See difficulty principle above.)
+**`data/mutations.json`:**
+- **Remove the `knockback` mutation** entirely.
+- **Ricochet → Split:** repurpose `ricochet` — on hit, **spawn 1 projectile at the nearest *other*
+  enemy**; splits do **not** re-split (param e.g. `split_count: 1`). Update description. (R13
+  wall-bounce removed — it failed vs auto-aim.) Code change in A4.
 
-# Parked ideas / future development (not now)
+## A2 — Manual aim (auto default + seamless override)
 
-Captured so they're not lost; explicitly deferred, not part of the current plan.
+Today aiming is auto-only (`Player.gd` `_find_auto_target`/`_auto_attack_direction`; `aim_mode`
+`auto`/`movement` in `PlayerConfig.gd`). Add a real manual override — **purely additive over auto.**
 
-- **Arcade high-score layer (Returnal/MANIAC-inspired).** NOTE: the *flow* half of this idea was
-  **pulled into core** as the Momentum/Flow system (see Part 2). What remains parked is the **arcade
-  layer on top:** a **score multiplier** driven by momentum, and **"heat" — aggression-driven dynamic
-  difficulty** (the more you push, the harder the response, MANIAC-style), with **endless mode** as the
-  score-chase home (potentially shaped as a single persistent **open arena**). Parked because core
-  gameplay comes first; revisit once core is solid.
-- **Returnal-style readable bullet-hell boss patterns.** A boss-design note for the future boss work —
-  dense, weave-through geometric patterns; helps "bosses too easy" and plays to the neon strength.
-- **Risk/reward "parasite" items** — upgrades with a real downside. Adds depth to the mutation pool;
-  more scope/complexity. Optional.
-- **Open-world / GTA2-style roaming** — considered and **set aside**: a genre pivot that fights our
-  bounded couch-co-op identity, unbounded run length, and scope. Not pursuing.
-- **Interconnected arenas** — **rejected as filler**: corridors between the same fights add travel time
-  and break the upgrade beat without adding decisions, unless something *flows* through them (roaming/
-  pursuing enemies, persistent state, real routing). Not worth it for connection's sake.
+- **Input:** bind the already-defined-but-unbound `pX_aim_*` actions to the right stick
+  (`JOY_AXIS_RIGHT_X/Y`), mirroring the controller defaults in `Bootstrap.gd` (~753). Compute
+  **`_aim_facing`** from the aim-stick vector when magnitude **> 0.35** (deadzone).
+- **Fire logic** (`Player.gd` `_physics_process`, ~364–372): aim magnitude > deadzone → **manual**
+  (`fire_direction = _aim_facing`; deflect-to-fire; continuous at weapon cadence; **no aim-assist**);
+  else → **auto** (current nearest-target behavior).
+- **KB+M:** auto + override, consistent with gamepad — auto by default; moving the mouse / firing
+  engages manual aim at the cursor, reverts to auto when idle.
+- **Reticle:** while manual-aiming, draw a neon **directional line/arc** from the player toward
+  `_aim_facing`, out to weapon range.
+- **Abilities are weapon-aim-independent:** Dash/Blink use the **movement** direction (`_move_facing`);
+  only "no movement input while aiming" falls back to `_aim_facing`, else last facing. Placed/centered
+  abilities (turret/minefield/decoy/shockwave/shield/dome/orbit) unchanged.
+- **Settings:** add a **"Manual only"** `aim_mode` (weapon fires *only* while aiming). Default = auto +
+  override.
+- **[REPORT]** the per-device aim input wiring and the manual/auto fire branch.
 
-# Part 3 — Open items (continue next session)
+## A3 — Momentum / Flow system (new core feel)
 
-**Cross-system gaps logged for later (raised, not yet designed):**
-- **Mutation × new-weapon interactions** — define how existing effect mutations behave on **Beam**
-  (continuous — "split" is odd) and **Boomerang** (does pierce apply on both legs?). Some auto-work,
-  some need exclusion. Reconcile during the weapon stats pass.
-- **New HUD / UI** — a **momentum meter / aura**, a **manual-aim reticle** (so you see where you're
-  pointing), and **encyclopedia entries** for the new weapons/abilities/momentum.
-- **Onboarding** — rising complexity (manual aim, momentum, 7 weapons, more abilities) with no tutorial;
-  couch co-op needs lightweight teaching (control hints / first-run tips).
+Per-player flow meter rewarding aggressive, flawless play. Builds on existing `_kill_streak_progress`
+(`CoopManager.gd`). The "in the zone" feel — distinct from Overcharge (active burst) since momentum is
+passive/earned.
 
-- **Stats/numbers** for everything in Part 2: Beam ramp/range, Boomerang fire rate/return, Cannon
-  damage/cadence post-rework, Railgun confirm, the 3 abilities (root multipliers, drone DPS, dome
-  duration/radius), the 4 boss/enemy concepts, the 3 biomes.
-- **Manual aim implementation details:** right-stick/mouse input wiring, `_aim_facing`, settings UI,
-  per-weapon auto-vs-manual behavior tuning.
-- **Cannon** — confirmed "keep simple = boss-killer," but it's mechanically plain; watch in playtest /
-  revisit if it feels flat.
-## Build sequencing (decided)
+- **Meter:** 4 tiers, **per-player**, **resets at room start.**
+- **Build — kills per tier, cumulative (placeholder, to balance):** T1 = **10**, T2 = **+15** (25),
+  T3 = **+20** (45), T4 = **+25** (70).
+- **Tier buffs (ADDITIVE, UNCAPPED — stack with Overcharge/mutations/levels):**
+  | Tier | Move | Fire rate |
+  |---|---|---|
+  | T1 | +10% | +15% |
+  | T2 | +20% | +30% |
+  | T3 | +35% | +50% |
+  | T4 | +50% | +75% |
+- **Loss:** a **damaging** hit drops **2 tiers.** Hits **prevented** by dash i-frames / Shield / (future
+  Barrier dome) cost **nothing** — gate the drop on actual HP loss. **No idle decay.**
+- **Do NOT cap** the resulting fire rate / move speed — additive + uncapped is intended (OP is the
+  fantasy; balance via values, and via the post-playtest enemy pass).
+- **UI:** **4 tier pips** near each player's HUD card + an **escalating player aura** (per tier).
+- **[REPORT]** the gain/loss hooks and how buffs feed the move-speed/fire-rate math (and that nothing
+  caps it).
 
-One big patch instead of many small rounds, scoped so it stays shippable:
+## A4 — New weapon behavior (`scripts/weapons/…`)
 
-- **Patch 1 (next):** **Part 1 tuning + Manual aim system + full Weapon roster** (Cannon de-pierce,
-  Railgun pierce line, **Beam**, **Boomerang**) **+ the Momentum/Flow system** (core-feel, self-
-  contained). All "make the core feel good" work in one playtestable chunk. **Needs a stats pass +
-  manual-aim implementation detail before it's Codex-ready.**
-- **Patch 2:** Abilities (Stance/Root, combat drone, Barrier dome).
-- **Patch 3:** Bosses/enemies (arena-altering, weakpoint, conditional, combiner).
-- **Patch 4:** Physical biomes (cover, pits, bumpers).
+- **Beam (continuous, dwell-ramp):** continuous beam along `_aim_facing` (manual) or toward nearest
+  (auto), out to `range 750`. Damage ramps **per held target**: starts at `ramp_start_fraction` (0.30)
+  of `max_damage_per_second`, ramps to max over `ramp_seconds` (1.5s) on the **same** target; **resets
+  instantly** on target change. Apply damage as ticks (document tick rate). **[REPORT]** the tick model
+  + "same target"/reset tracking.
+- **Boomerang (returning, double-hit):** travels `travel_distance` (480) out, then **returns to the
+  player**, dealing `damage` to enemies on **both** legs (don't double-hit the same enemy on the same
+  leg). Full stream, `fire_rate 3.0`. Auto throws at nearest; manual aims the path.
+- **Ricochet → Split** (`Projectile.gd`): on hit, if a split charge remains, spawn 1 projectile toward
+  the nearest enemy that isn't the current target; the spawned one does **not** split. Remove the R13
+  wall-reflection path.
+- Add Beam/Boomerang icons (`IconFactory.gd`). The encyclopedia auto-picks them up from
+  `weapons.json`.
 
-Remaining before Patch 1 is Codex-ready:
-- **Weapon stats:** Beam ramp/range/DPS, Boomerang fire rate/travel/return, Cannon damage/cadence
-  post-rework, Railgun confirm.
-- **Manual-aim implementation:** right-stick/mouse input wiring + `_aim_facing`, settings-menu toggle,
-  per-weapon auto-vs-manual behavior.
+## A5 — Other tuning (`scripts/…`)
+
+- `Player.move_speed` **488 → 560** (base; momentum adds on top).
+- `ZoomCamera.zoom_max` **0.52 → 0.56** (zoom_min `0.45`, padding `(440,380)` unchanged).
+- `Player.gd` player visual scale **`*1.5` → `*1.35`** (`_base_visual_scale`); **collision unchanged.**
+- `Enemy.gd` `READABILITY_VISUAL_SCALE` **1.3 → 1.2** (collision already decoupled).
+- `CoopManager._rebuild_floor_grid` (~771): grid `Line2D` **`antialiased = true`** (grid-flicker fix).
+- **Remove the boss off-screen indicator** (`_update_boss_offscreen_indicator` + build/refs) — at this
+  zoom the arena is ~always on-screen, so it's noise.
+
+## Patch 1 — out of scope
+- **Enemy re-tune:** ship **current enemy values**; hand-tune trash/elites (and bosses) **after
+  playtest** against the stronger player. Likely direction = **threat over HP** (momentum makes the
+  game about *not getting hit*), but confirmed in playtest, not pre-committed.
+- New abilities, bosses/enemies, biomes — see Part B.
+
+## Patch 1 — build order / validation
+- Order: **A1** data → **A5** other tuning → **A2** manual aim → **A4** new weapons → **A3** momentum.
+- Each cluster: implement → headless-validate → continue.
+- `git diff --check`
+- Parse: `& 'D:\GameDev\Godot_v4.6.2-stable_win64.exe\Godot_v4.6.2-stable_win64_console.exe' --headless --path 'D:\GameDev\Project_Twin_stick' --quit`
+- Boot: same exe with `--quit-after 1`
+- **Manual playtest required** before approval — feel the manual aim, momentum flow, new weapons; it
+  drives the post-playtest enemy re-tune.
+- **[REPORT]** list: aim wiring + fire branch; momentum hooks + uncapped buff math; Beam tick model;
+  Boomerang double-hit; anything unclear/skipped/deviated.
+
+---
+
+# PART B — Content vision (future patches)
+
+Identities/mechanics locked; **most stats TBD.** Built *around the structured (acts + map) main mode*
+(endless is the secondary/score mode). Manual aim, weapons, and momentum from Part A are the
+foundation these build on.
+
+## Build sequencing
+- **Patch 1 (Part A):** tuning + manual aim + weapons + momentum. ← now
+- **Patch 2 — Abilities:** Stance/Root, combat drone, Barrier dome.
+- **Patch 3 — Bosses/enemies:** arena-altering, weakpoint/puzzle, conditional, combiner.
+- **Patch 4 — Biomes:** destructible cover, pits/gaps, pinball bumpers.
+- Each later patch gets its own stats pass + Codex plan, and a hand enemy re-tune as the player power
+  changes.
+
+## B1 — Abilities (Patch 2)
+- **Stance toggle — "Root for Power":** toggle on → can't move (or very slowly) but fire rate + damage
+  + range spike hugely. Commit-to-a-spot turret mode; an ongoing trade-off, not a timed burst.
+- **Persistent companion — combat drone:** an always-on auto-firing drone that follows you the **whole
+  run** (no cooldown, no command); picking it dedicates an ability slot to a permanent second gun.
+- **Barrier — dome:** timed bubble around you that blocks **incoming projectiles only** (not bodies);
+  **you can still shoot out**; lasts longer than Shield. Distinct from **Shield** (total invuln, short,
+  can't attack).
+
+## B2 — Bosses / enemies (Patch 3)
+- **Arena-altering boss** — reshapes the battlefield mid-fight (walls, flood, shrink).
+- **Weakpoint / puzzle boss** — beat a specific way (expose cores / reflect its attack); fixes "bosses
+  too easy/samey."
+- **Conditional enemies** — directional shield (must flank), movement-mirror, anchor-buffer
+  (kill-priority).
+- **Combiner enemies** — small enemies that merge into a big threat if not cleared fast.
+- (Boss readability: lean into Returnal-style dense, weave-through patterns.)
+
+## B3 — Modifiers / biomes (Patch 4)
+Physical/spatial biomes (rule-modifiers parked):
+- **Destructible cover** — breakable cover you + enemies use; turns the open arena tactical.
+- **Pits / gaps** — fall hazards; knock enemies in; dash/blink across.
+- **Pinball bumpers** — physics bumpers that bounce enemies (and you) around.
+
+---
+
+# PART C — Parked ideas (not now)
+
+- **Arcade layer (Returnal/MANIAC-inspired)** — the *flow* half is already core (Momentum, Part A).
+  Parked on top: a **score multiplier** driven by momentum, and **"heat" — aggression-driven dynamic
+  difficulty** (push harder → harder response, MANIAC-style), with **endless** as the score-chase home
+  (possibly a single persistent **open arena**). Revisit once core is solid.
+- **Returnal-style bullet-hell boss patterns** — a boss-design note for Patch 3.
+- **Risk/reward "parasite" items** — upgrades with a downside; adds mutation-pool depth; optional.
+- **Open-world / GTA2 roaming** — set aside (genre pivot vs bounded couch-co-op identity, scope).
+- **Interconnected arenas** — rejected as filler (corridors add travel time without decisions unless
+  something *flows* through them).
+
+---
+
+# PART D — Open items (future sessions)
+
+- **Stats for Part B:** the 3 abilities, the 4 boss/enemy concepts, the 3 biomes.
+- **Mutation × new-weapon interactions** — how existing effect mutations behave on **Beam** (continuous
+  — "split" is odd) and **Boomerang** (pierce on both legs?). Reconcile during/after Patch 1.
+- **New HUD/UI polish** beyond Patch 1: encyclopedia entries auto-update, but verify new weapons read
+  well; aim-reticle feel.
+- **Onboarding** — rising complexity (manual aim, momentum, 7 weapons, more abilities) with no
+  tutorial; couch co-op needs lightweight teaching (control hints / first-run tips).
+- **Cannon** — confirmed "keep simple = boss-killer," but watch it in playtest in case it feels flat.
