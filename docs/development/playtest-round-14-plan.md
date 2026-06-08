@@ -197,7 +197,13 @@ bindings can drive *both* players off one controller. Make P1 and P2 **symmetric
 - **Per-device InputMap bindings (keep rebinding functional):** **stamp each player's gameplay action
   events** (move / aim / abilities / fire) **with that player's assigned device id** — never device
   `-1` (all devices), which is what lets one pad cross-drive both. This keeps the InputMap rebind
-  system working **and** per-device. **Rebinding persists per-player, device-targeted events.**
+  system working **and** per-device.
+- **Persist LAYOUT only, stamp the device ID at runtime (do NOT save device IDs):** Godot joypad device
+  IDs are **runtime slots** that change on reconnect/relaunch, so they must not be serialized. Save
+  only the **per-player layout** (button/axis, device-agnostic) — the current storage already decodes
+  joy events to `device = -1` (`Bootstrap.gd` ~934/962), so **keep that**. Then, at **config/device-
+  assignment time**, **stamp/copy** each player's saved (or default) events onto their assigned runtime
+  `gamepad_device_id` on the live InputMap actions.
 - **UI / settings — also unblock P2 gamepad (else P2 still can't pick it):**
   - `_populate_player_2_control_option` (~264): offer **Gamepad**, not keyboard-only.
   - **Enable the P2 controller-binding buttons** (~596).
