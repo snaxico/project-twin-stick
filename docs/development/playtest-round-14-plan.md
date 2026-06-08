@@ -53,30 +53,42 @@ No new abilities/bosses/biomes; **no enemy re-tune** (that's post-playtest).
 - **Shotgun:** `per_level.spread_degrees` `[18,17,16,15,14]` → **`[12,11,10,9,8]`**; **remove
   `knockback`** (the `150` from R13).
 - **Railgun:** no change.
-- **Add Beam:** `projectile_kind "beam"`; stats `range 750`; `per_level.max_damage_per_second
-  [120,140,160,180,200]`; `ramp_seconds 1.5`; `ramp_start_fraction 0.30`.
-- **Add Boomerang:** `projectile_kind "boomerang"`; stats `fire_rate 3.0`, `travel_distance 480`,
-  `projectile_speed ~700`; `per_level.damage [16,20,24,29,34]`.
+- **Add Beam / Add Boomerang — but do this LAST, after the A4 firing branches exist** (see build-order
+  gate; they must not be selectable before the pipeline can fire them):
+  - **Beam:** `projectile_kind "beam"`; stats `range 750`; `per_level.max_damage_per_second
+    [120,140,160,180,200]`; `ramp_seconds 1.5`; `ramp_start_fraction 0.30`.
+  - **Boomerang:** `projectile_kind "boomerang"`; stats `fire_rate 3.0`, `travel_distance 480`,
+    `projectile_speed ~700`; `per_level.damage [16,20,24,29,34]`.
 
 **`data/abilities.json`:**
 - **Overcharge:** `cooldown` `16` → **`12`**.
-- **Dash:** `cooldown` `3.0` → **`1.5`**; **remove the dash-through damage**; i-frames/speed/duration
+- **Dash:** `cooldown` `3.0` → **`1.5`** only. (Base Dash has **no** damage — the "dash-through
+  damage" is the **Shockdash** rare, handled in `mutations.json` below.) i-frames/speed/duration
   unchanged.
 
 **`data/mutations.json`:**
-- **Remove the `knockback` mutation** entirely.
+- **Remove the `knockback` mutation** entirely. **Also strip the dead code it leaves** (data removal
+  alone isn't enough): the `knockback_level` / `get_knockback_bonus` / `knockback_bonus` computation in
+  `MutationSystem.gd` (~117) and the `knockback_level` read in `Player._fire_weapon` (~611), plus any
+  stale `current-state.md` references. (Weapon `knockback` removal in `weapons.json` is data-only.)
+- **Shockdash (`dash_shockdash` rare):** **remove its knockback** — drop the `knockback_force` param
+  and the knockback application in `Player._apply_shockdash_hits` (~517); **keep `passthrough_damage`**.
+  Update its description (drop "and knocks back"). (This is the only "dash-through damage" in the game.)
 - **Ricochet → Split:** repurpose `ricochet` — on hit, **spawn 1 projectile at the nearest *other*
   enemy**; splits do **not** re-split (param e.g. `split_count: 1`). Update description. (R13
-  wall-bounce removed — it failed vs auto-aim.) Code change in A4.
+  wall-bounce removed — it failed vs auto-aim.) Code change in A4 — **routed through `CoopManager`**,
+  not `Projectile.gd`.
 
 ## A2 — Manual aim (auto default + seamless override)
 
 Today aiming is auto-only (`Player.gd` `_find_auto_target`/`_auto_attack_direction`; `aim_mode`
 `auto`/`movement` in `PlayerConfig.gd`). Add a real manual override — **purely additive over auto.**
 
-- **Input:** bind the already-defined-but-unbound `pX_aim_*` actions to the right stick
-  (`JOY_AXIS_RIGHT_X/Y`), mirroring the controller defaults in `Bootstrap.gd` (~753). Compute
-  **`_aim_facing`** from the aim-stick vector when magnitude **> 0.35** (deadzone).
+- **Input (via A6's per-device InputMap bindings):** **bind `pX_aim_*` to the right stick**
+  (`JOY_AXIS_RIGHT_X/Y`), with each player's aim events **device-stamped to that player's gamepad**
+  (per A6) — so aim is **rebindable, per-device, and symmetric P1/P2** with no cross-drive. Read it
+  through the action (action strengths / `Input.get_vector`) into **`_aim_facing`** when magnitude
+  **> 0.35** (deadzone). The KB+M/mouse player aims with the mouse.
 - **Fire logic** (`Player.gd` `_physics_process`, ~364–372): aim magnitude > deadzone → **manual**
   (`fire_direction = _aim_facing`; deflect-to-fire; continuous at weapon cadence; **no aim-assist**);
   else → **auto** (current nearest-target behavior).
@@ -109,8 +121,22 @@ passive/earned.
   | T4 | +50% | +75% |
 - **Loss:** a **damaging** hit drops **2 tiers.** Hits **prevented** by dash i-frames / Shield / (future
   Barrier dome) cost **nothing** — gate the drop on actual HP loss. **No idle decay.**
+- **Kill credit = SHARED gain, per-player loss.** Gain is **shared**: on **any** enemy death
+  (`_on_enemy_died`, `CoopManager.gd`), **all players gain** toward their meter — so **no damage-owner
+  attribution is needed** (we avoid threading a `source_player` through projectiles / Beam ticks /
+  fire & poison pools / Shockwave / Orbit / Turret / mines / splitter-minis). **Loss is per-player:**
+  each player drops their own 2 tiers only when **they** take a damaging hit (already attributable —
+  the Player takes damage individually). Hook gain into `_on_enemy_died`; per-player meters track tiers
+  + loss.
 - **Do NOT cap** the resulting fire rate / move speed — additive + uncapped is intended (OP is the
   fantasy; balance via values, and via the post-playtest enemy pass).
+- **Implementation — UNIFIED ADDITIVE stat path (changes today's multiplicative stacking):** today
+  `Player._recompute_effective_stats` (~934) **multiplies** sources (`_combined_modifier`) and
+  `MutationSystem.get_compiled_weapon_stats` (~79) multiplies mutation bonuses. **Rework to ADDITIVE
+  accumulation:** sum all percent bonuses (momentum tiers + Overcharge + Root + fire-rate/damage/move
+  mutations) and apply once as **`base * (1 + Σ%)`**, **uncapped.** This is a **deliberate balance
+  change** (additive stacks weaker than multiplicative at high counts) — re-tune values in playtest.
+  **[REPORT]** the new additive formula and which sources feed it.
 - **UI:** **4 tier pips** near each player's HUD card + an **escalating player aura** (per tier).
 - **[REPORT]** the gain/loss hooks and how buffs feed the move-speed/fire-rate math (and that nothing
   caps it).
@@ -125,9 +151,28 @@ passive/earned.
 - **Boomerang (returning, double-hit):** travels `travel_distance` (480) out, then **returns to the
   player**, dealing `damage` to enemies on **both** legs (don't double-hit the same enemy on the same
   leg). Full stream, `fire_rate 3.0`. Auto throws at nearest; manual aims the path.
-- **Ricochet → Split** (`Projectile.gd`): on hit, if a split charge remains, spawn 1 projectile toward
-  the nearest enemy that isn't the current target; the spawned one does **not** split. Remove the R13
-  wall-reflection path.
+- **Ricochet → Split:** on hit, if a split charge remains, spawn 1 projectile toward the nearest enemy
+  that isn't the current target; the spawned one does **not** split. **Route the spawn through
+  `CoopManager`** — emit a `split_requested` signal from `Projectile.gd` → manager callback (or call a
+  manager method) so split shots respect pooling, `MAX_ACTIVE_PROJECTILES`, `impact_requested` /
+  `projectile_deactivated`, and active-projectile cleanup. **Do NOT instantiate projectiles inside
+  `Projectile.gd`** (that bypasses the pool/caps/signals). Remove the R13 wall-reflection path.
+- **Mutation compatibility (Beam is continuous → projectile-spawn/travel mutations don't apply):**
+  - **Apply to Beam:** `high_caliber` (damage), `range`, `rapid_fire` (remap → faster ramp / DPS),
+    `fire_trail` (ignite a pool at the contact point — **one active pool per beam, repositioned to the
+    current contact point and refreshed on a ~0.5s cooldown; do NOT spawn a pool per damage tick**, to
+    avoid balance/perf spam), `freeze_shot` (slow stacks on the hit target), `poison` (DoT on the hit
+    target); plus survival/player stats (`move_speed`, `tough`).
+  - **Do NOT apply to Beam:** `velocity` (no projectile travel), `ricochet`/split (no projectile to
+    spawn), `oc_piercing_overdrive` (pierce/travel N/A — beam already hits the whole line). (Ability-
+    group mutations are ability-scoped and never touch weapons.)
+  - **Boomerang is projectile-based** → all weapon mutations apply normally; damage is applied per leg
+    per the double-hit rule.
+  - **Compiler branch (required):** add an explicit `if projectile_kind == "beam"` branch in
+    `MutationSystem.get_compiled_weapon_stats` (~79) — the generic projectile path targets the wrong
+    keys for a beam. In the branch: **remap** `high_caliber` → `max_damage_per_second`, `rapid_fire` →
+    ramp speed; **skip** `velocity` / `ricochet`(split) / pierce. The generic projectile mutation pass
+    must NOT run for beams.
 - Add Beam/Boomerang icons (`IconFactory.gd`). The encyclopedia auto-picks them up from
   `weapons.json`.
 
@@ -141,6 +186,27 @@ passive/earned.
 - **Remove the boss off-screen indicator** (`_update_boss_offscreen_indicator` + build/refs) — at this
   zoom the arena is ~always on-screen, so it's noise.
 
+## A6 — Per-player controller ownership (make P1 = P2)
+
+Today **P2 is forced to `keyboard`** (`Bootstrap._build_player_configs` ~352) because shared pad
+bindings can drive *both* players off one controller. Make P1 and P2 **symmetric**, each owning a
+**distinct gamepad** — this is the prerequisite for 2P manual aim.
+
+- **Assign each player a distinct `gamepad_device_id`** — extend the assignment loop in `CoopManager`
+  (~672) so P2+ get their own connected pad; **remove the forced-keyboard P2 default** (~352).
+- **Per-device InputMap bindings (keep rebinding functional):** **stamp each player's gameplay action
+  events** (move / aim / abilities / fire) **with that player's assigned device id** — never device
+  `-1` (all devices), which is what lets one pad cross-drive both. This keeps the InputMap rebind
+  system working **and** per-device. **Rebinding persists per-player, device-targeted events.**
+- **UI / settings — also unblock P2 gamepad (else P2 still can't pick it):**
+  - `_populate_player_2_control_option` (~264): offer **Gamepad**, not keyboard-only.
+  - **Enable the P2 controller-binding buttons** (~596).
+  - **Stop stripping saved P2 controller bindings** (~749).
+- Result: **P1 and P2 identical** — movement, aim, abilities, **and** rebinding. KB+M stays a
+  selectable control source.
+- **[REPORT]** the per-device binding + storage approach, the UI changes, and confirm two pads no
+  longer cross-drive and that P2 can both **pick** and **rebind** a gamepad.
+
 ## Patch 1 — out of scope
 - **Enemy re-tune:** ship **current enemy values**; hand-tune trash/elites (and bosses) **after
   playtest** against the stronger player. Likely direction = **threat over HP** (momentum makes the
@@ -148,15 +214,24 @@ passive/earned.
 - New abilities, bosses/enemies, biomes — see Part B.
 
 ## Patch 1 — build order / validation
-- Order: **A1** data → **A5** other tuning → **A2** manual aim → **A4** new weapons → **A3** momentum.
+- Order: **A1** data tuning **(EXCEPT the Beam/Boomerang weapon entries)** → **A5** other tuning →
+  **A6** per-player controller ownership → **A2** manual aim → **A4** new-weapon firing branches
+  (continuous Beam + compiler branch, returning Boomerang, split-via-`CoopManager`) **→ then add the
+  Beam/Boomerang `weapons.json` entries** → **A3** momentum **(incl. the unified additive stat-path
+  rework)**.
+- **Gate:** the current pipeline assumes projectile-style firing (`_fire_weapon` →
+  `_on_player_fire_requested` → `_activate_projectile`). **Beam/Boomerang must NOT be selectable until
+  their A4 firing branches exist** — otherwise selecting them breaks firing.
 - Each cluster: implement → headless-validate → continue.
 - `git diff --check`
 - Parse: `& 'D:\GameDev\Godot_v4.6.2-stable_win64.exe\Godot_v4.6.2-stable_win64_console.exe' --headless --path 'D:\GameDev\Project_Twin_stick' --quit`
 - Boot: same exe with `--quit-after 1`
 - **Manual playtest required** before approval — feel the manual aim, momentum flow, new weapons; it
   drives the post-playtest enemy re-tune.
-- **[REPORT]** list: aim wiring + fire branch; momentum hooks + uncapped buff math; Beam tick model;
-  Boomerang double-hit; anything unclear/skipped/deviated.
+- **[REPORT]** list: per-player controller ownership (symmetric P1/P2, no cross-drive); aim wiring +
+  fire branch; the unified additive stat-path formula + sources; momentum gain/loss hooks; Beam tick
+  model + compiler branch; Boomerang double-hit; split-via-`CoopManager`; anything unclear/skipped/
+  deviated.
 
 ---
 
@@ -217,8 +292,9 @@ Physical/spatial biomes (rule-modifiers parked):
 # PART D — Open items (future sessions)
 
 - **Stats for Part B:** the 3 abilities, the 4 boss/enemy concepts, the 3 biomes.
-- **Mutation × new-weapon interactions** — how existing effect mutations behave on **Beam** (continuous
-  — "split" is odd) and **Boomerang** (pierce on both legs?). Reconcile during/after Patch 1.
+- **Mutation × new-weapon interactions** — *specified in A4* (Beam mutation-compatibility list;
+  Boomerang = projectile-based, mutations apply per-leg). Verify in playtest that the categorization
+  feels right.
 - **New HUD/UI polish** beyond Patch 1: encyclopedia entries auto-update, but verify new weapons read
   well; aim-reticle feel.
 - **Onboarding** — rising complexity (manual aim, momentum, 7 weapons, more abilities) with no
