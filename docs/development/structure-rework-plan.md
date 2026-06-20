@@ -577,6 +577,41 @@ keeps the same run climbing seamlessly until death. Reuses the existing `RunFlow
   nudges) and **risk/reward "parasite" items** (Part C) — revisit only if the simple 2-option choice
   feels too thin in playtest.
 
+## Open from the critical system review (DISCUSS NEXT SESSION)
+
+A critical pass over current gameplay systems vs the rework surfaced these. **Not yet decided** — to
+walk through next session (the design ones as multiple-choice).
+
+**Mechanical fixes (likely just fold in — low controversy):**
+
+- 🔴 **Rare-odds is broken by the rework.** `_get_current_rare_chance()` (`CoopManager` ~2294) is
+  hardcoded `0.40` if `is_endless_mode()` else `0.20`/`0.30` by act. Endless mode is **deleted** and all
+  continuation rooms are "act 2" → rare chance **stalls at 0.30 forever**, never reaching the deep-play
+  `0.40`. Replace with a **depth-based rare curve.**
+- 🟡 **"Act 1 / Act 2" is now vestigial** — just a `depth ≤ ROOMS_PER_ACT` threshold driving arena
+  color, rare odds, and enemy pool. Past the milestone everything is "act 2" → one arena color + one
+  pool tier **forever**. Generalize to **depth-based** (or keep acts as deliberate cosmetic bands).
+- ⚠️ **Enemy-pool functions are split** — `_build_enemy_pool` (act) for the arc vs `_get_endless_enemy_pool`
+  (depth) for continuation. Reconcile to one depth-based curve.
+
+**Design decisions (need a call — multiple-choice next session):**
+
+- ❓ **HP pickups** (10% drop / +5 HP) — with health reset per room + nothing-persists, healing is
+  purely intra-room. Marginal. **Cut, keep, or repurpose?**
+- ❓ **Side objectives** (Hold Zone / Kill Streak / Collector + room buffs) — a parallel goal layer
+  absent from champion rooms; competes for attention with the choice + champion + momentum. **Cut,
+  simplify, or keep?**
+- ❓ **Momentum scope** — resets **per room** (intra-room snowball); a long continuable score-run might
+  want it to **build/persist**. **Per-room (current) or build across the run?**
+
+**Notes for the re-tune / future (not blocking):**
+
+- **Cannon's "boss-killer" niche** weakens — it was built for isolated boss rooms; champions now fight
+  inside waves where AoE/clear matters more. Watch in the Phase-4 re-tune.
+- **`CoopManager` is a ~3000-line god-object** (room runtime + spawning + projectiles + abilities +
+  champions + HUD + modifiers + objectives + momentum). The rework removes some of it but doesn't
+  decompose it. Candidate for a later structural pass — **not** part of this rework.
+
 ## Carried forward from Part B/C/D (unaffected by this rework)
 
 - **Patch 2 — Abilities:** Stance/Root, combat drone, Barrier dome (still queued).
