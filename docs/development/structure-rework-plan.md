@@ -178,6 +178,36 @@ headless parse must stay clean (catches orphaned `@onready` / deleted scene-node
 - **Stale `current-state.md` Known Risks note:** the "gold stub functions in `RunState.gd` remain" entry
   is **already false** (code is clean of gold) — delete the note.
 
+## UI changes (per phase)
+
+Beyond the headline UI (map removal, win screen), these secondary surfaces need updating:
+
+### Phase 1
+
+- **Remove** the map-view UI (`RunFlow.tscn` map nodes + `_show_map` render) → present the **2-card
+  choice** via `_build_route_card`.
+- **Remove** the mode-select (`Bootstrap.tscn` `RunModeRow`/`RunModeOption`); menu = single **Play**.
+- **In-run HUD:** keep `_room_label` showing **"Room N" always**; **delete `_score_label`** (the room
+  number *is* the score). Replace the `is_endless_mode()` HUD/scaling gates (`CoopManager.gd` ~1422
+  boss-room depth scale, ~1450 room-duration past room 20) with **unified depth-based** logic so
+  scaling applies continuously, not only in "endless."
+
+### Phase 2
+
+- **Boss HP bar** (`CoopManager.gd` `_boss_health_bar`): relabel `"Boss"` → the **champion's name**
+  (named bar); **delete `_boss_phase_label`** + the phase-pip drawing.
+- **Champion enemy visual:** bigger scale + colored aura.
+- **EncyclopediaUI.gd:** replace the hardcoded `elite_*` + `boss_*` `ENEMY_ENTRIES` with the **7
+  champions** and their **new 2-attack-kit descriptions** (no more "elite"/"boss" wording or stale kit
+  text). Keep trash enemies; champions as their own group/section.
+- **Encounter Builder / in-room debug roster** (`Bootstrap.gd`): update the boss/elite spawn lists to the
+  champion taxonomy (dev-tool; lower priority).
+
+### Phase 3
+
+- **Resolution panel:** add the second button (`Continue` / `End run`) for the win milestone.
+- **Game-over screen:** show **"Reached room N"** as the final score.
+
 ## Implementation phasing (each = its own bounded, validated task)
 
 1. **Strip the map → 2-option chooser + unify into one run.** Replace the branching map graph with a
