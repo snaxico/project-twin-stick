@@ -4,8 +4,8 @@
 > `playtest-round-14-plan.md` Part B (especially **Patch 3 — boss set-pieces, which is cancelled**).
 > Built on top of the Round 14 / Patch 1 build (manual aim, 7 weapons, Momentum/Flow).
 >
-> This is a **design + scope** plan. It is not yet Codex-ready; each phase below becomes its own
-> bounded, Codex-ready task with stats before implementation.
+> **Phases 1–3 are detailed and Codex-ready below; Phase 4 (enemy re-tune) is deliberately deferred to
+> a tuning pass after the rest is built and playable.**
 
 ## Decision summary
 
@@ -97,16 +97,13 @@ champion**, no separate elite tier. The champion pool = **7 champions**: the 4 f
 (Warden / Hydra / Hive / Pulsar) + the 3 former Elite mini-bosses (Charger / Spitter / Support).
 
 - Champions **spawn into a live wave room**, not a dedicated room.
-- Each keeps **1–2 signature telegraphed attacks** from its old kit:
-  - **Warden** — leap gap-closer / ground-pound shockwave
-  - **Hydra** — rotating sweep / aimed snipe
-  - **Hive** — shield + poison cloud
-  - **Pulsar** — EMP ability-lockout / sweeping beam
-  - **former elites** — keep their existing telegraphed pressure patterns
-- **Drop** multi-phase HP-threshold scripting and entrance windup; keep one readable threat each.
+- Each keeps **two signature telegraphed attacks** — the finalized per-champion kits are in the
+  *Phase 2 — Champions* detail below (e.g. Warden = charge-combo + ground-pound).
+- **Drop** multi-phase HP-threshold scripting and the entrance windup.
 - **Look (readability):** champions are **visibly bigger**, carry a **colored aura**, and show a
   **named health bar** — repurpose the boss HP bar we're otherwise removing, **minus the phase pips**.
-- **Delivery:** repurpose the existing **elite add-wave system** as the champion spawn mechanism.
+- **Delivery:** reuse the **boss-spawn path** (`_spawn_boss`), spawning the champion **partway** into
+  the beat room (the old continuous elite add-wave system is removed).
 - **Cadence:** guaranteed champion at the **mid beat** and at **room `RUN_LENGTH`** (the win-milestone
   room); after the milestone, champions resume **every 5 rooms** (beat steps, no 2-option choice).
   Champion rooms inherit the **existing elite-room bonus pick**. The milestone champion is the run's
@@ -127,8 +124,8 @@ champion**, no separate elite tier. The champion pool = **7 champions**: the 4 f
 
 ## What gets reused
 
-- Continuous wave spawner, XP/pick economy, modifiers, side objectives, **elite add-wave system**
-  (becomes champion delivery), reward-card UI, Momentum/Flow.
+- Continuous wave spawner, XP/pick economy, modifiers, side objectives, the **boss-spawn path**
+  (`_spawn_boss` → champion delivery), reward-card UI, Momentum/Flow.
 - All four boss AIs **+ the three elite AIs** → the 7 champion behaviors.
 - The **boss HP bar** (minus phase pips) → champion health bar.
 - **Keep** the boss telegraph **prewarm** (Round 12) — still needed so champion attack VFX don't
@@ -268,7 +265,7 @@ flat, readable 2-attack threat.
   (`elite_charger`, `elite_spitter`, `elite_support`).
 - Add an `is_champion()` concept (generalize `is_boss()`); the former elites are promoted to champions,
   so **no enemy is an "elite" anymore** — `_spawn_elite_miniboss` / `_update_elite_add_waves` are
-  removed or repurposed as the champion spawner.
+  **removed** (champion delivery uses the `_spawn_boss` path instead).
 - **Each champion keeps 2 telegraphed attacks** (the bosses already have rich kits — pick their 2 best;
   the former elites keep their existing pattern + get **one** added telegraphed attack). The specific
   2-attack kit per champion is a **content decision — see Open below**.
