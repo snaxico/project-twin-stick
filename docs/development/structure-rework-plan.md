@@ -18,11 +18,11 @@ Locked decisions:
 1. **One continuable run — no mode split.** Drop the separate Structured / Endless modes. There is a
    single run: a **curated arc** of clear-the-room rooms, then a **win milestone**, then optional
    **seamless continuation into endless scaling**.
-2. **Remove the branching map.** Replace with a between-room **risk/reward choice card**.
+2. **Remove the branching map.** Replace with a simple **pick-one-of-two** between rooms, using the
+   **existing loot and modifier generation** (no new reward economy, no custom modifier rule).
 3. **Remove dedicated boss rooms.** **Convert all four boss kits** (Warden / Hydra / Hive / Pulsar)
    into **elite champions** that spawn inside normal wave rooms (unified champion tier — see below).
-4. Champions appear on **fixed beats + choosable** (guaranteed at set depths, plus an opt-in champion
-   room from the choice card).
+4. Champions appear on **fixed beats** (guaranteed every 5 rooms); an option may also be a champion room.
 5. **Clear-the-room encounters** (current model — timed spawning, room clears when enemies dead), **not**
    survival-timer waves. No mandatory boss climax.
 
@@ -35,36 +35,29 @@ There is **one run**, not two modes:
 2. **Win milestone** — clearing the final arc room (room `RUN_LENGTH`, a champion room) shows a
    **win screen**: the run is banked as a **win** + score, and offers **"continue into Endless?"**.
 3. **Continuation** — choosing continue keeps the *same run* going past `RUN_LENGTH` with
-   **difficulty climbing seamlessly** (one smooth curve, champions every 5, choice card continues),
-   score = rooms cleared, until death.
+   **difficulty climbing seamlessly** (one smooth curve, champions every 5, the 2-option choice
+   continues), score = rooms cleared, until death.
 
 Menu shows just **Play** (the run) — no Structured/Endless selection. The old "Endless mode" is simply
 the post-milestone continuation of this one run.
 
 **Run stake = the run itself.** Nothing carries across rooms — **health resets each room and momentum
 resets each room** (unchanged). There is deliberately **no persistent resource** (no carried HP, no
-heals, no lives). The thing at risk is the **whole run**: dying in any room ends it. This is what gives
-the choice card teeth, and it shapes how that card is built (below).
+heals, no lives). The thing at risk is the **whole run**: dying in any room ends it.
 
 Momentum/Flow remains the connective tissue. **Pick cadence stays XP-gated** (unchanged): you keep
 leveling as you keep clearing, so a long continuation keeps granting picks.
-
-**Run stake = the run itself.** Nothing carries across rooms — **health resets each room and momentum
-resets each room** (unchanged). There is deliberately **no persistent resource** (no carried HP, no
-heals, no lives). The thing at risk is therefore the **whole run**: dying in any room ends it. This is
-what gives the choice card teeth, and it shapes how that card is built (below).
 
 ## Run curve
 
 - **`RUN_LENGTH` rooms (tunable constant, target ~10), two acts.** Difficulty is a **steady climb** —
   each room a notch harder than the last, Act 2 baseline above Act 1. Predictable forward motion, no big
   cliff at the act break. The exact `RUN_LENGTH` is pinned in playtest tuning, not committed now.
-- **Champion beats:** mid (act-1 finale, ~halfway) and **room `RUN_LENGTH`** (the win-milestone room),
-  plus any opt-in champion rooms from the card. After the milestone, champions resume **every 5 rooms**.
-- **Major modifiers are forced by depth** (ambient): rooms acquire a modifier automatically as depth
-  rises, independent of the card. The card layers its risk kind + reward *on top* of whatever modifier
-  the room already carries (so e.g. a deep room can be `swarm` **and** Fire Floor at once). Exact depth
-  thresholds = a phase-1 number.
+- **Champion beats:** mid (act-1 finale, ~halfway) and **room `RUN_LENGTH`** (the win-milestone room).
+  After the milestone, champions resume **every 5 rooms**.
+- **Modifiers use the existing rolling** (`_roll_modifiers_for_node`, already act/depth/room-type
+  scaled) — unchanged. Each of the 2 next-room options carries its own rolled modifiers, so the modifier
+  is part of the choice (pick the room with the flavor you'd rather fight), exactly as map nodes work today.
 - **Continuation past the milestone** reuses the same per-room escalation, climbing **seamlessly** from
   where the arc left off (one curve, no reset), unbounded until death. Score = rooms cleared.
 
@@ -73,35 +66,29 @@ what gives the choice card teeth, and it shapes how that card is built (below).
 1. **Wave room** — existing continuous time-based spawner, escalating with depth.
 2. **Clear** — waves exhausted + enemies dead (existing).
 3. **XP / level → banked picks** (existing reward sequencing).
-4. **Choice card** — pick the next room as **risk vs reward** (replaces the map).
+4. **Choice** — pick the next room from **2 options** (replaces the map).
 
-## Choice card — risk vs reward
+## Between-room choice (simple — "for now")
 
-Replaces MapUI / route graph / node layout with a flat **2–3 option next-room card**.
+Replaces the branching map with a flat **2-option next-room choice**. **It deliberately keeps the
+existing systems** — no new reward economy, no risk-kind taxonomy, no custom modifier rule:
 
-Because **nothing persists across rooms**, the card can't trade a saved resource (no heals, no carried
-HP/momentum). So the decision is framed as **"which threat do I want to face, for which kind of build
-payoff"** — a **risk *kind*** paired with a **reward *category*** — with the run itself as the stake
-(death ends it). Each option pairs:
+- The **2 options are generated by the current node logic** (room type, enemy pool, and **the existing
+  `_roll_modifiers_for_node` modifier rolling**), exactly as the map already produces route options.
+- The two options **differ** via the existing `_ensure_route_options_differ` check (distinct
+  enemy/modifier signatures), so it's a real choice — typically "which modifier / room flavor do I
+  want," same as picking between two map nodes today.
+- **Loot is unchanged.** The post-clear pick uses the **existing reward sequencing** — no forced
+  category, no rarity nudge. Rare odds stay the current depth/act-based values.
+- **No card on beat steps.** When the next room is a fixed champion/boss beat (every 5), it's forced —
+  no 2-option choice that step. One of the two options *may* itself be a champion room on non-beat
+  steps, but that's just the existing room-type roll, not a special economy.
 
-- **Risk kind** (one of): `standard` · `swarm` · `champion room` (opt-in, on top of the fixed beats).
-  - **Major modifiers are NOT a card option** — they're **ambient, forced by depth** (see *Structured
-    room curve*). The card layers its risk kind on top of whatever modifier the room already carries.
-  - **Elite-add pressure is gone** as a risk kind — elites are folded into the unified champion tier.
-- **Reward** = a **forced pick category** for that room's post-clear pick (`Weapon` / `Effect` /
-  `Attribute` / `Ability`) **+ a rarity nudge that scales with risk**:
-  - `standard` → normal pick, normal rarity
-  - `swarm` → normal pick, **rare-weighted**
-  - `champion` → **guaranteed rare option + extra pick** (inherits the old elite-room bonus)
+**Reuse** the existing route-choice card UI (`_build_route_card` in `RunFlow.gd` already renders
+room/enemy/modifier detail); strip the graph/positions and present the flat 2-option choice.
 
-**Generation rule:** the 2–3 shown options must differ on **both** axes (no two identical risk kinds,
-no two identical reward categories) so it's always a real decision — *what threat suits my loadout* ×
-*what my build needs next* — not a flavor reshuffle. With only 3 risk kinds, the **reward category**
-carries most of the differentiation; if the card feels thin in playtest, add more risk kinds (e.g. a
-hazard/objective variant) rather than reintroducing forced-vs-chosen modifiers.
-
-**Reuse** the existing route-choice card UI (it already renders room/enemy/modifier/reward detail);
-strip the graph/positions and present the flat 2–3 option choice.
+*("for now" = this is the simple version; a richer risk/reward economy is parked, not cancelled — see
+Remaining open items.)*
 
 ## Champions (unified tier: former elites + former bosses)
 
@@ -121,9 +108,9 @@ champion**, no separate elite tier. The champion pool = **7 champions**: the 4 f
   **named health bar** — repurpose the boss HP bar we're otherwise removing, **minus the phase pips**.
 - **Delivery:** repurpose the existing **elite add-wave system** as the champion spawn mechanism.
 - **Cadence:** guaranteed champion at the **mid beat** and at **room `RUN_LENGTH`** (the win-milestone
-  room); after the milestone, champions resume **every 5 rooms**. The choice card can also offer an
-  extra opt-in **champion room**. Champion rooms inherit the old **elite-room bonus** (guaranteed rare +
-  extra pick). The milestone champion is the run's "win" peak without being a dedicated boss.
+  room); after the milestone, champions resume **every 5 rooms** (beat steps, no 2-option choice).
+  Champion rooms inherit the **existing elite-room bonus pick**. The milestone champion is the run's
+  "win" peak without being a dedicated boss.
 
 ## What gets removed
 
@@ -149,95 +136,85 @@ champion**, no separate elite tier. The champion pool = **7 champions**: the 4 f
 
 ## Implementation phasing (each = its own bounded, validated task)
 
-1. **Strip the map + unify into one run.** Run generator emits a **single linear room sequence**
-   (`RUN_LENGTH` arc rooms then unbounded continuation, bosses kept at the beats, modifiers forced by
-   depth); collapse the separate endless path into it; remove the map UI and mode selection; **auto-advance**
-   between rooms. The card comes in Phase 2. See *Phase 1 (task detail)* below.
-2. **Choice card.** Risk/reward option generation + selection → feeds the next room config.
-3. **Champions.** Convert elite-add-wave delivery to spawn former-boss kits as champions; trim boss
+1. **Strip the map → 2-option chooser + unify into one run.** Replace the branching map graph with a
+   **lazily-generated 2-option choice per step**, using the **existing** room/modifier/loot generation;
+   collapse the separate endless path into the same generator; remove the map graph UI and mode
+   selection; bosses kept at the every-5 beats. See *Phase 1 (task detail)* below. (The old separate
+   "choice card" phase is folded in here — the 2-option choice *is* the mechanic.)
+2. **Champions.** Convert elite-add-wave delivery to spawn former-boss kits as champions; trim boss
    scripts to 1–2 attacks; remove boss-room / HP-HUD / add-budget machinery.
-4. **Win milestone + continue.** Win screen at room `RUN_LENGTH` (banked win + score) with a
+3. **Win milestone + continue.** Win screen at room `RUN_LENGTH` (banked win + score) with a
    **"continue into Endless?"** choice; continuation keeps the same run climbing seamlessly. Score = rooms cleared.
-5. **Enemy / power re-tune (last).** Numeric pass lands here — *after* champions-in-waves exist, since
+4. **Enemy / power re-tune (last).** Numeric pass lands here — *after* champions-in-waves exist, since
    that's what shifts the curve. **Philosophy: low-HP / high-threat** — enemies pressure via counts +
    telegraphed attacks, not HP-sponge bloat. Keep current enemy values until this phase; ship the
    stronger Patch-1 player against current enemies, then hand-tune.
 
-Each phase: headless parse + boot validation; phases 3–5 also need **PerfRunner** — champions inside a
+Each phase: headless parse + boot validation; phases 2–4 also need **PerfRunner** — champions inside a
 full wave are a **new** perf case (champion attack VFX + dense wave), distinct from the old isolated
 boss-room profiles.
 
 ---
 
-## Phase 1 — Strip the map + unify into one run (Codex-ready)
+## Phase 1 — Strip the map → 2-option chooser (Codex-ready)
 
-**Goal:** replace the **branching node map** with a single **lazily-generated linear room spine**,
-collapse the separate Endless path into it, remove the map UI and the mode-selection screen, and force
-modifiers by depth. **Bosses stay at the beat rooms as placeholders** (boss→champion = Phase 3). No
-choice card (Phase 2), no win screen (Phase 4) — Phase 1 **auto-advances** and keeps generating rooms
-forever.
+**Goal:** replace the branching map *graph* with a **lazily-generated 2-option choice per step**, using
+the **existing** room / modifier / loot generation. Collapse the endless path into the same flow, remove
+the map graph UI and mode selection, keep bosses at the every-5 beats. **Loot and modifier generation do
+not change** — only the map is replaced by a 2-card pick. (Boss→champion = Phase 2; win screen = Phase 3.)
 
-### Key realization (why this is small)
+### What stays exactly as-is (do NOT rewrite)
 
-`_build_endless_node(room_number)` is **already** a lazy, one-node-per-room linear generator with
-depth-banded enemy pools / wave counts / modifiers. Phase 1 is essentially: **make the whole run use a
-curated version of that builder**, and delete the branching path. There is no separate "arc generator"
-and "endless generator" — there is one `_build_run_node(room_number)` used from room 1 to infinity.
+- **Modifiers:** `_roll_modifiers_for_node`, `_roll_modifier_selection`, `_ensure_route_options_differ`,
+  `_build_route_option_signature`, `_build_distinct_modifier_load` — existing rolling + the
+  option-differentiation check that makes the two choices distinct.
+- **Room content:** `_build_map_node`, `_build_enemy_pool`, `_determine_wave_count`, `_roll_side_objective`.
+- **Loot:** the post-clear reward / pick sequencing and the current depth/act rare odds.
 
 ### Constants (RunState.gd)
 
 ```
-const RUN_LENGTH := 10          # tunable; the win milestone (Phase 4). Arc = rooms 1..RUN_LENGTH
-const ROOMS_PER_ACT := 5        # act 1 = rooms 1..5, act 2 = 6..RUN_LENGTH
-const BEAT_INTERVAL := 5        # boss/champion beat every 5th room (5,10,15,…) — replaces ENDLESS_BOSS_INTERVAL
+const RUN_LENGTH := 10     # tunable; the win milestone (Phase 3)
+const ROOMS_PER_ACT := 5   # act 1 = rooms 1..ROOMS_PER_ACT, act 2 beyond
+const BEAT_INTERVAL := 5    # forced champion/boss beat every 5th room (replaces ENDLESS_BOSS_INTERVAL)
 ```
-Remove: `ACT_1_ROW_MIN/MAX`, `ACT_2_ROW_MIN/MAX`, `MAP_COLUMN_COUNT`, `START_ROW_COLUMNS`.
+Remove only the branching-graph sizing: `ACT_1_ROW_MIN/MAX`, `ACT_2_ROW_MIN/MAX`, `MAP_COLUMN_COUNT`,
+`START_ROW_COLUMNS`.
 
-### `_build_run_node(room_number)` — the one generator
+### `_build_choice_step(room_number) -> Array` — one step (= the choice)
 
 ```
-depth      = room_number
-is_beat    = (room_number % BEAT_INTERVAL == 0)            # 5,10,15,…
-act        = 1 if room_number <= ROOMS_PER_ACT else 2
-room_type  = "boss" if is_beat else "combat"
-enemy_pool = _get_endless_enemy_pool(room_number)          # reuse — already depth-banded
-wave_count = _get_endless_wave_count(room_number, is_beat) # reuse
-side_obj   = "" if is_beat else _roll_side_objective("combat")
-boss_type  = _beat_boss_type(room_number)                  # see below
-modifiers  = _forced_modifiers_for_room(room_number, is_beat)
-# node dict shape stays identical to _build_endless_node, with next_node_ids = [] (linear)
+is_beat = (room_number % BEAT_INTERVAL == 0)
+act     = 1 if room_number <= ROOMS_PER_ACT else 2
+if is_beat:
+    return [ one boss node ]                 # forced — no choice this step
+else:
+    return [ two option nodes ]              # the player picks 1 of 2
 ```
 
-- `_beat_boss_type(room_number)`: room 5 → `_structured_mid_boss_type`, room `RUN_LENGTH` →
-  `_structured_final_boss_type`, any other beat → `_roll_boss_type()`. (Keep
-  `_assign_structured_boss_types()` for the two arc bosses.)
-- `_forced_modifiers_for_room(room_number, is_beat)` — **depth→modifier, replaces all route-roll
-  helpers.** Reuse `_roll_modifier_selection(minor_min, minor_max, major_min, major_max)`:
-
-  ```
-  if is_beat:               return _roll_modifier_selection(0, 0, 1, 1)   # 1 major
-  elif room_number <= 2:    return []                                     # clean opener
-  elif room_number <= 6:    return _roll_modifier_selection(1, 1, 0, 0)   # 1 minor  (rooms 3,4,6)
-  else:                     return _roll_modifier_selection(0, 0, 1, 1)   # 1 major  (rooms 7,8,9, 11+)
-  ```
-
-  This yields exactly the agreed schedule (1–2 none · 3–4 minor · **5 major beat** · 6 minor ·
-  7–9 major · **10 major beat** · 11+ major, beats every 5 major) and extends past the arc unchanged.
+- **Beat node:** built like the current boss node; boss_type = `_structured_mid_boss_type` at room 5,
+  `_structured_final_boss_type` at `RUN_LENGTH`, else `_roll_boss_type()`. (Keep `_assign_structured_boss_types()`.)
+- **Two option nodes:** built with the **existing** path — `_build_map_node(...)` per option (passing
+  `act` and `depth = room_number`), modifiers via **`_roll_modifiers_for_node`**, then run
+  **`_ensure_route_options_differ`** so the two differ (distinct enemy/modifier signature). Room types
+  stay the existing mix (combat / elite — elite rooms become champion rooms in Phase 2).
+- **Enemy pool / wave count:** reuse the existing builders; past `RUN_LENGTH` the depth-banded
+  `_get_endless_enemy_pool` / `_get_endless_wave_count` keep them scaling (both already exist).
 
 ### Generation + advancement (RunState.gd)
 
-- `start_new_run`: drop the `is_endless_mode()` branch. Always
-  `node_map = [[_build_run_node(1)]]`; `current_step_index = 0`; set
-  `_structured_total_combat_depth = RUN_LENGTH` (so `get_run_progress()` reaches 1.0 at the milestone).
-- On room clear / advance: `current_step_index += 1`, append `[[_build_run_node(current_step_index + 1)]]`
-  (lazy, one row per room), set it current. Mirrors how endless already extends.
-- Replace `_generate_node_map`, `_build_branching_row`, `_build_endless_node`, `_roll_modifiers_for_node`,
-  `_assign_modifiers_to_map`, `_ensure_route_options_differ`, `_build_route_option_signature`,
-  `_build_distinct_modifier_load`, `_should_place_elite_node`, `_roll_row_columns` → **removed** (elite
-  *rooms* go away with branching; the elite *enemies* still exist and become champions in Phase 3).
-- Collapse navigation to linear: `get_current_options()` returns just `[next node]`;
-  `select_map_node`/`reachable`/`visited` reduce to single-step advance. Keep `run_mode` field but it's
-  effectively always one mode.
+- `start_new_run`: drop the `is_endless_mode()` branch. `node_map = [ _build_choice_step(1) ]`;
+  `current_step_index = 0`; set `_structured_total_combat_depth = RUN_LENGTH` (so `get_run_progress()`
+  reaches 1.0 at the milestone).
+- On advance (player picks an option, or clears a beat): `current_step_index += 1`, append
+  `_build_choice_step(current_step_index + 1)`, present it. Lazy, one step at a time, unbounded.
+- **Remove** the multi-row graph + branching helpers: `_generate_node_map`, `_build_branching_row`,
+  `_build_endless_node`, `_roll_row_columns`. (`_should_place_elite_node` can stay if the 2 options still
+  roll an occasional elite room; that's an existing-content detail.)
+- **Keep** the modifier helpers listed in *What stays* — they are reused, not removed.
+- Navigation: `get_current_options()` returns the current step's nodes (2, or 1 on a beat);
+  `select_map_node(id)` sets the chosen node current and advances; drop reachability/visited. Keep
+  `run_mode` (effectively one mode now).
 
 ### Difficulty / continuation
 
@@ -248,29 +225,24 @@ modifiers  = _forced_modifiers_for_room(room_number, is_beat)
 
 ### UI
 
-- Remove the branching map render: `MapNodeButton.gd` + the map view in `RunFlow.gd` → a minimal
-  auto-advance transition (or immediate next-room load).
+- Remove the branching map render (`MapNodeButton.gd` + the map graph view in `RunFlow.gd`); present the
+  **2-card choice** by reusing `_build_route_card`. On a beat step (1 option), show it as a single
+  "next: boss" confirm (or auto-advance).
 - Remove the **Structured/Endless mode selection** in `Bootstrap.gd`; menu = a single **Play** entry.
 
 ### Out of scope for Phase 1
 
-- Choice card (Phase 2); champion conversion / unified tier (Phase 3); win screen + "continue?" (Phase 4);
-  enemy/champion re-tune (Phase 5). Phase 1 keeps current bosses and just generates past `RUN_LENGTH`.
+- Champion conversion / unified tier (Phase 2); win screen + "continue?" (Phase 3); enemy re-tune
+  (Phase 4). Phase 1 keeps current bosses at beats and the existing loot/modifier systems untouched.
 
 ### Acceptance test
 
 - `git diff --check`; headless parse; headless boot (`--quit-after 1`).
-- Add a temporary headless assert (or PerfRunner hook) that walks `_build_run_node(1..20)` and checks:
-  rooms 5/10/15/20 are `boss` with a major modifier; rooms 1–2 have no modifier; rooms 3,4,6 have one
-  minor; rooms 7,8,9,11+ have one major; `enemy_pool`/`wave_count` grow with depth; `act` flips at room 6.
-- Manual: launch a run, confirm no map/mode-select screen, rooms auto-advance, bosses appear at 5 & 10,
-  and play continues past room 10.
-
-### Watch-item (from the beat-room modifier decision)
-
-- Beat rooms stack a **major modifier on top of the boss/champion**. Verify in playtest the big
-  telegraphed attacks stay readable under the modifier's visual noise; if not, change `is_beat` →
-  `return []` in `_forced_modifiers_for_room` (clean beats).
+- Temporary headless walk of `_build_choice_step(1..20)`: rooms 5/10/15/20 return **1** boss node; every
+  other step returns **exactly 2** nodes with a **distinct route signature**; `act` flips at room 6;
+  steps keep generating past `RUN_LENGTH`.
+- Manual: launch a run → no map / mode-select screen; each non-beat step shows **2 cards**; picking one
+  loads it; bosses appear at 5 & 10; play continues past room 10.
 
 ## Risks to watch in playtest
 
@@ -281,7 +253,8 @@ modifiers  = _forced_modifiers_for_room(room_number, is_beat)
   unfair jump right after the finale champion; add a soft knee in tuning if it is.
 - **Champion readability in a swarm** — champion + wave can be visually noisy; telegraphs must stay
   legible (prewarm + clear tells), especially under a stacked beat-room modifier.
-- **Choice-card differentiation** — options must feel like real decisions, not flavor.
+- **2-option differentiation** — the two rooms must feel meaningfully different (the existing
+  `_ensure_route_options_differ` carries this); confirm picks feel like real decisions, not flavor.
 - **New perf case** — champion + full wave needs profiling; old boss-room profiles no longer represent
   the worst case.
 
@@ -294,25 +267,27 @@ modifiers  = _forced_modifiers_for_room(room_number, is_beat)
 - **Continuation difficulty** → **keeps climbing seamlessly** (one curve, no reset).
 - **Pick cadence** → **stays XP-gated** (unchanged).
 - **Run stake** → **nothing persists**; the run itself is the stake (death ends it). (above)
-- **Choice-card economy** → risk-kind × reward-category, rarity nudge scales with risk; no heals. (above)
-- **Enemy re-tune** → tune **last**, low-HP / high-threat philosophy; keep current values until phase 5.
+- **Between-room mechanic** → **simple pick-one-of-two using the existing loot + modifier generation**
+  ("for now"). No new reward economy, no risk-kind taxonomy, no custom modifier rule. (above)
+- **Enemy re-tune** → tune **last**, low-HP / high-threat philosophy; keep current values until the last phase.
 - **Onboarding** → **deferred** (see below). Not part of this rework.
 - **Threat ladder** → **unified champion tier** (trash → champion, 7 champions = 4 bosses + 3 former
   elites); no separate elite tier. (above)
 - **Champion look** → **bigger + aura + named health bar** (repurpose boss HP bar minus phase pips).
-- **Champion rooms grant the extra pick** → yes (inherit the old elite-room bonus).
+- **Champion rooms** → inherit the existing elite-room bonus pick (existing loot behavior).
 - **R14 confidence** → playtest was thorough; build the rework straight on top, no extra R14 pass.
 - **Difficulty curve** → **steady climb**, Act 2 baseline above Act 1.
-- **Modifiers** → **forced by depth** (ambient), not a card option; card layers risk + reward on top.
+- **Modifiers** → **use the existing rolling** (`_roll_modifiers_for_node`, already act/depth-scaled);
+  each of the 2 options carries its own rolled modifiers, so the modifier is part of the choice.
 
 ## Remaining open items (decide during the relevant phase, not blocking)
 
-- **Exact numbers, to set when writing each phase's Codex task:** final `RUN_LENGTH`; rare-weight nudge
-  per risk kind; per-room difficulty values across the arc; modifier depth-thresholds; the
+- **Exact numbers, to set when writing each phase's Codex task:** final `RUN_LENGTH`; the
   continuation ramp rate (and any soft knee right after the milestone).
-- **Tuning targets (phase 5):** the actual enemy + champion stat values, hand-tuned in playtest.
-- **Risk/reward "parasite" items** (Part C) — synergize strongly with the choice card; candidate
-  follow-up *after* the card ships, not part of this rework.
+- **Tuning targets (last phase):** the actual enemy + champion stat values, hand-tuned in playtest.
+- **Parked (not now):** the richer risk/reward card economy (risk kinds × reward categories, rarity
+  nudges) and **risk/reward "parasite" items** (Part C) — revisit only if the simple 2-option choice
+  feels too thin in playtest.
 
 ## Carried forward from Part B/C/D (unaffected by this rework)
 
