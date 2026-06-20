@@ -169,73 +169,108 @@ boss-room profiles.
 
 ---
 
-## Phase 1 — Strip the map + unify into one run (task detail)
+## Phase 1 — Strip the map + unify into one run (Codex-ready)
 
-**Goal:** replace the **branching node map** with a single **linear room spine** that runs an
-**`RUN_LENGTH`-room curated arc and then continues unbounded**, collapse the separate Endless path into
-it, remove the map UI and the mode-selection screen, and force modifiers by depth. **Bosses stay at the
-beat rooms as placeholders** (the boss→champion conversion is Phase 3). The **choice card is Phase 2**
-and the **win-milestone/continue UX is Phase 4** — Phase 1 just **auto-advances** room→room and keeps
-generating rooms past `RUN_LENGTH` (no win screen yet).
+**Goal:** replace the **branching node map** with a single **lazily-generated linear room spine**,
+collapse the separate Endless path into it, remove the map UI and the mode-selection screen, and force
+modifiers by depth. **Bosses stay at the beat rooms as placeholders** (boss→champion = Phase 3). No
+choice card (Phase 2), no win screen (Phase 4) — Phase 1 **auto-advances** and keeps generating rooms
+forever.
 
-### Locked numbers
+### Key realization (why this is small)
 
-- **`RUN_LENGTH` = 10** for now (a single tunable constant; pin the final value in playtest tuning),
-  two acts of 5 (act swaps to the harder enemy pool at room 6). The generator must keep producing rooms
-  **past `RUN_LENGTH`** with the same escalation (seamless continuation).
-- **Beat rooms = room 5 (mid) and room `RUN_LENGTH` (milestone)** — keep the current mid-boss /
-  final-boss for now; after `RUN_LENGTH`, a boss/champion beat **every 5 rooms**.
-- **Forced-modifier schedule by room** for the arc (ambient, independent of any future card):
+`_build_endless_node(room_number)` is **already** a lazy, one-node-per-room linear generator with
+depth-banded enemy pools / wave counts / modifiers. Phase 1 is essentially: **make the whole run use a
+curated version of that builder**, and delete the branching path. There is no separate "arc generator"
+and "endless generator" — there is one `_build_run_node(room_number)` used from room 1 to infinity.
 
-  | Room | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 |
-  |---|---|---|---|---|---|---|---|---|---|---|
-  | Modifier | – | – | minor | minor | **major** | minor | major | major | major | **major** |
-  | Beat | | | | | **boss** | | | | | **boss** |
+### Constants (RunState.gd)
 
-  Beat rooms **5 & 10 carry a modifier too** (user decision — see readability watch-item below).
-  Past the arc, continue the depth→modifier escalation (all major).
-- Difficulty (room duration / spawn interval / opening burst) keeps scaling off `get_run_progress()`;
-  for the **continuation**, progress should keep climbing past 1.0 (or switch to the
-  endless-style unbounded ramp) so difficulty rises seamlessly — **steady climb** with no reset.
+```
+const RUN_LENGTH := 10          # tunable; the win milestone (Phase 4). Arc = rooms 1..RUN_LENGTH
+const ROOMS_PER_ACT := 5        # act 1 = rooms 1..5, act 2 = 6..RUN_LENGTH
+const BEAT_INTERVAL := 5        # boss/champion beat every 5th room (5,10,15,…) — replaces ENDLESS_BOSS_INTERVAL
+```
+Remove: `ACT_1_ROW_MIN/MAX`, `ACT_2_ROW_MIN/MAX`, `MAP_COLUMN_COUNT`, `START_ROW_COLUMNS`.
 
-### Touch points (RunState.gd unless noted)
+### `_build_run_node(room_number)` — the one generator
 
-- Replace `_generate_node_map()` (branching builder) with a **linear room builder** that produces the
-  `RUN_LENGTH` arc and can **extend on demand** past it (lazy-append rooms for the continuation, or
-  generate-on-advance).
-- **Merge `_build_endless_node` into the single generator** — endless rooms are just arc-continuation
-  rooms (same escalation/beat/modifier rules), not a separate path.
-- Retire the route-differentiation helpers: `_assign_modifiers_to_map`, `_ensure_route_options_differ`,
-  `_build_route_option_signature`, `_build_distinct_modifier_load`, `_roll_modifiers_for_node` →
-  replaced by a **depth→modifier lookup** matching the table.
-- Replace variable act sizing (`ACT_1_ROW_MIN/MAX`, `ACT_2_ROW_MIN/MAX`) with `ROOMS_PER_ACT = 5` and a
-  single `RUN_LENGTH` constant.
-- Keep `_assign_structured_boss_types` / `_build_boss_node` for the beat rooms (5 & `RUN_LENGTH`, then
-  every 5).
-- Collapse map navigation (`get_map_rows`, `get_reachable_node_ids`, `select_map_node`,
-  `_get_starting_reachable_node_ids`) to **linear next-room** advancement.
-- **UI:** remove the branching map render (`MapNodeButton.gd` + the map view in `RunFlow.gd`) **and the
-  pre-run mode-selection** (Structured/Endless) in `Bootstrap.gd`; replace with a minimal auto-advance
-  transition and a single **Play** entry.
+```
+depth      = room_number
+is_beat    = (room_number % BEAT_INTERVAL == 0)            # 5,10,15,…
+act        = 1 if room_number <= ROOMS_PER_ACT else 2
+room_type  = "boss" if is_beat else "combat"
+enemy_pool = _get_endless_enemy_pool(room_number)          # reuse — already depth-banded
+wave_count = _get_endless_wave_count(room_number, is_beat) # reuse
+side_obj   = "" if is_beat else _roll_side_objective("combat")
+boss_type  = _beat_boss_type(room_number)                  # see below
+modifiers  = _forced_modifiers_for_room(room_number, is_beat)
+# node dict shape stays identical to _build_endless_node, with next_node_ids = [] (linear)
+```
+
+- `_beat_boss_type(room_number)`: room 5 → `_structured_mid_boss_type`, room `RUN_LENGTH` →
+  `_structured_final_boss_type`, any other beat → `_roll_boss_type()`. (Keep
+  `_assign_structured_boss_types()` for the two arc bosses.)
+- `_forced_modifiers_for_room(room_number, is_beat)` — **depth→modifier, replaces all route-roll
+  helpers.** Reuse `_roll_modifier_selection(minor_min, minor_max, major_min, major_max)`:
+
+  ```
+  if is_beat:               return _roll_modifier_selection(0, 0, 1, 1)   # 1 major
+  elif room_number <= 2:    return []                                     # clean opener
+  elif room_number <= 6:    return _roll_modifier_selection(1, 1, 0, 0)   # 1 minor  (rooms 3,4,6)
+  else:                     return _roll_modifier_selection(0, 0, 1, 1)   # 1 major  (rooms 7,8,9, 11+)
+  ```
+
+  This yields exactly the agreed schedule (1–2 none · 3–4 minor · **5 major beat** · 6 minor ·
+  7–9 major · **10 major beat** · 11+ major, beats every 5 major) and extends past the arc unchanged.
+
+### Generation + advancement (RunState.gd)
+
+- `start_new_run`: drop the `is_endless_mode()` branch. Always
+  `node_map = [[_build_run_node(1)]]`; `current_step_index = 0`; set
+  `_structured_total_combat_depth = RUN_LENGTH` (so `get_run_progress()` reaches 1.0 at the milestone).
+- On room clear / advance: `current_step_index += 1`, append `[[_build_run_node(current_step_index + 1)]]`
+  (lazy, one row per room), set it current. Mirrors how endless already extends.
+- Replace `_generate_node_map`, `_build_branching_row`, `_build_endless_node`, `_roll_modifiers_for_node`,
+  `_assign_modifiers_to_map`, `_ensure_route_options_differ`, `_build_route_option_signature`,
+  `_build_distinct_modifier_load`, `_should_place_elite_node`, `_roll_row_columns` → **removed** (elite
+  *rooms* go away with branching; the elite *enemies* still exist and become champions in Phase 3).
+- Collapse navigation to linear: `get_current_options()` returns just `[next node]`;
+  `select_map_node`/`reachable`/`visited` reduce to single-step advance. Keep `run_mode` field but it's
+  effectively always one mode.
+
+### Difficulty / continuation
+
+- Cadence (room duration / spawn interval / opening burst) keeps scaling off `get_run_progress()`,
+  which **clamps at 1.0 by `RUN_LENGTH`** — so cadence *plateaus* at the milestone. **Continuation
+  pressure past the milestone comes from the depth-banded `enemy_pool` + `wave_count`** (already rising
+  with `room_number`), not from uncapping cadence. Net: one steady climb, no reset, no runaway cadence.
+
+### UI
+
+- Remove the branching map render: `MapNodeButton.gd` + the map view in `RunFlow.gd` → a minimal
+  auto-advance transition (or immediate next-room load).
+- Remove the **Structured/Endless mode selection** in `Bootstrap.gd`; menu = a single **Play** entry.
 
 ### Out of scope for Phase 1
 
-- The risk/reward **choice card** (Phase 2).
-- **Champion** behavior / the boss→champion conversion and unified-tier work (Phase 3).
-- The **win screen + "continue?" UX** (Phase 4) — Phase 1 just keeps generating past `RUN_LENGTH`.
-- Any **enemy/champion re-tune** (Phase 5).
+- Choice card (Phase 2); champion conversion / unified tier (Phase 3); win screen + "continue?" (Phase 4);
+  enemy/champion re-tune (Phase 5). Phase 1 keeps current bosses and just generates past `RUN_LENGTH`.
 
-### Validation
+### Acceptance test
 
-- `git diff --check`; headless parse; headless boot.
-- Sanity-check a generated run = `RUN_LENGTH` arc rooms with bosses at 5 & `RUN_LENGTH` and the modifier
-  schedule above; confirm rooms keep generating past `RUN_LENGTH` with the same escalation.
+- `git diff --check`; headless parse; headless boot (`--quit-after 1`).
+- Add a temporary headless assert (or PerfRunner hook) that walks `_build_run_node(1..20)` and checks:
+  rooms 5/10/15/20 are `boss` with a major modifier; rooms 1–2 have no modifier; rooms 3,4,6 have one
+  minor; rooms 7,8,9,11+ have one major; `enemy_pool`/`wave_count` grow with depth; `act` flips at room 6.
+- Manual: launch a run, confirm no map/mode-select screen, rooms auto-advance, bosses appear at 5 & 10,
+  and play continues past room 10.
 
 ### Watch-item (from the beat-room modifier decision)
 
-- Rooms 5 & 10 stack a **major modifier on top of the boss/champion**. Verify in playtest that the
-  big telegraphed attacks stay readable under the modifier's visual noise; if not, drop the beat-room
-  modifier (back to clean beats).
+- Beat rooms stack a **major modifier on top of the boss/champion**. Verify in playtest the big
+  telegraphed attacks stay readable under the modifier's visual noise; if not, change `is_beat` →
+  `return []` in `_forced_modifiers_for_room` (clean beats).
 
 ## Risks to watch in playtest
 
