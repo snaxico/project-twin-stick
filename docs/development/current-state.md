@@ -427,7 +427,15 @@ regression fix; manual playtest with real controllers is still pending.
 
 ## Next Step
 
-Run manual validation for the round-14 build using `docs/development/playtest-round-14-plan.md` as the checklist. Focus on P1/P2 controller ownership, controller movement after the regression fix, manual aim feel, Momentum pacing/loss, Beam ramp behavior, Boomerang double-hit readability, Split targeting, additive stat balance, and the smaller player/enemy/zoom readability pass.
+Round 14 is playtested and committed (`5bf529a`), including the three post-playtest fixes (faint aim
+reticle, continuous beam, HP-as-ring-after-damage). The active direction is now the **structure rework
+("trim")** in `docs/development/structure-rework-plan.md` — design-locked, not implemented. Next
+implementation task is **Phase 1: strip the branching map** (linear room sequence + flat risk/reward
+choice card), then choice card → champions → mode framing → enemy re-tune (last).
+
+The round-14 checklist below remains valid for any further balance/feel passes:
+
+Manual validation focus for the round-14 build (`docs/development/playtest-round-14-plan.md`): P1/P2 controller ownership, controller movement after the regression fix, manual aim feel, Momentum pacing/loss, Beam ramp behavior, Boomerang double-hit readability, Split targeting, additive stat balance, and the smaller player/enemy/zoom readability pass.
 
 - continuous spawn pacing in `1P` and `2P` — does `35-45s` room duration feel right?
 - first `30s` pressure — do the opening burst, `~5/s` rifle, spawn ramp, and multi-edge spawns feel active without overwhelming?
