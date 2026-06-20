@@ -411,7 +411,7 @@ regression fix; manual playtest with real controllers is still pending.
 - Pulsar teleport / EMP / beam, Hydra homing orbs, Hive shield/burrow, Warden leap pressure, and Elite Support minion spawning need live feel validation
 - spawn timing values, opening burst size, base ramp, and anti-clump separation are first-pass and need playtesting
 - the map UI is functional but compact — may need further polish for controller navigation
-- `GoldPickup.gd` remains deleted; gold stub functions in `RunState.gd` remain (no-ops)
+- `GoldPickup.gd` remains deleted; `RunState.gd` is already clean of gold (no stub functions remain)
 - `wave_count` fields in RunState node data are now unused dead data (harmless)
 - objective-panel icons currently use simple letter fallback glyphs (`H` / `K` / `C`); acceptable for the current local build, but a later IconFactory/drawn-glyph polish pass would improve presentation
 - Pulsar beam currently uses angle/range damage and does not raycast line-of-sight through walls; accept for now unless playtest reads unfair

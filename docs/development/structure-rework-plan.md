@@ -131,6 +131,53 @@ champion**, no separate elite tier. The champion pool = **7 champions**: the 4 f
 - **Keep** the boss telegraph **prewarm** (Round 12) — still needed so champion attack VFX don't
   first-use stutter inside a dense wave.
 
+## Cleanup audit (delete / strip as part of this patch)
+
+Cleanup is **part of each phase**, not an afterthought. Every phase's acceptance test ends with a
+**no-dangling-references gate**: grep the codebase for the symbols it removed → expect **zero** hits, and
+headless parse must stay clean (catches orphaned `@onready` / deleted scene-node references). **Scene
+(`.tscn`) nodes must be deleted in the same change as their script refs** or Godot errors.
+
+### Phase 1 — map / endless / mode-select
+
+- **RunState.gd functions:** `_generate_node_map`, `_build_branching_row`, `_roll_row_columns`,
+  `_build_endless_node`, `_roll_endless_modifiers`, `is_endless_mode`, `_get_starting_reachable_node_ids`,
+  and the reachability/visited accessors (`get_reachable_node_ids`, `get_visited_node_ids`). Keep
+  `_get_endless_enemy_pool` / `_get_endless_wave_count` (reused for continuation scaling).
+- **RunState.gd constants/vars:** `ACT_1_ROW_MIN/MAX`, `ACT_2_ROW_MIN/MAX`, `MAP_COLUMN_COUNT`,
+  `START_ROW_COLUMNS`, `ENDLESS_BOSS_INTERVAL` (→ `BEAT_INTERVAL`), `endless_room_index`,
+  `reachable_node_ids` / `visited_node_ids`.
+- **RunFlow.gd:** `_show_map` + the map-render/route-graph helpers; the `@onready` map refs
+  (`map_title_label`, `map_detail_body_label`, …). Reuse `_build_route_card` for the 2-card choice.
+- **Bootstrap.gd:** `run_mode_row` / `run_mode_option` and all ~8 references (lines ~50–51, 137,
+  198–200, 283, 305, 367, 463, 477).
+- **Files:** delete `scripts/ui/MapNodeButton.gd` and its preload/usages (verify in `RunFlow` / others).
+- **Scene nodes:** `Bootstrap.tscn` → delete `RunModeRow` / `RunModeOption`; `RunFlow.tscn` → delete the
+  map-view nodes.
+
+### Phase 2 — boss/elite machinery
+
+- **Enemy.gd:** `_boss_phase_index`, `_update_boss_phase_transition`, `_spawn_phase_transition_telegraph`,
+  the deflector **phase** index, `begin_boss_windup` + `_boss_windup_until` / `_boss_invulnerable_until`
+  (entrance windup), `apply_elite_act_scale` + `_elite_cd_mult`, and the **dropped attack code + state
+  vars** per the kit list (Warden leap/minions, Hydra radial-burst/aimed-snipes, Hive add-spawners/burrow,
+  Pulsar aimed-fire/minions). Rename `apply_boss_scale` → `apply_champion_scale`.
+- **CoopManager.gd:** `_update_boss_add_waves` (add-wave budget), `_spawn_elite_miniboss`,
+  `_update_elite_add_waves`, `_spawn_elite_entrance_vfx`, the boss-HP-bar **phase pips** drawing, and the
+  `notify_boss_phase_transition` hook.
+
+### Phase 3 — resolution
+
+- **RunFlow.gd:** collapse the old `"Run Victory"` / `"Endless Complete"` resolution branches into the
+  single milestone screen + death game-over.
+
+### Pre-existing dead code (fold in — not caused by the rework)
+
+- **`wave_count`:** set-but-unused dead data — verify no runtime reader, then stop writing it
+  (`_determine_wave_count` + the `node["wave_count"]` assignments). 
+- **Stale `current-state.md` Known Risks note:** the "gold stub functions in `RunState.gd` remain" entry
+  is **already false** (code is clean of gold) — delete the note.
+
 ## Implementation phasing (each = its own bounded, validated task)
 
 1. **Strip the map → 2-option chooser + unify into one run.** Replace the branching map graph with a
@@ -240,6 +287,9 @@ else:
   steps keep generating past `RUN_LENGTH`.
 - Manual: launch a run → no map / mode-select screen; each non-beat step shows **2 cards**; picking one
   loads it; bosses appear at 5 & 10; play continues past room 10.
+- **Cleanup gate:** grep for the Phase-1 removed symbols (`_generate_node_map`, `_build_endless_node`,
+  `run_mode_option`, `MapNodeButton`, …) → zero references; `Bootstrap.tscn` / `RunFlow.tscn` scene
+  nodes deleted; headless parse clean (no orphaned `@onready`).
 
 ---
 
@@ -335,6 +385,9 @@ multi-phase / minion-spawn / extra-attack code is removed.
 - Manual: a beat room shows a normal wave; the champion drops in partway with a telegraph, has a named
   HP bar (no pips), uses 2 attacks with no phase jumps; room clears on champion death; former elites now
   appear as champions, never as the old elite mini-bosses.
+- **Cleanup gate:** grep for the Phase-2 removed symbols (`_update_boss_phase_transition`,
+  `_spawn_elite_miniboss`, `_update_elite_add_waves`, `begin_boss_windup`, `apply_elite_act_scale`,
+  dropped-attack vars) → zero references; headless parse clean.
 
 ---
 
@@ -386,6 +439,8 @@ keeps the same run climbing seamlessly until death. Reuses the existing `RunFlow
 - Manual: clear to room `RUN_LENGTH` → win screen with **Continue** and **End run**; `Continue` resumes
   at room `RUN_LENGTH + 1` and keeps going; `End run` returns to menu; dying after the milestone shows a
   final-score game-over and the run is still recorded as a win.
+- **Cleanup gate:** old `"Run Victory"` / `"Endless Complete"` branches gone; `wave_count` stripped;
+  stale gold note removed from `current-state.md`; headless parse clean.
 
 ## Risks to watch in playtest
 
