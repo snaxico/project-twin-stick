@@ -22,7 +22,10 @@ Locked decisions:
    **existing loot and modifier generation** (no new reward economy, no custom modifier rule).
 3. **Remove dedicated boss rooms.** **Convert all four boss kits** (Warden / Hydra / Hive / Pulsar)
    into **elite champions** that spawn inside normal wave rooms (unified champion tier — see below).
-4. Champions appear on **fixed beats** (guaranteed every 5 rooms); an option may also be a champion room.
+4. Champions appear on a **depth-scaling cadence** (a stepped interval that **tightens with depth, with
+   a floor**; exact numbers fixed in playtest), plus the guaranteed milestone champion. **There is no
+   separate "elite" tier or concept** — every tougher-than-trash enemy is a *champion* (no elite room
+   type, no elite scaling, no elite-specific state).
 5. **Clear-the-room encounters** (current model — timed spawning, room clears when enemies dead), **not**
    survival-timer waves. No mandatory boss climax.
 
@@ -35,8 +38,8 @@ There is **one run**, not two modes:
 2. **Win milestone** — clearing the final arc room (room `RUN_LENGTH`, a champion room) shows a
    **win screen**: the run is banked as a **win** + score, and offers **"continue into Endless?"**.
 3. **Continuation** — choosing continue keeps the *same run* going past `RUN_LENGTH` with
-   **difficulty climbing seamlessly** (one smooth curve, champions every 5, the 2-option choice
-   continues), score = rooms cleared, until death.
+   **difficulty climbing seamlessly** (one smooth curve, champions on the tightening cadence, the
+   2-option choice continues), score = rooms cleared, until death.
 
 Menu shows just **Play** (the run) — no Structured/Endless selection. The old "Endless mode" is simply
 the post-milestone continuation of this one run.
@@ -53,8 +56,10 @@ leveling as you keep clearing, so a long continuation keeps granting picks.
 - **`RUN_LENGTH` rooms (tunable constant, target ~10), two acts.** Difficulty is a **steady climb** —
   each room a notch harder than the last, Act 2 baseline above Act 1. Predictable forward motion, no big
   cliff at the act break. The exact `RUN_LENGTH` is pinned in playtest tuning, not committed now.
-- **Champion beats:** mid (act-1 finale, ~halfway) and **room `RUN_LENGTH`** (the win-milestone room).
-  After the milestone, champions resume **every 5 rooms**.
+- **Champion cadence:** a **depth-banded interval that tightens with depth, with a floor** — more
+  frequent the deeper you go (e.g. illustratively ~every 5 early → ~every 4 → ~every 3, floored so it
+  never becomes every-room; **exact band thresholds + floor fixed in playtest**). Room `RUN_LENGTH` is
+  **always** a champion (the milestone). **Not** a fixed every-5.
 - **Modifiers use the existing rolling** (`_roll_modifiers_for_node`, already act/depth/room-type
   scaled) — unchanged. Each of the 2 next-room options carries its own rolled modifiers, so the modifier
   is part of the choice (pick the room with the flavor you'd rather fight), exactly as map nodes work today.
@@ -80,9 +85,9 @@ existing systems** — no new reward economy, no risk-kind taxonomy, no custom m
   want," same as picking between two map nodes today.
 - **Loot is unchanged.** The post-clear pick uses the **existing reward sequencing** — no forced
   category, no rarity nudge. Rare odds stay the current depth/act-based values.
-- **No card on beat steps.** When the next room is a fixed champion/boss beat (every 5), it's forced —
-  no 2-option choice that step. One of the two options *may* itself be a champion room on non-beat
-  steps, but that's just the existing room-type roll, not a special economy.
+- **No card on champion steps.** When the next room is a champion step (on the depth-scaling cadence,
+  or the milestone), it's forced — no 2-option choice that step. Non-champion steps are always two
+  `combat` options.
 
 **Reuse** the existing route-choice card UI (`_build_route_card` in `RunFlow.gd` already renders
 room/enemy/modifier detail); strip the graph/positions and present the flat 2-option choice.
@@ -93,8 +98,13 @@ Remaining open items.)*
 ## Champions (unified tier: former elites + former bosses)
 
 Elites and bosses **collapse into one "champion" tier** above trash — a **two-tier ladder: trash →
-champion**, no separate elite tier. The champion pool = **7 champions**: the 4 former bosses
-(Warden / Hydra / Hive / Pulsar) + the 3 former Elite mini-bosses (Charger / Spitter / Support).
+champion**. The champion pool = **7 champions**: the 4 former bosses (Warden / Hydra / Hive / Pulsar) +
+the 3 former Elite mini-bosses (Charger / Spitter / Support).
+
+> **No "elite" concept survives anywhere** — no elite room type, no elite generation
+> (`_should_place_elite_node`), no elite scaling (`apply_elite_act_scale`/`_elite_cd_mult`), no
+> elite-specific state (`_active_elite`, `_next_elite_add_spawn_at`, `_pending_elite_bonus_pick`). The
+> former elites are handled **identically** to the former bosses: just champions.
 
 - Champions **spawn into a live wave room**, not a dedicated room.
 - Each keeps **two signature telegraphed attacks** — the finalized per-champion kits are in the
@@ -104,10 +114,10 @@ champion**, no separate elite tier. The champion pool = **7 champions**: the 4 f
   **named health bar** — repurpose the boss HP bar we're otherwise removing, **minus the phase pips**.
 - **Delivery:** reuse the **boss-spawn path** (`_spawn_boss`), spawning the champion **partway** into
   the beat room (the old continuous elite add-wave system is removed).
-- **Cadence:** guaranteed champion at the **mid beat** and at **room `RUN_LENGTH`** (the win-milestone
-  room); after the milestone, champions resume **every 5 rooms** (beat steps, no 2-option choice).
-  Champion rooms inherit the **existing elite-room bonus pick**. The milestone champion is the run's
-  "win" peak without being a dedicated boss.
+- **Cadence:** a **depth-banded tightening interval with a floor** (numbers TBD in playtest); room
+  `RUN_LENGTH` is **always** a champion. Champion steps have no 2-option choice. Champion rooms grant a
+  **bonus pick** (the old elite-room bonus, now simply the champion-room bonus). The milestone champion
+  is the run's "win" peak without being a dedicated boss.
 
 ## What gets removed
 
@@ -119,7 +129,8 @@ champion**, no separate elite tier. The champion pool = **7 champions**: the 4 f
   budget, boss-entrance windup set-piece, boss-every-5 endless cadence. (The boss **HP bar itself is
   repurposed** as the champion health bar, not deleted.)
 - The separate **Elite tier** as a distinct concept — elites fold into the champion pool; their
-  AIs/patterns survive as champions, and "elite rooms" become "champion rooms."
+  AIs/patterns survive as champions; **there are no elite rooms** (champions come only from the cadence
+  + milestone).
 - (Boss off-screen indicator already removed in Round 14.)
 
 ## What gets reused
@@ -145,8 +156,9 @@ headless parse must stay clean (catches orphaned `@onready` / deleted scene-node
   and the reachability/visited accessors (`get_reachable_node_ids`, `get_visited_node_ids`). Keep
   `_get_endless_enemy_pool` / `_get_endless_wave_count` (reused for continuation scaling).
 - **RunState.gd constants/vars:** `ACT_1_ROW_MIN/MAX`, `ACT_2_ROW_MIN/MAX`, `MAP_COLUMN_COUNT`,
-  `START_ROW_COLUMNS`, `ENDLESS_BOSS_INTERVAL` (→ `BEAT_INTERVAL`), `endless_room_index`,
-  `reachable_node_ids` / `visited_node_ids`.
+  `START_ROW_COLUMNS`, `ENDLESS_BOSS_INTERVAL`, `_should_place_elite_node` (no elite room type),
+  `endless_room_index`, `reachable_node_ids` / `visited_node_ids`.
+- **CoopManager.gd:** the `_room_type == "elite"` room-duration `+10` branch (no elite rooms).
 - **RunFlow.gd:** `_show_map` + the map-render/route-graph helpers; the `@onready` map refs
   (`map_title_label`, `map_detail_body_label`, …). Reuse `_build_route_card` for the 2-card choice.
 - **Bootstrap.gd:** `run_mode_row` / `run_mode_option` and all ~8 references (lines ~50–51, 137,
@@ -162,9 +174,11 @@ headless parse must stay clean (catches orphaned `@onready` / deleted scene-node
   (entrance windup), `apply_elite_act_scale` + `_elite_cd_mult`, and the **dropped attack code + state
   vars** per the kit list (Warden leap/minions, Hydra radial-burst/aimed-snipes, Hive add-spawners/burrow,
   Pulsar aimed-fire/minions). Rename `apply_boss_scale` → `apply_champion_scale`.
-- **CoopManager.gd:** `_update_boss_add_waves` (add-wave budget), `_spawn_elite_miniboss`,
-  `_update_elite_add_waves`, `_spawn_elite_entrance_vfx`, the boss-HP-bar **phase pips** drawing, and the
-  `notify_boss_phase_transition` hook.
+- **CoopManager.gd:** `_update_boss_add_waves` (add-wave budget) + the boss-room constants
+  (`BOSS_SPAWN_DELAY`, `BOSS_ADD_CAP`, `BOSS_ADD_WAVE_MIN/MAX`); the **elite tier** entirely —
+  `_spawn_elite_miniboss`, `_update_elite_add_waves`, `_spawn_elite_entrance_vfx`, and the elite state
+  vars (`_active_elite`, `_next_elite_add_spawn_at`, `_pending_elite_bonus_pick`); the boss-HP-bar
+  **phase pips** drawing + `_boss_phase_label`; and the `notify_boss_phase_transition` hook.
 
 ### Phase 3 — resolution
 
@@ -191,6 +205,10 @@ Beyond the headline UI (map removal, win screen), these secondary surfaces need 
   number *is* the score). Replace the `is_endless_mode()` HUD/scaling gates (`CoopManager.gd` ~1422
   boss-room depth scale, ~1450 room-duration past room 20) with **unified depth-based** logic so
   scaling applies continuously, not only in "endless."
+- **Encounter Builder room type** (`Bootstrap.gd` `debug_room_type_option`, ~line 211–213): **drop the
+  "Elite" option** — room types become **Combat / Champion** (the "boss" option is renamed to
+  "Champion"). The dependent visibility logic (`debug_secondary_row`, `debug_room_objective_row`,
+  `debug_layout_row` keyed on `"boss"`/`"combat"`) updates to the new values.
 
 ### Phase 2
 
@@ -200,8 +218,10 @@ Beyond the headline UI (map removal, win screen), these secondary surfaces need 
 - **EncyclopediaUI.gd:** replace the hardcoded `elite_*` + `boss_*` `ENEMY_ENTRIES` with the **7
   champions** and their **new 2-attack-kit descriptions** (no more "elite"/"boss" wording or stale kit
   text). Keep trash enemies; champions as their own group/section.
-- **Encounter Builder / in-room debug roster** (`Bootstrap.gd`): update the boss/elite spawn lists to the
-  champion taxonomy (dev-tool; lower priority).
+- **Encounter Builder champion picker** (`Bootstrap.gd` `debug_secondary_option`): the boss-type dropdown
+  becomes a **champion dropdown** over the 7 champions.
+- **In-room debug spawn roster** (`CoopManager.gd` ~lines 87–93): relabel the 7 entries as **champions**
+  (drop the "Elite "/"Boss " prefixes); they're one group, not two (dev-tool).
 
 ### Phase 3
 
@@ -231,7 +251,8 @@ Checked the remaining surfaces — most are no-ops, with one real dev-tool item:
 1. **Strip the map → 2-option chooser + unify into one run.** Replace the branching map graph with a
    **lazily-generated 2-option choice per step**, using the **existing** room/modifier/loot generation;
    collapse the separate endless path into the same generator; remove the map graph UI and mode
-   selection; bosses kept at the every-5 beats. See *Phase 1 (task detail)* below. (The old separate
+   selection; champions (bosses, placeholder) on the depth-scaling cadence. See *Phase 1 (task detail)*
+   below. (The old separate
    "choice card" phase is folded in here — the 2-option choice *is* the mechanic.)
 2. **Champions.** Convert elite-add-wave delivery to spawn former-boss kits as champions; trim boss
    scripts to 1–2 attacks; remove boss-room / HP-HUD / add-budget machinery.
@@ -252,8 +273,9 @@ boss-room profiles.
 
 **Goal:** replace the branching map *graph* with a **lazily-generated 2-option choice per step**, using
 the **existing** room / modifier / loot generation. Collapse the endless path into the same flow, remove
-the map graph UI and mode selection, keep bosses at the every-5 beats. **Loot and modifier generation do
-not change** — only the map is replaced by a 2-card pick. (Boss→champion = Phase 2; win screen = Phase 3.)
+the map graph UI and mode selection, put champions (bosses as placeholders) on the **depth-scaling
+cadence**. **Loot and modifier generation do not change** — only the map is replaced by a 2-card pick.
+(Boss→champion = Phase 2; win screen = Phase 3.)
 
 ### What stays exactly as-is (do NOT rewrite)
 
@@ -268,28 +290,40 @@ not change** — only the map is replaced by a 2-card pick. (Boss→champion = P
 ```
 const RUN_LENGTH := 10     # tunable; the win milestone (Phase 3)
 const ROOMS_PER_ACT := 5   # act 1 = rooms 1..ROOMS_PER_ACT, act 2 beyond
-const BEAT_INTERVAL := 5    # forced champion/boss beat every 5th room (replaces ENDLESS_BOSS_INTERVAL)
+# Champion cadence: a depth-banded interval that TIGHTENS with depth, with a floor.
+# Numbers are placeholders pinned in playtest — e.g.:
+const CHAMPION_INTERVAL_BANDS := [
+    {"until_depth": 10, "interval": 5},   # rooms 1..10  → champion every 5
+    {"until_depth": 20, "interval": 4},   # rooms 11..20 → every 4
+    {"until_depth": -1, "interval": 3},   # deeper       → every 3 (the FLOOR)
+]
 ```
 Remove only the branching-graph sizing: `ACT_1_ROW_MIN/MAX`, `ACT_2_ROW_MIN/MAX`, `MAP_COLUMN_COUNT`,
-`START_ROW_COLUMNS`.
+`START_ROW_COLUMNS`, and `ENDLESS_BOSS_INTERVAL`.
+
+### Champion-step test
+
+`_is_champion_step(room_number)` is true when the room is on the **current band's interval** (tracked
+from the previous champion's depth so band changes don't double/skip), **or** `room_number == RUN_LENGTH`
+(the milestone is always a champion). This replaces the fixed `% BEAT_INTERVAL` check.
 
 ### `_build_choice_step(room_number) -> Array` — one step (= the choice)
 
 ```
-is_beat = (room_number % BEAT_INTERVAL == 0)
-act     = 1 if room_number <= ROOMS_PER_ACT else 2
-if is_beat:
-    return [ one boss node ]                 # forced — no choice this step
+act = 1 if room_number <= ROOMS_PER_ACT else 2
+if _is_champion_step(room_number):
+    return [ one champion node ]             # forced — no choice this step
 else:
     return [ two option nodes ]              # the player picks 1 of 2
 ```
 
-- **Beat node:** built like the current boss node; boss_type = `_structured_mid_boss_type` at room 5,
-  `_structured_final_boss_type` at `RUN_LENGTH`, else `_roll_boss_type()`. (Keep `_assign_structured_boss_types()`.)
+- **Champion node:** built like the current boss node; type = `_structured_mid_boss_type` at the first
+  arc champion, `_structured_final_boss_type` at `RUN_LENGTH`, else `_roll_boss_type()` (Phase 1
+  placeholder — Phase 2 makes it random-no-repeat over the 7). Keep `_assign_structured_boss_types()`.
 - **Two option nodes:** built with the **existing** path — `_build_map_node(...)` per option (passing
   `act` and `depth = room_number`), modifiers via **`_roll_modifiers_for_node`**, then run
-  **`_ensure_route_options_differ`** so the two differ (distinct enemy/modifier signature). Room types
-  stay the existing mix (combat / elite — elite rooms become champion rooms in Phase 2).
+  **`_ensure_route_options_differ`** so the two differ. Both options are **`combat` rooms** — **no
+  "elite" room type** (elites no longer exist as a tier; champions come only from the cadence/milestone).
 - **Enemy pool / wave count:** reuse the existing builders; past `RUN_LENGTH` the depth-banded
   `_get_endless_enemy_pool` / `_get_endless_wave_count` keep them scaling (both already exist).
 
@@ -300,9 +334,9 @@ else:
   reaches 1.0 at the milestone).
 - On advance (player picks an option, or clears a beat): `current_step_index += 1`, append
   `_build_choice_step(current_step_index + 1)`, present it. Lazy, one step at a time, unbounded.
-- **Remove** the multi-row graph + branching helpers: `_generate_node_map`, `_build_branching_row`,
-  `_build_endless_node`, `_roll_row_columns`. (`_should_place_elite_node` can stay if the 2 options still
-  roll an occasional elite room; that's an existing-content detail.)
+- **Remove** the multi-row graph + branching + elite-room helpers: `_generate_node_map`,
+  `_build_branching_row`, `_build_endless_node`, `_roll_row_columns`, **`_should_place_elite_node`**
+  (no elite room type anymore).
 - **Keep** the modifier helpers listed in *What stays* — they are reused, not removed.
 - Navigation: `get_current_options()` returns the current step's nodes (2, or 1 on a beat);
   `select_map_node(id)` sets the chosen node current and advances; drop reachability/visited. Keep
@@ -330,11 +364,12 @@ else:
 ### Acceptance test
 
 - `git diff --check`; headless parse; headless boot (`--quit-after 1`).
-- Temporary headless walk of `_build_choice_step(1..20)`: rooms 5/10/15/20 return **1** boss node; every
-  other step returns **exactly 2** nodes with a **distinct route signature**; `act` flips at room 6;
-  steps keep generating past `RUN_LENGTH`.
-- Manual: launch a run → no map / mode-select screen; each non-beat step shows **2 cards**; picking one
-  loads it; bosses appear at 5 & 10; play continues past room 10.
+- Temporary headless walk of `_build_choice_step(1..25)`: champion steps follow the **band intervals**
+  (every 5 in 1–10, every 4 in 11–20, every 3 deeper) and `RUN_LENGTH` is always a champion; every other
+  step returns **exactly 2** `combat` nodes with a **distinct route signature** (no `elite` room type);
+  `act` flips at room 6; steps keep generating past `RUN_LENGTH`.
+- Manual: launch a run → no map / mode-select screen; each non-champion step shows **2 cards**; picking
+  one loads it; champions appear on the cadence (incl. room 10); play continues past room 10.
 - **Cleanup gate:** grep for the Phase-1 removed symbols (`_generate_node_map`, `_build_endless_node`,
   `run_mode_option`, `MapNodeButton`, …) → zero references; `Bootstrap.tscn` / `RunFlow.tscn` scene
   nodes deleted; headless parse clean (no orphaned `@onready`).
@@ -380,8 +415,8 @@ flat, readable 2-attack threat.
 
 ### Champion delivery (CoopManager.gd)
 
-- Beat step (every 5) → room runs the normal spawner **plus** a champion: at the spawn delay, call the
-  (renamed) champion spawner, with a brief telegraph. Reuse `_spawn_boss` as the base.
+- Champion step (on the cadence) → room runs the normal spawner **plus** a champion: at the spawn delay,
+  call the (renamed) champion spawner, with a brief telegraph. Reuse `_spawn_boss` as the base.
 - **Remove** boss-only room machinery: the boss add-wave **budget** (`_update_boss_add_waves`), the
   **phase HUD pips** (keep the HP bar, drop pips), the **entrance windup**, and the dedicated
   boss-room "spawn at 25s / clear on death" flow → the beat room is just a combat room with a champion.
@@ -403,6 +438,11 @@ flat, readable 2-attack threat.
 
 ### Resolved
 
+- **Champion cadence** → **depth-banded interval that tightens with depth, with a floor** (stepped:
+  ~every 5 early → ~every 4 → ~every 3 floor; exact numbers in playtest). Milestone room always a
+  champion. **Not** a fixed every-5.
+- **No "elite" tier** → former elites are handled **identically** to former bosses (champions); no elite
+  room type / scaling / state survives.
 - **Beat selection** → **random from the 7-pool, no repeat until the pool cycles.**
 - **Depth scaling** → **per-champion base stat block × a depth multiplier** (preserves identity;
   exact multiplier curve = last-phase tuning).
@@ -456,8 +496,8 @@ keeps the same run climbing seamlessly until death. Reuses the existing `RunFlow
 1. **Reach room `RUN_LENGTH`** (a champion beat) and clear it → set `run_outcome = "won"`, show the
    **win resolution** with **two actions**: `Continue` (into Endless) and `End run`.
    - `Continue` → resume: advance to room `RUN_LENGTH + 1`, keep generating/climbing (Phase 1's lazy
-     `_build_choice_step` already produces rooms past `RUN_LENGTH`). The 2-option choice + every-5 beats
-     continue unchanged.
+     `_build_choice_step` already produces rooms past `RUN_LENGTH`). The 2-option choice + champion
+     cadence continue unchanged.
    - `End run` → return to menu (the win is already recorded).
 2. **Past the milestone:** room clears just advance — **no win screen again**.
 3. **Death anytime:** game-over resolution showing **final score** ("Reached room N / Score: N rooms")
@@ -509,7 +549,9 @@ keeps the same run climbing seamlessly until death. Reuses the existing `RunFlow
 - **One continuable run — no mode split** → curated arc → win milestone → seamless endless
   continuation. Menu = just **Play**; old "Endless" = the post-milestone continuation. (above)
 - **Run length** → single **tunable constant `RUN_LENGTH`** (target ~10), pinned in playtest tuning;
-  champion beats at room 5 + `RUN_LENGTH`, then every 5. (above)
+  the milestone room is always a champion. (above)
+- **Champion cadence** → **depth-banded tightening interval with a floor** (more frequent deeper;
+  numbers in playtest), **not** a fixed every-5. (above)
 - **Continuation difficulty** → **keeps climbing seamlessly** (one curve, no reset).
 - **Pick cadence** → **stays XP-gated** (unchanged).
 - **Run stake** → **nothing persists**; the run itself is the stake (death ends it). (above)
@@ -518,7 +560,7 @@ keeps the same run climbing seamlessly until death. Reuses the existing `RunFlow
 - **Enemy re-tune** → tune **last**, low-HP / high-threat philosophy; keep current values until the last phase.
 - **Onboarding** → **deferred** (see below). Not part of this rework.
 - **Threat ladder** → **unified champion tier** (trash → champion, 7 champions = 4 bosses + 3 former
-  elites); no separate elite tier. (above)
+  elites); **no "elite" concept anywhere** — former elites handled identically to bosses. (above)
 - **Champion look** → **bigger + aura + named health bar** (repurpose boss HP bar minus phase pips).
 - **Champion rooms** → inherit the existing elite-room bonus pick (existing loot behavior).
 - **R14 confidence** → playtest was thorough; build the rework straight on top, no extra R14 pass.
