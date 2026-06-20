@@ -42,6 +42,17 @@ resets each room** (unchanged). There is deliberately **no persistent resource**
 heals, no lives). The thing at risk is therefore the **whole run**: dying in any room ends it. This is
 what gives the choice card teeth, and it shapes how that card is built (below).
 
+## Structured room curve
+
+- **10 rooms, two acts of ~5.** Difficulty is a **steady climb** — each room a notch harder than the
+  last, Act 2 baseline (rooms 6–10) above Act 1. Predictable forward motion, no big cliff at the break.
+- **Champions** at room 5 (act finale) and room 10 (run finale), plus any opt-in champion rooms.
+- **Major modifiers are forced by depth** (ambient): rooms acquire a modifier automatically as depth
+  rises, independent of the card. The card layers its risk kind + reward *on top* of whatever modifier
+  the room already carries (so e.g. a deep room can be `swarm` **and** Fire Floor at once). Exact depth
+  thresholds = a phase-1 number.
+- Endless reuses the same per-room escalation, just unbounded.
+
 ## The core loop (per room)
 
 1. **Wave room** — existing continuous time-based spawner, escalating with depth.
@@ -58,49 +69,63 @@ HP/momentum). So the decision is framed as **"which threat do I want to face, fo
 payoff"** — a **risk *kind*** paired with a **reward *category*** — with the run itself as the stake
 (death ends it). Each option pairs:
 
-- **Risk kind** (one of): `standard` · `swarm` · `major modifier` (Fire Floor / Ice Zone / Scanline /
-  Shrinking Arena) · `elite-add pressure` · `champion room` (opt-in, on top of the fixed beats).
+- **Risk kind** (one of): `standard` · `swarm` · `champion room` (opt-in, on top of the fixed beats).
+  - **Major modifiers are NOT a card option** — they're **ambient, forced by depth** (see *Structured
+    room curve*). The card layers its risk kind on top of whatever modifier the room already carries.
+  - **Elite-add pressure is gone** as a risk kind — elites are folded into the unified champion tier.
 - **Reward** = a **forced pick category** for that room's post-clear pick (`Weapon` / `Effect` /
   `Attribute` / `Ability`) **+ a rarity nudge that scales with risk**:
   - `standard` → normal pick, normal rarity
-  - `swarm` / `modifier` → normal pick, **rare-weighted**
-  - `champion` → **guaranteed rare option** (and optionally an **extra pick**)
+  - `swarm` → normal pick, **rare-weighted**
+  - `champion` → **guaranteed rare option + extra pick** (inherits the old elite-room bonus)
 
 **Generation rule:** the 2–3 shown options must differ on **both** axes (no two identical risk kinds,
 no two identical reward categories) so it's always a real decision — *what threat suits my loadout* ×
-*what my build needs next* — not a flavor reshuffle. This directly answers the old
-route-differentiation worry: the choice is legible on two independent axes.
+*what my build needs next* — not a flavor reshuffle. With only 3 risk kinds, the **reward category**
+carries most of the differentiation; if the card feels thin in playtest, add more risk kinds (e.g. a
+hazard/objective variant) rather than reintroducing forced-vs-chosen modifiers.
 
 **Reuse** the existing route-choice card UI (it already renders room/enemy/modifier/reward detail);
 strip the graph/positions and present the flat 2–3 option choice.
 
-## Champions (former bosses)
+## Champions (unified tier: former elites + former bosses)
 
-- The four boss AIs are **reused** as elite **champions** that spawn **into a live wave room**, not a
-  dedicated boss room.
-- Each champion keeps **1–2 signature telegraphed attacks** from its old kit:
+Elites and bosses **collapse into one "champion" tier** above trash — a **two-tier ladder: trash →
+champion**, no separate elite tier. The champion pool = **7 champions**: the 4 former bosses
+(Warden / Hydra / Hive / Pulsar) + the 3 former Elite mini-bosses (Charger / Spitter / Support).
+
+- Champions **spawn into a live wave room**, not a dedicated room.
+- Each keeps **1–2 signature telegraphed attacks** from its old kit:
   - **Warden** — leap gap-closer / ground-pound shockwave
   - **Hydra** — rotating sweep / aimed snipe
   - **Hive** — shield + poison cloud
   - **Pulsar** — EMP ability-lockout / sweeping beam
-- **Drop** multi-phase HP-threshold scripting and entrance windup; keep one readable threat per champion.
+  - **former elites** — keep their existing telegraphed pressure patterns
+- **Drop** multi-phase HP-threshold scripting and entrance windup; keep one readable threat each.
+- **Look (readability):** champions are **visibly bigger**, carry a **colored aura**, and show a
+  **named health bar** — repurpose the boss HP bar we're otherwise removing, **minus the phase pips**.
 - **Delivery:** repurpose the existing **elite add-wave system** as the champion spawn mechanism.
 - **Cadence:** guaranteed champion at fixed depths (**structured: room 5 + room 10; endless: every 5
-  rooms**), plus the choice card can offer an extra opt-in **champion room** for a guaranteed-rare
-  reward. The room-10 champion doubles as the run's send-off without being a dedicated boss.
+  rooms**), plus the choice card can offer an extra opt-in **champion room**. Champion rooms inherit the
+  old **elite-room bonus** (guaranteed rare + extra pick). The room-10 champion is the run's send-off
+  without being a dedicated boss.
 
 ## What gets removed
 
 - Branching map: `MapUI`, map flow in `RunFlow`, route-graph generation, node layout/positions.
-- Dedicated boss rooms: delayed-boss combat-room logic, boss HP/phase HUD, boss add-wave budget,
-  boss-entrance windup set-piece, boss-every-5 endless cadence.
+- Dedicated boss rooms: delayed-boss combat-room logic, boss **phase** HUD + phase pips, boss add-wave
+  budget, boss-entrance windup set-piece, boss-every-5 endless cadence. (The boss **HP bar itself is
+  repurposed** as the champion health bar, not deleted.)
+- The separate **Elite tier** as a distinct concept — elites fold into the champion pool; their
+  AIs/patterns survive as champions, and "elite rooms" become "champion rooms."
 - (Boss off-screen indicator already removed in Round 14.)
 
 ## What gets reused
 
 - Continuous wave spawner, XP/pick economy, modifiers, side objectives, **elite add-wave system**
   (becomes champion delivery), reward-card UI, Momentum/Flow.
-- All four boss AIs → champion behaviors.
+- All four boss AIs **+ the three elite AIs** → the 7 champion behaviors.
+- The **boss HP bar** (minus phase pips) → champion health bar.
 - **Keep** the boss telegraph **prewarm** (Round 12) — still needed so champion attack VFX don't
   first-use stutter inside a dense wave.
 
@@ -138,12 +163,18 @@ boss-room profiles.
 - **Choice-card economy** → risk-kind × reward-category, rarity nudge scales with risk; no heals. (above)
 - **Enemy re-tune** → tune **last**, low-HP / high-threat philosophy; keep current values until phase 5.
 - **Onboarding** → **deferred** (see below). Not part of this rework.
+- **Threat ladder** → **unified champion tier** (trash → champion, 7 champions = 4 bosses + 3 former
+  elites); no separate elite tier. (above)
+- **Champion look** → **bigger + aura + named health bar** (repurpose boss HP bar minus phase pips).
+- **Champion rooms grant the extra pick** → yes (inherit the old elite-room bonus).
+- **R14 confidence** → playtest was thorough; build the rework straight on top, no extra R14 pass.
+- **Difficulty curve** → **steady climb**, Act 2 baseline above Act 1.
+- **Modifiers** → **forced by depth** (ambient), not a card option; card layers risk + reward on top.
 
 ## Remaining open items (decide during the relevant phase, not blocking)
 
-- **Exact numbers, to set when writing each phase's Codex task:** rare-weight nudge per risk kind;
-  whether `champion` rooms also grant the extra pick; the per-room difficulty curve across the 10 rooms;
-  endless escalation rate.
+- **Exact numbers, to set when writing each phase's Codex task:** rare-weight nudge per risk kind; the
+  per-room difficulty values across the 10 rooms; the modifier depth-thresholds; endless escalation rate.
 - **Tuning targets (phase 5):** the actual enemy + champion stat values, hand-tuned in playtest.
 - **Risk/reward "parasite" items** (Part C) — synergize strongly with the choice card; candidate
   follow-up *after* the card ships, not part of this rework.
