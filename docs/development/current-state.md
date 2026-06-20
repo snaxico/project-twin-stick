@@ -11,13 +11,14 @@ The live runtime is now aligned to the `Feature Roadmap V3` redesign:
 - the core economy is shared XP with room-end picks
 - health resets at the start of every room
 - meta progression and pre-run weapon unlock/selection remain deferred
-- the round-9 weapon system is live: five peer weapons, one active weapon, shared weapon level, and categorized upgrade cards
+- the round-14 weapon system is live: seven peer weapons, one active weapon, shared weapon level, and categorized upgrade cards
 
-Current local runtime includes the playtest round-13 implementation on top of the round-12
-tool-validated baseline and the round-9 Mutation-to-Weapon system rework. Boss rooms now run as
+Current local runtime includes the playtest round-14 implementation on top of the round-13
+tool-validated baseline and the round-9 Mutation-to-Weapon system rework. Boss rooms still run as
 normal combat rooms with continuous add spawns, spawn the boss after `25s`, and clear immediately when
-the boss dies. Generic boss add-waves are disabled; boss-specific scripted minion attacks remain.
-Round 13 is implemented and tool-validated; manual playtest is still pending.
+the boss dies. Round 14 adds manual aim, per-player controller ownership, Beam, Boomerang, Split, and
+Momentum/Flow. Round 14 is implemented and tool-validated, including the follow-up controller movement
+regression fix; manual playtest with real controllers is still pending.
 
 ## Current Runtime
 
@@ -34,8 +35,10 @@ Round 13 is implemented and tool-validated; manual playtest is still pending.
 - main-menu settings now support:
   - VSync toggle persisted via `user://video_settings.cfg`; first-run project default is enabled
   - keyboard rebinding for menu and active `1-2P` gameplay actions
-  - controller button / axis rebinding for menu and Player 1 gameplay actions
-  - Player 2 is temporarily keyboard-only; P2 controller bind buttons are disabled and stale P2 pad bindings are stripped on startup/reset
+  - controller button / axis rebinding for menu and active `1-2P` gameplay actions
+  - per-player gamepad layouts persist device-agnostic; runtime gameplay actions are stamped to the assigned gamepad device
+  - wildcard controller bindings are now polled against the assigned device at runtime, so saved layouts
+    stay portable without one pad cross-driving both players
   - saved runtime bindings via `user://input_bindings.cfg`
   - reset to default bindings
   - audio sliders for Master / Music / SFX
@@ -68,7 +71,7 @@ Round 13 is implemented and tool-validated; manual playtest is still pending.
 - every player always has:
   - one active weapon, starting with `Rifle`
   - shared weapon level `1-5` that is preserved when changing weapons
-  - faster base movement (`488` default speed)
+  - faster base movement (`560` default speed)
   - `1 OFF` ability slot on `LT`
   - `1 DEF` ability slot on `RT`
   - mutation inventory
@@ -82,8 +85,8 @@ Round 13 is implemented and tool-validated; manual playtest is still pending.
   - `Turret`
   - `Minefield`
   - `Orbit`
-- weapon fire is automatic via nearest-target auto-targeting
-- aim mode remains in code but the in-run pause Settings panel was removed; active runtime defaults to auto-target aim
+- weapon fire defaults to nearest-target auto-targeting, with seamless right-stick / mouse manual override
+- aim modes are `auto` (auto + manual override), `movement`, and `manual` (manual only)
 - current round-4 + round-5 tuning changed:
   - `Overcharge` is now a smaller boost (`22s` cooldown, `4s` duration, `1.3x` fire-rate, no extra projectiles)
   - `Blink` uses movement direction, longer range, short arrival i-frames, and an arrival detonation
@@ -110,7 +113,7 @@ Round 13 is implemented and tool-validated; manual playtest is still pending.
   - upgrade cards are grouped as `Weapon`, `Effect`, `Attribute`, and `Ability`
   - `High Caliber` and `Range` were added as attribute commons
   - seven new loadout-gated ability signatures were added: `Shockdash`, `Twin Charge`, `Aegis Burst`, `Volatile Decoy`, `Twin Turret`, `Expanding Orbit`, and `Extra Mines`
-  - Player 2 controller gameplay input is disabled for now to prevent one controller from driving both local players
+  - Player 2 can select and rebind gamepad controls; runtime gameplay actions are stamped to each player's assigned gamepad device
 - current round-10 tuning changed:
   - room clear freezes runtime hazards/enemies/projectiles while reward/map UI is active
   - generated adaptive music runs on a dedicated `Music` bus; SFX are softer and routed through `SFX`
@@ -142,7 +145,7 @@ Round 13 is implemented and tool-validated; manual playtest is still pending.
   - Pulsar teleports more aggressively toward player movement, attacks sooner after telegraph, and leads player-position hazards in all phases
   - rendered combat VFX/projectile/enemy prewarm removes the first-use boss-attack hitch measured by PerfRunner heavy boss profiles
   - reward cards are compact with a selected-upgrade detail panel; Encyclopedia opens from the main menu and pause menu
-  - boss off-screen marker is larger, pulsing, and boss-colored; downed players show an explicit revive progress marker
+  - downed players show an explicit revive progress marker
   - Encounter Builder removes starting-primary, room-step, starting mutation, starting level/XP, and launch-cheat controls
 - current round-13 tuning changed:
   - camera padding is wider and close-player zoom is lowered to `0.52`; player visuals are `1.5x`
@@ -150,16 +153,29 @@ Round 13 is implemented and tool-validated; manual playtest is still pending.
   - Overcharge cooldown is `16s`; Shockwave Resonance pulses are staggered by `0.4s`
   - revive radius is `150`
   - Ice Zone uses one shared `ice_zone` slow source so overlapping patches do not stack
-  - Railgun uses explicit infinite pierce, and Ricochet now grants `2` arena-wall bounces instead of
-    enemy seeking
+  - Railgun uses explicit infinite pierce; the round-13 Ricochet wall-bounce behavior was superseded by
+    round-14 Split
   - boss rooms spawn normal adds continuously, delay boss spawn by `25s`, disable generic boss
     add-waves, and clear immediately on boss death
   - reward picks stay locked per confirmed player until `ui_cancel` unconfirms them; finalization still
     requires all players confirmed
-  - Encyclopedia ability entries show active duration/cooldown, and the boss marker waits until the
-    boss is outside an inflated viewport margin
+  - Encyclopedia ability entries show active duration/cooldown; the round-13 boss marker behavior was
+    superseded by round-14 removal of the boss off-screen arrow
   - boss-hit shake/hit-stop feedback is throttled to reduce perceived screen-shake stutter under
     sustained fire
+- current round-14 tuning changed:
+  - active weapons are now `Rifle`, `Rocket Launcher`, `Shotgun`, `Cannon`, `Railgun`, `Beam`, and `Boomerang`
+  - Cannon is slower/heavier with no pierce or knockback; Shotgun spread is tighter and no longer has weapon knockback
+  - Dash cooldown is `1.5s`; Overcharge cooldown is `12s`
+  - player visuals are `1.35x`, enemy readability scale is `1.2x`, close-player zoom is `0.56`, and floor-grid lines are antialiased
+  - boss off-screen arrow indicator is removed; boss health/phase HUD remains
+  - Ricochet is repurposed as `Split`: projectile hits spawn one pooled follow-up shot at the nearest other enemy
+  - Beam is a continuous line weapon with `0.1s` ticks, per-target dwell-ramp damage, Beam-specific upgrade compilation, and one refreshed fire pool per beam when Fire Bullets is active
+  - Boomerang travels out and returns, with separate outbound/return hit tracking so enemies can be hit once per leg
+  - Momentum/Flow is live: shared kill gain, per-player damaging-hit tier loss, four HUD pips, player aura, and additive uncapped move/fire-rate bonuses
+  - weapon/player percent bonuses now use additive accumulation (`base * (1 + sum(percent bonuses))`) for move speed, fire rate, and damage sources
+  - controller movement/aim/abilities now use `PlayerConfig.uses_gamepad()` / `uses_keyboard()` so `Hybrid` remains hybrid and `Gamepad` remains device-owned
+  - mutation-pick direction/confirm/cancel also respects controller-capable configs after the movement regression fix
 - player mutation visuals are now partially wired:
   - projectile streaks for high `Rapid Fire` / `Velocity`
   - speed-line feedback for `Move Speed`
@@ -171,7 +187,6 @@ Round 13 is implemented and tool-validated; manual playtest is still pending.
 
 - live common mutations:
   - `rapid_fire`
-  - `knockback`
   - `velocity`
   - `high_caliber`
   - `range`
@@ -186,8 +201,10 @@ Round 13 is implemented and tool-validated; manual playtest is still pending.
   - `Shotgun`
   - `Cannon`
   - `Railgun`
+  - `Beam`
+  - `Boomerang`
 - live universal weapon rares:
-  - `ricochet`
+  - `ricochet` / `Split`
   - `fire_trail`
   - `freeze_shot`
   - `poison`
@@ -341,7 +358,7 @@ Round 13 is implemented and tool-validated; manual playtest is still pending.
   - pooled projectile activation/deactivation
   - dedicated slow homing projectile path for Hydra orbs
   - capped boss add-wave budget for normal boss rooms
-  - boss off-screen indicator
+  - Beam, Boomerang, Split, Momentum, boss health/phase HUD, and controller-owned local co-op input
   - ability dispatch
   - reward sequencing
   - boss helper attacks
@@ -366,7 +383,7 @@ Round 13 is implemented and tool-validated; manual playtest is still pending.
   - run setup
   - per-player ability selection
   - main-menu VSync setting and runtime input rebinding
-  - temporary P2 keyboard-only enforcement
+  - per-player controller ownership and main-menu input rebinding
   - encounter builder wiring
 - `RunFlow.gd`
   - structured map flow
@@ -385,8 +402,8 @@ Round 13 is implemented and tool-validated; manual playtest is still pending.
 ## Known Risks
 
 - full live playtesting and balance validation still have not been run after the full V3 integration
-- round-2 through round-13 tuning have passed headless validation; round-6, round-11, round-12, and
-  round-13 also have non-headless profiling data, but round-13 still needs full
+- round-2 through round-14 tuning have passed headless validation; round-6, round-11, round-12, and
+  round-13 also have non-headless profiling data, but round-14 still needs full
   balance/readability/performance playtesting
 - boss and elite behavior is implemented, but still likely needs feel tuning against real runs
 - modifier stacking, projectile pooling, AI time-slicing, new boss add pressure, homing orbs, and endless pressure have not been manually stress-tested yet
@@ -405,12 +422,12 @@ Round 13 is implemented and tool-validated; manual playtest is still pending.
 - enemy visual draw reduction needs a manual readability check because shadow/outline nodes were removed
 - `FireTrailZone` distance checks passed parse validation and warning cleanup but still need focused in-game correctness validation for player Fire Bullets damaging enemies and no friendly fire
 - round-9 weapon cards, active weapon switching, shared weapon level, weapon-specific fire patterns, and ability signatures are implemented but still need manual `1P` / `2P` feel validation
-- Player 2 is keyboard-only for now; controller support should stay disabled until per-player controller device/binding ownership is redesigned
+- Round 14 controller ownership, manual aim, Momentum, Beam, Boomerang, Split, and the controller movement regression fix have passed headless validation but still need live 1P/2P feel testing with real controllers
 - round-11 `entity_ramp` at `200 enemies + 200 projectiles` still reports roughly `40-50 FPS` because enemies remain per-node; real round-11 `boss:pulsar --players=2 --build=heavy` measured far above target, so enemy MultiMesh remains deferred unless live playtest contradicts the real-room result
 
 ## Next Step
 
-Run manual validation for the round-13 build using `docs/development/playtest-round-13-plan.md` as the checklist. Focus on camera/scale readability, Railgun/Ricochet behavior, delayed boss combat-room pressure, reward cancel/unconfirm UX, Ice Zone no-stack behavior, revive radius, boss marker visibility, and screen-shake feel.
+Run manual validation for the round-14 build using `docs/development/playtest-round-14-plan.md` as the checklist. Focus on P1/P2 controller ownership, controller movement after the regression fix, manual aim feel, Momentum pacing/loss, Beam ramp behavior, Boomerang double-hit readability, Split targeting, additive stat balance, and the smaller player/enemy/zoom readability pass.
 
 - continuous spawn pacing in `1P` and `2P` — does `35-45s` room duration feel right?
 - first `30s` pressure — do the opening burst, `~5/s` rifle, spawn ramp, and multi-edge spawns feel active without overwhelming?
@@ -432,12 +449,12 @@ Run manual validation for the round-13 build using `docs/development/playtest-ro
 - projectile pooling / AI time-slicing / boss entity-load performance at `100-150+` enemies/projectiles
 - ability selection usability on controller
 - remapped keyboard/controller binding behavior from main-menu Settings
-- P2 keyboard-only behavior; one controller must not move/control both players
-- weapon level-up cards, weapon swap cards, shared weapon level preservation, and all five weapon firing profiles
+- P1/P2 controller ownership; one controller must not move/control both players
+- controller movement, right-stick aim, OFF/DEF triggers, and mutation-pick confirm/cancel in `1P` and `2P`
+- weapon level-up cards, weapon swap cards, shared weapon level preservation, and all seven weapon firing profiles
 - new ability signatures: Shockdash, Twin Charge, Aegis Burst, Volatile Decoy, Twin Turret, Expanding Orbit, Extra Mines
 - map node readability at the new compact size
 - Round 11 arena shrink + camera retune in `1P` and `2P`
-- boss off-screen indicator direction/visibility
 - Encounter Builder full spawn list and live weapon selector
 - loadout/reward text density after truncation
 - route choices are actually differentiated

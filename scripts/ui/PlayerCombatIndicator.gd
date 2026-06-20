@@ -2,8 +2,6 @@ class_name PlayerCombatIndicator
 extends Control
 
 const INDICATOR_SIZE := Vector2(56.0, 48.0)
-const BAR_WIDTH := 44.0
-const BAR_HEIGHT := 5.0
 const LOW_HEALTH_THRESHOLD := 0.35
 const COOLDOWN_ARC_CENTER := Vector2(INDICATOR_SIZE.x * 0.5, 18.0)
 const COOLDOWN_ARC_RADIUS := 16.0
@@ -11,6 +9,9 @@ const COOLDOWN_ARC_WIDTH := 2.0
 const COOLDOWN_ARC_STEPS := 28
 const DASH_ARC_RADIUS := 10.0
 const DASH_ARC_WIDTH := 1.5
+const HEALTH_RING_RADIUS := 24.0
+const HEALTH_RING_WIDTH := 3.0
+const HEALTH_RING_STEPS := 40
 const READY_PULSE_DURATION := 0.22
 const HEALTH_BAR_COLOR := Color(0.24, 0.92, 0.34, 1.0)
 
@@ -128,12 +129,12 @@ func _draw() -> void:
 			DASH_ARC_WIDTH + 0.8
 		)
 
-	var track_rect := Rect2((INDICATOR_SIZE.x - BAR_WIDTH) * 0.5, 40.0, BAR_WIDTH, BAR_HEIGHT)
-	draw_rect(track_rect, Color(0.04, 0.06, 0.09, 0.68), true)
-	draw_rect(track_rect, Color(0.78, 0.9, 1.0, 0.12), false, 1.0)
+	# Health is shown as a ring around the player that only appears once damaged.
+	if not _is_downed and _health_ratio >= 0.999:
+		return
 
 	var fill_color := HEALTH_BAR_COLOR
-	var alpha := 0.66
+	var alpha := 0.7
 	if _is_downed:
 		var pulse := 0.55 + 0.45 * (0.5 + 0.5 * sin(_low_health_phase))
 		fill_color = Color(1.0, 0.28, 0.28, 1.0)
@@ -142,9 +143,8 @@ func _draw() -> void:
 		var pulse := 0.65 + 0.35 * (0.5 + 0.5 * sin(_low_health_phase))
 		fill_color = HEALTH_BAR_COLOR.lerp(Color(1.0, 0.34, 0.3, 1.0), 0.5)
 		alpha = 0.58 + pulse * 0.28
-	elif _health_ratio >= 0.99:
-		alpha = 0.34
 
-	var fill_width := BAR_WIDTH * _health_ratio
-	if fill_width > 0.0:
-		draw_rect(Rect2(track_rect.position.x, track_rect.position.y, fill_width, BAR_HEIGHT), Color(fill_color.r, fill_color.g, fill_color.b, alpha), true)
+	draw_arc(COOLDOWN_ARC_CENTER, HEALTH_RING_RADIUS, -PI * 0.5, -PI * 0.5 + TAU, HEALTH_RING_STEPS, Color(0.04, 0.06, 0.09, 0.55), HEALTH_RING_WIDTH)
+	if _health_ratio > 0.0:
+		var ring_end := -PI * 0.5 + TAU * _health_ratio
+		draw_arc(COOLDOWN_ARC_CENTER, HEALTH_RING_RADIUS, -PI * 0.5, ring_end, HEALTH_RING_STEPS, Color(fill_color.r, fill_color.g, fill_color.b, alpha), HEALTH_RING_WIDTH)

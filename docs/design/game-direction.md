@@ -7,14 +7,16 @@
 
 ## One-Line Pitch
 
-Same-screen local co-op roguelite where your weapon auto-fires, you focus on movement and timing,
-and the run grows through an XP economy of weapons, effects, attributes, and ability upgrades.
+Same-screen local co-op roguelite where your weapon auto-fires by default, manual aim can override
+when you want control, and the run grows through an XP economy of weapons, effects, attributes, and
+ability upgrades.
 
 ## The Feel
 
-You move first; the weapon handles the basic fire loop. Decisions come from where to stand, when
-to use your OFF/DEF abilities, which **Upgrades** to take at level-ups, and which route to push.
-Readable first, explosive second — spectacle must never bury enemy/projectile/HUD readability.
+You move first; the weapon handles the basic fire loop unless the player deliberately overrides with
+right-stick or mouse aim. Decisions come from where to stand, when to manually aim, when to use your
+OFF/DEF abilities, which **Upgrades** to take at level-ups, and which route to push. Readable first,
+explosive second: spectacle must never bury enemy/projectile/HUD readability.
 
 ## Core Loop
 
@@ -27,10 +29,14 @@ Readable first, explosive second — spectacle must never bury enemy/projectile/
 
 ## Combat Direction
 
-- **Weapons (new — the round-9 system):** 5 peer weapons — `Rifle`, `Rocket Launcher`,
-  `Scattergun`, `Cannon`, `Railgun`. One active at a time; a single shared `weapon_level` (1–5)
-  preserved when changing weapons. Weapons are chosen at the Reward screen (Level Up / Change cards).
-  Weapon level is the primary offense axis.
+- **Weapons:** 7 peer weapons — `Rifle`, `Rocket Launcher`, `Shotgun`, `Cannon`, `Railgun`, `Beam`,
+  `Boomerang`. One active at a time; a single shared `weapon_level` (1-5) is preserved when changing
+  weapons. Weapons are chosen at the Reward screen (Level Up / Change cards). Weapon level is the
+  primary offense axis.
+- **Aim:** auto-targeting is the default feel, with seamless right-stick / mouse manual override and a
+  manual-only option for players who want full aim control.
+- **Momentum / Flow:** per-player passive meter that builds from shared kill gain, drops on actual HP
+  loss, and gives uncapped additive movement/fire-rate bonuses.
 - **Abilities:** `1 OFF` (LT) + `1 DEF` (RT) from the 9-ability roster (Shockwave, Dash, Overcharge,
   Blink, Shield, Decoy, Turret, Minefield, Orbit). Each ability has a rare **Signature** upgrade.
 - **Upgrade categories:** Weapon · Effect (burn/frost/venom/bounce on-hit riders) · Attribute
@@ -64,18 +70,23 @@ Readable first, explosive second — spectacle must never bury enemy/projectile/
 
 ## Visual / Audio Direction
 
-- Dark arena, readable neon contrast, render-local over-bright bloom. Geometric placeholder visuals
-  acceptable while tuning is the priority.
+- Dark arena, readable neon contrast, render-local over-bright bloom. Geometric visuals are
+  placeholder scaffolding while tuning is the priority; the intended final style is a later rubberhose
+  restyle once mechanics are stable.
 - Audio is procedural (generated SFX + adaptive music); spectacle never buries readability.
 
 ## Current Priorities
 
-- Validate and tune the round-9 weapon system + the round-10 patch (see `playtest-round-10-plan.md`).
+- Validate and tune the round-14 build (see `playtest-round-14-plan.md`): controller ownership,
+  manual aim, Momentum, Beam, Boomerang, Split, additive stat balance, and player/enemy/zoom
+  readability.
 - Boss feel/fairness (windups, telegraphs), rarity feel, readability (cards, ability text, scanlines).
-- A dedicated **performance round** for the ~200-entity ceiling (MultiMesh + caps), driven by the Perf Runner.
+- Keep using the Perf Runner for dense-room and boss stress checks; enemy MultiMesh remains deferred
+  unless live playtest contradicts real-room performance.
 
 ## What This Direction Is Not
 
 - Not the old gold/shop/mutation-buy economy.
 - Not a `3-4`-player or split-screen target.
-- Not manual-fire twin-stick.
+- Not pure manual-fire twin-stick; auto-targeting remains the default, with manual aim as an override
+  and optional mode.

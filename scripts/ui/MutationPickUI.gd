@@ -437,11 +437,11 @@ func _format_name(raw_id: String) -> String:
 
 func _get_player_menu_direction(event: InputEvent, player_index: int) -> int:
 	var config = _player_configs[player_index]
-	if config.control_source == "gamepad":
+	if config.has_method("uses_gamepad") and config.uses_gamepad():
 		var gamepad_direction := _gamepad_direction(event, config)
 		if gamepad_direction != 0:
 			return gamepad_direction
-	if config.control_source != "gamepad":
+	if config.has_method("uses_keyboard") and config.uses_keyboard():
 		if _event_matches_action(event, "p%d_move_left" % int(config.player_id)):
 			return -1
 		if _event_matches_action(event, "p%d_move_right" % int(config.player_id)):
@@ -474,18 +474,17 @@ func _gamepad_direction_button(event: InputEvent, config, button_index: JoyButto
 
 func _is_player_confirm_pressed(event: InputEvent, player_index: int) -> bool:
 	var config = _player_configs[player_index]
-	if config.control_source == "gamepad":
-		if not (event is InputEventJoypadButton):
-			return false
+	if config.has_method("uses_gamepad") and config.uses_gamepad() and event is InputEventJoypadButton:
 		var joy_button := event as InputEventJoypadButton
-		return joy_button.pressed and joy_button.button_index == JOY_BUTTON_A
-	return _event_matches_action(event, "p%d_secondary" % int(config.player_id))
+		if joy_button.pressed and joy_button.button_index == JOY_BUTTON_A:
+			return true
+	return _event_matches_action(event, "p%d_secondary" % int(config.player_id)) if config.has_method("uses_keyboard") and config.uses_keyboard() else false
 
 func _is_player_cancel_pressed(event: InputEvent, player_index: int) -> bool:
 	var config = _player_configs[player_index]
-	if config.control_source == "gamepad":
-		return _gamepad_direction_button(event, config, JOY_BUTTON_B)
-	return _event_matches_action(event, "ui_cancel")
+	if config.has_method("uses_gamepad") and config.uses_gamepad() and _gamepad_direction_button(event, config, JOY_BUTTON_B):
+		return true
+	return _event_matches_action(event, "ui_cancel") if config.has_method("uses_keyboard") and config.uses_keyboard() else false
 
 func _event_matches_action(event: InputEvent, action_name: String) -> bool:
 	if not (event is InputEventKey):

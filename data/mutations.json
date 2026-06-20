@@ -12,17 +12,6 @@
       "params": { "fire_rate_bonus_per_level": 0.30 }
     },
     {
-      "id": "knockback",
-      "name": "Knockback",
-      "description": "Weapon and pulse hits gain flat knockback per level.",
-      "icon": "knockback",
-      "category": "weapon",
-      "group": "attribute",
-      "rarity": "common",
-      "max_level": 3,
-      "params": { "force_per_level": 120.0 }
-    },
-    {
       "id": "velocity",
       "name": "Velocity",
       "description": "Projectile speed increases by 33% per level.",
@@ -112,8 +101,8 @@
     },
     {
       "id": "ricochet",
-      "name": "Ricochet",
-      "description": "Projectiles bounce off arena walls up to 2 times.",
+      "name": "Split",
+      "description": "Projectile hits spawn one follow-up shot at the nearest other enemy.",
       "icon": "ricochet",
       "category": "weapon",
       "group": "effect",
@@ -122,7 +111,7 @@
       "trail_style": "sparks",
       "accent_color": [1.35, 1.08, 0.22, 1.0],
       "impact_sfx": "ping",
-      "params": { "bounce_count": 2 }
+      "params": { "split_count": 1 }
     },
     {
       "id": "fire_trail",
@@ -191,13 +180,13 @@
     {
       "id": "dash_shockdash",
       "name": "Shockdash",
-      "description": "Dash damages and knocks back enemies you pass through.",
+      "description": "Dash damages enemies you pass through.",
       "icon": "dash",
       "category": "ability",
       "group": "ability",
       "rarity": "rare",
       "requires_ability": "dash",
-      "params": { "passthrough_damage": 20, "knockback_force": 600.0 }
+      "params": { "passthrough_damage": 20 }
     },
     {
       "id": "blink_twin_charge",

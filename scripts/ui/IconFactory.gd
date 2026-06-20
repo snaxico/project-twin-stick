@@ -223,6 +223,10 @@ static func _draw_primary_icon(image: Image, weapon_id: String) -> void:
 			base_color = Color(0.96, 0.55, 0.15, 1.0)
 		"beam_lance":
 			base_color = Color(0.3, 0.85, 0.95, 1.0)
+		"beam":
+			base_color = Color(0.26, 0.95, 0.95, 1.0)
+		"boomerang":
+			base_color = Color(0.86, 0.72, 0.28, 1.0)
 		"arc_caster":
 			base_color = Color(0.4, 0.5, 1.0, 1.0)
 	_draw_rounded_rect(image, Rect2(10.0, 16.0, 44.0, 32.0), 8.0, base_color)
@@ -238,6 +242,13 @@ static func _draw_primary_icon(image: Image, weapon_id: String) -> void:
 			_draw_triangle(image, Vector2(26.0, 17.0), Vector2(32.0, 8.0), Vector2(38.0, 17.0), Color(1.0, 0.84, 0.35, 0.95))
 		"beam_lance":
 			_draw_line_thick(image, Vector2(16.0, 32.0), Vector2(48.0, 32.0), 4.0, Color(0.94, 1.0, 1.0, 0.92))
+		"beam":
+			_draw_line_thick(image, Vector2(14.0, 32.0), Vector2(50.0, 32.0), 5.0, Color(0.94, 1.0, 1.0, 0.94))
+			_draw_line_thick(image, Vector2(18.0, 24.0), Vector2(46.0, 24.0), 2.0, Color(0.94, 1.0, 1.0, 0.75))
+			_draw_line_thick(image, Vector2(18.0, 40.0), Vector2(46.0, 40.0), 2.0, Color(0.94, 1.0, 1.0, 0.75))
+		"boomerang":
+			_draw_line_thick(image, Vector2(20.0, 42.0), Vector2(34.0, 20.0), 5.0, Color(0.08, 0.1, 0.14, 0.9))
+			_draw_line_thick(image, Vector2(34.0, 20.0), Vector2(48.0, 42.0), 5.0, Color(0.08, 0.1, 0.14, 0.9))
 		"arc_caster":
 			var zigzag_points: Array = [
 				Vector2(18.0, 38.0),

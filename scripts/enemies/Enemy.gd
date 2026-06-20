@@ -7,7 +7,7 @@ const PULSAR_REACTIVE_TELEPORT_DISTANCE := 250.0
 const SEPARATION_RADIUS := 64.0
 const SEPARATION_STRENGTH := 120.0
 const BLOOM_COLOR_MULTIPLIER := 1.45
-const READABILITY_VISUAL_SCALE := 1.3
+const READABILITY_VISUAL_SCALE := 1.2
 
 signal enemy_died(enemy)
 signal fire_requested(origin, direction, speed, damage, team, color, projectile_scale)

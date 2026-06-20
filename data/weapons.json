@@ -41,12 +41,11 @@
         "damage": 12.0,
         "fire_rate": 2.2,
         "projectile_speed": 800.0,
-        "range": 550.0,
-        "knockback": 150.0
+        "range": 550.0
       },
       "per_level": {
         "pellet_count": [4, 5, 6, 7, 8],
-        "spread_degrees": [18, 17, 16, 15, 14]
+        "spread_degrees": [12, 11, 10, 9, 8]
       }
     },
     {
@@ -55,15 +54,13 @@
       "type": "weapon",
       "projectile_kind": "slug",
       "stats": {
-        "fire_rate": 2.0,
+        "fire_rate": 1.5,
         "projectile_speed": 700.0,
         "range": 900.0,
-        "area": 8.0,
-        "knockback": 320.0
+        "area": 8.0
       },
       "per_level": {
-        "damage": [40, 55, 70, 85, 100],
-        "pierce": [1, 1, 2, 2, 3]
+        "damage": [55, 75, 95, 115, 135]
       }
     },
     {
@@ -80,6 +77,38 @@
       },
       "per_level": {
         "damage": [16, 22, 28, 34, 40]
+      }
+    },
+    {
+      "id": "beam",
+      "name": "Beam",
+      "type": "weapon",
+      "projectile_kind": "beam",
+      "stats": {
+        "range": 750.0,
+        "area": 20.0,
+        "tick_interval": 0.1,
+        "ramp_seconds": 1.5,
+        "ramp_start_fraction": 0.30
+      },
+      "per_level": {
+        "max_damage_per_second": [120, 140, 160, 180, 200]
+      }
+    },
+    {
+      "id": "boomerang",
+      "name": "Boomerang",
+      "type": "weapon",
+      "projectile_kind": "boomerang",
+      "stats": {
+        "fire_rate": 3.0,
+        "travel_distance": 480.0,
+        "projectile_speed": 700.0,
+        "range": 960.0,
+        "area": 6.0
+      },
+      "per_level": {
+        "damage": [16, 20, 24, 29, 34]
       }
     },
     {

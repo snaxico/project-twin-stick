@@ -21,7 +21,7 @@
       "description": "Quick directional dodge with i-frames.",
       "slot": "def",
       "type": "movement",
-      "cooldown": 3.0,
+      "cooldown": 1.5,
       "duration": 0.2,
       "stats": {
         "dash_speed": 1180.0,
@@ -35,7 +35,7 @@
       "description": "For a short burst, your weapon fires 50% faster.",
       "slot": "off",
       "type": "sustained",
-      "cooldown": 16.0,
+      "cooldown": 12.0,
       "duration": 6.0,
       "stats": {
         "fire_rate_multiplier": 1.5,

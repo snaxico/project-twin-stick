@@ -17,6 +17,11 @@ const INPUT_BINDING_ACTIONS := [
 	{"label": "Move Right", "suffix": "move_right"},
 	{"label": "Move Up", "suffix": "move_up"},
 	{"label": "Move Down", "suffix": "move_down"},
+	{"label": "Aim Left", "suffix": "aim_left"},
+	{"label": "Aim Right", "suffix": "aim_right"},
+	{"label": "Aim Up", "suffix": "aim_up"},
+	{"label": "Aim Down", "suffix": "aim_down"},
+	{"label": "Fire", "suffix": "fire"},
 	{"label": "OFF Ability LT", "suffix": "secondary"},
 	{"label": "DEF Ability RT", "suffix": "dash"},
 	{"label": "Swap LT", "suffix": "switch_primary"},
@@ -117,12 +122,12 @@ func _ready() -> void:
 	_ensure_debug_input_binding()
 	_cache_default_input_events()
 	_load_input_bindings()
-	_strip_player_2_controller_bindings()
 	_load_video_settings()
 	_load_audio_settings()
 	_load_mutation_definitions()
 	_load_modifier_definitions()
 	_populate_menu()
+	_configure_aim_mode_options()
 	_configure_setup_panel_layout()
 	home_play_button.pressed.connect(_on_home_play_button_pressed)
 	home_settings_button.pressed.connect(_open_settings_from_home)
@@ -262,10 +267,7 @@ func _populate_control_option(option_button: OptionButton, default_value: String
 			break
 
 func _populate_player_2_control_option() -> void:
-	player_2_control_option.clear()
-	player_2_control_option.add_item("Keyboard")
-	player_2_control_option.set_item_metadata(0, "keyboard")
-	player_2_control_option.select(0)
+	_populate_control_option(player_2_control_option, "gamepad")
 
 func _populate_profile_option(option_button: OptionButton, entries: Array, default_value: String) -> void:
 	option_button.clear()
@@ -352,11 +354,12 @@ func _on_home_debug_button_pressed() -> void:
 func _build_player_configs() -> Array:
 	var configs: Array = []
 	var control_options := [player_1_control_option, player_2_control_option]
+	var aim_options := [settings_player_1_option, settings_player_2_option]
 	for index in range(get_selected_player_count()):
 		var control_source := str(control_options[index].get_selected_metadata())
-		if index == 1:
-			control_source = "keyboard"
-		configs.append(PlayerConfigData.new(index + 1, control_source, _player_tints[index]))
+		var config = PlayerConfigData.new(index + 1, control_source, _player_tints[index])
+		config.aim_mode = str(aim_options[index].get_selected_metadata()) if index < aim_options.size() else "auto"
+		configs.append(config)
 	return configs
 
 func _build_debug_start_options() -> Dictionary:
@@ -483,8 +486,8 @@ func _configure_settings_panel() -> void:
 	settings_panel.offset_bottom = 360.0
 	settings_detail_label.text = "Change display, gameplay keybindings, and controller bindings. Pick a Bind button, then press the next key, controller button, or controller axis direction."
 	settings_screen_effect_option.get_parent().visible = false
-	settings_player_1_row.visible = false
-	settings_player_2_row.visible = false
+	settings_player_1_row.visible = true
+	settings_player_2_row.visible = true
 	settings_player_3_row.visible = false
 	settings_player_4_row.visible = false
 	if settings_layout.get_node_or_null("BindingScroll") != null:
@@ -517,6 +520,16 @@ func _configure_settings_panel() -> void:
 	settings_layout.add_child(reset_button)
 	settings_layout.move_child(reset_button, settings_back_button.get_index())
 	_refresh_binding_buttons()
+
+func _configure_aim_mode_options() -> void:
+	for option in [settings_player_1_option, settings_player_2_option]:
+		if option == null:
+			continue
+		_populate_profile_option(option, [
+			{"label": "Auto + Manual", "value": "auto"},
+			{"label": "Movement", "value": "movement"},
+			{"label": "Manual Only", "value": "manual"},
+		], "auto")
 
 func _add_video_settings_rows() -> void:
 	var section_label := Label.new()
@@ -595,12 +608,7 @@ func _add_binding_row(parent: VBoxContainer, label_text: String, action: String)
 	row.add_child(keyboard_button)
 	var controller_button := Button.new()
 	controller_button.custom_minimum_size = Vector2(180.0, 32.0)
-	if _is_player_2_action(action):
-		controller_button.text = "Pad: disabled"
-		controller_button.disabled = true
-		controller_button.tooltip_text = "Player 2 controller input is disabled for now."
-	else:
-		controller_button.pressed.connect(_begin_binding.bind(action, "controller", controller_button))
+	controller_button.pressed.connect(_begin_binding.bind(action, "controller", controller_button))
 	row.add_child(controller_button)
 	_settings_binding_buttons[action] = {
 		"keyboard": keyboard_button,
@@ -608,8 +616,6 @@ func _add_binding_row(parent: VBoxContainer, label_text: String, action: String)
 	}
 
 func _begin_binding(action: String, kind: String, button: Button) -> void:
-	if kind == "controller" and _is_player_2_action(action):
-		return
 	_pending_binding_action = action
 	_pending_binding_kind = kind
 	_pending_binding_button = button
@@ -660,8 +666,6 @@ func _try_capture_binding_event(event: InputEvent) -> bool:
 	return false
 
 func _apply_binding_event(action: String, kind: String, event: InputEvent) -> void:
-	if kind == "controller" and _is_player_2_action(action):
-		return
 	if not InputMap.has_action(action):
 		InputMap.add_action(action)
 	var preserved_events: Array = []
@@ -683,7 +687,7 @@ func _refresh_binding_buttons() -> void:
 			keyboard_button.text = "Key: %s" % _describe_binding(action, "keyboard")
 		var controller_button: Button = buttons.get("controller", null)
 		if controller_button != null:
-			controller_button.text = "Pad: disabled" if _is_player_2_action(action) else "Pad: %s" % _describe_binding(action, "controller")
+			controller_button.text = "Pad: %s" % _describe_binding(action, "controller")
 
 func _describe_binding(action: String, kind: String) -> String:
 	for event in InputMap.action_get_events(action):
@@ -747,13 +751,16 @@ func _joy_axis_name(axis: int) -> String:
 	return str(names.get(axis, "Axis %d" % axis))
 
 func _ensure_default_controller_bindings() -> void:
-	# Player 2 controller bindings are disabled temporarily because shared pad
-	# bindings can drive both local players at once.
-	for player_id in [1]:
+	for player_id in [1, 2]:
 		_add_default_controller_motion("p%d_move_left" % player_id, JOY_AXIS_LEFT_X, -1.0)
 		_add_default_controller_motion("p%d_move_right" % player_id, JOY_AXIS_LEFT_X, 1.0)
 		_add_default_controller_motion("p%d_move_up" % player_id, JOY_AXIS_LEFT_Y, -1.0)
 		_add_default_controller_motion("p%d_move_down" % player_id, JOY_AXIS_LEFT_Y, 1.0)
+		_add_default_controller_motion("p%d_aim_left" % player_id, JOY_AXIS_RIGHT_X, -1.0)
+		_add_default_controller_motion("p%d_aim_right" % player_id, JOY_AXIS_RIGHT_X, 1.0)
+		_add_default_controller_motion("p%d_aim_up" % player_id, JOY_AXIS_RIGHT_Y, -1.0)
+		_add_default_controller_motion("p%d_aim_down" % player_id, JOY_AXIS_RIGHT_Y, 1.0)
+		_add_default_controller_button("p%d_fire" % player_id, JOY_BUTTON_RIGHT_SHOULDER)
 		_add_default_controller_motion("p%d_secondary" % player_id, JOY_AXIS_TRIGGER_LEFT, 1.0)
 		_add_default_controller_motion("p%d_dash" % player_id, JOY_AXIS_TRIGGER_RIGHT, 1.0)
 
@@ -775,11 +782,27 @@ func _add_default_controller_motion(action: String, axis: JoyAxis, axis_value: f
 	event.axis_value = axis_value
 	InputMap.action_add_event(action, event)
 
+func _add_default_controller_button(action: String, button_index: JoyButton) -> void:
+	if _action_has_matching_controller_button(action, button_index):
+		return
+	var event := InputEventJoypadButton.new()
+	event.device = -1
+	event.button_index = button_index
+	InputMap.action_add_event(action, event)
+
 func _action_has_matching_controller_motion(action: String, axis: JoyAxis, axis_value: float) -> bool:
 	for event in InputMap.action_get_events(action):
 		if event is InputEventJoypadMotion:
 			var motion_event := event as InputEventJoypadMotion
 			if motion_event.axis == axis and signf(motion_event.axis_value) == signf(axis_value):
+				return true
+	return false
+
+func _action_has_matching_controller_button(action: String, button_index: JoyButton) -> bool:
+	for event in InputMap.action_get_events(action):
+		if event is InputEventJoypadButton:
+			var button_event := event as InputEventJoypadButton
+			if button_event.button_index == button_index:
 				return true
 	return false
 
@@ -807,8 +830,14 @@ func _save_input_bindings() -> void:
 	var config := ConfigFile.new()
 	for action in _get_editable_input_actions():
 		var encoded_events: Array = []
+		var seen_events := {}
 		for event in InputMap.action_get_events(action):
-			encoded_events.append(_encode_input_event(event))
+			var encoded_event := _encode_input_event(event)
+			var encoded_key := JSON.stringify(encoded_event)
+			if seen_events.has(encoded_key):
+				continue
+			seen_events[encoded_key] = true
+			encoded_events.append(encoded_event)
 		config.set_value("bindings", action, encoded_events)
 	config.save(INPUT_BINDINGS_PATH)
 
@@ -825,28 +854,6 @@ func _load_input_bindings() -> void:
 			var event := _decode_input_event(encoded as Dictionary)
 			if event != null:
 				InputMap.action_add_event(action, event)
-	_strip_player_2_controller_bindings()
-
-func _strip_player_2_controller_bindings() -> void:
-	var removed_any := false
-	for entry in INPUT_BINDING_ACTIONS:
-		var action := "p2_%s" % str(entry["suffix"])
-		if not InputMap.has_action(action):
-			continue
-		var preserved_events: Array = []
-		for event in InputMap.action_get_events(action):
-			if _get_binding_kind(event) == "controller":
-				removed_any = true
-				continue
-			preserved_events.append(event)
-		if preserved_events.size() == InputMap.action_get_events(action).size():
-			continue
-		InputMap.action_erase_events(action)
-		for preserved_event in preserved_events:
-			InputMap.action_add_event(action, preserved_event)
-	if removed_any:
-		_save_input_bindings()
-		_refresh_binding_buttons()
 
 func _reset_input_bindings_to_defaults() -> void:
 	_cancel_pending_binding()
@@ -854,7 +861,6 @@ func _reset_input_bindings_to_defaults() -> void:
 		InputMap.action_erase_events(action)
 		for event in (_default_input_events.get(action, []) as Array):
 			InputMap.action_add_event(action, (event as InputEvent).duplicate())
-	_strip_player_2_controller_bindings()
 	_save_input_bindings()
 	_refresh_binding_buttons()
 

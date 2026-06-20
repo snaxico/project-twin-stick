@@ -2,6 +2,7 @@ extends Node2D
 
 const EnemySceneData = preload("res://scenes/enemies/Enemy.tscn")
 const ProjectileSceneData = preload("res://scenes/weapons/Projectile.tscn")
+const FireTrailZoneData = preload("res://scripts/weapons/FireTrailZone.gd")
 const PlayerCombatIndicatorData = preload("res://scripts/ui/PlayerCombatIndicator.gd")
 const ProjectileRendererData = preload("res://scripts/weapons/ProjectileRenderer.gd")
 const MutationSystemData = preload("res://scripts/game/MutationSystem.gd")
@@ -43,7 +44,6 @@ const REVIVE_RADIUS := 150.0
 const REVIVE_HOLD_DURATION := 1.2
 const MAX_ACTIVE_PROJECTILES := 180
 const HUD_REFRESH_INTERVAL := 0.08
-const BOSS_MARKER_VISIBILITY_MARGIN := 140.0
 const BOSS_SPAWN_DELAY := 25.0
 const BOSS_HIT_FEEDBACK_INTERVAL := 0.22
 const COLLECTOR_TARGET := 8
@@ -52,6 +52,9 @@ const COLLECTOR_SPAWN_INTERVAL := 2.5
 const HEALTH_DROP_CHANCE := 0.10
 const BASE_RAMP_DURATION := 45.0
 const ENEMY_SEPARATION_CELL_SIZE := 96.0
+const MOMENTUM_THRESHOLDS := [10, 25, 45, 70]
+const MOMENTUM_MOVE_BONUSES := [0.0, 0.10, 0.20, 0.35, 0.50]
+const MOMENTUM_FIRE_RATE_BONUSES := [0.0, 0.15, 0.30, 0.50, 0.75]
 const BOSS_ADD_CAP := 25
 const BOSS_ADD_WAVE_MIN := 4
 const BOSS_ADD_WAVE_MAX := 5
@@ -59,6 +62,21 @@ const HUD_HEALTH_COLOR := Color(0.24, 0.92, 0.34, 1.0)
 const HUD_SLOT_2_COLOR := HudPaletteData.SLOT_2_COLOR
 const ENEMY_PROJECTILE_COLOR := Color(1.0, 0.0, 0.0, 1.0)
 const COMBAT_VFX_LOAD_THRESHOLD := 150
+const GAMEPLAY_INPUT_SUFFIXES := [
+	"move_left",
+	"move_right",
+	"move_up",
+	"move_down",
+	"aim_left",
+	"aim_right",
+	"aim_up",
+	"aim_down",
+	"fire",
+	"secondary",
+	"dash",
+	"switch_primary",
+	"switch_secondary",
+]
 const DEBUG_ENEMY_SPAWN_CATALOG := [
 	{"label": "Chaser", "value": "chaser"},
 	{"label": "Charger", "value": "charger"},
@@ -170,8 +188,6 @@ var _objective_progress_label: Label = null
 var _objective_progress_bar: ProgressBar = null
 var _boss_health_bar = null
 var _boss_phase_label: Label = null
-var _boss_offscreen_indicator: Label = null
-var _boss_indicator_phase := 0.0
 var _mutation_pick_ui = null
 var _active_modifiers: Array = []
 var _modifier_definitions: Dictionary = {}
@@ -189,6 +205,8 @@ var _side_objective_id := ""
 var _side_objective_completed := false
 var _kill_streak_target := 0
 var _kill_streak_progress := 0
+var _momentum_progress_by_player: Array = []
+var _momentum_tier_by_player: Array = []
 var _collector_collected := 0
 var _collector_spawned := 0
 var _collector_spawn_timer := COLLECTOR_SPAWN_INTERVAL
@@ -214,6 +232,8 @@ var _pause_input_proxy = null
 var _projectile_pool: Array = []
 var _active_projectiles: Array = []
 var _active_homing_projectiles: Array = []
+var _beam_states: Dictionary = {}
+const BEAM_VISUAL_GRACE := 0.16
 var _screen_effect_level := "full"
 var _hit_stop_manager = null
 var _debug_overlay_panel: PanelContainer = null
@@ -347,20 +367,6 @@ func _build_hud() -> void:
 	_boss_phase_label.add_theme_color_override("font_color", Color(1.0, 0.72, 0.54, 0.92))
 	_boss_phase_label.visible = false
 	_hud_root.add_child(_boss_phase_label)
-	_boss_offscreen_indicator = Label.new()
-	_boss_offscreen_indicator.text = ">"
-	_boss_offscreen_indicator.size = Vector2(58.0, 58.0)
-	_boss_offscreen_indicator.pivot_offset = Vector2(29.0, 29.0)
-	_boss_offscreen_indicator.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_boss_offscreen_indicator.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_boss_offscreen_indicator.add_theme_font_size_override("font_size", 54)
-	_boss_offscreen_indicator.add_theme_color_override("font_color", Color(1.0, 0.34, 0.18, 0.96))
-	_boss_offscreen_indicator.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.86))
-	_boss_offscreen_indicator.add_theme_constant_override("shadow_offset_x", 3)
-	_boss_offscreen_indicator.add_theme_constant_override("shadow_offset_y", 3)
-	_boss_offscreen_indicator.visible = false
-	_hud_root.add_child(_boss_offscreen_indicator)
-
 	_objective_label = Label.new()
 	_objective_label.position = Vector2(24.0, 24.0)
 	_objective_label.size = Vector2(520.0, 54.0)
@@ -388,7 +394,7 @@ func _build_hud() -> void:
 	_bottom_hud.anchor_top = 1.0
 	_bottom_hud.anchor_bottom = 1.0
 	_bottom_hud.offset_left = 36.0
-	_bottom_hud.offset_top = -104.0
+	_bottom_hud.offset_top = -118.0
 	_bottom_hud.offset_right = -36.0
 	_bottom_hud.offset_bottom = -20.0
 	_bottom_hud.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -416,7 +422,7 @@ func _build_hud() -> void:
 		_revive_markers.append(revive_marker)
 
 		var card := PanelContainer.new()
-		card.custom_minimum_size = Vector2(card_width, 72.0)
+		card.custom_minimum_size = Vector2(card_width, 86.0)
 		var card_style := StyleBoxFlat.new()
 		card_style.bg_color = Color(tint.r * 0.14, tint.g * 0.14, tint.b * 0.14, 0.84)
 		card_style.border_color = tint.lightened(0.18)
@@ -459,6 +465,18 @@ func _build_hud() -> void:
 		health_bar.custom_minimum_size = Vector2(120.0, 10.0)
 		_apply_progress_bar_tint(health_bar, HUD_HEALTH_COLOR, 0.92)
 		card_layout.add_child(health_bar)
+
+		var momentum_row := HBoxContainer.new()
+		momentum_row.alignment = BoxContainer.ALIGNMENT_CENTER
+		momentum_row.add_theme_constant_override("separation", 4)
+		card_layout.add_child(momentum_row)
+		var momentum_pips: Array = []
+		for pip_index in range(4):
+			var pip := ColorRect.new()
+			pip.custom_minimum_size = Vector2(18.0, 5.0)
+			pip.color = Color(tint.r, tint.g, tint.b, 0.18)
+			momentum_row.add_child(pip)
+			momentum_pips.append(pip)
 
 		var ability_row := HBoxContainer.new()
 		ability_row.add_theme_constant_override("separation", 8)
@@ -522,6 +540,7 @@ func _build_hud() -> void:
 			"slot_2_label": slot_2_label,
 			"slot_2_charge_label": slot_2_charge_label,
 			"slot_2_bar": slot_2_bar,
+			"momentum_pips": momentum_pips,
 		})
 
 func _build_debug_overlay() -> void:
@@ -674,12 +693,19 @@ func _spawn_players() -> void:
 	_player_nodes.clear()
 	var connected_gamepads: Array = Input.get_connected_joypads()
 	var gamepad_cursor := 0
+	var assigned_gamepads: Array = []
 	for index in range(_player_configs.size()):
-		var player = player_scene.instantiate()
 		var assigned_gamepad := -1
-		if str(_player_configs[index].control_source) == "gamepad" and gamepad_cursor < connected_gamepads.size():
+		var config = _player_configs[index]
+		var uses_gamepad: bool = config.has_method("uses_gamepad") and config.uses_gamepad()
+		if uses_gamepad and gamepad_cursor < connected_gamepads.size():
 			assigned_gamepad = int(connected_gamepads[gamepad_cursor])
 			gamepad_cursor += 1
+		assigned_gamepads.append(assigned_gamepad)
+	_stamp_player_gamepad_input_actions(assigned_gamepads)
+	for index in range(_player_configs.size()):
+		var player = player_scene.instantiate()
+		var assigned_gamepad := int(assigned_gamepads[index])
 		player.player_index = index
 		players.add_child(player)
 		player.global_position = _get_player_spawn_position(index)
@@ -696,6 +722,40 @@ func _spawn_players() -> void:
 		camera.set_players(_player_nodes)
 		camera.global_position = ARENA_CENTER
 
+func _stamp_player_gamepad_input_actions(assigned_gamepads: Array) -> void:
+	var controller_layouts: Dictionary = {}
+	for player_index in range(assigned_gamepads.size()):
+		var player_id := player_index + 1
+		for suffix in GAMEPLAY_INPUT_SUFFIXES:
+			var action := "p%d_%s" % [player_id, str(suffix)]
+			if not InputMap.has_action(action):
+				InputMap.add_action(action)
+			var layout_events: Array = []
+			for event in InputMap.action_get_events(action):
+				if event is InputEventJoypadButton or event is InputEventJoypadMotion:
+					layout_events.append((event as InputEvent).duplicate())
+			controller_layouts[action] = layout_events
+	for player_index in range(assigned_gamepads.size()):
+		var player_id := player_index + 1
+		var assigned_gamepad := int(assigned_gamepads[player_index])
+		for suffix in GAMEPLAY_INPUT_SUFFIXES:
+			var action := "p%d_%s" % [player_id, str(suffix)]
+			var preserved_events: Array = []
+			for event in InputMap.action_get_events(action):
+				if event is InputEventJoypadButton or event is InputEventJoypadMotion:
+					if int((event as InputEvent).device) != -1:
+						continue
+				preserved_events.append((event as InputEvent).duplicate())
+			InputMap.action_erase_events(action)
+			for event in preserved_events:
+				InputMap.action_add_event(action, event)
+			if assigned_gamepad < 0:
+				continue
+			for layout_event in (controller_layouts.get(action, []) as Array):
+				var stamped_event := (layout_event as InputEvent).duplicate()
+				stamped_event.device = assigned_gamepad
+				InputMap.action_add_event(action, stamped_event)
+
 func _rebuild_player_loadouts() -> void:
 	_compiled_loadouts.clear()
 	for index in range(_player_nodes.size()):
@@ -711,11 +771,64 @@ func _rebuild_player_loadouts() -> void:
 			"ability_slot_1_id": str(base_loadout.get("ability_slot_1_id", "overcharge")),
 			"ability_slot_2_id": str(base_loadout.get("ability_slot_2_id", "dash")),
 			"mutations": _mutation_system.get_active_mutations(index),
-			"move_speed": float(base_loadout.get("move_speed", 488.0)) * _mutation_system.get_move_speed_multiplier(index),
+			"move_speed": float(base_loadout.get("move_speed", 560.0)),
+			"move_speed_bonus": _mutation_system.get_move_speed_bonus(index),
 			"max_health": int(round(float(base_loadout.get("max_health", 100)) * _mutation_system.get_max_health_multiplier(index))),
 		}
 		_compiled_loadouts.append(compiled_loadout)
 		_player_nodes[index].apply_loadout(compiled_loadout)
+		if index < _momentum_tier_by_player.size():
+			_apply_momentum_to_player(index)
+
+func _reset_momentum() -> void:
+	_momentum_progress_by_player.clear()
+	_momentum_tier_by_player.clear()
+	for index in range(_player_nodes.size()):
+		_momentum_progress_by_player.append(0)
+		_momentum_tier_by_player.append(0)
+		_apply_momentum_to_player(index)
+
+func _gain_shared_momentum() -> void:
+	for index in range(_player_nodes.size()):
+		_momentum_progress_by_player[index] = int(_momentum_progress_by_player[index]) + 1
+		_update_momentum_tier(index)
+
+func _drop_player_momentum(player_index: int) -> void:
+	if player_index < 0 or player_index >= _momentum_tier_by_player.size():
+		return
+	var new_tier: int = max(0, int(_momentum_tier_by_player[player_index]) - 2)
+	_momentum_tier_by_player[player_index] = new_tier
+	_momentum_progress_by_player[player_index] = _get_min_progress_for_momentum_tier(new_tier)
+	_apply_momentum_to_player(player_index)
+
+func _update_momentum_tier(player_index: int) -> void:
+	if player_index < 0 or player_index >= _momentum_progress_by_player.size():
+		return
+	var progress := int(_momentum_progress_by_player[player_index])
+	var tier := 0
+	for threshold_index in range(MOMENTUM_THRESHOLDS.size()):
+		if progress >= int(MOMENTUM_THRESHOLDS[threshold_index]):
+			tier = threshold_index + 1
+	_momentum_tier_by_player[player_index] = tier
+	_apply_momentum_to_player(player_index)
+
+func _apply_momentum_to_player(player_index: int) -> void:
+	if player_index < 0 or player_index >= _player_nodes.size():
+		return
+	var player = _player_nodes[player_index]
+	if player == null or not is_instance_valid(player) or not player.has_method("set_momentum_tier"):
+		return
+	var tier := int(_momentum_tier_by_player[player_index]) if player_index < _momentum_tier_by_player.size() else 0
+	player.set_momentum_tier(
+		tier,
+		float(MOMENTUM_MOVE_BONUSES[tier]),
+		float(MOMENTUM_FIRE_RATE_BONUSES[tier])
+	)
+
+func _get_min_progress_for_momentum_tier(tier: int) -> int:
+	if tier <= 0:
+		return 0
+	return int(MOMENTUM_THRESHOLDS[clampi(tier, 1, 4) - 1])
 
 func _build_runtime_ability(player_index: int, ability_definition: Dictionary) -> Dictionary:
 	if ability_definition.is_empty():
@@ -777,6 +890,7 @@ func _rebuild_floor_grid() -> void:
 		var line := Line2D.new()
 		var is_major_line := column_index % FLOOR_GRID_MAJOR_INTERVAL == 0
 		line.width = 3.0 if is_major_line else 1.5
+		line.antialiased = true
 		line.default_color = Color(0.34, 0.8, 1.0, 0.3) if is_major_line else Color(0.24, 0.52, 0.68, 0.18)
 		line.points = PackedVector2Array([Vector2(x, 0.0), Vector2(x, ARENA_SIZE.y)])
 		floor_grid.add_child(line)
@@ -788,6 +902,7 @@ func _rebuild_floor_grid() -> void:
 		var line := Line2D.new()
 		var is_major_line := row_index % FLOOR_GRID_MAJOR_INTERVAL == 0
 		line.width = 3.0 if is_major_line else 1.5
+		line.antialiased = true
 		line.default_color = Color(0.34, 0.8, 1.0, 0.3) if is_major_line else Color(0.24, 0.52, 0.68, 0.18)
 		line.points = PackedVector2Array([Vector2(0.0, y), Vector2(ARENA_SIZE.x, y)])
 		floor_grid.add_child(line)
@@ -842,6 +957,7 @@ func _start_room() -> void:
 	_prewarm_combat_vfx()
 	_set_game_paused(false)
 	_rebuild_player_loadouts()
+	_reset_momentum()
 	_room_clear_started = false
 	_awaiting_mutation_pick = false
 	_pending_pick_consumes_levelup = false
@@ -907,6 +1023,7 @@ func _clear_runtime_nodes() -> void:
 	_projectile_pool.clear()
 	_active_projectiles.clear()
 	_active_homing_projectiles.clear()
+	_beam_states.clear()
 	_collector_orbs.clear()
 	_hold_zone = null
 	_fire_floor_modifier = null
@@ -1063,8 +1180,8 @@ func _physics_process(delta: float) -> void:
 	_update_revives(delta)
 	_clamp_runtime_nodes()
 	_check_wave_progress()
-	_update_boss_offscreen_indicator(delta)
 	var now := _current_time_seconds()
+	_update_beam_visual_timeouts(now)
 	if now >= _next_hud_refresh_at:
 		_next_hud_refresh_at = now + HUD_REFRESH_INTERVAL
 		_refresh_hud()
@@ -1100,60 +1217,6 @@ func _update_hazards(delta: float) -> void:
 		if hazard != null and is_instance_valid(hazard):
 			hazard.update_zone(delta, _player_nodes)
 	_cleanup_helpers()
-
-func _update_boss_offscreen_indicator(delta: float) -> void:
-	if _boss_offscreen_indicator == null:
-		return
-	if _active_boss == null or not is_instance_valid(_active_boss) or not (_active_boss is Node2D):
-		_boss_offscreen_indicator.visible = false
-		return
-	if _active_boss.has_method("is_alive") and not _active_boss.is_alive():
-		_boss_offscreen_indicator.visible = false
-		return
-	var viewport_size := get_viewport_rect().size
-	if viewport_size.x <= 0.0 or viewport_size.y <= 0.0:
-		_boss_offscreen_indicator.visible = false
-		return
-	var zoom_value := camera.zoom.x if camera != null else 1.0
-	var camera_center := camera.get_screen_center_position() if camera != null else ARENA_CENTER
-	var world_half_extents := viewport_size * zoom_value * 0.5
-	var top_left := camera_center - world_half_extents
-	var boss_screen_position: Vector2 = ((_active_boss as Node2D).global_position - top_left) / maxf(zoom_value, 0.001)
-	var screen_rect := Rect2(Vector2.ZERO, viewport_size)
-	if screen_rect.grow(BOSS_MARKER_VISIBILITY_MARGIN).has_point(boss_screen_position):
-		_boss_offscreen_indicator.visible = false
-		return
-	var center := viewport_size * 0.5
-	var direction_to_boss := (boss_screen_position - center).normalized()
-	if direction_to_boss.length() <= 0.0:
-		_boss_offscreen_indicator.visible = false
-		return
-	var edge_margin := 64.0
-	var clamped_position := Vector2(
-		clampf(boss_screen_position.x, edge_margin, viewport_size.x - edge_margin),
-		clampf(boss_screen_position.y, edge_margin, viewport_size.y - edge_margin)
-	)
-	_boss_indicator_phase = fmod(_boss_indicator_phase + delta * 5.8, TAU)
-	var pulse := 1.0 + sin(_boss_indicator_phase) * 0.16
-	var boss_color := _get_active_boss_indicator_color()
-	_boss_offscreen_indicator.add_theme_color_override("font_color", boss_color)
-	_boss_offscreen_indicator.scale = Vector2.ONE * pulse
-	_boss_offscreen_indicator.position = clamped_position - _boss_offscreen_indicator.size * 0.5
-	_boss_offscreen_indicator.rotation = direction_to_boss.angle()
-	_boss_offscreen_indicator.visible = true
-
-func _get_active_boss_indicator_color() -> Color:
-	if _active_boss != null and is_instance_valid(_active_boss) and _active_boss.has_method("get_type_name"):
-		match str(_active_boss.get_type_name()):
-			"boss_hydra":
-				return Color(0.46, 0.9, 1.0, 0.98)
-			"boss_hive":
-				return Color(0.92, 0.74, 0.28, 0.98)
-			"boss_pulsar":
-				return Color(0.72, 0.55, 1.0, 0.98)
-			_:
-				return Color(1.0, 0.34, 0.18, 0.98)
-	return Color(1.0, 0.34, 0.18, 0.98)
 
 func _update_elite_add_waves() -> void:
 	if _room_type != "elite" or _room_clear_started:
@@ -1494,6 +1557,9 @@ func _build_clear_summary() -> String:
 	return "\n".join(lines)
 
 func _on_player_fire_requested(origin: Vector2, direction: Vector2, projectile_config: Dictionary) -> void:
+	if str(projectile_config.get("projectile_kind", "bullet")) == "beam":
+		_process_beam_fire(origin, direction, projectile_config)
+		return
 	_cleanup_active_projectiles()
 	if _active_projectiles.size() >= MAX_ACTIVE_PROJECTILES:
 		return
@@ -1505,6 +1571,117 @@ func _on_player_fire_requested(origin: Vector2, direction: Vector2, projectile_c
 		if _active_projectiles.size() >= MAX_ACTIVE_PROJECTILES:
 			return
 		_activate_projectile("player", origin, projectile_direction, projectile_config)
+
+func _process_beam_fire(origin: Vector2, direction: Vector2, projectile_config: Dictionary) -> void:
+	if direction.length() <= 0.0:
+		return
+	var shooter = projectile_config.get("shooter", null)
+	var shooter_key := int(shooter.get_instance_id()) if shooter != null and is_instance_valid(shooter) else 0
+	var state: Dictionary = _beam_states.get(shooter_key, {
+		"held_targets": {},
+		"visual": null,
+		"fire_pool": null,
+		"next_fire_pool_at": 0.0,
+	})
+	var range := float(projectile_config.get("range", projectile_config.get("max_distance", 750.0)))
+	var tick_interval := maxf(float(projectile_config.get("tick_interval", 0.1)), 0.05)
+	var beam_width := maxf(float(projectile_config.get("area", 18.0)), 18.0)
+	var beam_direction := direction.normalized()
+	var held_targets: Dictionary = state.get("held_targets", {}) as Dictionary
+	var current_target_ids := {}
+	var hit_position := origin + beam_direction * range
+	for enemy in get_nearby_enemy_target_nodes(origin + beam_direction * range * 0.5, range * 0.6 + beam_width):
+		if enemy == null or not is_instance_valid(enemy) or not enemy.has_method("is_alive") or not enemy.is_alive():
+			continue
+		var enemy_position: Vector2 = enemy.global_position
+		var offset := enemy_position - origin
+		var projected := offset.dot(beam_direction)
+		if projected < 0.0 or projected > range:
+			continue
+		var closest := origin + beam_direction * projected
+		if enemy_position.distance_squared_to(closest) > beam_width * beam_width:
+			continue
+		var target_id := int(enemy.get_instance_id())
+		var held_time := float(held_targets.get(target_id, 0.0)) + tick_interval
+		held_targets[target_id] = held_time
+		current_target_ids[target_id] = true
+		var ramp_seconds := maxf(float(projectile_config.get("ramp_seconds", 1.5)), 0.01)
+		var start_fraction := clampf(float(projectile_config.get("ramp_start_fraction", 0.3)), 0.0, 1.0)
+		var ramp_ratio := clampf(held_time / ramp_seconds, 0.0, 1.0)
+		var dps := float(projectile_config.get("max_damage_per_second", projectile_config.get("damage", 120.0))) * lerpf(start_fraction, 1.0, ramp_ratio)
+		var damage: int = max(1, int(round(dps * tick_interval)))
+		enemy.apply_damage(damage)
+		if float(projectile_config.get("slow_duration", 0.0)) > 0.0:
+			if float(projectile_config.get("slow_step", 0.0)) > 0.0 and enemy.has_method("apply_stacking_slow"):
+				enemy.apply_stacking_slow(float(projectile_config.get("slow_step", 0.0)), float(projectile_config.get("slow_floor", 0.15)), float(projectile_config.get("slow_duration", 0.0)))
+			elif enemy.has_method("apply_slow"):
+				enemy.apply_slow(float(projectile_config.get("slow_multiplier", 1.0)), float(projectile_config.get("slow_duration", 0.0)))
+		if float(projectile_config.get("poison_duration", 0.0)) > 0.0 and float(projectile_config.get("poison_dps", 0.0)) > 0.0 and enemy.has_method("apply_poison"):
+			enemy.apply_poison(float(projectile_config.get("poison_dps", 0.0)), float(projectile_config.get("poison_duration", 0.0)))
+		hit_position = closest
+	for target_id in held_targets.keys():
+		if not current_target_ids.has(target_id):
+			held_targets.erase(target_id)
+	state["held_targets"] = held_targets
+	_update_beam_visual(state, origin, beam_direction, range, projectile_config)
+	_update_beam_fire_pool(state, hit_position, projectile_config)
+	_beam_states[shooter_key] = state
+
+func _update_beam_visual(state: Dictionary, origin: Vector2, direction: Vector2, range: float, projectile_config: Dictionary) -> void:
+	var line: Line2D = state.get("visual", null)
+	if line == null or not is_instance_valid(line):
+		line = Line2D.new()
+		line.name = "BeamTrace"
+		line.width = maxf(float(projectile_config.get("area", 18.0)), 18.0)
+		line.antialiased = true
+		line.z_index = 5
+		effects.add_child(line)
+		state["visual"] = line
+	var color: Color = projectile_config.get("color", Color.WHITE)
+	line.default_color = Color(color.r, color.g, color.b, 0.55)
+	line.global_position = Vector2.ZERO
+	line.points = PackedVector2Array([origin, origin + direction.normalized() * range])
+	line.modulate.a = 1.0
+	line.visible = true
+	state["last_update_at"] = _current_time_seconds()
+
+func _update_beam_visual_timeouts(now: float) -> void:
+	for key in _beam_states.keys():
+		var state: Dictionary = _beam_states[key]
+		var line = state.get("visual", null)
+		if line == null or not is_instance_valid(line):
+			continue
+		if line.visible and now - float(state.get("last_update_at", 0.0)) > BEAM_VISUAL_GRACE:
+			line.visible = false
+
+func _update_beam_fire_pool(state: Dictionary, hit_position: Vector2, projectile_config: Dictionary) -> void:
+	if not bool(projectile_config.get("leaves_fire_trail", false)):
+		return
+	var now := _current_time_seconds()
+	if now < float(state.get("next_fire_pool_at", 0.0)):
+		var existing_pool = state.get("fire_pool", null)
+		if existing_pool != null and is_instance_valid(existing_pool):
+			existing_pool.global_position = hit_position
+		return
+	var radius := float(projectile_config.get("impact_pool_radius", 0.0))
+	var lifetime := float(projectile_config.get("impact_pool_lifetime", 0.0))
+	var damage_percent := float(projectile_config.get("impact_pool_damage_percent", 0.0))
+	if radius <= 0.0 or lifetime <= 0.0 or damage_percent <= 0.0:
+		return
+	var pool = state.get("fire_pool", null)
+	if pool == null or not is_instance_valid(pool):
+		pool = FireTrailZoneData.new()
+		effects.add_child(pool)
+		state["fire_pool"] = pool
+	pool.global_position = hit_position
+	pool.configure(
+		radius,
+		max(1, int(round(float(projectile_config.get("max_damage_per_second", projectile_config.get("damage", 1.0))) * damage_percent))),
+		lifetime,
+		maxf(float(projectile_config.get("trail_tick_interval", 0.5)), 0.1),
+		"player"
+	)
+	state["next_fire_pool_at"] = now + maxf(float(projectile_config.get("beam_fire_pool_cooldown", 0.5)), 0.1)
 
 func _on_player_ability_activated(player, _slot_index: int, ability_id: String, origin: Vector2, direction: Vector2, stats: Dictionary) -> void:
 	var tint: Color = stats.get("color", Color.WHITE)
@@ -1838,10 +2015,38 @@ func _acquire_projectile():
 	var projectile = ProjectileSceneData.instantiate()
 	projectile.set_pooled(true)
 	projectile.impact_requested.connect(_on_projectile_impact)
+	projectile.split_requested.connect(_on_projectile_split_requested)
 	projectile.projectile_deactivated.connect(_on_projectile_deactivated)
 	projectiles.add_child(projectile)
 	_projectile_pool.append(projectile)
 	return projectile
+
+func _on_projectile_split_requested(origin: Vector2, _direction: Vector2, team: String, projectile_config: Dictionary, current_target: Node) -> void:
+	if team != "player":
+		return
+	_cleanup_active_projectiles()
+	if _active_projectiles.size() >= MAX_ACTIVE_PROJECTILES:
+		return
+	var search_radius := float(projectile_config.get("range", projectile_config.get("max_distance", 900.0)))
+	var best_target: Node2D = null
+	var best_distance_sq := INF
+	for enemy in get_nearby_enemy_target_nodes(origin, search_radius):
+		if enemy == null or not is_instance_valid(enemy) or enemy == current_target:
+			continue
+		if enemy.has_method("is_alive") and not enemy.is_alive():
+			continue
+		if not (enemy is Node2D):
+			continue
+		var distance_sq := (enemy as Node2D).global_position.distance_squared_to(origin)
+		if distance_sq < best_distance_sq:
+			best_distance_sq = distance_sq
+			best_target = enemy as Node2D
+	if best_target == null:
+		return
+	var split_direction := (best_target.global_position - origin).normalized()
+	if split_direction.length() <= 0.0:
+		return
+	_activate_projectile("player", origin, split_direction, projectile_config)
 
 func _on_projectile_deactivated(projectile) -> void:
 	_active_projectiles.erase(projectile)
@@ -1858,10 +2063,6 @@ func _on_projectile_impact(origin: Vector2, direction: Vector2, team: String, co
 	if not suppress_vfx:
 		_spawn_projectile_hit_effect(origin, direction, color, impact_weight, target)
 	_play_sfx("play_impact_profile", [impact_weight, feedback_profile])
-	if not suppress_vfx and int(combat_context.get("knockback_level", 0)) >= 2:
-		var knockback_burst := ParticleFactoryData.create_impact_sparks(color.lightened(0.24), -direction.normalized() if direction.length() > 0.0 else Vector2.UP, impact_weight + 0.35)
-		knockback_burst.global_position = origin
-		effects.add_child(knockback_burst)
 	var explosion_radius := float(combat_context.get("explosion_radius", 0.0))
 	var explosion_damage := int(combat_context.get("explosion_damage", 0))
 	if explosion_radius > 0.0 and explosion_damage > 0:
@@ -1907,6 +2108,7 @@ func _on_enemy_died(enemy) -> void:
 	if enemy == _active_boss:
 		_active_boss = null
 	_enemies_killed += 1
+	_gain_shared_momentum()
 	var enemy_type_name := str(enemy.get_type_name())
 	_spawn_enemy_death_global_vfx(enemy_type_name)
 	if enemy_type_name.begins_with("boss_"):
@@ -1969,6 +2171,7 @@ func _on_player_damage_taken(player, _amount: int, _current_health: int) -> void
 		return
 	if _side_objective_id == "kill_streak" and not _side_objective_completed:
 		_kill_streak_progress = 0
+	_drop_player_momentum(int(player.player_index))
 	var burst := ParticleFactoryData.create_impact_sparks(player.player_config.tint.lightened(0.22), Vector2.UP, 1.1)
 	burst.global_position = player.global_position
 	effects.add_child(burst)
@@ -2214,6 +2417,17 @@ func _refresh_bottom_hud() -> void:
 		(card.get("slot_2_label") as Label).text = str(slot_2_hud_data.get("name", "Ability 2"))
 		_update_slot_charge_label(card.get("slot_2_charge_label") as Label, slot_2_hud_data)
 		(card.get("slot_2_bar") as ProgressBar).value = slot_2_ratio * 100.0
+		_refresh_momentum_pips(card, index)
+
+func _refresh_momentum_pips(card: Dictionary, player_index: int) -> void:
+	var pips: Array = card.get("momentum_pips", []) as Array
+	var tier := int(_momentum_tier_by_player[player_index]) if player_index < _momentum_tier_by_player.size() else 0
+	var tint: Color = _player_configs[player_index].tint if player_index < _player_configs.size() else Color.WHITE
+	for index in range(pips.size()):
+		var pip: ColorRect = pips[index] as ColorRect
+		if pip == null:
+			continue
+		pip.color = Color(tint.r, tint.g, tint.b, 0.92) if index < tier else Color(tint.r, tint.g, tint.b, 0.18)
 
 func _update_slot_charge_label(label: Label, slot_hud_data: Dictionary) -> void:
 	if label == null:

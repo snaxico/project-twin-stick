@@ -6,6 +6,8 @@ const DashData = preload("res://scripts/player/Dash.gd")
 const ParticleFactoryData = preload("res://scripts/juice/ParticleFactory.gd")
 const CONTACT_INVULN_DURATION := 0.35
 const BLOOM_COLOR_MULTIPLIER := 1.45
+const MANUAL_AIM_DEADZONE := 0.35
+const MOUSE_AIM_IDLE_SECONDS := 0.65
 
 const FLASH_SHADER_CODE := """
 shader_type canvas_item;
@@ -29,7 +31,7 @@ signal damage_taken(player, amount, current_health)
 signal shield_burst_requested(origin, radius, damage, color)
 
 @export_range(1, 4, 1) var player_id: int = 1
-@export var move_speed: float = 488.0
+@export var move_speed: float = 560.0
 @export var max_health: int = 100
 @export var weapon_fire_interval: float = 0.25
 @export var projectile_speed: float = 850.0
@@ -51,6 +53,7 @@ var _auto_targeter = AutoTargetData.new()
 var _input_locked := false
 var _is_downed := false
 var _move_facing := Vector2.RIGHT
+var _aim_facing := Vector2.RIGHT
 var _auto_attack_direction := Vector2.RIGHT
 var _auto_target: Node2D = null
 var _next_weapon_fire_at := 0.0
@@ -72,7 +75,7 @@ var _dash_invuln_until := 0.0
 var _invisible_until := 0.0
 var _external_impulse := Vector2.ZERO
 var _mutation_ids: Array = []
-var _base_move_speed: float = 488.0
+var _base_move_speed: float = 560.0
 var _base_max_health: int = 100
 var _base_weapon_fire_interval: float = 0.25
 var _base_projectile_damage: int = 10
@@ -82,8 +85,14 @@ var _modifier_damage_sources: Dictionary = {}
 var _buff_move_speed: float = 1.0
 var _buff_attack_speed: float = 1.0
 var _buff_damage: float = 1.0
+var _momentum_tier := 0
+var _momentum_move_bonus := 0.0
+var _momentum_fire_rate_bonus := 0.0
 var _base_visual_scale := Vector2.ONE
 var _base_shadow_scale := Vector2.ONE
+var _aim_reticle: Line2D = null
+var _last_mouse_position := Vector2.INF
+var _mouse_manual_aim_until := 0.0
 var _next_speed_line_at := 0.0
 var _next_reflex_particle_at := 0.0
 var _chevron_polygon := PackedVector2Array([
@@ -102,11 +111,12 @@ func _ready() -> void:
 	add_to_group("player_target")
 	current_health = max_health
 	if visual != null:
-		_base_visual_scale = visual.scale * 1.5
+		_base_visual_scale = visual.scale * 1.35
 		visual.scale = _base_visual_scale
 	if shadow != null:
-		_base_shadow_scale = shadow.scale * 1.5
+		_base_shadow_scale = shadow.scale * 1.35
 		shadow.scale = _base_shadow_scale
+	_create_aim_reticle()
 	health_changed.emit(current_health, max_health)
 	_apply_visual_state(_current_time_seconds())
 
@@ -188,8 +198,11 @@ func apply_loadout(loadout: Dictionary) -> void:
 	_weapon_id = str(loadout.get("weapon_id", "rifle"))
 	_weapon_profile_name = str(loadout.get("weapon_name", "Rifle"))
 	_weapon_stats = (loadout.get("weapon_stats", {}) as Dictionary).duplicate(true)
-	_base_projectile_damage = int(round(float(_weapon_stats.get("damage", projectile_damage))))
-	_base_weapon_fire_interval = 1.0 / max(float(_weapon_stats.get("fire_rate", 4.0)), 0.01)
+	_base_projectile_damage = int(round(float(_weapon_stats.get("damage", _weapon_stats.get("max_damage_per_second", projectile_damage)))))
+	if str(_weapon_stats.get("projectile_kind", "bullet")) == "beam":
+		_base_weapon_fire_interval = maxf(float(_weapon_stats.get("tick_interval", 0.1)), 0.05)
+	else:
+		_base_weapon_fire_interval = 1.0 / max(float(_weapon_stats.get("fire_rate", 4.0)), 0.01)
 	projectile_speed = float(_weapon_stats.get("projectile_speed", projectile_speed))
 	_weapon_range = float(_weapon_stats.get("range", _weapon_range))
 	_weapon_area = float(_weapon_stats.get("area", _weapon_area))
@@ -216,6 +229,9 @@ func apply_loadout(loadout: Dictionary) -> void:
 	_dash_hit_targets.clear()
 	_next_speed_line_at = 0.0
 	_next_reflex_particle_at = 0.0
+	_modifier_move_speed_sources["upgrade_move_speed"] = 1.0 + float(loadout.get("move_speed_bonus", 0.0))
+	_modifier_attack_speed_sources["upgrade_fire_rate"] = 1.0 + float(_weapon_stats.get("fire_rate_bonus", 0.0))
+	_modifier_damage_sources["upgrade_damage"] = 1.0 + float(_weapon_stats.get("damage_bonus", 0.0))
 	_recompute_effective_stats()
 	health_changed.emit(current_health, max_health)
 
@@ -246,6 +262,12 @@ func clear_temp_buffs() -> void:
 	_buff_move_speed = 1.0
 	_buff_attack_speed = 1.0
 	_buff_damage = 1.0
+	_recompute_effective_stats()
+
+func set_momentum_tier(tier: int, move_bonus: float, fire_rate_bonus: float) -> void:
+	_momentum_tier = clampi(tier, 0, 4)
+	_momentum_move_bonus = maxf(move_bonus, 0.0)
+	_momentum_fire_rate_bonus = maxf(fire_rate_bonus, 0.0)
 	_recompute_effective_stats()
 
 func set_health_state(state: Dictionary) -> void:
@@ -351,6 +373,7 @@ func _physics_process(delta: float) -> void:
 	_update_buffered_dashes(now)
 	if _input_locked or _is_downed:
 		velocity = Vector2.ZERO
+		_update_aim_reticle(false)
 		move_and_slide()
 		_apply_visual_state(now, delta)
 		return
@@ -361,13 +384,13 @@ func _physics_process(delta: float) -> void:
 	if _external_impulse.length() > 0.0:
 		_external_impulse = _external_impulse.move_toward(Vector2.ZERO, delta * 12.0)
 
-	_auto_target = _find_auto_target()
-	var fire_direction := Vector2.ZERO
-	if _auto_target != null:
-		_auto_attack_direction = (_auto_target.global_position - global_position).normalized()
-		fire_direction = _auto_attack_direction
-	elif str(player_config.aim_mode) == "movement":
-		fire_direction = _move_facing
+	var manual_aim_vector := _get_manual_aim_vector(now)
+	var manual_aim_active := manual_aim_vector.length() > MANUAL_AIM_DEADZONE
+	if manual_aim_active:
+		_aim_facing = manual_aim_vector.normalized()
+	_auto_target = _find_auto_target(manual_aim_active)
+	var fire_direction := _get_weapon_fire_direction(manual_aim_active)
+	_update_aim_reticle(manual_aim_active and fire_direction.length() > 0.0)
 	if _can_attack(now) and fire_direction.length() > 0.0 and now >= _next_weapon_fire_at:
 		_fire_weapon(now, fire_direction.normalized())
 
@@ -385,10 +408,27 @@ func _physics_process(delta: float) -> void:
 	_emit_reflex_feedback(now)
 	_apply_visual_state(now, delta)
 
-func _find_auto_target() -> Node2D:
+func _find_auto_target(manual_aim_active: bool = false) -> Node2D:
+	if manual_aim_active:
+		return null
 	if str(player_config.aim_mode) == "movement":
 		return null
+	if str(player_config.aim_mode) == "manual":
+		return null
 	return _auto_targeter.find_nearest(self, _weapon_range)
+
+func _get_weapon_fire_direction(manual_aim_active: bool) -> Vector2:
+	var aim_mode := str(player_config.aim_mode)
+	if manual_aim_active:
+		return _aim_facing
+	if aim_mode == "manual":
+		return Vector2.ZERO
+	if _auto_target != null:
+		_auto_attack_direction = (_auto_target.global_position - global_position).normalized()
+		return _auto_attack_direction
+	if aim_mode == "movement":
+		return _move_facing
+	return Vector2.ZERO
 
 func _build_runtime_ability(definition: Dictionary, fallback_id: String) -> Dictionary:
 	var ability_id := str(definition.get("id", fallback_id))
@@ -525,7 +565,6 @@ func _apply_shockdash_hits(now: float) -> void:
 		var passthrough_damage := int(stats.get("passthrough_damage", 0))
 		if passthrough_damage <= 0:
 			continue
-		var knockback_force := float(stats.get("knockback_force", 0.0))
 		var hit_targets: Array = (_dash_hit_targets.get(slot_index, []) as Array)
 		var player_hit_radius := _get_dash_hit_radius()
 		var query_radius := player_hit_radius + 64.0
@@ -543,8 +582,6 @@ func _apply_shockdash_hits(now: float) -> void:
 				continue
 			if enemy.has_method("apply_damage"):
 				enemy.apply_damage(passthrough_damage)
-			if knockback_force > 0.0 and enemy.has_method("apply_knockback"):
-				enemy.apply_knockback((enemy_node.global_position - global_position).normalized(), knockback_force)
 			hit_targets.append(enemy)
 		_dash_hit_targets[slot_index] = hit_targets
 
@@ -590,6 +627,39 @@ func _get_current_velocity(move_input: Vector2, now: float) -> Vector2:
 	_active_dash_slot_index = -1
 	return move_input * move_speed + _external_impulse
 
+func _get_manual_aim_vector(now: float) -> Vector2:
+	var gamepad_vector := _get_gamepad_aim_vector() if player_config.uses_gamepad() else Vector2.ZERO
+	if gamepad_vector.length() > 0.0:
+		return gamepad_vector
+	return _get_mouse_aim_vector(now) if player_config.uses_keyboard() else Vector2.ZERO
+
+func _get_gamepad_aim_vector() -> Vector2:
+	var left_action := "p%d_aim_left" % player_id
+	var right_action := "p%d_aim_right" % player_id
+	var up_action := "p%d_aim_up" % player_id
+	var down_action := "p%d_aim_down" % player_id
+	if _has_gamepad_action_events([left_action, right_action, up_action, down_action]):
+		var vector := Vector2(
+			_get_gamepad_action_strength(right_action) - _get_gamepad_action_strength(left_action),
+			_get_gamepad_action_strength(down_action) - _get_gamepad_action_strength(up_action)
+		)
+		return vector.normalized() if vector.length() > 1.0 else vector
+	return _get_gamepad_stick_vector(JOY_AXIS_RIGHT_X, JOY_AXIS_RIGHT_Y)
+
+func _get_mouse_aim_vector(now: float) -> Vector2:
+	var mouse_position := get_global_mouse_position()
+	if _last_mouse_position == Vector2.INF:
+		_last_mouse_position = mouse_position
+	if mouse_position.distance_squared_to(_last_mouse_position) > 1.0:
+		_mouse_manual_aim_until = now + MOUSE_AIM_IDLE_SECONDS
+		_last_mouse_position = mouse_position
+	if _is_keyboard_action_pressed("p%d_fire" % player_id) or Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+		_mouse_manual_aim_until = now + MOUSE_AIM_IDLE_SECONDS
+	if now > _mouse_manual_aim_until:
+		return Vector2.ZERO
+	var vector := mouse_position - global_position
+	return vector.normalized() if vector.length() > 1.0 else Vector2.ZERO
+
 func _is_damage_immune(now: float) -> bool:
 	if now < _shield_until:
 		return true
@@ -608,7 +678,6 @@ func _can_attack(now: float) -> bool:
 func _fire_weapon(now: float, fire_direction: Vector2) -> void:
 	var rapid_fire_level := _get_mutation_level("rapid_fire")
 	var velocity_level := _get_mutation_level("velocity")
-	var knockback_level := _get_mutation_level("knockback")
 	var muzzle_weight := _weapon_impact_weight
 	if rapid_fire_level >= 3:
 		muzzle_weight += 0.28
@@ -621,6 +690,8 @@ func _fire_weapon(now: float, fire_direction: Vector2) -> void:
 	projectile_config["weapon_id"] = _weapon_id
 	projectile_config["speed"] = float(projectile_config.get("projectile_speed", projectile_speed))
 	projectile_config["damage"] = projectile_damage
+	if str(projectile_config.get("projectile_kind", "bullet")) == "beam":
+		projectile_config["max_damage_per_second"] = projectile_damage
 	projectile_config["team"] = get_team()
 	projectile_config["color"] = player_config.tint
 	projectile_config["shooter"] = self
@@ -628,9 +699,10 @@ func _fire_weapon(now: float, fire_direction: Vector2) -> void:
 	projectile_config["impact_weight"] = _weapon_impact_weight
 	projectile_config["max_distance"] = float(projectile_config.get("range", _weapon_range))
 	projectile_config["collision_half_width"] = float(projectile_config.get("area", _weapon_area))
-	projectile_config["projectile_multiplier"] = _get_overcharge_projectile_multiplier(now)
+	projectile_config["tick_interval"] = _get_current_weapon_fire_interval()
+	projectile_config["projectile_multiplier"] = 1 if str(projectile_config.get("projectile_kind", "bullet")) == "beam" else _get_overcharge_projectile_multiplier(now)
 	var overcharge_stats := _get_active_ability_stats("overcharge", now)
-	if not overcharge_stats.is_empty():
+	if not overcharge_stats.is_empty() and str(projectile_config.get("projectile_kind", "bullet")) != "beam":
 		var pierce_bonus := int(overcharge_stats.get("pierce_bonus", 0))
 		if pierce_bonus > 0:
 			projectile_config["pierce_count"] = int(projectile_config.get("pierce_count", 0)) + pierce_bonus
@@ -639,15 +711,15 @@ func _fire_weapon(now: float, fire_direction: Vector2) -> void:
 			projectile_config["speed"] = float(projectile_config.get("speed", projectile_speed)) * projectile_speed_mult
 	projectile_config["rapid_fire_level"] = rapid_fire_level
 	projectile_config["velocity_level"] = velocity_level
-	projectile_config["knockback_level"] = knockback_level
 	projectile_config["source_type"] = "weapon"
 	fire_requested.emit(global_position + fire_direction * 24.0, fire_direction, projectile_config)
 
 func _get_current_weapon_fire_interval() -> float:
-	var interval := weapon_fire_interval
 	var overcharge_multiplier := _get_overcharge_fire_rate_multiplier(_current_time_seconds())
-	if overcharge_multiplier > 1.0:
-		interval /= overcharge_multiplier
+	var interval := _base_weapon_fire_interval / _additive_modifier(
+		_modifier_attack_speed_sources,
+		(_buff_attack_speed - 1.0) + _momentum_fire_rate_bonus + maxf(overcharge_multiplier - 1.0, 0.0)
+	)
 	return max(interval, 0.05)
 
 func get_current_fire_rate() -> float:
@@ -661,8 +733,8 @@ func _try_activate_ability(slot_index: int, now: float) -> void:
 	if ability_id.is_empty():
 		return
 	var direction := _move_facing if _move_facing.length() > 0.0 else Vector2.RIGHT
-	if _auto_target != null:
-		direction = _auto_attack_direction
+	if _get_move_input().length() <= 0.0 and _aim_facing.length() > 0.0:
+		direction = _aim_facing
 	match ability_id:
 		"dash":
 			var dash_state := _dash_states.get(slot_index, null) as DashData
@@ -764,9 +836,19 @@ func _is_slot_active_by_id(ability_id: String, now: float) -> bool:
 	return false
 
 func _get_move_input() -> Vector2:
-	var keyboard_vector := Input.get_vector("p%d_move_left" % player_id, "p%d_move_right" % player_id, "p%d_move_up" % player_id, "p%d_move_down" % player_id)
-	var gamepad_vector := _get_gamepad_movement_vector()
-	return gamepad_vector if player_config.control_source == "gamepad" else keyboard_vector
+	var vector := Vector2.ZERO
+	if player_config.uses_keyboard():
+		vector += _get_keyboard_movement_vector()
+	if player_config.uses_gamepad():
+		vector += _get_gamepad_movement_vector()
+	return vector.normalized() if vector.length() > 1.0 else vector
+
+func _get_keyboard_movement_vector() -> Vector2:
+	var vector := Vector2(
+		_get_keyboard_action_strength("p%d_move_right" % player_id) - _get_keyboard_action_strength("p%d_move_left" % player_id),
+		_get_keyboard_action_strength("p%d_move_down" % player_id) - _get_keyboard_action_strength("p%d_move_up" % player_id)
+	)
+	return vector.normalized() if vector.length() > 1.0 else vector
 
 func _get_gamepad_movement_vector() -> Vector2:
 	var left_action := "p%d_move_left" % player_id
@@ -788,16 +870,26 @@ func _get_gamepad_stick_vector(axis_x: JoyAxis, axis_y: JoyAxis) -> Vector2:
 	return vector if vector.length() >= 0.2 else Vector2.ZERO
 
 func _is_ability_pressed(slot_index: int) -> bool:
-	if player_config.control_source == "gamepad":
+	if player_config.uses_gamepad():
 		if gamepad_device_id < 0:
+			if player_config.uses_keyboard():
+				return _is_keyboard_ability_pressed(slot_index)
 			return false
 		var action := "p%d_secondary" % player_id if slot_index == 0 else "p%d_dash" % player_id
 		if _has_gamepad_action_events([action]):
-			return _get_gamepad_action_strength(action) >= 0.5
+			if _get_gamepad_action_strength(action) >= 0.5:
+				return true
 		if slot_index == 0:
-			return Input.get_joy_axis(gamepad_device_id, JOY_AXIS_TRIGGER_LEFT) >= 0.5 or Input.is_joy_button_pressed(gamepad_device_id, JOY_BUTTON_X)
-		return Input.get_joy_axis(gamepad_device_id, JOY_AXIS_TRIGGER_RIGHT) >= 0.5 or Input.is_joy_button_pressed(gamepad_device_id, JOY_BUTTON_B)
-	return Input.is_action_pressed("p%d_secondary" % player_id) if slot_index == 0 else Input.is_action_pressed("p%d_dash" % player_id)
+			if Input.get_joy_axis(gamepad_device_id, JOY_AXIS_TRIGGER_LEFT) >= 0.5 or Input.is_joy_button_pressed(gamepad_device_id, JOY_BUTTON_X):
+				return true
+		elif Input.get_joy_axis(gamepad_device_id, JOY_AXIS_TRIGGER_RIGHT) >= 0.5 or Input.is_joy_button_pressed(gamepad_device_id, JOY_BUTTON_B):
+			return true
+	if player_config.uses_keyboard():
+		return _is_keyboard_ability_pressed(slot_index)
+	return false
+
+func _is_keyboard_ability_pressed(slot_index: int) -> bool:
+	return _is_keyboard_action_pressed("p%d_secondary" % player_id) if slot_index == 0 else _is_keyboard_action_pressed("p%d_dash" % player_id)
 
 func _has_gamepad_action_events(actions: Array) -> bool:
 	for action_variant in actions:
@@ -824,6 +916,24 @@ func _get_gamepad_action_strength(action: String) -> float:
 			strength = maxf(strength, clampf((signed_value - 0.2) / 0.8, 0.0, 1.0))
 	return strength
 
+func _get_keyboard_action_strength(action: String) -> float:
+	return 1.0 if _is_keyboard_action_pressed(action) else 0.0
+
+func _is_keyboard_action_pressed(action: String) -> bool:
+	for event in InputMap.action_get_events(action):
+		if event is InputEventKey:
+			var key_event := event as InputEventKey
+			var physical_key := key_event.physical_keycode
+			if physical_key != 0 and Input.is_physical_key_pressed(physical_key):
+				return true
+			if key_event.keycode != 0 and Input.is_key_pressed(key_event.keycode):
+				return true
+		elif event is InputEventMouseButton:
+			var mouse_event := event as InputEventMouseButton
+			if Input.is_mouse_button_pressed(mouse_event.button_index):
+				return true
+	return false
+
 func _enter_downed_state() -> void:
 	_is_downed = true
 	velocity = Vector2.ZERO
@@ -844,7 +954,7 @@ func _apply_visual_state(now: float, delta: float = 0.0) -> void:
 	var overcharge_active := _is_slot_active_by_id("overcharge", now)
 	var tough_level := _get_mutation_level("tough")
 	var mutation_glow := clampf(float(_mutation_ids.size()) / 18.0, 0.0, 0.5)
-	var bonus_glow := float(max(tough_level - 1, 0)) * 0.1 + (0.18 if overcharge_active else 0.0)
+	var bonus_glow := float(max(tough_level - 1, 0)) * 0.1 + (0.18 if overcharge_active else 0.0) + float(_momentum_tier) * 0.08
 	var dash_scale := 1.14 if dash_active else 1.0
 	var squash_x := 1.0 + _turn_squash * 0.18
 	var squash_y := 1.0 - _turn_squash * 0.12
@@ -863,9 +973,9 @@ func _apply_visual_state(now: float, delta: float = 0.0) -> void:
 		shadow.scale = _base_shadow_scale * (1.08 if tough_level >= 2 else 1.0)
 		shadow.modulate.a = 0.18 if now < _invisible_until else 1.0
 	if dash_shield_ring != null:
-		dash_shield_ring.visible = (shield_active or dash_active) and not _is_downed
+		dash_shield_ring.visible = (shield_active or dash_active or _momentum_tier > 0) and not _is_downed
 		dash_shield_ring.default_color = _bloom_color(player_config.tint.lerp(Color(0.92, 1.0, 1.0, 1.0), 0.42 if shield_active else 0.18))
-		dash_shield_ring.width = 5.0 if tough_level >= 2 else 4.0
+		dash_shield_ring.width = 5.0 + float(_momentum_tier) * 0.55 if tough_level >= 2 or _momentum_tier > 0 else 4.0
 	body_root.rotation = lerp_angle(body_root.rotation, _move_facing.angle(), 0.22)
 	_turn_squash = move_toward(_turn_squash, 0.0, delta * 4.0)
 
@@ -890,6 +1000,32 @@ func _emit_reflex_feedback(now: float) -> void:
 	var crackle := ParticleFactoryData.create_attack_trail(player_config.tint.lightened(0.28), crackle_direction, 0.7)
 	crackle.global_position = global_position
 	get_parent().add_child(crackle)
+
+func _create_aim_reticle() -> void:
+	if _aim_reticle != null:
+		return
+	_aim_reticle = Line2D.new()
+	_aim_reticle.name = "AimReticle"
+	_aim_reticle.width = 2.0
+	_aim_reticle.default_color = Color(player_config.tint.r, player_config.tint.g, player_config.tint.b, 0.30)
+	_aim_reticle.antialiased = true
+	_aim_reticle.visible = false
+	_aim_reticle.z_index = 8
+	add_child(_aim_reticle)
+
+func _update_aim_reticle(visible_now: bool) -> void:
+	if _aim_reticle == null:
+		return
+	_aim_reticle.visible = visible_now and not _is_downed
+	if not _aim_reticle.visible:
+		return
+	var direction := _aim_facing.normalized() if _aim_facing.length() > 0.0 else Vector2.RIGHT
+	var reticle_length := minf(_weapon_range, 170.0)
+	_aim_reticle.default_color = Color(player_config.tint.r, player_config.tint.g, player_config.tint.b, 0.30)
+	_aim_reticle.points = PackedVector2Array([
+		direction * 26.0,
+		direction * reticle_length,
+	])
 
 func _bloom_color(color: Color) -> Color:
 	return Color(color.r * BLOOM_COLOR_MULTIPLIER, color.g * BLOOM_COLOR_MULTIPLIER, color.b * BLOOM_COLOR_MULTIPLIER, color.a)
@@ -925,13 +1061,13 @@ func _get_mutation_level(mutation_id: String) -> int:
 			count += 1
 	return count
 
-func _combined_modifier(sources: Dictionary) -> float:
-	var result := 1.0
+func _additive_modifier(sources: Dictionary, extra_bonus: float = 0.0) -> float:
+	var total_bonus := maxf(extra_bonus, 0.0)
 	for value in sources.values():
-		result *= float(value)
-	return result
+		total_bonus += float(value) - 1.0
+	return maxf(0.01, 1.0 + total_bonus)
 
 func _recompute_effective_stats() -> void:
-	move_speed = _base_move_speed * _combined_modifier(_modifier_move_speed_sources) * _buff_move_speed
-	weapon_fire_interval = _base_weapon_fire_interval / (_combined_modifier(_modifier_attack_speed_sources) * _buff_attack_speed)
-	projectile_damage = int(round(float(_base_projectile_damage) * _combined_modifier(_modifier_damage_sources) * _buff_damage))
+	move_speed = _base_move_speed * _additive_modifier(_modifier_move_speed_sources, (_buff_move_speed - 1.0) + _momentum_move_bonus)
+	weapon_fire_interval = _base_weapon_fire_interval / _additive_modifier(_modifier_attack_speed_sources, (_buff_attack_speed - 1.0) + _momentum_fire_rate_bonus)
+	projectile_damage = int(round(float(_base_projectile_damage) * _additive_modifier(_modifier_damage_sources, _buff_damage - 1.0)))

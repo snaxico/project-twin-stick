@@ -3,12 +3,12 @@ extends Area2D
 const FireTrailZoneData = preload("res://scripts/weapons/FireTrailZone.gd")
 const BASE_COLLISION_HALF_WIDTH := 4.0
 const BLOOM_COLOR_MULTIPLIER := 1.45
-const WALL_BOUNCE_NUDGE := 4.0
 
 @export var lifetime: float = 1.8
 
 signal impact_requested(origin, direction, team, color, feedback_profile, impact_weight, target, combat_context)
 signal projectile_deactivated(projectile)
+signal split_requested(origin, direction, team, projectile_config, current_target)
 
 var direction: Vector2 = Vector2.RIGHT
 var speed: float = 500.0
@@ -23,8 +23,6 @@ var collision_half_width: float = BASE_COLLISION_HALF_WIDTH
 var infinite_pierce := false
 var pierce_count: int = 0
 var pierce_remaining: int = 0
-var ricochet_remaining: int = 0
-var ricochet_range: float = 200.0
 var leaves_fire_trail := false
 var trail_tick_interval: float = 0.5
 var impact_pool_radius: float = 0.0
@@ -41,16 +39,18 @@ var poison_dps: float = 0.0
 var poison_duration: float = 0.0
 var rapid_fire_level: int = 0
 var velocity_level: int = 0
-var knockback_level: int = 0
 var projectile_shape: String = "orb"
 var trail_style: String = "default"
 var accent_color: Color = Color.WHITE
 var impact_sfx: String = "hit"
 var source_type: String = "projectile"
 var weapon_id: String = ""
+var projectile_kind: String = "bullet"
 var weapon_tags: Array = []
 var trigger_passives: Array = []
 var use_lifetime := true
+var travel_distance: float = 0.0
+var split_remaining: int = 0
 var _shooter_node: Node = null
 
 @onready var visual: Polygon2D = $Visual
@@ -62,6 +62,10 @@ var _spawn_position := Vector2.ZERO
 var _base_collision_radius := 0.0
 var _base_visual_scale := Vector2.ONE
 var _hit_targets: Array = []
+var _boomerang_out_hit_targets: Array = []
+var _boomerang_return_hit_targets: Array = []
+var _boomerang_returning := false
+var _projectile_config: Dictionary = {}
 var _pooled := false
 var _active := true
 var _impact_pool_spawned := false
@@ -80,8 +84,6 @@ func setup(projectile_team: String, projectile_direction: Vector2, projectile_sp
 	infinite_pierce = false
 	pierce_count = 0
 	pierce_remaining = 0
-	ricochet_remaining = 0
-	ricochet_range = 200.0
 	leaves_fire_trail = false
 	trail_tick_interval = 0.5
 	impact_pool_radius = 0.0
@@ -98,17 +100,23 @@ func setup(projectile_team: String, projectile_direction: Vector2, projectile_sp
 	poison_duration = 0.0
 	rapid_fire_level = 0
 	velocity_level = 0
-	knockback_level = 0
 	projectile_shape = "orb"
 	trail_style = "default"
 	accent_color = projectile_color.lightened(0.2)
 	impact_sfx = "hit"
 	source_type = "projectile"
 	weapon_id = ""
+	projectile_kind = "bullet"
 	weapon_tags = []
 	trigger_passives = []
+	travel_distance = 0.0
+	split_remaining = 0
 	use_lifetime = projectile_team != "enemy"
 	_hit_targets.clear()
+	_boomerang_out_hit_targets.clear()
+	_boomerang_return_hit_targets.clear()
+	_boomerang_returning = false
+	_projectile_config.clear()
 	_impact_pool_spawned = false
 
 func setup_from_config(projectile_team: String, projectile_direction: Vector2, config: Dictionary) -> void:
@@ -127,8 +135,6 @@ func setup_from_config(projectile_team: String, projectile_direction: Vector2, c
 	infinite_pierce = bool(config.get("infinite_pierce", infinite_pierce))
 	pierce_count = max(0, int(config.get("pierce_count", pierce_count)))
 	pierce_remaining = pierce_count
-	ricochet_remaining = max(0, int(config.get("ricochet_count", 0)))
-	ricochet_range = max(1.0, float(config.get("ricochet_range", ricochet_range)))
 	leaves_fire_trail = bool(config.get("leaves_fire_trail", false))
 	trail_tick_interval = max(0.1, float(config.get("trail_tick_interval", trail_tick_interval)))
 	impact_pool_radius = max(0.0, float(config.get("impact_pool_radius", impact_pool_radius)))
@@ -145,7 +151,6 @@ func setup_from_config(projectile_team: String, projectile_direction: Vector2, c
 	poison_duration = max(0.0, float(config.get("poison_duration", poison_duration)))
 	rapid_fire_level = max(0, int(config.get("rapid_fire_level", rapid_fire_level)))
 	velocity_level = max(0, int(config.get("velocity_level", velocity_level)))
-	knockback_level = max(0, int(config.get("knockback_level", knockback_level)))
 	projectile_shape = str(config.get("projectile_shape", projectile_shape))
 	trail_style = str(config.get("trail_style", trail_style))
 	accent_color = _parse_color(config.get("accent_color", accent_color), accent_color)
@@ -156,9 +161,15 @@ func setup_from_config(projectile_team: String, projectile_direction: Vector2, c
 	impact_sfx = str(config.get("impact_sfx", impact_sfx))
 	source_type = str(config.get("source_type", source_type))
 	weapon_id = str(config.get("weapon_id", weapon_id))
+	projectile_kind = str(config.get("projectile_kind", projectile_kind))
 	weapon_tags = (config.get("weapon_tags", []) as Array).duplicate(true)
 	trigger_passives = (config.get("trigger_passives", []) as Array).duplicate(true)
+	travel_distance = maxf(0.0, float(config.get("travel_distance", travel_distance)))
+	if travel_distance > 0.0 and max_distance <= 0.0:
+		max_distance = travel_distance
+	split_remaining = max(0, int(config.get("split_count", split_remaining)))
 	use_lifetime = bool(config.get("use_lifetime", use_lifetime))
+	_projectile_config = config.duplicate(true)
 
 func _ready() -> void:
 	if not body_entered.is_connected(_on_body_entered):
@@ -200,6 +211,9 @@ func _activate_projectile_runtime() -> void:
 func _physics_process(delta: float) -> void:
 	if not _active:
 		return
+	if projectile_kind == "boomerang":
+		_update_boomerang_motion(delta)
+		return
 	rotation = direction.angle()
 	global_position += direction * speed * delta
 	if max_distance > 0.0 and global_position.distance_squared_to(_spawn_position) >= max_distance * max_distance:
@@ -213,9 +227,6 @@ func _physics_process(delta: float) -> void:
 func _on_body_entered(body: Node) -> void:
 	if body is StaticBody2D:
 		impact_requested.emit(global_position, -direction, team, _get_impact_color(), impact_sfx, impact_weight, body, _build_combat_context(body))
-		if ricochet_remaining > 0 and _try_wall_ricochet():
-			ricochet_remaining -= 1
-			return
 		_spawn_impact_fire_pool()
 		_finish_projectile()
 		return
@@ -229,14 +240,12 @@ func _attempt_hit_target(target: Node) -> void:
 		return
 	if not target.has_method("apply_damage"):
 		return
-	if _hit_targets.has(target):
+	if not _can_hit_target_on_current_leg(target):
 		return
 	if target.has_method("get_team") and str(target.get_team()) == team:
 		return
 	if knockback_force > 0.0 and target.has_method("apply_knockback"):
 		target.apply_knockback(direction, knockback_force)
-	elif target.has_method("apply_knockback"):
-		target.apply_knockback(direction, 180.0 + impact_weight * 90.0)
 	target.apply_damage(damage)
 	if slow_duration > 0.0:
 		if slow_step > 0.0 and target.has_method("apply_stacking_slow"):
@@ -245,8 +254,11 @@ func _attempt_hit_target(target: Node) -> void:
 			target.apply_slow(slow_multiplier, slow_duration)
 	if poison_duration > 0.0 and poison_dps > 0.0 and target.has_method("apply_poison"):
 		target.apply_poison(poison_dps, poison_duration)
-	_hit_targets.append(target)
+	_mark_target_hit_on_current_leg(target)
 	impact_requested.emit(global_position, -direction, team, _get_impact_color(), impact_sfx, impact_weight, target, _build_combat_context(target))
+	_request_split(target)
+	if projectile_kind == "boomerang":
+		return
 	if infinite_pierce:
 		return
 	if pierce_remaining > 0:
@@ -254,6 +266,51 @@ func _attempt_hit_target(target: Node) -> void:
 		return
 	_spawn_impact_fire_pool()
 	_finish_projectile()
+
+func _update_boomerang_motion(delta: float) -> void:
+	if _boomerang_returning:
+		if _shooter_node != null and is_instance_valid(_shooter_node) and _shooter_node is Node2D:
+			var to_owner: Vector2 = (_shooter_node as Node2D).global_position - global_position
+			if to_owner.length() <= 32.0:
+				_finish_projectile()
+				return
+			direction = to_owner.normalized()
+		else:
+			_finish_projectile()
+			return
+	else:
+		if max_distance > 0.0 and global_position.distance_squared_to(_spawn_position) >= max_distance * max_distance:
+			_boomerang_returning = true
+			_hit_targets.clear()
+			return
+	rotation = direction.angle()
+	global_position += direction * speed * delta
+	if use_lifetime and _current_time_seconds() >= _expires_at:
+		_finish_projectile()
+
+func _can_hit_target_on_current_leg(target: Node) -> bool:
+	if projectile_kind != "boomerang":
+		return not _hit_targets.has(target)
+	var leg_hits := _boomerang_return_hit_targets if _boomerang_returning else _boomerang_out_hit_targets
+	return not leg_hits.has(target)
+
+func _mark_target_hit_on_current_leg(target: Node) -> void:
+	if projectile_kind != "boomerang":
+		_hit_targets.append(target)
+		return
+	if _boomerang_returning:
+		_boomerang_return_hit_targets.append(target)
+	else:
+		_boomerang_out_hit_targets.append(target)
+
+func _request_split(target: Node) -> void:
+	if team != "player" or split_remaining <= 0 or projectile_kind == "boomerang":
+		return
+	split_remaining -= 1
+	var split_config := _projectile_config.duplicate(true)
+	split_config["split_count"] = 0
+	split_config["projectile_multiplier"] = 1
+	split_requested.emit(global_position, direction, team, split_config, target)
 
 func _spawn_impact_fire_pool() -> void:
 	if _impact_pool_spawned or not leaves_fire_trail or impact_pool_radius <= 0.0 or impact_pool_lifetime <= 0.0 or impact_pool_damage_percent <= 0.0:
@@ -286,39 +343,6 @@ func _finish_projectile() -> void:
 	if collision_shape != null:
 		collision_shape.set_deferred("disabled", true)
 	projectile_deactivated.emit(self)
-
-func _try_wall_ricochet() -> bool:
-	var tree := get_tree()
-	if tree == null:
-		return false
-	var combat_owner := tree.current_scene
-	if combat_owner == null or not combat_owner.has_method("get_arena_rect"):
-		return false
-	var arena_rect: Rect2 = combat_owner.get_arena_rect()
-	if arena_rect.size.x <= 0.0 or arena_rect.size.y <= 0.0:
-		return false
-	var distances := {
-		Vector2.RIGHT: absf(global_position.x - arena_rect.position.x),
-		Vector2.LEFT: absf(global_position.x - arena_rect.end.x),
-		Vector2.DOWN: absf(global_position.y - arena_rect.position.y),
-		Vector2.UP: absf(global_position.y - arena_rect.end.y),
-	}
-	var normal := Vector2.RIGHT
-	var best_distance := INF
-	for candidate_normal in distances.keys():
-		var distance := float(distances[candidate_normal])
-		if distance < best_distance:
-			best_distance = distance
-			normal = candidate_normal
-	direction = direction.bounce(normal).normalized()
-	global_position = global_position.clamp(
-		arena_rect.position + Vector2.ONE * WALL_BOUNCE_NUDGE,
-		arena_rect.end - Vector2.ONE * WALL_BOUNCE_NUDGE
-	)
-	global_position += normal * WALL_BOUNCE_NUDGE
-	_spawn_position = global_position
-	rotation = direction.angle()
-	return true
 
 func _current_time_seconds() -> float:
 	return Time.get_ticks_msec() / 1000.0
@@ -404,6 +428,7 @@ func _build_combat_context(target: Node) -> Dictionary:
 	return {
 		"owner": _shooter_node,
 		"weapon_id": weapon_id,
+		"projectile_kind": projectile_kind,
 		"weapon_tags": weapon_tags,
 		"origin": global_position,
 		"direction": direction,
@@ -418,7 +443,6 @@ func _build_combat_context(target: Node) -> Dictionary:
 		"trigger_passives": trigger_passives,
 		"rapid_fire_level": rapid_fire_level,
 		"velocity_level": velocity_level,
-		"knockback_level": knockback_level,
 		"explosion_radius": explosion_radius,
 		"explosion_damage": int(round(float(damage) * explosion_damage_percent)),
 		"slow_multiplier": slow_multiplier,
