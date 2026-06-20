@@ -131,8 +131,9 @@ champion**, no separate elite tier. The champion pool = **7 champions**: the 4 f
 
 ## Implementation phasing (each = its own bounded, validated task)
 
-1. **Strip the map.** Run generator emits a **linear room sequence**; replace MapUI with the
-   choice-card overlay (reuse route-card UI). Unify with endless, which is already linear.
+1. **Strip the map.** Run generator emits a **linear 10-room sequence** (bosses kept at 5 & 10,
+   modifiers forced by depth); remove the map UI and **auto-advance** between rooms. The card comes in
+   Phase 2. See *Phase 1 — Strip the map (task detail)* below.
 2. **Choice card.** Risk/reward option generation + selection → feeds the next room config.
 3. **Champions.** Convert elite-add-wave delivery to spawn former-boss kits as champions; trim boss
    scripts to 1–2 attacks; remove boss-room / HP-HUD / add-budget machinery.
@@ -145,6 +146,63 @@ champion**, no separate elite tier. The champion pool = **7 champions**: the 4 f
 Each phase: headless parse + boot validation; phases 3–5 also need **PerfRunner** — champions inside a
 full wave are a **new** perf case (champion attack VFX + dense wave), distinct from the old isolated
 boss-room profiles.
+
+---
+
+## Phase 1 — Strip the map (task detail)
+
+**Goal:** replace the structured **branching node map** with a fixed **linear 10-room spine**, remove
+the map UI, and force modifiers by depth. **Bosses stay at rooms 5 & 10 as placeholders** (the
+boss→champion-in-waves conversion is Phase 3). The **choice card is Phase 2** — Phase 1 just
+**auto-advances** room→room (minimal "room cleared → next" transition, no choice yet).
+
+### Locked numbers
+
+- **10 rooms**, two acts of **5** (act swaps to the harder enemy pool at room 6).
+- **Beat rooms = 5 (mid) and 10 (finale)** — keep the current mid-boss / final-boss for now.
+- **Forced-modifier schedule by room** (ambient, independent of any future card):
+
+  | Room | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 |
+  |---|---|---|---|---|---|---|---|---|---|---|
+  | Modifier | – | – | minor | minor | **major** | minor | major | major | major | **major** |
+  | Beat | | | | | **boss** | | | | | **boss** |
+
+  Beat rooms **5 & 10 carry a modifier too** (user decision — see readability watch-item below).
+- Difficulty (room duration / spawn interval / opening burst) keeps scaling off
+  `get_run_progress()`, which now runs over a fixed `_structured_total_combat_depth` of 10 →
+  **steady climb** for free.
+
+### Touch points (RunState.gd unless noted)
+
+- Replace `_generate_node_map()` (branching builder) with a **linear 10-room builder**.
+- Retire the route-differentiation helpers: `_assign_modifiers_to_map`, `_ensure_route_options_differ`,
+  `_build_route_option_signature`, `_build_distinct_modifier_load`, `_roll_modifiers_for_node` →
+  replaced by a **depth→modifier lookup** matching the table.
+- Replace variable act sizing (`ACT_1_ROW_MIN/MAX`, `ACT_2_ROW_MIN/MAX`) with a fixed
+  `ROOMS_PER_ACT = 5`.
+- Keep `_assign_structured_boss_types` / `_build_boss_node` for rooms 5 & 10.
+- Collapse map navigation (`get_map_rows`, `get_reachable_node_ids`, `select_map_node`,
+  `_get_starting_reachable_node_ids`) to **linear next-room** advancement.
+- **UI:** remove the branching map render (`MapNodeButton.gd` + the map view in `RunFlow.gd`); replace
+  with a minimal auto-advance transition.
+
+### Out of scope for Phase 1
+
+- The risk/reward **choice card** (Phase 2).
+- **Champion** behavior / the boss→champion conversion and unified-tier work (Phase 3).
+- Any **enemy/champion re-tune** (Phase 5).
+
+### Validation
+
+- `git diff --check`; headless parse; headless boot.
+- Sanity-check a generated structured run = exactly 10 rooms with bosses at 5 & 10 and the modifier
+  schedule above; confirm endless still chains linearly.
+
+### Watch-item (from the beat-room modifier decision)
+
+- Rooms 5 & 10 stack a **major modifier on top of the boss/champion**. Verify in playtest that the
+  big telegraphed attacks stay readable under the modifier's visual noise; if not, drop the beat-room
+  modifier (back to clean beats).
 
 ## Risks to watch in playtest
 
