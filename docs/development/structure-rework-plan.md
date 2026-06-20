@@ -244,6 +244,82 @@ else:
 - Manual: launch a run → no map / mode-select screen; each non-beat step shows **2 cards**; picking one
   loads it; bosses appear at 5 & 10; play continues past room 10.
 
+---
+
+## Phase 2 — Champions (Codex-ready)
+
+**Goal:** collapse the 4 bosses + 3 elites into one **champion** tier and convert beat rooms into
+**"normal wave + a champion that drops in partway."** Strip the multi-phase boss machinery down to a
+flat, readable 2-attack threat.
+
+### Decisions (locked)
+
+- **Two signature attacks each**, kept on cooldown (no third/phase attacks).
+- **No multi-phase escalation** — flat behavior spawn→death. **Remove** `_boss_phase_index`,
+  `_update_boss_phase_transition`, phase telegraphs, and the deflector-phase index.
+- **Beat room = normal wave + champion** — the beat room runs the **existing room spawner** (adds
+  throughout) and the champion **drops in partway** (see timing).
+- **Entrance: partway through** — wave starts at room open; champion spawns after a delay with a brief
+  telegraph (replaces the old 2.5s invuln windup).
+
+### The unified champion tier
+
+- Champion pool = **7**: `warden`, `hydra`, `hive`, `pulsar` (former bosses) + the 3 former elites
+  (`elite_charger`, `elite_spitter`, `elite_support`).
+- Add an `is_champion()` concept (generalize `is_boss()`); the former elites are promoted to champions,
+  so **no enemy is an "elite" anymore** — `_spawn_elite_miniboss` / `_update_elite_add_waves` are
+  removed or repurposed as the champion spawner.
+- **Each champion keeps 2 telegraphed attacks** (the bosses already have rich kits — pick their 2 best;
+  the former elites keep their existing pattern + get **one** added telegraphed attack). The specific
+  2-attack kit per champion is a **content decision — see Open below**.
+
+### Champion runtime (Enemy.gd)
+
+- Replace phase-driven attack selection with a **flat 2-attack loop**: alternate/randomly pick between
+  the champion's two attacks on a cooldown; no HP-threshold branches.
+- Keep telegraphs (`_spawn_boss_attack_telegraph`) and the R12 **prewarm**.
+- **HP / power scaling with depth** — champions appear at every beat in an unbounded run, so their
+  stats must scale with `room_number`. Generalize `apply_boss_scale` / `apply_elite_act_scale` into one
+  depth-based `apply_champion_scale(room_number, player_count)`. **Exact curve = Phase 4 tuning**, but
+  the hook lands here. (Approach is an Open below.)
+
+### Champion delivery (CoopManager.gd)
+
+- Beat step (every 5) → room runs the normal spawner **plus** a champion: at the spawn delay, call the
+  (renamed) champion spawner, with a brief telegraph. Reuse `_spawn_boss` as the base.
+- **Remove** boss-only room machinery: the boss add-wave **budget** (`_update_boss_add_waves`), the
+  **phase HUD pips** (keep the HP bar, drop pips), the **entrance windup**, and the dedicated
+  boss-room "spawn at 25s / clear on death" flow → the beat room is just a combat room with a champion.
+- Room clears when the **champion is dead** (and the wave is handled by the normal clear rules).
+
+### Champion look (readability)
+
+- **Bigger** visual scale + a **colored aura** on the champion node.
+- **Named health bar** = the existing boss HP bar **minus the phase pips**.
+
+### Removed / renamed summary
+
+- Gone: `is_boss()`-only phase system, `_boss_phase_index`, `_update_boss_phase_transition`, deflector
+  phase index, boss add-wave budget, phase HUD pips, entrance windup, the separate elite tier
+  (`_spawn_elite_miniboss`, `_update_elite_add_waves`, `apply_elite_act_scale`), `ENDLESS_BOSS_INTERVAL`
+  remnants.
+- Kept/renamed: boss AIs' attacks (trimmed to 2), boss HP bar (→ champion bar), telegraphs, prewarm,
+  `apply_boss_scale`→`apply_champion_scale`.
+
+### Open (next decisions, before this phase is fully Codex-ready)
+
+- **Which 2 attacks** each of the 7 champions keeps (and the former elites' added attack).
+- **Champion selection at each beat** — random from the pool / curated / depth-weighted.
+- **Depth scaling approach** for `apply_champion_scale`.
+
+### Acceptance test
+
+- `git diff --check`; headless parse; headless boot.
+- **PerfRunner** champion-in-dense-wave profile (the new worst case).
+- Manual: a beat room shows a normal wave; the champion drops in partway with a telegraph, has a named
+  HP bar (no pips), uses 2 attacks with no phase jumps; room clears on champion death; former elites now
+  appear as champions, never as the old elite mini-bosses.
+
 ## Risks to watch in playtest
 
 - **Win milestone feels arbitrary** — since the run just keeps going, the room-`RUN_LENGTH` "win" must
