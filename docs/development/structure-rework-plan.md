@@ -208,6 +208,24 @@ Beyond the headline UI (map removal, win screen), these secondary surfaces need 
 - **Resolution panel:** add the second button (`Continue` / `End run`) for the win milestone.
 - **Game-over screen:** show **"Reached room N"** as the final score.
 
+## Other surfaces audit (data / audio / dev tools / save)
+
+Checked the remaining surfaces — most are no-ops, with one real dev-tool item:
+
+- **`PerfRunner.gd` (Phase 2):** its `--profile=boss:<id>` and `room:elite|boss` scenarios use the old
+  taxonomy + the single-room boss path. Update to **`champion:<id>`** + a **champion-in-dense-wave**
+  scenario (the new perf worst case the Phase-2 acceptance already calls for). Also the stale
+  `"run_mode": "structured"` string.
+- **`is_endless_mode()` breadth (Phase 1):** referenced in **~10 spots** (`RunState` 86, 119–123, 144,
+  158–166, 186, 332–333; `CoopManager` 1422, 1450) — collapse **all**, not just the generation branch.
+- **`data/enemies.json` is empty** (`{"enemies": []}`) — enemy/champion stats are **hardcoded in
+  `Enemy.gd`**; the per-champion base stats for `apply_champion_scale` live in code, **no JSON change**.
+- **Audio (Phase 2/3):** boss SFX hooks (`_play_sfx("play_explosion", […, "boss"])`) just **reuse** for
+  champions. Only a possible **win-milestone victory sting** is a new hook (Phase 3, optional).
+- **No action — verified clean:** `ProfileState.gd` (`user://profile_state.save`) persists only
+  `screen_effect_level` (a no-op stub) — nothing about mode/score/progress; `run_mode` is **not
+  persisted** anywhere. No save/config changes from this rework.
+
 ## Implementation phasing (each = its own bounded, validated task)
 
 1. **Strip the map → 2-option chooser + unify into one run.** Replace the branching map graph with a
