@@ -306,11 +306,30 @@ flat, readable 2-attack threat.
 - Kept/renamed: boss AIs' attacks (trimmed to 2), boss HP bar (→ champion bar), telegraphs, prewarm,
   `apply_boss_scale`→`apply_champion_scale`.
 
-### Open (next decisions, before this phase is fully Codex-ready)
+### Resolved
 
-- **Which 2 attacks** each of the 7 champions keeps (and the former elites' added attack).
-- **Champion selection at each beat** — random from the pool / curated / depth-weighted.
-- **Depth scaling approach** for `apply_champion_scale`.
+- **Beat selection** → **random from the 7-pool, no repeat until the pool cycles.**
+- **Depth scaling** → **per-champion base stat block × a depth multiplier** (preserves identity;
+  exact multiplier curve = last-phase tuning).
+
+### Champion 2-attack kits (deciding one champion at a time)
+
+Former bosses: trim their existing kit to the 2 keepers. Former elites: keep their existing pattern +
+one added telegraphed attack. Filled in as we walk each champion:
+
+- **Warden** — **Charge combo + Ground-pound** (drop leap + minion-spawn)
+- **Hydra** — **Rotating arm-fire + Sweep** (drop radial burst + aimed snipes)
+- **Hive** — **Deflectors + Poison cloud** (deflectors as a flat attack, no phase scripting; drop both add-spawners + burrow)
+- **Pulsar** — **EMP + Shockwave/hazard** (teleport stays as movement; drop aimed fire + minions)
+- **Elite Charger** — **charge-slam + Radial burst** (radial burst reused from Hydra's freed nova)
+- **Elite Spitter** — **rapid aimed fire + Aimed snipes** (aimed snipes reused from Hydra's freed move)
+- **Elite Support** — **Buff aura + Shockwave** (existing shockwave kept; **buff aura is new** — a
+  speed/fire-rate aura that empowers nearby wave enemies, making Support a kill-priority force-multiplier)
+
+**Net-new content in Phase 2:** only the **Elite Support buff aura** (every other champion attack reuses
+an existing function — Warden charge/pound, Hydra arm-fire/sweep, Hive deflectors/poison, Pulsar
+EMP/shockwave, plus Hydra's radial burst & aimed snipes reused on the two elite shooters). All
+multi-phase / minion-spawn / extra-attack code is removed.
 
 ### Acceptance test
 
