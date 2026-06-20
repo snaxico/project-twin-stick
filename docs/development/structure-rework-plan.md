@@ -339,6 +339,57 @@ multi-phase / minion-spawn / extra-attack code is removed.
   HP bar (no pips), uses 2 attacks with no phase jumps; room clears on champion death; former elites now
   appear as champions, never as the old elite mini-bosses.
 
+---
+
+## Phase 3 — Win milestone + continue (Codex-ready)
+
+**Goal:** at room `RUN_LENGTH`, bank a **win** and offer **"continue into Endless?"**; continuation
+keeps the same run climbing seamlessly until death. Reuses the existing `RunFlow` resolution panel.
+
+### Decisions (locked)
+
+- **Win banked at the milestone.** Clearing room `RUN_LENGTH` sets `run_outcome = "won"` **permanently**
+  — dying later in the continuation never un-wins it. Continuing risks only **score**.
+- **Minimal screen.** Title + score + the two buttons. No rich recap.
+- **No persistence.** Session-only score; nothing written to `user://`. (Meta stays deferred.)
+
+### Flow
+
+1. **Reach room `RUN_LENGTH`** (a champion beat) and clear it → set `run_outcome = "won"`, show the
+   **win resolution** with **two actions**: `Continue` (into Endless) and `End run`.
+   - `Continue` → resume: advance to room `RUN_LENGTH + 1`, keep generating/climbing (Phase 1's lazy
+     `_build_choice_step` already produces rooms past `RUN_LENGTH`). The 2-option choice + every-5 beats
+     continue unchanged.
+   - `End run` → return to menu (the win is already recorded).
+2. **Past the milestone:** room clears just advance — **no win screen again**.
+3. **Death anytime:** game-over resolution showing **final score** ("Reached room N / Score: N rooms")
+   → return to menu. If the milestone was passed, the run still counts as a **win** (banked); score is
+   the rooms cleared.
+
+### Touch points
+
+- **RunState.gd:** `is_run_complete()` no longer ends the run — replace the "final boss = complete"
+  logic. Instead, on clearing room `RUN_LENGTH`, set `run_outcome = "won"` and emit a milestone outcome
+  (new `post_action = "win_milestone"`). After that, clears use the existing advance path
+  (`resolve_current_combat_victory` → `endless_next`-style continuation). `rooms_completed` stays the
+  score source for `get_run_summary_text()`.
+- **RunFlow.gd:** the `resolution_panel` currently has **one** `resolution_button`. Add a **second
+  button** (e.g. `resolution_button_secondary`) shown **only** for the `win_milestone` resolution:
+  primary = `Continue`, secondary = `End run`. Wire `_post_resolution_action` to handle the two
+  (`continue_run` advances like `endless_next`; `return_to_menu`). The old `"Run Victory"` /
+  `"Endless Complete"` resolutions collapse into this single milestone screen + the death game-over.
+
+### Out of scope
+
+- Difficulty re-tuning of the continuation ramp (Phase 4 / tuning); any persistent best score or meta.
+
+### Acceptance test
+
+- `git diff --check`; headless parse; headless boot.
+- Manual: clear to room `RUN_LENGTH` → win screen with **Continue** and **End run**; `Continue` resumes
+  at room `RUN_LENGTH + 1` and keeps going; `End run` returns to menu; dying after the milestone shows a
+  final-score game-over and the run is still recorded as a win.
+
 ## Risks to watch in playtest
 
 - **Win milestone feels arbitrary** — since the run just keeps going, the room-`RUN_LENGTH` "win" must
