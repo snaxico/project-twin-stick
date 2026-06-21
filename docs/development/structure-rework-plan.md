@@ -33,8 +33,8 @@ Locked decisions:
 
 There is **one run**, not two modes:
 
-1. **Curated arc** — rooms `1 … RUN_LENGTH` (a tunable constant, target ~10). Steady-climb difficulty,
-   two-act enemy-pool backbone, champion beats, forced modifiers by depth.
+1. **Curated arc** — rooms `1 … RUN_LENGTH` (a tunable constant, target ~10). Steady-climb difficulty
+   scaling continuously with depth, champion cadence, modifiers via the existing per-room rolling.
 2. **Win milestone** — clearing the final arc room (room `RUN_LENGTH`, a champion room) shows a
    **win screen**: the run is banked as a **win** + score, and offers **"continue into Endless?"**.
 3. **Continuation** — choosing continue keeps the *same run* going past `RUN_LENGTH` with
@@ -44,18 +44,21 @@ There is **one run**, not two modes:
 Menu shows just **Play** (the run) — no Structured/Endless selection. The old "Endless mode" is simply
 the post-milestone continuation of this one run.
 
-**Run stake = the run itself.** Nothing carries across rooms — **health resets each room and momentum
-resets each room** (unchanged). There is deliberately **no persistent resource** (no carried HP, no
-heals, no lives). The thing at risk is the **whole run**: dying in any room ends it.
+**Run stake = the run itself.** **Health resets each room** — no carried HP, heals, or lives, so the
+thing at risk is the **whole run**: dying in any room ends it. The one thing that *does* now carry is
+**Momentum** — see below — but that's a *power snowball*, not a saved resource you spend; you can't bank
+it for safety, and a damaging hit dents it.
 
-Momentum/Flow remains the connective tissue. **Pick cadence stays XP-gated** (unchanged): you keep
-leveling as you keep clearing, so a long continuation keeps granting picks.
+**Momentum now builds across the run** (decided 2026-06-21 — no longer per-room): it persists room to
+room and only resets at run start, so the flow rewards a long continuation/score-chase. The −2-tier
+hit penalty still applies. **Pick cadence stays XP-gated** (unchanged): you keep leveling as you clear,
+so a long continuation keeps granting picks.
 
 ## Run curve
 
-- **`RUN_LENGTH` rooms (tunable constant, target ~10), two acts.** Difficulty is a **steady climb** —
-  each room a notch harder than the last, Act 2 baseline above Act 1. Predictable forward motion, no big
-  cliff at the act break. The exact `RUN_LENGTH` is pinned in playtest tuning, not committed now.
+- **`RUN_LENGTH` rooms (tunable constant, target ~10).** Difficulty is a **steady climb** — each room a
+  notch harder than the last, scaling **continuously with depth** (no discrete acts). The exact
+  `RUN_LENGTH` is pinned in playtest tuning, not committed now.
 - **Champion cadence:** a **depth-banded interval that tightens with depth, with a floor** — more
   frequent the deeper you go (e.g. illustratively ~every 5 early → ~every 4 → ~every 3, floored so it
   never becomes every-room; **exact band thresholds + floor fixed in playtest**). Room `RUN_LENGTH` is
@@ -156,9 +159,13 @@ headless parse must stay clean (catches orphaned `@onready` / deleted scene-node
   and the reachability/visited accessors (`get_reachable_node_ids`, `get_visited_node_ids`). Keep
   `_get_endless_enemy_pool` / `_get_endless_wave_count` (reused for continuation scaling).
 - **RunState.gd constants/vars:** `ACT_1_ROW_MIN/MAX`, `ACT_2_ROW_MIN/MAX`, `MAP_COLUMN_COUNT`,
-  `START_ROW_COLUMNS`, `ENDLESS_BOSS_INTERVAL`, `_should_place_elite_node` (no elite room type),
-  `endless_room_index`, `reachable_node_ids` / `visited_node_ids`.
-- **CoopManager.gd:** the `_room_type == "elite"` room-duration `+10` branch (no elite rooms).
+  `START_ROW_COLUMNS`, `ENDLESS_BOSS_INTERVAL`, `ROOMS_PER_ACT` (acts dropped), `_should_place_elite_node`
+  (no elite room type), `endless_room_index`, `reachable_node_ids` / `visited_node_ids`.
+- **RunState.gd acts → depth:** remove `current_act` / `get_current_act` / `set_current_act` and the
+  `act` field on nodes; `_build_enemy_pool` folds into the single depth-based pool.
+- **CoopManager.gd:** the `_room_type == "elite"` room-duration `+10` branch (no elite rooms); rework
+  `_get_current_rare_chance()` → depth curve; rework `_apply_arena_color_for_act()` → depth-based color;
+  drop the `set_current_act` call in `_start_room`.
 - **RunFlow.gd:** `_show_map` + the map-render/route-graph helpers; the `@onready` map refs
   (`map_title_label`, `map_detail_body_label`, …). Reuse `_build_route_card` for the 2-card choice.
 - **Bootstrap.gd:** `run_mode_row` / `run_mode_option` and all ~8 references (lines ~50–51, 137,
@@ -289,7 +296,8 @@ cadence**. **Loot and modifier generation do not change** — only the map is re
 
 ```
 const RUN_LENGTH := 10     # tunable; the win milestone (Phase 3)
-const ROOMS_PER_ACT := 5   # act 1 = rooms 1..ROOMS_PER_ACT, act 2 beyond
+# No ROOMS_PER_ACT / acts — difficulty, pool, rare odds, and color all key off `depth` (see
+# "Mechanical fixes folded in").
 # Champion cadence: a depth-banded interval that TIGHTENS with depth, with a floor.
 # Numbers are placeholders pinned in playtest — e.g.:
 const CHAMPION_INTERVAL_BANDS := [
@@ -310,7 +318,7 @@ from the previous champion's depth so band changes don't double/skip), **or** `r
 ### `_build_choice_step(room_number) -> Array` — one step (= the choice)
 
 ```
-act = 1 if room_number <= ROOMS_PER_ACT else 2
+# depth = room_number; no act (see Mechanical fixes folded in)
 if _is_champion_step(room_number):
     return [ one champion node ]             # forced — no choice this step
 else:
@@ -320,12 +328,12 @@ else:
 - **Champion node:** built like the current boss node; type = `_structured_mid_boss_type` at the first
   arc champion, `_structured_final_boss_type` at `RUN_LENGTH`, else `_roll_boss_type()` (Phase 1
   placeholder — Phase 2 makes it random-no-repeat over the 7). Keep `_assign_structured_boss_types()`.
-- **Two option nodes:** built with the **existing** path — `_build_map_node(...)` per option (passing
-  `act` and `depth = room_number`), modifiers via **`_roll_modifiers_for_node`**, then run
+- **Two option nodes:** built with the **existing** path — `_build_map_node(...)` per option (keyed on
+  `depth = room_number`, no `act`), modifiers via **`_roll_modifiers_for_node`**, then run
   **`_ensure_route_options_differ`** so the two differ. Both options are **`combat` rooms** — **no
   "elite" room type** (elites no longer exist as a tier; champions come only from the cadence/milestone).
-- **Enemy pool / wave count:** reuse the existing builders; past `RUN_LENGTH` the depth-banded
-  `_get_endless_enemy_pool` / `_get_endless_wave_count` keep them scaling (both already exist).
+- **Enemy pool / wave count:** use the single depth-based pool curve (see *Mechanical fixes folded in*)
+  + `_get_endless_wave_count`; both keep scaling unbounded.
 
 ### Generation + advancement (RunState.gd)
 
@@ -349,6 +357,21 @@ else:
   pressure past the milestone comes from the depth-banded `enemy_pool` + `wave_count`** (already rising
   with `room_number`), not from uncapping cadence. Net: one steady climb, no reset, no runaway cadence.
 
+### Mechanical fixes folded in (from the critical review)
+
+**These supersede the `act` references above — drop the "act" concept; everything keys off `depth`.**
+
+- **No more `act`.** Remove `current_act` / `get_current_act` / `set_current_act` and `ROOMS_PER_ACT`;
+  `_build_choice_step` no longer computes `act` (pass `depth` to room-building). Difficulty, pool, and
+  color all derive from `depth`.
+- **Rare odds → depth curve.** Replace `_get_current_rare_chance()` (`CoopManager` ~2294) with a curve
+  that rises with `depth` (e.g. lerp from ~0.20 shallow to ~0.45 deep; exact values in tuning). No
+  `is_endless_mode()`, no binary act.
+- **Enemy pool → one depth-based function** for all rooms (fold `_build_enemy_pool` into the depth-banded
+  `_get_endless_enemy_pool`-style curve).
+- **Arena color → depth-based.** Rework `_apply_arena_color_for_act(...)` into a depth-driven color
+  (continuous gradient/curve) so deep play keeps shifting instead of freezing.
+
 ### UI
 
 - Remove the branching map render (`MapNodeButton.gd` + the map graph view in `RunFlow.gd`); present the
@@ -367,7 +390,7 @@ else:
 - Temporary headless walk of `_build_choice_step(1..25)`: champion steps follow the **band intervals**
   (every 5 in 1–10, every 4 in 11–20, every 3 deeper) and `RUN_LENGTH` is always a champion; every other
   step returns **exactly 2** `combat` nodes with a **distinct route signature** (no `elite` room type);
-  `act` flips at room 6; steps keep generating past `RUN_LENGTH`.
+  enemy pool / rare odds / arena color scale with `depth` (no act flip); steps keep generating past `RUN_LENGTH`.
 - Manual: launch a run → no map / mode-select screen; each non-champion step shows **2 cards**; picking
   one loads it; champions appear on the cadence (incl. room 10); play continues past room 10.
 - **Cleanup gate:** grep for the Phase-1 removed symbols (`_generate_node_map`, `_build_endless_node`,
@@ -517,6 +540,16 @@ keeps the same run climbing seamlessly until death. Reuses the existing `RunFlow
   (`continue_run` advances like `endless_next`; `return_to_menu`). The old `"Run Victory"` /
   `"Endless Complete"` resolutions collapse into this single milestone screen + the death game-over.
 
+### Momentum → build across the run (decided 2026-06-21)
+
+- **Remove the per-room reset.** `_start_room()` currently calls `_reset_momentum()` — drop that call so
+  momentum tier/progress **persist room to room**. Reset only at **run start** (keep `_reset_momentum`
+  invoked from the run-init path, not per room).
+- The **damaging-hit −2-tier drop is unchanged**, so momentum builds over a run but a deep hit costs
+  more. This makes the flow run-scoped (rewards the continuation/score-chase).
+- **Watch (playtest):** deep-run power could get oppressive — the −2 drop + the tightening champion
+  cadence are the intended counters; tune if needed.
+
 ### Out of scope
 
 - Difficulty re-tuning of the continuation ramp (Phase 4 / tuning); any persistent best score or meta.
@@ -554,7 +587,9 @@ keeps the same run climbing seamlessly until death. Reuses the existing `RunFlow
   numbers in playtest), **not** a fixed every-5. (above)
 - **Continuation difficulty** → **keeps climbing seamlessly** (one curve, no reset).
 - **Pick cadence** → **stays XP-gated** (unchanged).
-- **Run stake** → **nothing persists**; the run itself is the stake (death ends it). (above)
+- **Run stake** → **health resets each room** (no carried HP/heals/lives); the run itself is the stake
+  (death ends it). **Momentum is the exception** — it now **builds across the run** (decided 2026-06-21),
+  a power snowball you can't bank for safety. (above)
 - **Between-room mechanic** → **simple pick-one-of-two using the existing loot + modifier generation**
   ("for now"). No new reward economy, no risk-kind taxonomy, no custom modifier rule. (above)
 - **Enemy re-tune** → tune **last**, low-HP / high-threat philosophy; keep current values until the last phase.
@@ -564,7 +599,7 @@ keeps the same run climbing seamlessly until death. Reuses the existing `RunFlow
 - **Champion look** → **bigger + aura + named health bar** (repurpose boss HP bar minus phase pips).
 - **Champion rooms** → inherit the existing elite-room bonus pick (existing loot behavior).
 - **R14 confidence** → playtest was thorough; build the rework straight on top, no extra R14 pass.
-- **Difficulty curve** → **steady climb**, Act 2 baseline above Act 1.
+- **Difficulty curve** → **steady climb**, scaling **continuously with depth** (no discrete acts).
 - **Modifiers** → **use the existing rolling** (`_roll_modifiers_for_node`, already act/depth-scaled);
   each of the 2 options carries its own rolled modifiers, so the modifier is part of the choice.
 
@@ -577,32 +612,33 @@ keeps the same run climbing seamlessly until death. Reuses the existing `RunFlow
   nudges) and **risk/reward "parasite" items** (Part C) — revisit only if the simple 2-option choice
   feels too thin in playtest.
 
-## Open from the critical system review (DISCUSS NEXT SESSION)
+## Open from the critical system review
 
-A critical pass over current gameplay systems vs the rework surfaced these. **Not yet decided** — to
-walk through next session (the design ones as multiple-choice).
+A critical pass over current gameplay systems vs the rework surfaced these.
 
-**Mechanical fixes (likely just fold in — low controversy):**
+**Design decisions — RESOLVED (2026-06-21):**
 
-- 🔴 **Rare-odds is broken by the rework.** `_get_current_rare_chance()` (`CoopManager` ~2294) is
-  hardcoded `0.40` if `is_endless_mode()` else `0.20`/`0.30` by act. Endless mode is **deleted** and all
-  continuation rooms are "act 2" → rare chance **stalls at 0.30 forever**, never reaching the deep-play
-  `0.40`. Replace with a **depth-based rare curve.**
-- 🟡 **"Act 1 / Act 2" is now vestigial** — just a `depth ≤ ROOMS_PER_ACT` threshold driving arena
-  color, rare odds, and enemy pool. Past the milestone everything is "act 2" → one arena color + one
-  pool tier **forever**. Generalize to **depth-based** (or keep acts as deliberate cosmetic bands).
-- ⚠️ **Enemy-pool functions are split** — `_build_enemy_pool` (act) for the arc vs `_get_endless_enemy_pool`
-  (depth) for continuation. Reconcile to one depth-based curve.
+- ✅ **HP pickups → KEEP as-is** (10% drop / +5 HP). Intra-room safety net stays; no change.
+- ✅ **Side objectives → KEEP as-is** (Hold Zone / Kill Streak / Collector + room buffs). No change.
+- ✅ **Momentum → BUILD ACROSS THE RUN** (was per-room reset). Implementation: **stop calling
+  `_reset_momentum()` in `_start_room()`** — momentum tier/progress now persist across rooms within a
+  run and reset only at run start (`start_new_run` / `_reset_momentum` on new run). The damaging-hit
+  **−2-tier drop still applies**, so it builds over the run but a hit deep costs more. This makes the
+  flow run-scoped (rewards the continuation/score-chase), matching the uncapped-is-intended ethos.
+  Small standalone change; slot with the **Phase 3** run-framing work. Watch in playtest that deep-run
+  power isn't unfun-oppressive (the −2 drop + the new depth-scaling champion cadence are the counters).
 
-**Design decisions (need a call — multiple-choice next session):**
+**Mechanical fixes — RESOLVED (2026-06-21), folded into Phase 1:**
 
-- ❓ **HP pickups** (10% drop / +5 HP) — with health reset per room + nothing-persists, healing is
-  purely intra-room. Marginal. **Cut, keep, or repurpose?**
-- ❓ **Side objectives** (Hold Zone / Kill Streak / Collector + room buffs) — a parallel goal layer
-  absent from champion rooms; competes for attention with the choice + champion + momentum. **Cut,
-  simplify, or keep?**
-- ❓ **Momentum scope** — resets **per room** (intra-room snowball); a long continuable score-run might
-  want it to **build/persist**. **Per-room (current) or build across the run?**
+- 🔴 **Rare-odds → depth-based curve.** Replace `_get_current_rare_chance()` (`CoopManager` ~2294,
+  hardcoded on the deleted `is_endless_mode()` + binary act) with odds that **rise continuously with
+  `depth`** (exact curve in playtest tuning).
+- ⚠️ **Enemy pool → one depth-based curve.** Drop `_build_enemy_pool` (act); use a single depth-scaled
+  pool for all rooms.
+- 🟢 **"Acts" → generalized fully to depth.** Drop the `current_act` concept entirely; **arena color,
+  rare odds, and enemy pool all scale continuously with `depth`** (no binary act, no freeze at "act 2").
+  Removes `current_act` / `get_current_act` / `set_current_act` and reworks `_apply_arena_color_for_act`
+  into a depth-based color (gradient/curve).
 
 **Notes for the re-tune / future (not blocking):**
 
