@@ -6,6 +6,10 @@
 >
 > **Phases 1–3 are detailed and Codex-ready below; Phase 4 (enemy re-tune) is deliberately deferred to
 > a tuning pass after the rest is built and playable.**
+>
+> **Branch / workflow:** this rework is implemented on the **`v3/structure-rework`** branch. **`v3/main`
+> stays frozen as the current stable game** (Round 14 + fixes) — no rework code lands on it. The two
+> rejoin only via an explicit merge once the rework is validated.
 
 ## Decision summary
 
