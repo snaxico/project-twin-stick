@@ -3,6 +3,11 @@
 > Status: **design locked, not implemented.** Sits on top of the implemented structure rework
 > (`v3/structure-rework`, commit `1a3d840`). A "patch" on the next-room choice that today is a plain
 > text-dump button with no risk/reward.
+>
+> **This is now Phase 0 of the merged `replayability-patch-plan.md` ("Choices & Builds").** The
+> **rare-odds nudge below is reconciled with the build-depth Signature tier** in that doc's *Rarity &
+> reward economy* section — treat that as the source of truth for the rare roll; the formulas here are
+> the Phase-0 mechanic/UI detail.
 
 ## Goal
 

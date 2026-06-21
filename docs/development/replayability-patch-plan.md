@@ -1,8 +1,12 @@
-# Replayability Patch — vision & roadmap
+# Choices & Builds Patch — vision & roadmap
 
 > Status: **vision drafting (guided Q&A in progress).** Sits on top of the implemented structure rework
-> (`v3/structure-rework`). This is the "what makes it replayable" patch — a phased roadmap, not a single
-> commit.
+> (`v3/structure-rework`). The "what makes it replayable" patch — a phased roadmap, not a single commit.
+>
+> **Absorbs the next-room-choice patch** (now **Phase 0**) — the two share one rarity/reward economy
+> (room rare-nudge ↔ Signature-tier roll), so they're designed together here. The theme that unifies
+> them: **make the player's choices matter** — *which room* (Phase 0) and *which upgrade* (Phase A).
+> `next-room-choice-plan.md` stays as the detailed Phase-0 spec; this doc owns the shared economy.
 
 ## The problem (diagnosis)
 
@@ -29,7 +33,14 @@ identity, with Momentum/Flow staying a supporting buff (no full score/heat econo
 
 ## Phased roadmap
 
-Build order matters: the replay *hook* first, the reason-to-*return* second, the *skin* last.
+Build order: the small choice-UI win first, then the replay *hook*, then the reason-to-*return*, the
+*skin* last.
+
+### Phase 0 — Next-room choice *(small, ships first)*
+The *which-room* decision: the styled 2-card UI (trait label, danger pips, real modifier names),
+danger-score + dominant-trait derivation, and the **room rare-odds nudge** on the spicier option.
+Full detail in **`next-room-choice-plan.md`**; its rare-nudge is reconciled with Phase A's Signature
+tier in *Rarity & reward economy* below. Mostly ready — needs one card-UI tightening pass.
 
 ### Phase A — Build depth via tag synergies *(the hook — biggest piece)*
 
@@ -90,6 +101,21 @@ upgrades → `tag_power`, scale tagged effect magnitudes by it.
 - Build was already parameterized for a later re-skin.
 - *Detail later.*
 
+## Rarity & reward economy (shared — the reason to merge)
+
+Phase 0 and Phase A touch the *same* rare roll, so define it once:
+
+- **Rare chance** = depth curve (`lerpf(0.20, 0.45, …)`) **+ the Phase-0 room `rare_bonus`** (spicier
+  option), clamped ≤ ~`0.60`. (Today `_get_current_rare_chance()` is just the depth curve.)
+- **When a rare is rolled**, it draws from a pool of **{current rares} + {Signature tier}**. The
+  Signature share is **weighted and rises with depth** (e.g. 0% shallow → a meaningful share deep), so
+  build-defining cards show up more as a run matures — and the room nudge makes them show up *sooner*
+  if you take the spicy room. That's the payoff that ties the two patches together.
+- **Parasites** (Phase A) sit in the Signature pool but should be offered as a *choice you can decline*
+  (e.g. they appear alongside non-parasite options, never forced).
+- Tuning lever: Signature-share curve, the `rare_bonus` size, and the rare-chance cap are one balance
+  problem now, not two.
+
 ## Open questions (to resolve via guided Q&A)
 
 - **Phase A — SHAPE DECIDED** (tag synergies · Signature tier · mixed parasites · count-scaling ·
@@ -102,6 +128,7 @@ upgrades → `tag_power`, scale tagged effect magnitudes by it.
 
 ## Relationship to other plans
 
-- **`next-room-choice-plan.md`** (rarity nudge / card UI) is independent and can ship before or alongside.
+- **`next-room-choice-plan.md`** is now **Phase 0 of this patch** (merged), not independent. It stays as
+  the detailed Phase-0 spec; this doc owns the shared rarity economy.
 - This supersedes the parked Part-C "arcade layer" for now (flow stays light, per decision).
 - Rubberhose art = the long-committed restyle, now slotted as Phase C.
