@@ -4,10 +4,10 @@
 > structure rework (`v3/structure-rework`). The "what makes it replayable" patch — a phased roadmap, not
 > a single commit. (Phase C is scaffolding-only — art assets are a human/art task, not Codex-buildable.)
 >
-> **Absorbs the next-room-choice patch** (now **Phase 0**) — the two share one rarity/reward economy
-> (room rare-nudge ↔ Signature-tier roll), so they're designed together here. The theme that unifies
-> them: **make the player's choices matter** — *which room* (Phase 0) and *which upgrade* (Phase A).
-> `next-room-choice-plan.md` stays as the detailed Phase-0 spec; this doc owns the shared economy.
+> **Includes the next-room-choice work as Phase 0** — it shares one rarity/reward economy with the
+> build-depth Signature tier (room rare-nudge ↔ Signature roll), so it's designed here. The theme that
+> unifies the whole patch: **make the player's choices matter** — *which room* (Phase 0) and *which
+> upgrade* (Phase A).
 
 ## The problem (diagnosis)
 
@@ -39,9 +39,9 @@ Build order: the small choice-UI win first, then the replay *hook*, then the rea
 
 ### Phase 0 — Next-room choice *(small, ships first)*
 The *which-room* decision: the styled 2-card UI (trait label, danger pips, real modifier names),
-danger-score + dominant-trait derivation, and the **room rare-odds nudge** on the spicier option.
-Full detail in **`next-room-choice-plan.md`**; its rare-nudge is reconciled with Phase A's Signature
-tier in *Rarity & reward economy* below. Mostly ready — needs one card-UI tightening pass.
+danger-score + dominant-trait derivation, and the **room rare-odds nudge** on the spicier option (its
+nudge is reconciled with Phase A's Signature tier in *Rarity & reward economy* below). Full Codex-ready
+detail in *Phase 0 — Next-room choice* under *Codex-ready specs*.
 
 ### Phase A — Build depth via tag synergies *(the hook — biggest piece)*
 
@@ -155,8 +155,40 @@ bounded hand-offs. Every slice: `git diff --check` + headless parse/boot; symbol
 runtime paths only.
 
 ### Phase 0 — Next-room choice
-Detailed in **`next-room-choice-plan.md`** (data side ~ready; card-UI tightened there). Its `rare_bonus`
-obeys *Rarity & reward economy* above.
+
+Turn the placeholder 2-room choice (random-differ, same reward, text button) into a readable pick with a
+light push-your-luck layer + a styled card. **Modifier-led, flavor / near-equal reward, fully shown**:
+the two options are different *kinds* of fight; the spicier one carries the small rare-odds nudge from
+*Rarity & reward economy* above. No new room/enemy content; champion steps unchanged.
+
+**Mechanics** (all in `RunState._build_choice_step` / `_build_run_node` + a per-room field CoopManager reads):
+- **Danger score → pips:** `danger_score = minor_mods*1 + major_mods*2 + clampi(enemy_pool.size()-2,0,2)`;
+  pips = 1 (≤1) / 2 (≤3) / 3. Store `danger_score`, `danger_pips`.
+- **Dominant-trait label + icon** (first match, majors first): `fire_floor`→Hazard zone/flame ·
+  `ice_zone`→Frost field/snow · `mine_field`→Scanlines/scan · `shrinking_arena`→Closing walls/shrink ·
+  `swarm`→Swarm · `shielded`→Fortified/shield · `enemy_speed`→Frenzied/bolt ·
+  `accelerating_waves`→Escalating/rising · `explosive_death`→Volatile/bomb · none→Open room. Store
+  `trait_label`, `trait_icon`. Presentation only.
+- **Rare-odds nudge:** the higher-`danger_score` option gets `rare_bonus = RARE_NUDGE` (≈0.06), the
+  other 0.0 — the *only* reward difference. CoopManager reads it per the economy section
+  (`_get_current_rare_chance() += _room_rare_bonus`, clamped).
+- **Differ guarantee:** if both options' `trait_label` match, re-roll option b's modifiers (≤4 tries)
+  until traits differ; keep `_ensure_route_options_differ` as the signature backstop.
+
+**Card UI (`RunFlow._build_route_card` rewrite):** a `Button` (focus/controller nav) + child VBox
+(`mouse_filter=IGNORE`), `custom_minimum_size (252,196)`, `StyleBoxFlat` dark neon bg, 1px accent border
+(**2px brighter when `rare_bonus>0`**). Rows: (1) trait icon + `trait_label` · danger pips (filled dots);
+(2) `HFlowContainer` modifier chips with **real names** (`modifier_id→display_name` from `modifiers.json`,
+replacing `_modifier_abbreviation`); (3) Enemies / Objective; (4) "Rare odds NN%" + a `+N%` marker when
+nudged. Existing HUD neon colors, no new theme.
+
+**Slices:** 0a = RunState data (danger/trait/nudge + differ) + CoopManager rare-bonus read
+[headless-testable] · 0b = the styled card. **Touch:** `RunState` (`_build_choice_step`/`_build_run_node`,
+`_danger_score_for`/`_trait_for`, `RARE_NUDGE`), `CoopManager` (`_room_rare_bonus` in `_start_room` +
+`_get_current_rare_chance`), `RunFlow` (`_build_route_card` + `modifier→name/icon` maps; drop
+`_modifier_abbreviation`/`_build_modifier_badge_text`). **Accept:** headless walk asserts both options
+differ in `trait_label`, `danger_pips∈1..3`, exactly one `rare_bonus>0` (unless tie) on the higher-danger
+node; manual = cards read as different fights with real modifier names and the `+N%` marker.
 
 ### Phase A — Build depth (tag synergies)
 
@@ -229,7 +261,6 @@ that's an artist task. What an agent *can* do is the **re-skin scaffolding**:
 
 ## Relationship to other plans
 
-- **`next-room-choice-plan.md`** is now **Phase 0 of this patch** (merged), not independent. It stays as
-  the detailed Phase-0 spec; this doc owns the shared rarity economy.
+- The former `next-room-choice-plan.md` is now **fully folded in as Phase 0** of this single doc.
 - This supersedes the parked Part-C "arcade layer" for now (flow stays light, per decision).
 - Rubberhose art = the long-committed restyle, now slotted as Phase C.
