@@ -44,7 +44,7 @@ const REVIVE_RADIUS := 150.0
 const REVIVE_HOLD_DURATION := 1.2
 const MAX_ACTIVE_PROJECTILES := 180
 const HUD_REFRESH_INTERVAL := 0.08
-const BOSS_SPAWN_DELAY := 25.0
+const CHAMPION_SPAWN_DELAY := 10.0
 const BOSS_HIT_FEEDBACK_INTERVAL := 0.22
 const COLLECTOR_TARGET := 8
 const COLLECTOR_TOTAL_SPAWN := 12
@@ -55,9 +55,6 @@ const ENEMY_SEPARATION_CELL_SIZE := 96.0
 const MOMENTUM_THRESHOLDS := [10, 25, 45, 70]
 const MOMENTUM_MOVE_BONUSES := [0.0, 0.10, 0.20, 0.35, 0.50]
 const MOMENTUM_FIRE_RATE_BONUSES := [0.0, 0.15, 0.30, 0.50, 0.75]
-const BOSS_ADD_CAP := 25
-const BOSS_ADD_WAVE_MIN := 4
-const BOSS_ADD_WAVE_MAX := 5
 const HUD_HEALTH_COLOR := Color(0.24, 0.92, 0.34, 1.0)
 const HUD_SLOT_2_COLOR := HudPaletteData.SLOT_2_COLOR
 const ENEMY_PROJECTILE_COLOR := Color(1.0, 0.0, 0.0, 1.0)
@@ -84,13 +81,13 @@ const DEBUG_ENEMY_SPAWN_CATALOG := [
 	{"label": "Splitter", "value": "splitter"},
 	{"label": "Splitter Mini", "value": "splitter_mini"},
 	{"label": "Bomber", "value": "bomber"},
-	{"label": "Elite Charger", "value": "elite_charger"},
-	{"label": "Elite Spitter", "value": "elite_spitter"},
-	{"label": "Elite Support", "value": "elite_support"},
-	{"label": "Boss Warden", "value": "boss_warden"},
-	{"label": "Boss Hydra", "value": "boss_hydra"},
-	{"label": "Boss Hive", "value": "boss_hive"},
-	{"label": "Boss Pulsar", "value": "boss_pulsar"},
+	{"label": "Champion Charger", "value": "elite_charger"},
+	{"label": "Champion Spitter", "value": "elite_spitter"},
+	{"label": "Champion Support", "value": "elite_support"},
+	{"label": "Champion Warden", "value": "boss_warden"},
+	{"label": "Champion Hydra", "value": "boss_hydra"},
+	{"label": "Champion Hive", "value": "boss_hive"},
+	{"label": "Champion Pulsar", "value": "boss_pulsar"},
 ]
 
 const XP_PER_ENEMY_TYPE := {
@@ -162,12 +159,9 @@ var _spawning_done := false
 var _burst_interval := 10.0
 var _next_burst_at := 0.0
 var _pending_pick_consumes_levelup := false
-var _pending_elite_bonus_pick := false
+var _pending_champion_bonus_pick := false
 var _pending_clear_summary := ""
 var _active_boss = null
-var _active_elite = null
-var _next_elite_add_spawn_at := 0.0
-var _next_boss_add_spawn_at := 0.0
 var _next_boss_hit_feedback_at := 0.0
 var _revive_progress_by_player_id: Dictionary = {}
 var _hud_root: Control = null
@@ -180,14 +174,12 @@ var _room_label: Label = null
 var _xp_label: Label = null
 var _xp_fill: ColorRect = null
 var _modifier_hud: VBoxContainer = null
-var _score_label: Label = null
 var _objective_panel: PanelContainer = null
 var _objective_icon_label: Label = null
 var _objective_title_label: Label = null
 var _objective_progress_label: Label = null
 var _objective_progress_bar: ProgressBar = null
 var _boss_health_bar = null
-var _boss_phase_label: Label = null
 var _mutation_pick_ui = null
 var _active_modifiers: Array = []
 var _modifier_definitions: Dictionary = {}
@@ -359,14 +351,6 @@ func _build_hud() -> void:
 	_boss_health_bar.configure("Boss", Color(1.0, 0.22, 0.14, 0.95))
 	_boss_health_bar.visible = false
 	_hud_root.add_child(_boss_health_bar)
-	_boss_phase_label = Label.new()
-	_boss_phase_label.position = Vector2(700.0, 132.0)
-	_boss_phase_label.size = Vector2(520.0, 22.0)
-	_boss_phase_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_boss_phase_label.add_theme_font_size_override("font_size", 13)
-	_boss_phase_label.add_theme_color_override("font_color", Color(1.0, 0.72, 0.54, 0.92))
-	_boss_phase_label.visible = false
-	_hud_root.add_child(_boss_phase_label)
 	_objective_label = Label.new()
 	_objective_label.position = Vector2(24.0, 24.0)
 	_objective_label.size = Vector2(520.0, 54.0)
@@ -375,13 +359,6 @@ func _build_hud() -> void:
 	_objective_label.visible = false
 	_hud_root.add_child(_objective_label)
 	_build_objective_panel()
-
-	_score_label = Label.new()
-	_score_label.position = Vector2(1520.0, 24.0)
-	_score_label.size = Vector2(360.0, 28.0)
-	_score_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	_score_label.add_theme_font_size_override("font_size", 16)
-	_hud_root.add_child(_score_label)
 
 	_modifier_hud = VBoxContainer.new()
 	_modifier_hud.position = Vector2(1520.0, 60.0)
@@ -780,18 +757,20 @@ func _rebuild_player_loadouts() -> void:
 		if index < _momentum_tier_by_player.size():
 			_apply_momentum_to_player(index)
 
-func _reset_momentum() -> void:
+func _restore_momentum() -> void:
 	_momentum_progress_by_player.clear()
 	_momentum_tier_by_player.clear()
 	for index in range(_player_nodes.size()):
-		_momentum_progress_by_player.append(0)
-		_momentum_tier_by_player.append(0)
+		var state := RunState.get_momentum_state(index)
+		_momentum_progress_by_player.append(int(state.get("progress", 0)))
+		_momentum_tier_by_player.append(int(state.get("tier", 0)))
 		_apply_momentum_to_player(index)
 
 func _gain_shared_momentum() -> void:
 	for index in range(_player_nodes.size()):
 		_momentum_progress_by_player[index] = int(_momentum_progress_by_player[index]) + 1
 		_update_momentum_tier(index)
+		_store_momentum(index)
 
 func _drop_player_momentum(player_index: int) -> void:
 	if player_index < 0 or player_index >= _momentum_tier_by_player.size():
@@ -800,6 +779,7 @@ func _drop_player_momentum(player_index: int) -> void:
 	_momentum_tier_by_player[player_index] = new_tier
 	_momentum_progress_by_player[player_index] = _get_min_progress_for_momentum_tier(new_tier)
 	_apply_momentum_to_player(player_index)
+	_store_momentum(player_index)
 
 func _update_momentum_tier(player_index: int) -> void:
 	if player_index < 0 or player_index >= _momentum_progress_by_player.size():
@@ -811,6 +791,11 @@ func _update_momentum_tier(player_index: int) -> void:
 			tier = threshold_index + 1
 	_momentum_tier_by_player[player_index] = tier
 	_apply_momentum_to_player(player_index)
+
+func _store_momentum(player_index: int) -> void:
+	if player_index < 0 or player_index >= _momentum_tier_by_player.size() or player_index >= _momentum_progress_by_player.size():
+		return
+	RunState.set_momentum_state(player_index, int(_momentum_tier_by_player[player_index]), int(_momentum_progress_by_player[player_index]))
 
 func _apply_momentum_to_player(player_index: int) -> void:
 	if player_index < 0 or player_index >= _player_nodes.size():
@@ -927,8 +912,8 @@ func _add_arena_wall_visuals() -> void:
 		wall_line.points = segment
 		floor_grid.add_child(wall_line)
 
-func _apply_arena_color_for_act(act: int) -> void:
-	var hue := 0.55 if act <= 1 else 0.03
+func _apply_arena_color() -> void:
+	var hue := 0.55
 	var minor := Color.from_hsv(hue, 0.42, 0.92, 0.18)
 	var major := Color.from_hsv(hue, 0.58, 1.0, 0.34)
 	var wall := Color.from_hsv(hue, 0.62, 1.0, 0.68)
@@ -957,16 +942,13 @@ func _start_room() -> void:
 	_prewarm_combat_vfx()
 	_set_game_paused(false)
 	_rebuild_player_loadouts()
-	_reset_momentum()
+	_restore_momentum()
 	_room_clear_started = false
 	_awaiting_mutation_pick = false
 	_pending_pick_consumes_levelup = false
-	_pending_elite_bonus_pick = false
+	_pending_champion_bonus_pick = false
 	_active_boss = null
-	_active_elite = null
 	_boss_spawned = false
-	_next_elite_add_spawn_at = 0.0
-	_next_boss_add_spawn_at = 0.0
 	_next_boss_hit_feedback_at = 0.0
 	_room_elapsed = 0.0
 	_room_type = str(_room_config.get("room_type", "combat"))
@@ -980,7 +962,7 @@ func _start_room() -> void:
 	_enemies_killed = 0
 	_pending_enemy_spawns = 0
 	_spawning_done = false
-	_burst_interval = lerpf(11.0, 7.0, RunState.get_run_progress())
+	_burst_interval = _get_burst_interval()
 	_next_burst_at = _burst_interval
 	_side_objective_id = str(_room_config.get("side_objective", ""))
 	_side_objective_completed = false
@@ -988,8 +970,7 @@ func _start_room() -> void:
 	_collector_collected = 0
 	_collector_spawned = 0
 	_collector_spawn_timer = COLLECTOR_SPAWN_INTERVAL
-	RunState.set_current_act(int(_room_config.get("act", 1)))
-	_apply_arena_color_for_act(RunState.get_current_act())
+	_apply_arena_color()
 	if _temp_buff_system != null:
 		_temp_buff_system.clear_all_buffs(_player_nodes)
 	_temp_buff_system = TempBuffSystemData.new()
@@ -1005,8 +986,6 @@ func _start_room() -> void:
 		player.global_position = _get_player_spawn_position(int(player.player_index))
 	_setup_side_objective()
 	_apply_active_modifiers()
-	if _room_type == "elite":
-		_spawn_elite_miniboss()
 	_spawn_opening_burst()
 	_refresh_hud()
 
@@ -1174,7 +1153,6 @@ func _physics_process(delta: float) -> void:
 	_update_scheduled_enemy_hazards()
 	_update_scheduled_pulsar_emps()
 	_update_homing_projectiles(delta)
-	_update_elite_add_waves()
 	_update_side_objectives(delta)
 	_update_hazards(delta)
 	_update_revives(delta)
@@ -1218,91 +1196,22 @@ func _update_hazards(delta: float) -> void:
 			hazard.update_zone(delta, _player_nodes)
 	_cleanup_helpers()
 
-func _update_elite_add_waves() -> void:
-	if _room_type != "elite" or _room_clear_started:
-		return
-	if _active_elite == null or not is_instance_valid(_active_elite) or not _active_elite.has_method("is_alive") or not _active_elite.is_alive():
-		return
-	if _room_elapsed < _next_elite_add_spawn_at:
-		return
-	_next_elite_add_spawn_at = _room_elapsed + randf_range(6.0, 8.0)
-	var count := _scale_spawn_count(randi_range(2, 3))
-	var start_edge := randi() % 4
-	var health_multiplier := 0.5 if bool(_minor_modifier_flags["swarm"]) else 1.0
-	for index in range(count):
-		var enemy_type := _roll_wave_enemy_type(_room_enemy_pool)
-		var spawn_position := _get_enemy_spawn_position_for_index(index, start_edge)
-		_queue_enemy_spawn(enemy_type, spawn_position, health_multiplier)
-		_enemies_spawned += 1
-
-func _update_boss_add_waves() -> void:
-	if _room_type != "boss" or _room_clear_started:
-		return
-	if _active_boss == null or not is_instance_valid(_active_boss) or not _active_boss.has_method("is_alive") or not _active_boss.is_alive():
-		return
-	if _room_elapsed < _next_boss_add_spawn_at:
-		return
-	var remaining_budget := _get_boss_add_budget_remaining()
-	if remaining_budget <= 0:
-		_next_boss_add_spawn_at = _room_elapsed + 1.0
-		return
-	var boss_type := str(_room_config.get("boss_type", "warden"))
-	if boss_type == "hive":
-		_next_boss_add_spawn_at = _room_elapsed + randf_range(5.0, 6.0)
-		return
-	var count := mini(_scale_spawn_count(randi_range(BOSS_ADD_WAVE_MIN, BOSS_ADD_WAVE_MAX)), remaining_budget)
-	var enemy_type := _get_boss_add_enemy_type(boss_type)
-	var start_edge := randi() % 4
-	var health_multiplier := 0.5 if bool(_minor_modifier_flags["swarm"]) else 1.0
-	for index in range(count):
-		var spawn_position := _get_enemy_spawn_position_for_index(index, start_edge)
-		if _queue_boss_budgeted_enemy_spawn(enemy_type, spawn_position, health_multiplier):
-			_enemies_spawned += 1
-	_next_boss_add_spawn_at = _room_elapsed + randf_range(5.0, 6.0)
-
-func _get_boss_add_enemy_type(boss_type: String) -> String:
-	match boss_type:
-		"warden":
-			return "charger"
-		"hydra":
-			return "splitter"
-		"pulsar":
-			return "spitter"
-		_:
-			return "chaser"
-
-func _get_boss_add_budget_remaining() -> int:
-	if _room_type != "boss":
-		return 999999
-	var live_non_boss := 0
-	for enemy in _enemy_nodes:
-		if enemy == null or not is_instance_valid(enemy) or not enemy.has_method("is_alive") or not enemy.is_alive():
-			continue
-		if enemy.has_method("get_type_name") and str(enemy.get_type_name()).begins_with("boss_"):
-			continue
-		live_non_boss += 1
-	return maxi(_get_boss_add_cap() - live_non_boss - _pending_enemy_spawns, 0)
-
 func _check_wave_progress() -> void:
 	if _room_clear_started:
 		return
-	if _room_type == "boss":
-		if not _boss_spawned and _room_elapsed >= _get_boss_spawn_delay():
-			_spawn_boss()
-		if not _spawning_done:
-			_continuous_spawn()
-		if _boss_spawned and (_active_boss == null or not is_instance_valid(_active_boss)):
-			_clear_remaining_boss_room_adds()
-			_spawning_done = true
-			_handle_room_clear()
-		return
+	if _room_type == "boss" and not _boss_spawned and _room_elapsed >= _get_champion_spawn_delay():
+		_spawn_boss()
 	if not _spawning_done:
 		_continuous_spawn()
+	# Defensive: a champion room must spawn its champion before it can clear, even if future
+	# tuning ever made the spawn delay exceed the room duration (otherwise it could soft-lock).
+	if _room_type == "boss" and not _boss_spawned and _spawning_done:
+		_spawn_boss()
 	if _spawning_done and _enemy_nodes.is_empty() and _pending_enemy_spawns <= 0:
 		_handle_room_clear()
 
 func _continuous_spawn() -> void:
-	if _room_type != "boss" and _room_elapsed >= _room_duration:
+	if _room_elapsed >= _room_duration:
 		_spawning_done = true
 		return
 	var health_multiplier := 0.5 if bool(_minor_modifier_flags["swarm"]) else 1.0
@@ -1323,7 +1232,7 @@ func _continuous_spawn() -> void:
 			_enemies_spawned += 1
 	if _room_elapsed >= _next_burst_at:
 		_next_burst_at = _room_elapsed + _burst_interval
-		var burst_size := int(round(lerpf(4.0, 9.0, RunState.get_run_progress())))
+		var burst_size := _get_burst_size(false)
 		if bool(_minor_modifier_flags["swarm"]):
 			burst_size *= 2
 		burst_size = _scale_spawn_count(burst_size)
@@ -1335,7 +1244,7 @@ func _continuous_spawn() -> void:
 			_enemies_spawned += 1
 
 func _spawn_opening_burst() -> void:
-	var burst_size := int(round(lerpf(4.0, 9.0, RunState.get_run_progress())))
+	var burst_size := _get_burst_size(true)
 	if bool(_minor_modifier_flags["swarm"]):
 		burst_size *= 2
 	burst_size = _scale_spawn_count(burst_size)
@@ -1378,18 +1287,9 @@ func _consume_scaled_stream_count(base_batch: int) -> int:
 	_spawn_count_accumulator -= float(spawn_count)
 	return maxi(spawn_count, 0)
 
-func _get_boss_add_cap() -> int:
-	return int(round(float(BOSS_ADD_CAP) * _get_enemy_count_multiplier()))
-
 func _queue_enemy_spawn(enemy_type: String, spawn_position: Vector2, health_multiplier: float = 1.0) -> void:
 	_pending_enemy_spawns += 1
 	call_deferred("_spawn_queued_enemy_instance", enemy_type, spawn_position, health_multiplier)
-
-func _queue_boss_budgeted_enemy_spawn(enemy_type: String, spawn_position: Vector2, health_multiplier: float = 1.0) -> bool:
-	if _room_type == "boss" and _get_boss_add_budget_remaining() <= 0:
-		return false
-	_queue_enemy_spawn(enemy_type, spawn_position, health_multiplier)
-	return true
 
 func _spawn_queued_enemy_instance(enemy_type: String, spawn_position: Vector2, health_multiplier: float) -> void:
 	_pending_enemy_spawns = max(_pending_enemy_spawns - 1, 0)
@@ -1397,46 +1297,24 @@ func _spawn_queued_enemy_instance(enemy_type: String, spawn_position: Vector2, h
 		return
 	_spawn_enemy_instance(enemy_type, spawn_position, health_multiplier)
 
-func _spawn_elite_miniboss() -> void:
-	var elite_pool := ["elite_charger", "elite_spitter", "elite_support"]
-	var elite_type := str(elite_pool[randi() % elite_pool.size()])
-	var spawn_position := _get_elite_spawn_position()
-	_active_elite = _spawn_enemy_instance(elite_type, spawn_position)
-	if _active_elite != null and _active_elite.has_method("apply_elite_act_scale"):
-		_active_elite.apply_elite_act_scale(int(_room_config.get("act", 1)))
-	_next_elite_add_spawn_at = _room_elapsed + randf_range(6.0, 8.0)
-	_spawn_elite_entrance_vfx(spawn_position)
-
 func _spawn_boss() -> void:
 	if _boss_spawned or _room_clear_started:
 		return
 	_boss_spawned = true
 	var boss_type := str(_room_config.get("boss_type", "warden"))
-	var full_boss_id := "boss_%s" % boss_type
-	var boss = _spawn_enemy_instance(full_boss_id, ARENA_CENTER, 1.0)
+	var boss = _spawn_enemy_instance(_champion_enemy_id(boss_type), _get_champion_spawn_position(), 1.0)
 	_active_boss = boss
-	if boss != null and boss.has_method("apply_boss_scale"):
-		boss.apply_boss_scale(_player_nodes.size())
-		if int(_room_config.get("act", 1)) >= 2:
-			boss.apply_room_modifier({"health_multiplier": 2.0})
-		if RunState.is_endless_mode():
-			var room_scale := 1.0 + float(max(_room_depth - 1, 0)) * 0.1
-			boss.apply_room_modifier({"health_multiplier": room_scale})
-	if boss != null and boss.has_method("begin_boss_windup"):
-		boss.begin_boss_windup(2.5)
-	_next_boss_add_spawn_at = _room_elapsed + 2.5 + randf_range(0.4, 0.8)
+	if boss != null and boss.has_method("apply_champion_scale"):
+		boss.apply_champion_scale(_room_depth, _player_nodes.size())
 	_spawn_boss_entrance_vfx()
 
-func _clear_remaining_boss_room_adds() -> void:
-	for enemy in _enemy_nodes.duplicate():
-		if enemy == null or not is_instance_valid(enemy):
-			_enemy_nodes.erase(enemy)
-			continue
-		if enemy.has_method("get_type_name") and str(enemy.get_type_name()).begins_with("boss_"):
-			continue
-		_enemy_nodes.erase(enemy)
-		enemy.queue_free()
-	_pending_enemy_spawns = 0
+func _champion_enemy_id(champion_id: String) -> String:
+	if champion_id.begins_with("elite_") or champion_id.begins_with("boss_"):
+		return champion_id
+	return "boss_%s" % champion_id
+
+func _is_champion_enemy_type(enemy_type_name: String) -> bool:
+	return enemy_type_name.begins_with("boss_") or enemy_type_name.begins_with("elite_")
 
 func _roll_wave_enemy_type(pool: Array) -> String:
 	if pool.is_empty():
@@ -1444,21 +1322,40 @@ func _roll_wave_enemy_type(pool: Array) -> String:
 	return str(pool[randi() % pool.size()])
 
 func _get_room_duration() -> float:
-	var base := lerpf(32.0, 45.0, RunState.get_run_progress())
-	if _room_type == "elite":
-		base += 10.0
-	if RunState.is_endless_mode() and _room_depth >= 20:
-		base += 5.0
-	return base
+	var progress := RunState.get_run_progress()
+	var arc_progress := clampf(progress, 0.0, 1.0)
+	var continuation := maxf(progress - 1.0, 0.0)
+	return lerpf(32.0, 43.0, arc_progress) + continuation * 4.0
 
 func _get_spawn_interval() -> float:
-	var base := lerpf(0.80, 0.50, RunState.get_run_progress())
-	if _room_type == "elite":
-		base -= 0.07
-	return maxf(base, 0.30)
+	var progress := RunState.get_run_progress()
+	var arc_progress := clampf(progress, 0.0, 1.0)
+	var continuation := maxf(progress - 1.0, 0.0)
+	var base := lerpf(0.80, 0.50, arc_progress) - continuation * 0.18
+	return maxf(base, 0.34)
 
-func _get_boss_spawn_delay() -> float:
-	return maxf(0.0, float(_room_config.get("boss_spawn_delay", BOSS_SPAWN_DELAY)))
+func _get_champion_spawn_delay() -> float:
+	if _room_config.has("boss_spawn_delay"):
+		return maxf(0.0, float(_room_config.get("boss_spawn_delay", CHAMPION_SPAWN_DELAY)))
+	var continuation_depth := maxi(_room_depth - RunState.RUN_LENGTH, 0)
+	return maxf(7.0, CHAMPION_SPAWN_DELAY - float(continuation_depth) * 0.15)
+
+func _get_burst_interval() -> float:
+	var progress := RunState.get_run_progress()
+	var arc_progress := clampf(progress, 0.0, 1.0)
+	var continuation := maxf(progress - 1.0, 0.0)
+	return maxf(5.0, lerpf(11.0, 7.0, arc_progress) - continuation * 2.0)
+
+func _get_burst_size(is_opening: bool) -> int:
+	var progress := RunState.get_run_progress()
+	var arc_progress := clampf(progress, 0.0, 1.0)
+	var continuation := maxf(progress - 1.0, 0.0)
+	var base := lerpf(4.0, 8.0 if is_opening else 9.0, arc_progress)
+	var continuation_bonus := continuation * (3.0 if is_opening else 5.0)
+	return maxi(1, int(round(base + continuation_bonus)))
+
+func _get_champion_spawn_position() -> Vector2:
+	return ARENA_CENTER + Vector2(randf_range(-180.0, 180.0), randf_range(-120.0, 120.0))
 
 func _handle_room_clear() -> void:
 	if _room_clear_started:
@@ -1474,10 +1371,10 @@ func _show_progression_pick_if_needed() -> void:
 		_pending_pick_consumes_levelup = true
 		_show_mutation_pick(false, "Level Up", "Choose one upgrade.")
 		return
-	if _room_type == "elite" and not _pending_elite_bonus_pick:
-		_pending_elite_bonus_pick = true
+	if _room_type == "boss" and not _pending_champion_bonus_pick:
+		_pending_champion_bonus_pick = true
 		_pending_pick_consumes_levelup = false
-		_show_mutation_pick(true, "Elite Reward", "Guaranteed rare pressure. Choose one upgrade.")
+		_show_mutation_pick(true, "Champion Reward", "Guaranteed rare pressure. Choose one upgrade.")
 		return
 	_finish_room_progression()
 
@@ -1524,13 +1421,13 @@ func _on_mutation_selections_confirmed(selections_per_player: Array) -> void:
 	if _pending_pick_consumes_levelup and RunState.get_pending_levelups() > 0:
 		_show_progression_pick_if_needed()
 		return
-	if _pending_pick_consumes_levelup and _room_type == "elite" and not _pending_elite_bonus_pick:
+	if _pending_pick_consumes_levelup and _room_type == "boss" and not _pending_champion_bonus_pick:
 		_pending_pick_consumes_levelup = false
-		_pending_elite_bonus_pick = true
-		_show_mutation_pick(true, "Elite Reward", "Guaranteed rare pressure. Choose one upgrade.")
+		_pending_champion_bonus_pick = true
+		_show_mutation_pick(true, "Champion Reward", "Guaranteed rare pressure. Choose one upgrade.")
 		return
-	if not _pending_pick_consumes_levelup and _pending_elite_bonus_pick:
-		_pending_elite_bonus_pick = false
+	if not _pending_pick_consumes_levelup and _pending_champion_bonus_pick:
+		_pending_champion_bonus_pick = false
 		_finish_room_progression()
 		return
 	if RunState.get_pending_levelups() > 0:
@@ -1874,33 +1771,21 @@ func _spawn_modifier_activation_vfx(_modifier_id: String, color: Color) -> void:
 
 func _spawn_boss_entrance_vfx() -> void:
 	if _screen_effects_enabled() and screen_shake != null and screen_shake.has_method("add_trauma"):
-		screen_shake.add_trauma(0.55)
-	_request_hit_stop(1.0, 60)
+		screen_shake.add_trauma(0.32)
+	_request_hit_stop(0.65, 42)
 	_play_sfx("play_explosion", [1.35, "boss"])
-	_spawn_screen_flash(Color(0.82, 0.06, 0.04, 0.24), 0.5)
+	_spawn_screen_flash(Color(0.82, 0.06, 0.04, 0.18), 0.32)
 	var ring := ParticleFactoryData.create_explosion_ring(Color(1.0, 0.14, 0.08, 0.78), 260.0, 6.0)
-	ring.global_position = ARENA_CENTER
-	effects.add_child(ring)
-
-func _spawn_elite_entrance_vfx(spawn_position: Vector2) -> void:
-	if _screen_effects_enabled() and screen_shake != null and screen_shake.has_method("add_trauma"):
-		screen_shake.add_trauma(0.22)
-	var ring := ParticleFactoryData.create_explosion_ring(Color(1.0, 0.55, 0.18, 0.76), 190.0, 4.0)
-	ring.global_position = spawn_position
+	ring.global_position = _active_boss.global_position if _active_boss != null and is_instance_valid(_active_boss) and _active_boss is Node2D else ARENA_CENTER
 	effects.add_child(ring)
 
 func _spawn_enemy_death_global_vfx(enemy_type_name: String) -> void:
-	if enemy_type_name.begins_with("boss_"):
+	if _is_champion_enemy_type(enemy_type_name):
 		if _screen_effects_enabled() and screen_shake != null and screen_shake.has_method("add_trauma"):
-			screen_shake.add_trauma(0.6)
-		_request_hit_stop(1.0, 65)
+			screen_shake.add_trauma(0.42)
+		_request_hit_stop(0.85, 52)
 		_play_sfx("play_explosion", [1.45, "boss"])
 		_spawn_screen_flash(Color(1.0, 1.0, 1.0, 0.18), 0.2)
-	elif enemy_type_name.begins_with("elite_"):
-		if _screen_effects_enabled() and screen_shake != null and screen_shake.has_method("add_trauma"):
-			screen_shake.add_trauma(0.25)
-		_request_hit_stop(0.75, 45)
-		_play_sfx("play_enemy_death", [1.2])
 	else:
 		_play_sfx("play_enemy_death", [0.8])
 
@@ -1909,12 +1794,6 @@ func _on_run_level_up(_new_level: int) -> void:
 	if _screen_effects_enabled() and screen_shake != null and screen_shake.has_method("add_trauma"):
 		screen_shake.add_trauma(0.12)
 	_play_sfx("play_level_up", [])
-
-func notify_boss_phase_transition(_boss, _phase_index: int) -> void:
-	_request_hit_stop(0.9, 55)
-	if _screen_effects_enabled() and screen_shake != null and screen_shake.has_method("add_trauma"):
-		screen_shake.add_trauma(0.38)
-	_play_sfx("play_explosion", [1.2, "boss"])
 
 func _request_hit_stop(weight: float, duration_ms: int) -> void:
 	if _hit_stop_manager != null and _hit_stop_manager.has_method("request_hit_stop"):
@@ -2111,43 +1990,41 @@ func _on_enemy_died(enemy) -> void:
 	_gain_shared_momentum()
 	var enemy_type_name := str(enemy.get_type_name())
 	_spawn_enemy_death_global_vfx(enemy_type_name)
-	if enemy_type_name.begins_with("boss_"):
+	if _is_champion_enemy_type(enemy_type_name):
 		RunState.add_xp(0)
 	else:
 		RunState.add_xp(int(XP_PER_ENEMY_TYPE.get(enemy_type_name, 10)))
-	if not enemy_type_name.begins_with("boss_") and randf() < HEALTH_DROP_CHANCE:
+	if not _is_champion_enemy_type(enemy_type_name) and randf() < HEALTH_DROP_CHANCE:
 		call_deferred("_spawn_health_pickup", enemy.global_position)
 	if enemy_type_name == "splitter":
 		for mini_index in range(3):
 			var angle := TAU * float(mini_index) / 3.0
-			_queue_boss_budgeted_enemy_spawn("splitter_mini", enemy.global_position + Vector2.RIGHT.rotated(angle) * 36.0)
+			_queue_enemy_spawn("splitter_mini", enemy.global_position + Vector2.RIGHT.rotated(angle) * 36.0)
 	if _ice_zone_modifier != null and is_instance_valid(_ice_zone_modifier):
 		_ice_zone_modifier.spawn_patch(enemy.global_position)
 	if _side_objective_id == "kill_streak" and not _side_objective_completed:
 		_kill_streak_progress += 1
 		if _kill_streak_progress >= _kill_streak_target:
 			_complete_side_objective()
-	if was_active_boss and _room_type == "boss" and not _room_clear_started:
-		_clear_remaining_boss_room_adds()
-		_spawning_done = true
-		_handle_room_clear()
+	if was_active_boss:
+		_active_boss = null
 
 func _on_enemy_hit_received(_enemy, _damage_amount: int, _lethal: bool) -> void:
 	if _enemy == null or not is_instance_valid(_enemy):
 		return
 	var is_big_hit: bool = _damage_amount >= 90
-	var is_boss_hit: bool = _enemy.has_method("is_boss") and bool(_enemy.is_boss())
+	var is_champion_hit: bool = _enemy.has_method("is_champion") and bool(_enemy.is_champion())
 	var should_play_feedback := is_big_hit
-	if is_boss_hit:
+	if is_champion_hit:
 		var now := _current_time_seconds()
 		if now >= _next_boss_hit_feedback_at:
 			_next_boss_hit_feedback_at = now + BOSS_HIT_FEEDBACK_INTERVAL
 			should_play_feedback = true
 	if should_play_feedback:
 		if _screen_effects_enabled() and screen_shake != null and screen_shake.has_method("add_trauma"):
-			screen_shake.add_trauma(0.08 if not is_boss_hit else 0.10)
+			screen_shake.add_trauma(0.08 if not is_champion_hit else 0.10)
 		if not _lethal:
-			_request_hit_stop(0.45 if not is_boss_hit else 0.55, 35)
+			_request_hit_stop(0.45 if not is_champion_hit else 0.55, 35)
 	_play_sfx("play_impact_profile", [0.85, "hit"])
 
 func _spawn_health_pickup(spawn_position: Vector2) -> void:
@@ -2226,7 +2103,6 @@ func _refresh_hud() -> void:
 	_objective_label.text = _build_side_objective_text()
 	_refresh_objective_panel()
 	_refresh_boss_hud()
-	_score_label.text = "Room %d" % max(_room_depth, RunState.get_current_score() + 1) if RunState.is_endless_mode() else ""
 	_update_player_combat_indicators()
 	_refresh_bottom_hud()
 
@@ -2234,28 +2110,13 @@ func _refresh_boss_hud() -> void:
 	var boss_alive: bool = _active_boss != null and is_instance_valid(_active_boss) and _active_boss.has_method("is_alive") and bool(_active_boss.is_alive())
 	if _boss_health_bar != null:
 		_boss_health_bar.visible = boss_alive
-	if _boss_phase_label != null:
-		_boss_phase_label.visible = boss_alive
 	if not boss_alive:
 		return
 	var current_health := int(round(float(_active_boss.current_health)))
 	var max_health := int(round(float(_active_boss.max_health)))
 	var title := _format_boss_type()
-	_boss_health_bar.configure(title if not title.is_empty() else "Boss", Color(1.0, 0.22, 0.14, 0.95))
+	_boss_health_bar.configure(title if not title.is_empty() else "Champion", Color(1.0, 0.22, 0.14, 0.95))
 	_boss_health_bar.set_health(current_health, max_health)
-	var ratio := clampf(float(current_health) / maxf(float(max_health), 1.0), 0.0, 1.0)
-	var phase_index := 0
-	if ratio <= 0.34:
-		phase_index = 2
-	elif ratio <= 0.67:
-		phase_index = 1
-	_boss_phase_label.text = "Phase %d   %s" % [phase_index + 1, _build_boss_phase_pips(phase_index)]
-
-func _build_boss_phase_pips(phase_index: int) -> String:
-	var pips: Array = []
-	for index in range(3):
-		pips.append("[#]" if index <= phase_index else "[ ]")
-	return " ".join(pips)
 
 func _play_sfx(method_name: String, args: Array) -> void:
 	for node in get_tree().get_nodes_in_group("sfx_engine"):
@@ -2267,21 +2128,19 @@ func _overbright_color(color: Color, multiplier: float) -> Color:
 	return Color(color.r * multiplier, color.g * multiplier, color.b * multiplier, color.a)
 
 func _build_room_status_text() -> String:
-	if RunState.is_endless_mode():
-		return "Endless  |  Room %d  |  %s" % [_room_depth, _format_room_type()]
 	if _room_type == "boss":
-		return "%s  |  %s" % [_format_room_type(), _format_boss_type()]
+		return "Room %d  |  %s  |  %s" % [_room_depth, _format_room_type(), _format_boss_type()]
 	var time_left := maxf(_room_duration - _room_elapsed, 0.0)
 	if _spawning_done:
-		return "%s  |  %d remaining" % [_format_room_type(), _enemy_nodes.size()]
-	return "%s  |  %ds  |  %d alive" % [_format_room_type(), int(ceil(time_left)), _enemy_nodes.size()]
+		return "Room %d  |  %s  |  %d remaining" % [_room_depth, _format_room_type(), _enemy_nodes.size()]
+	return "Room %d  |  %s  |  %ds  |  %d alive" % [_room_depth, _format_room_type(), int(ceil(time_left)), _enemy_nodes.size()]
 
 func _format_room_type() -> String:
 	match _room_type:
 		"elite":
-			return "Elite"
+			return "Champion"
 		"boss":
-			return "Boss"
+			return "Champion"
 		_:
 			return "Combat"
 
@@ -2289,12 +2148,19 @@ func _format_boss_type() -> String:
 	var boss_type := str(_room_config.get("boss_type", ""))
 	if boss_type.is_empty():
 		return ""
-	return boss_type.capitalize()
+	if boss_type.begins_with("boss_"):
+		boss_type = boss_type.trim_prefix("boss_")
+	if boss_type.begins_with("elite_"):
+		boss_type = boss_type.trim_prefix("elite_")
+	var words := boss_type.split("_")
+	var parts: Array = []
+	for word in words:
+		if not word.is_empty():
+			parts.append(word.capitalize())
+	return " ".join(parts)
 
 func _get_current_rare_chance() -> float:
-	if RunState.is_endless_mode():
-		return 0.40
-	return 0.20 if RunState.get_current_act() <= 1 else 0.30
+	return lerpf(0.20, 0.45, clampf(float(_room_depth - 1) / 19.0, 0.0, 1.0))
 
 func _format_objective_text() -> String:
 	if _side_objective_completed:
@@ -2705,10 +2571,10 @@ func spawn_enemy_minions(origin: Vector2, count: int, phase: float, forced_type:
 			enemy_type = "chaser"
 			if phase >= 0.25 and randf() < phase:
 				enemy_type = "charger"
-			if phase >= 0.55 and randf() < phase * 0.7:
-				enemy_type = "spitter"
+		if phase >= 0.55 and randf() < phase * 0.7:
+			enemy_type = "spitter"
 		var angle := TAU * float(index) / float(max(count, 1))
-		_queue_boss_budgeted_enemy_spawn(enemy_type, origin + Vector2.RIGHT.rotated(angle) * 96.0)
+		_queue_enemy_spawn(enemy_type, origin + Vector2.RIGHT.rotated(angle) * 96.0)
 
 func spawn_enemy_minion_mix(origin: Vector2, count: int, types: Array) -> void:
 	if types.is_empty():
@@ -2716,29 +2582,25 @@ func spawn_enemy_minion_mix(origin: Vector2, count: int, types: Array) -> void:
 	for index in range(count):
 		var enemy_type := str(types[index % types.size()])
 		var angle := TAU * float(index) / float(max(count, 1))
-		_queue_boss_budgeted_enemy_spawn(enemy_type, origin + Vector2.RIGHT.rotated(angle) * 112.0)
+		_queue_enemy_spawn(enemy_type, origin + Vector2.RIGHT.rotated(angle) * 112.0)
 
-func spawn_hive_pressure_adds(target_position: Vector2, count: int, phase: float) -> void:
-	var types := ["spitter", "chaser"]
-	if phase >= 0.33:
-		types.append("charger")
-	if phase >= 0.66:
-		types.append("bomber")
-	var spawn_count := clampi(count, 1, 4)
-	for index in range(spawn_count):
-		if _get_boss_add_budget_remaining() <= 0:
-			return
-		var enemy_type := str(types[index % types.size()])
-		var angle := randf_range(0.0, TAU)
-		var distance := randf_range(260.0, 420.0)
-		var spawn_position := (target_position + Vector2.RIGHT.rotated(angle) * distance).clamp(ARENA_RECT.position + Vector2.ONE * 160.0, ARENA_RECT.end - Vector2.ONE * 160.0)
-		_queue_boss_budgeted_enemy_spawn(enemy_type, spawn_position)
+func apply_enemy_support_aura(origin: Vector2, radius: float, speed_mult: float, attack_mult: float, duration: float) -> void:
+	for enemy in get_nearby_enemy_target_nodes(origin, radius):
+		if enemy == null or not is_instance_valid(enemy) or not enemy.has_method("apply_aura"):
+			continue
+		if enemy.has_method("is_champion") and bool(enemy.is_champion()):
+			continue
+		enemy.apply_aura(speed_mult, attack_mult)
+		var aura_target = enemy
+		var timer := get_tree().create_timer(maxf(duration, 0.1))
+		timer.timeout.connect(func() -> void:
+			if aura_target != null and is_instance_valid(aura_target) and aura_target.has_method("clear_aura"):
+				aura_target.clear_aura()
+		)
 
-func spawn_boss_deflector_minions(origin: Vector2, count: int) -> Array:
+func spawn_champion_deflector_minions(origin: Vector2, count: int) -> Array:
 	var shield_nodes: Array = []
 	for index in range(count):
-		if _room_type == "boss" and _get_boss_add_budget_remaining() <= 0:
-			break
 		var angle := TAU * float(index) / float(max(count, 1))
 		var node := _spawn_enemy_instance("splitter_mini", origin + Vector2.RIGHT.rotated(angle) * 150.0, 3.75)
 		if node != null:
@@ -2746,7 +2608,7 @@ func spawn_boss_deflector_minions(origin: Vector2, count: int) -> Array:
 	return shield_nodes
 
 func spawn_hive_shield_minions(origin: Vector2, count: int) -> Array:
-	return spawn_boss_deflector_minions(origin, count)
+	return spawn_champion_deflector_minions(origin, count)
 
 func spawn_pulsar_emp(origin: Vector2, lockout_seconds: float, color: Color) -> void:
 	for player in _player_nodes:
@@ -2790,7 +2652,7 @@ func spawn_enemy_burst(origin: Vector2, count: int, phase: float) -> void:
 		if phase >= 0.66 and index % 4 == 0:
 			enemy_type = "spitter"
 		var angle := TAU * float(index) / float(max(count, 1))
-		_queue_boss_budgeted_enemy_spawn(enemy_type, origin + Vector2.RIGHT.rotated(angle) * 160.0)
+		_queue_enemy_spawn(enemy_type, origin + Vector2.RIGHT.rotated(angle) * 160.0)
 
 func handle_enemy_charge_windup(origin: Vector2) -> void:
 	var ring := ParticleFactoryData.create_impact_ring(Color(1.0, 0.76, 0.48, 0.82), 64.0, 3.0)
@@ -3053,8 +2915,8 @@ func _on_debug_spawn_pressed() -> void:
 	if target != null and is_instance_valid(target):
 		spawn_position = target.global_position + Vector2.RIGHT.rotated(randf_range(0.0, TAU)) * 360.0
 	var spawned := _spawn_enemy_instance(enemy_type, spawn_position)
-	if spawned != null and spawned.has_method("apply_boss_scale") and enemy_type.begins_with("boss_"):
-		spawned.apply_boss_scale(_player_nodes.size())
+	if spawned != null and spawned.has_method("apply_champion_scale") and _is_champion_enemy_type(enemy_type):
+		spawned.apply_champion_scale(_room_depth, _player_nodes.size())
 
 func _on_debug_give_weapon_level_pressed() -> void:
 	RunState.level_up_weapon(0)

@@ -2,12 +2,12 @@ extends Node
 ## Automated, reusable performance runner. NOT part of normal runtime.
 ##
 ## Launch unattended from the command line and read the CSV from stdout:
-##   Godot_v4.6.2-stable_win64_console.exe --path D:\GameDev\Project_Twin_stick -- --profile=boss:pulsar
+##   Godot_v4.6.2-stable_win64_console.exe --path D:\GameDev\Project_Twin_stick -- --profile=champion:pulsar
 ##
 ## Scenarios (the `--profile=` value):
 ##   entity_ramp        -> the isolated 50..200 ramp harness (scenes/dev/ProfilingHarness.tscn)
-##   boss:<id>          -> a REAL single boss room via the debug single-room path (warden|hydra|hive|pulsar)
-##   room:<room_type>   -> a REAL single room (combat|elite|boss) using real CoopManager spawning
+##   champion:<id>      -> a REAL champion-in-wave room via the debug single-room path
+##   room:<room_type>   -> a REAL single room (combat|boss) using real CoopManager spawning
 ##
 ## Real-room scenarios use the actual game systems, so the numbers reflect real load.
 ## RunState.debug_profiling makes players immortal so the fight runs the full window.
@@ -44,14 +44,14 @@ func _run(scenario: String, players: int, build: String) -> void:
 		return
 
 	var room_type := "combat"
-	var boss_type := ""
-	if scenario.begins_with("boss:"):
+	var champion_type := ""
+	if scenario.begins_with("champion:"):
 		room_type = "boss"
-		boss_type = scenario.substr("boss:".length())
+		champion_type = scenario.substr("champion:".length())
 	elif scenario.begins_with("room:"):
 		room_type = scenario.substr("room:".length())
 		if room_type == "boss":
-			boss_type = "warden"
+			champion_type = "warden"
 	else:
 		push_error("PerfRunner: unknown scenario '%s'" % scenario)
 		get_tree().quit(1)
@@ -65,7 +65,6 @@ func _run(scenario: String, players: int, build: String) -> void:
 		configs.append(PlayerConfigData.new(i + 1, "hybrid", tints[i % tints.size()]))
 		abilities.append(["overcharge", "dash"])
 	var options := {
-		"run_mode": "structured",
 		"enabled": true,
 		"launch_mode": "single_room",
 		"room_type": room_type,
@@ -75,7 +74,7 @@ func _run(scenario: String, players: int, build: String) -> void:
 		"player_abilities": abilities,
 	}
 	if room_type == "boss":
-		options["boss_type"] = boss_type
+		options["boss_type"] = champion_type
 		options["boss_spawn_delay"] = 1.0
 	RunState.start_new_run(configs, options)
 

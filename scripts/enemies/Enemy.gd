@@ -72,7 +72,7 @@ var _death_explosion_damage := 0
 var _fuse_active := false
 var _fuse_ends_at := 0.0
 var _hydra_rotation := 0.0
-var _boss_scale := 1.0
+var _champion_scale := 1.0
 var _feedback_color := Color(1.0, 0.26, 0.22, 1.0)
 var _feedback_weight := 1.0
 var _alive := true
@@ -81,12 +81,7 @@ var _base_collision_radius := 19.0
 var _pulsar_teleport_at := 0.0
 var _pulsar_telegraph_until := 0.0
 var _pulsar_emp_at := 0.0
-var _boss_phase_index := 0
 var _elite_charge_slam_pending := false
-var _elite_cd_mult := 1.0
-var _warden_leap_pending := false
-var _warden_leap_land_at := 0.0
-var _warden_leap_target := Vector2.ZERO
 var _warden_charge_slam_pending := false
 var _warden_charge_windup_until := 0.0
 var _profiled_attack_markers: Dictionary = {}
@@ -95,15 +90,8 @@ var _hydra_sweep_windup_until := 0.0
 var _hydra_sweep_started_at := 0.0
 var _hydra_next_sweep_shot_at := 0.0
 var _hydra_sweep_start_angle := 0.0
-var _hydra_radial_burst_at := 0.0
-var _hydra_orb_at := 0.0
-var _hive_burrow_until := 0.0
-var _hive_burrow_pending := false
-var _hive_pressure_at := 0.0
-var _boss_invulnerable_until := 0.0
-var _boss_windup_until := 0.0
-var _boss_deflector_nodes: Array = []
-var _boss_deflector_phase_index := -1
+var _champion_deflector_nodes: Array = []
+var _champion_attack_cooldown_mult := 1.0
 var _target_refresh_frame_offset := 0
 var _target_refresh_interval := 4
 
@@ -134,16 +122,12 @@ func setup(type_name: String, combat_owner: Node) -> void:
 	_hydra_rotation = _random.randf_range(0.0, TAU)
 	_next_trail_at = 0.0
 	_charge_chain_remaining = 0
-	_boss_scale = 1.0
+	_champion_scale = 1.0
 	_pulsar_teleport_at = 0.0
 	_pulsar_telegraph_until = 0.0
 	_pulsar_emp_at = 0.0
-	_boss_phase_index = 0
+	_champion_attack_cooldown_mult = 1.0
 	_elite_charge_slam_pending = false
-	_elite_cd_mult = 1.0
-	_warden_leap_pending = false
-	_warden_leap_land_at = 0.0
-	_warden_leap_target = Vector2.ZERO
 	_warden_charge_slam_pending = false
 	_warden_charge_windup_until = 0.0
 	_hydra_sweep_until = 0.0
@@ -151,15 +135,7 @@ func setup(type_name: String, combat_owner: Node) -> void:
 	_hydra_sweep_started_at = 0.0
 	_hydra_next_sweep_shot_at = 0.0
 	_hydra_sweep_start_angle = 0.0
-	_hydra_radial_burst_at = 0.0
-	_hydra_orb_at = 0.0
-	_hive_burrow_until = 0.0
-	_hive_burrow_pending = false
-	_hive_pressure_at = 0.0
-	_boss_invulnerable_until = 0.0
-	_boss_windup_until = 0.0
-	_boss_deflector_nodes.clear()
-	_boss_deflector_phase_index = -1
+	_champion_deflector_nodes.clear()
 	_target_refresh_frame_offset = int(get_instance_id() % _target_refresh_interval)
 	_configure_type(type_name)
 	current_health = max_health
@@ -323,43 +299,34 @@ func apply_room_modifier(config: Dictionary) -> void:
 	_death_explosion_damage = int(config.get("death_explosion_damage", _death_explosion_damage))
 	_update_visual_state()
 
-func apply_boss_scale(player_count: int) -> void:
-	if not is_boss():
+func apply_champion_scale(room_number: int, player_count: int) -> void:
+	if not is_champion():
 		return
-	_boss_scale = 1.0 + max(player_count - 1, 0) * 0.6
+	var depth := float(max(room_number - 1, 0))
+	var player_scale: float = 1.0 + float(max(player_count - 1, 0)) * 0.45
+	var depth_scale: float = 1.0 + minf(depth, 9.0) * 0.06 + maxf(depth - 9.0, 0.0) * 0.035
+	var damage_scale: float = 1.0 + minf(depth, 30.0) * 0.025
+	var speed_scale: float = 1.0 + minf(depth, 30.0) * 0.006
+	_champion_scale = player_scale * depth_scale
+	_champion_attack_cooldown_mult = clampf(1.0 - minf(depth, 30.0) * 0.01, 0.72, 1.0)
 	if enemy_type == EnemyType.BOSS_WARDEN:
-		max_health = 800.0 * _boss_scale
+		max_health = 560.0 * _champion_scale
 	elif enemy_type == EnemyType.BOSS_HYDRA:
-		max_health = 1000.0 * _boss_scale
+		max_health = 680.0 * _champion_scale
 	elif enemy_type == EnemyType.BOSS_HIVE:
-		max_health = 900.0 * _boss_scale
+		max_health = 640.0 * _champion_scale
 	elif enemy_type == EnemyType.BOSS_PULSAR:
-		max_health = 950.0 * _boss_scale
+		max_health = 650.0 * _champion_scale
+	elif enemy_type == EnemyType.ELITE_CHARGER:
+		max_health = 400.0 * _champion_scale
+	elif enemy_type == EnemyType.ELITE_SPITTER:
+		max_health = 330.0 * _champion_scale
+	elif enemy_type == EnemyType.ELITE_SUPPORT:
+		max_health = 370.0 * _champion_scale
+	contact_damage = maxi(1, int(round(float(contact_damage) * damage_scale)))
+	projectile_damage = maxi(projectile_damage, int(round(float(projectile_damage) * damage_scale)))
+	_base_move_speed *= speed_scale
 	current_health = max_health
-
-func begin_boss_windup(seconds: float) -> void:
-	if not is_boss():
-		return
-	var now := _current_time_seconds()
-	_boss_windup_until = now + maxf(seconds, 0.0)
-	_boss_invulnerable_until = maxf(_boss_invulnerable_until, _boss_windup_until)
-	_next_fire_at = maxf(_next_fire_at, _boss_windup_until + 0.3)
-	_next_ability_at = maxf(_next_ability_at, _boss_windup_until + 0.5)
-	_next_spawn_at = maxf(_next_spawn_at, _boss_windup_until + 0.8)
-	_next_burst_at = maxf(_next_burst_at, _boss_windup_until + 0.8)
-	_spawn_boss_attack_telegraph(220.0)
-
-func apply_elite_act_scale(act: int) -> void:
-	if not get_type_name().begins_with("elite_"):
-		return
-	if act < 2:
-		return
-	max_health *= 1.5
-	current_health = max_health
-	contact_damage = int(contact_damage * 1.3)
-	projectile_damage = int(projectile_damage * 1.3)
-	_elite_cd_mult = 0.75
-	_update_visual_state()
 
 func apply_aura(speed_mult: float, attack_mult: float) -> void:
 	_aura_speed_mult = speed_mult
@@ -374,6 +341,9 @@ func get_team() -> String:
 
 func is_alive() -> bool:
 	return _alive
+
+func is_champion() -> bool:
+	return is_boss() or enemy_type == EnemyType.ELITE_CHARGER or enemy_type == EnemyType.ELITE_SPITTER or enemy_type == EnemyType.ELITE_SUPPORT
 
 func is_boss() -> bool:
 	return enemy_type == EnemyType.BOSS_WARDEN or enemy_type == EnemyType.BOSS_HYDRA or enemy_type == EnemyType.BOSS_HIVE or enemy_type == EnemyType.BOSS_PULSAR
@@ -421,8 +391,8 @@ func get_type_name() -> String:
 func apply_damage(amount: int) -> void:
 	if not _alive or amount <= 0:
 		return
-	_cleanup_boss_deflector_nodes()
-	if is_boss() and (_boss_deflector_nodes.size() > 0 or _current_time_seconds() < _boss_invulnerable_until):
+	_cleanup_champion_deflector_nodes()
+	if is_champion() and _champion_deflector_nodes.size() > 0:
 		_spawn_hit_particles(0.75, true)
 		return
 	if _shield_active:
@@ -442,7 +412,7 @@ func apply_damage(amount: int) -> void:
 func apply_knockback(direction: Vector2, force: float) -> void:
 	if force <= 0.0:
 		return
-	if is_boss():
+	if is_champion():
 		return
 	var normalized := direction.normalized() if direction.length() > 0.0 else Vector2.RIGHT
 	_external_velocity += normalized * force * 0.003
@@ -468,13 +438,7 @@ func _physics_process(delta: float) -> void:
 		return
 	var now := _current_time_seconds()
 	_update_status_effects(now)
-	_update_boss_phase_transition(now)
 	_refresh_target_if_due()
-	if is_boss() and now < _boss_windup_until:
-		velocity = _external_velocity
-		move_and_slide()
-		_update_dynamic_visuals()
-		return
 	var desired_velocity := Vector2.ZERO
 	if _target != null:
 		var offset := _target.global_position - global_position
@@ -508,7 +472,7 @@ func _physics_process(delta: float) -> void:
 	_update_dynamic_visuals()
 
 func _apply_separation() -> Vector2:
-	if is_boss() or _combat_owner == null:
+	if is_champion() or _combat_owner == null:
 		return Vector2.ZERO
 	var enemy_nodes: Array = []
 	if _combat_owner.has_method("get_nearby_enemy_target_nodes"):
@@ -521,7 +485,7 @@ func _apply_separation() -> Vector2:
 	for neighbor in enemy_nodes:
 		if neighbor == self or neighbor == null or not is_instance_valid(neighbor) or not (neighbor is Node2D):
 			continue
-		if neighbor.has_method("is_boss") and neighbor.is_boss():
+		if neighbor.has_method("is_champion") and neighbor.is_champion():
 			continue
 		if neighbor.has_method("is_alive") and not neighbor.is_alive():
 			continue
@@ -544,43 +508,6 @@ func _update_status_effects(now: float) -> void:
 			apply_damage(maxi(1, int(round(_poison_dps * 0.5))))
 		else:
 			_poison_dps = 0.0
-
-func _update_boss_phase_transition(now: float) -> void:
-	if not is_boss():
-		return
-	var next_phase := 0
-	var phase := _get_phase_ratio()
-	if phase >= 0.66:
-		next_phase = 2
-	elif phase >= 0.33:
-		next_phase = 1
-	if next_phase <= _boss_phase_index:
-		return
-	_boss_phase_index = next_phase
-	_next_ability_at = minf(_next_ability_at, now + 0.4)
-	_next_burst_at = minf(_next_burst_at, now + 0.8)
-	_next_spawn_at = minf(_next_spawn_at, now + 1.0)
-	if enemy_type == EnemyType.BOSS_HYDRA and _combat_owner != null and _combat_owner.has_method("spawn_enemy_minion_mix"):
-		_combat_owner.spawn_enemy_minion_mix(global_position, _random.randi_range(4, 6), ["chaser", "splitter"])
-	if enemy_type == EnemyType.BOSS_HIVE:
-		_cleanup_boss_deflector_nodes()
-		if _boss_deflector_nodes.is_empty():
-			_boss_deflector_phase_index = -1
-			_spawn_boss_deflector(4)
-	if _combat_owner != null and _combat_owner.has_method("notify_boss_phase_transition"):
-		_combat_owner.notify_boss_phase_transition(self, _boss_phase_index)
-	_spawn_phase_transition_telegraph()
-
-func _spawn_phase_transition_telegraph() -> void:
-	_spawn_hit_particles(1.35, true)
-	if _combat_owner != null and _combat_owner.has_method("spawn_enemy_shockwave"):
-		_combat_owner.spawn_enemy_shockwave(global_position, 230.0, 0, 760.0, _feedback_color, true)
-	var parent_node := get_parent()
-	if parent_node == null:
-		return
-	var ring := ParticleFactoryData.create_explosion_ring(_feedback_color.lightened(0.2), 180.0 + float(_boss_phase_index) * 55.0, 4.5)
-	ring.global_position = global_position
-	parent_node.add_child(ring)
 
 func _spawn_boss_attack_telegraph(radius: float) -> void:
 	var parent_node := get_parent()
@@ -675,7 +602,7 @@ func _attempt_contact_damage(now: float) -> void:
 			candidate.apply_knockback(knockback_direction, _get_contact_knockback_force())
 		any_hit = true
 	if any_hit:
-		_next_contact_at = now + (0.65 if is_boss() else 0.45)
+		_next_contact_at = now + (0.65 if is_champion() else 0.45)
 
 func _get_contact_range() -> float:
 	if collision_shape == null or not (collision_shape.shape is CircleShape2D):
@@ -692,12 +619,12 @@ func _update_charger_behavior(direction: Vector2, distance: float, now: float) -
 		_elite_charge_slam_pending = false
 		if _combat_owner != null and _combat_owner.has_method("spawn_enemy_shockwave"):
 			_combat_owner.spawn_enemy_shockwave(global_position, 190.0, 12, 620.0, _feedback_color, false)
-	var charge_cooldown := lerpf(1.8, 1.1, phase) if is_elite else lerpf(2.4, 1.35, phase)
+	var charge_cooldown := (lerpf(1.8, 1.1, phase) if is_elite else lerpf(2.4, 1.35, phase)) * ( _champion_attack_cooldown_mult if is_elite else 1.0)
 	var charge_range := 760.0 if is_elite else 440.0
 	if distance <= charge_range and now >= _next_ability_at:
 		_charge_direction = direction
 		_charge_until = now + (0.72 if is_elite else 0.55)
-		_next_ability_at = now + charge_cooldown * (_elite_cd_mult if is_elite else 1.0)
+		_next_ability_at = now + charge_cooldown
 		_elite_charge_slam_pending = is_elite
 		if _combat_owner != null and _combat_owner.has_method("handle_enemy_charge_windup"):
 			_combat_owner.handle_enemy_charge_windup(global_position)
@@ -711,11 +638,11 @@ func _update_spitter_behavior(direction: Vector2, distance: float, now: float) -
 		desired_velocity = direction * _get_effective_move_speed() * 0.8
 	if now >= _next_fire_at and distance > 120.0:
 		var is_elite := enemy_type == EnemyType.ELITE_SPITTER
-		_next_fire_at = now + _get_effective_fire_interval() * (_elite_cd_mult if is_elite else 1.0)
+		_next_fire_at = now + _get_effective_fire_interval()
 		var attack_direction := _get_lead_direction(direction, projectile_speed, 0.35) if enemy_type == EnemyType.ELITE_SPITTER else direction
 		_emit_projectiles_at(attack_direction, 1 if enemy_type == EnemyType.SPITTER else 5, 0.16 if enemy_type == EnemyType.ELITE_SPITTER else 0.0, 0.9 if enemy_type == EnemyType.ELITE_SPITTER else 0.7)
 	if enemy_type == EnemyType.ELITE_SPITTER and now >= _next_ability_at:
-		_next_ability_at = now + 4.0 * _elite_cd_mult
+		_next_ability_at = now + 4.0 * _champion_attack_cooldown_mult
 		if _combat_owner != null and _combat_owner.has_method("spawn_enemy_shockwave"):
 			_combat_owner.spawn_enemy_shockwave(global_position, 180.0, 10, 520.0, _feedback_color, false)
 	return desired_velocity
@@ -733,34 +660,21 @@ func _update_support_behavior(direction: Vector2, _distance: float, now: float) 
 	var perpendicular := direction.orthogonal().normalized()
 	var orbit_bias := perpendicular if int(now * 2.0) % 2 == 0 else -perpendicular
 	if now >= _next_ability_at:
-		_next_ability_at = now + 3.5 * _elite_cd_mult
-		if _combat_owner != null and _combat_owner.has_method("spawn_enemy_minions"):
-			_combat_owner.spawn_enemy_minions(global_position, _random.randi_range(1, 2), 0.0, "splitter_mini")
+		_next_ability_at = now + 3.5 * _champion_attack_cooldown_mult
+		if _combat_owner != null and _combat_owner.has_method("apply_enemy_support_aura"):
+			_combat_owner.apply_enemy_support_aura(global_position, 360.0, 1.18, 1.25, 3.0)
 		if _combat_owner != null and _combat_owner.has_method("spawn_enemy_shockwave"):
 			_combat_owner.spawn_enemy_shockwave(global_position, 210.0, 9, 420.0, _feedback_color, false)
 	return (direction * 0.45 + orbit_bias * 0.55).normalized() * _get_effective_move_speed()
 
 func _update_warden_behavior(direction: Vector2, _distance: float, now: float) -> Vector2:
-	var phase := _get_phase_ratio()
-	if now >= _next_spawn_at:
-		_profile_attack_first_use("warden_minions")
-		_next_spawn_at = now + (7.0 if phase < 0.66 else 5.0)
-		if _combat_owner != null and _combat_owner.has_method("spawn_enemy_minions"):
-			_combat_owner.spawn_enemy_minions(global_position, 1 + _boss_phase_index, phase)
-	if _warden_leap_pending:
-		if now < _warden_leap_land_at:
-			return Vector2.ZERO
-		_warden_leap_pending = false
-		global_position = _warden_leap_target
-		if _combat_owner != null and _combat_owner.has_method("spawn_enemy_shockwave"):
-			_combat_owner.spawn_enemy_shockwave(global_position, 140.0, 20, 620.0, _feedback_color, false)
 	if now < _charge_until:
 		if now < _warden_charge_windup_until:
 			return Vector2.ZERO
 		if _combat_owner != null and _combat_owner.has_method("spawn_enemy_hazard_zone") and now >= _next_trail_at:
 			_next_trail_at = now + 0.08
 			_combat_owner.spawn_enemy_hazard_zone(global_position, 52.0, 2.0, 10, Color(1.0, 0.68, 0.28, 0.28))
-		return _charge_direction * (_get_effective_move_speed() * (3.4 + phase))
+		return _charge_direction * (_get_effective_move_speed() * 3.4)
 	if _warden_charge_slam_pending:
 		_warden_charge_slam_pending = false
 		_profile_attack_first_use("warden_charge_slam")
@@ -775,46 +689,29 @@ func _update_warden_behavior(direction: Vector2, _distance: float, now: float) -
 		_warden_charge_slam_pending = true
 		if _combat_owner != null and _combat_owner.has_method("handle_enemy_charge_windup"):
 			_combat_owner.handle_enemy_charge_windup(global_position)
-		return _charge_direction * (_get_effective_move_speed() * (3.6 + phase))
+		return _charge_direction * (_get_effective_move_speed() * 3.6)
 	if now >= _next_burst_at:
 		_profile_attack_first_use("warden_ground_pound")
-		_next_burst_at = now + lerpf(5.0, 4.0, phase)
+		_next_burst_at = now + 5.0 * _champion_attack_cooldown_mult
 		_spawn_boss_attack_telegraph(220.0)
 		if _combat_owner != null and _combat_owner.has_method("schedule_enemy_shockwave"):
 			_combat_owner.schedule_enemy_shockwave(global_position, 260.0, 15, 700.0, _feedback_color, 0.8, false)
-	if now >= _next_fire_at:
-		_profile_attack_first_use("warden_leap")
-		_next_fire_at = now + lerpf(6.0, 5.0, phase)
-		_warden_leap_pending = true
-		_warden_leap_land_at = now + 0.8
-		_warden_leap_target = _target.global_position if _target != null and is_instance_valid(_target) else global_position + direction * 320.0
-		_spawn_boss_attack_telegraph(140.0)
-		if _combat_owner != null and _combat_owner.has_method("spawn_enemy_hazard_zone"):
-			_combat_owner.spawn_enemy_hazard_zone(_warden_leap_target, 140.0, 0.6, 0, Color(1.0, 0.28, 0.18, 0.28))
-	elif now >= _next_ability_at:
+	if now >= _next_ability_at:
 		_profile_attack_first_use("warden_charge_combo")
 		_charge_direction = direction
 		_warden_charge_windup_until = now + 0.8
 		_charge_until = _warden_charge_windup_until + 0.55
 		_next_trail_at = now
-		_charge_chain_remaining = 2 if _boss_phase_index >= 2 else 1 if _boss_phase_index >= 1 else 0
+		_charge_chain_remaining = 1
 		_warden_charge_slam_pending = true
-		_next_ability_at = now + (2.2 if phase >= 0.5 else 3.1)
+		_next_ability_at = now + 3.1 * _champion_attack_cooldown_mult
 		if _combat_owner != null and _combat_owner.has_method("handle_enemy_charge_windup"):
 			_combat_owner.handle_enemy_charge_windup(global_position)
-	return direction * _get_effective_move_speed() * (1.0 + phase * 0.8)
+	return direction * _get_effective_move_speed()
 
 func _update_hydra_behavior(now: float) -> Vector2:
-	var phase := _get_phase_ratio()
-	var rotation_speed := deg_to_rad(10.0 if phase < 0.25 else 18.0 if phase < 0.5 else 24.0)
-	var rotation_sign := -1.0 if phase >= 0.5 and int(floor(now)) % 4 < 2 else 1.0
-	_hydra_rotation = fmod(_hydra_rotation + rotation_speed * rotation_sign * get_physics_process_delta_time(), TAU)
-	if _hydra_radial_burst_at > 0.0 and now >= _hydra_radial_burst_at:
-		_profile_attack_first_use("hydra_radial_burst")
-		_hydra_radial_burst_at = 0.0
-		for burst_index in range(12):
-			var burst_angle := _hydra_rotation + TAU * float(burst_index) / 12.0
-			_emit_projectile_burst(Vector2.RIGHT.rotated(burst_angle), 1, 0.0, 1.12)
+	var rotation_speed := deg_to_rad(18.0)
+	_hydra_rotation = fmod(_hydra_rotation + rotation_speed * get_physics_process_delta_time(), TAU)
 	if _hydra_sweep_until > now and now >= _hydra_sweep_windup_until:
 		if now >= _hydra_next_sweep_shot_at:
 			_profile_attack_first_use("hydra_sweep")
@@ -824,8 +721,8 @@ func _update_hydra_behavior(now: float) -> Vector2:
 			_emit_projectile_burst(Vector2.RIGHT.rotated(sweep_angle), 5, 0.08, 1.05)
 	if now >= _next_fire_at:
 		_profile_attack_first_use("hydra_arm_fire")
-		_next_fire_at = now + (0.9 if phase < 0.25 else 0.68 if phase < 0.5 else 0.52 if phase < 0.75 else 0.38)
-		var arm_count := 3 if phase < 0.5 else 4
+		_next_fire_at = now + 0.68 * _champion_attack_cooldown_mult
+		var arm_count := 3
 		for arm_index in range(arm_count):
 			var base_angle := _hydra_rotation + TAU * float(arm_index) / float(arm_count)
 			match arm_index:
@@ -833,119 +730,59 @@ func _update_hydra_behavior(now: float) -> Vector2:
 					_emit_projectile_burst(Vector2.RIGHT.rotated(base_angle), 1, 0.0, 1.0)
 				1:
 					_emit_projectile_burst(Vector2.RIGHT.rotated(base_angle), 3, 0.18, 1.0)
-				2:
-					_emit_projectile_burst(Vector2.RIGHT.rotated(base_angle + now * 0.8), 3 if phase >= 0.25 else 1, 0.08, 0.95)
 				_:
-					_emit_projectile_burst(Vector2.RIGHT.rotated(base_angle), 2 if phase >= 0.75 else 1, 0.06, 1.05)
-	if now >= _next_burst_at:
-		_profile_attack_first_use("hydra_radial_telegraph")
-		_next_burst_at = now + (6.0 if phase < 0.75 else 4.0)
-		_spawn_boss_attack_telegraph(240.0)
-		_hydra_radial_burst_at = now + 0.8
-	if now >= _next_ability_at and _combat_owner != null and _combat_owner.has_method("get_player_target_nodes"):
-		_profile_attack_first_use("hydra_aimed_snipes")
-		_next_ability_at = now + lerpf(4.0, 3.0, phase)
-		var shot_count := 2 if phase >= 0.66 else 1
-		for player in _combat_owner.get_player_target_nodes():
-			if player == null or not is_instance_valid(player) or not player.has_method("is_alive") or not player.is_alive():
-				continue
-			var player_direction: Vector2 = (player.global_position - global_position).normalized()
-			_emit_projectile_burst_custom(player_direction, shot_count, 0.04, 1.0, 550.0, projectile_damage)
-	if now >= _hydra_orb_at:
-		_profile_attack_first_use("hydra_homing_orbs")
-		_hydra_orb_at = now + lerpf(8.0, 7.0, phase)
-		if _combat_owner != null and _combat_owner.has_method("spawn_enemy_homing_orbs"):
-			_combat_owner.spawn_enemy_homing_orbs(global_position, 3 if phase >= 0.5 else 2, 120.0, 4.0, projectile_damage, _feedback_color)
+					_emit_projectile_burst(Vector2.RIGHT.rotated(base_angle + now * 0.8), 3, 0.08, 0.95)
 	if _hydra_sweep_until <= now and now >= _next_trail_at:
 		_profile_attack_first_use("hydra_sweep_telegraph")
-		_next_trail_at = now + lerpf(10.0, 8.0, phase)
+		_next_trail_at = now + 8.0 * _champion_attack_cooldown_mult
 		_hydra_sweep_windup_until = now + 0.8
 		_hydra_sweep_started_at = _hydra_sweep_windup_until
 		_hydra_sweep_until = _hydra_sweep_windup_until + 1.5
 		_hydra_next_sweep_shot_at = _hydra_sweep_windup_until
 		_hydra_sweep_start_angle = _hydra_rotation - deg_to_rad(60.0)
 		_spawn_boss_attack_telegraph(280.0)
-	if now >= _next_spawn_at:
-		_profile_attack_first_use("hydra_minions")
-		_next_spawn_at = now + (8.0 if phase < 0.66 else 5.5)
-		if _combat_owner != null and _combat_owner.has_method("spawn_enemy_minions"):
-			_combat_owner.spawn_enemy_minions(global_position, 1 + _boss_phase_index, phase)
 	return Vector2.ZERO
 
 func _update_hive_behavior(direction: Vector2, distance: float, now: float) -> Vector2:
-	var phase := _get_phase_ratio()
-	_update_boss_deflector_positions(now)
-	if _boss_deflector_phase_index < 0:
+	_update_champion_deflector_positions(now)
+	if _champion_deflector_nodes.is_empty():
 		_profile_attack_first_use("hive_deflectors")
-		_spawn_boss_deflector(4)
-	if _hive_burrow_pending:
-		if now < _hive_burrow_until:
-			return Vector2.ZERO
-		_hive_burrow_pending = false
-		_profile_attack_first_use("hive_burrow_relocate")
-		global_position = _find_hive_relocate_position()
-		if _combat_owner != null and _combat_owner.has_method("spawn_enemy_burst"):
-			_combat_owner.spawn_enemy_burst(global_position, 5 + int(phase * 3.0), phase)
+		_spawn_champion_deflectors(4)
 	if distance < 240.0:
 		direction = -direction
-	if _hive_pressure_at <= 0.0:
-		_hive_pressure_at = now + 3.0
-	if now >= _hive_pressure_at:
-		_profile_attack_first_use("hive_pressure_adds")
-		_hive_pressure_at = now + lerpf(4.5, 3.4, phase)
-		if _target != null and is_instance_valid(_target) and _combat_owner != null and _combat_owner.has_method("spawn_hive_pressure_adds"):
-			_combat_owner.spawn_hive_pressure_adds(_target.global_position, 1 + _boss_phase_index, phase)
-	if now >= _next_spawn_at:
-		_profile_attack_first_use("hive_minion_mix")
-		_next_spawn_at = now + lerpf(2.0, 0.8, phase)
-		if _combat_owner != null and _combat_owner.has_method("spawn_enemy_minion_mix"):
-			var types := ["chaser", "splitter"]
-			if phase >= 0.33:
-				types.append("charger")
-			if phase >= 0.66:
-				types.append("bomber")
-			_combat_owner.spawn_enemy_minion_mix(global_position, 1 + int(phase * 2.0), types)
 	if now >= _next_burst_at:
 		_profile_attack_first_use("hive_poison_cloud")
-		_next_burst_at = now + lerpf(6.0, 5.0, phase)
+		_next_burst_at = now + 5.5 * _champion_attack_cooldown_mult
 		_spawn_boss_attack_telegraph(160.0)
 		var poison_origin := _target.global_position if _target != null and is_instance_valid(_target) else global_position
 		if _combat_owner != null and _combat_owner.has_method("spawn_enemy_hazard_zone"):
 			_combat_owner.spawn_enemy_hazard_zone(poison_origin, 160.0, 0.8, 0, Color(0.38, 0.9, 0.24, 0.22))
 		if _combat_owner != null and _combat_owner.has_method("schedule_enemy_hazard_zone"):
 			_combat_owner.schedule_enemy_hazard_zone(poison_origin, 160.0, 4.0, 5, Color(0.38, 0.9, 0.24, 0.32), 0.8)
-	if now >= _next_ability_at:
-		_profile_attack_first_use("hive_burrow_telegraph")
-		_next_ability_at = now + lerpf(12.0, 10.0, phase)
-		_hive_burrow_pending = true
-		_hive_burrow_until = now + 1.0
-		_boss_invulnerable_until = _hive_burrow_until
-		_spawn_boss_attack_telegraph(180.0)
 	return direction * _get_effective_move_speed()
 
-func _spawn_boss_deflector(count: int) -> void:
-	if not is_boss() or _combat_owner == null or not _combat_owner.has_method("spawn_boss_deflector_minions"):
+func _spawn_champion_deflectors(count: int) -> void:
+	if not is_champion() or _combat_owner == null or not _combat_owner.has_method("spawn_champion_deflector_minions"):
 		return
-	_cleanup_boss_deflector_nodes()
-	if not _boss_deflector_nodes.is_empty():
+	_cleanup_champion_deflector_nodes()
+	if not _champion_deflector_nodes.is_empty():
 		return
-	_boss_deflector_nodes = _combat_owner.spawn_boss_deflector_minions(global_position, count)
-	_boss_deflector_phase_index = _boss_phase_index
+	_champion_deflector_nodes = _combat_owner.spawn_champion_deflector_minions(global_position, count)
 
-func _cleanup_boss_deflector_nodes() -> void:
+func _cleanup_champion_deflector_nodes() -> void:
 	var kept: Array = []
-	for node in _boss_deflector_nodes:
+	for node in _champion_deflector_nodes:
 		if node != null and is_instance_valid(node) and node.has_method("is_alive") and node.is_alive():
 			kept.append(node)
-	_boss_deflector_nodes = kept
+	_champion_deflector_nodes = kept
 
-func _update_boss_deflector_positions(now: float) -> void:
-	_cleanup_boss_deflector_nodes()
-	var count := _boss_deflector_nodes.size()
+func _update_champion_deflector_positions(now: float) -> void:
+	_cleanup_champion_deflector_nodes()
+	var count := _champion_deflector_nodes.size()
 	if count <= 0:
 		return
 	for index in range(count):
-		var node = _boss_deflector_nodes[index]
+		var node = _champion_deflector_nodes[index]
 		if node == null or not is_instance_valid(node):
 			continue
 		var angle := now * 1.4 + TAU * float(index) / float(count)
@@ -974,11 +811,10 @@ func _find_hive_relocate_position() -> Vector2:
 	return best_position
 
 func _update_pulsar_behavior(direction: Vector2, _distance: float, now: float) -> Vector2:
-	var phase := _get_phase_ratio()
 	if _pulsar_teleport_at <= 0.0:
-		_pulsar_teleport_at = now + _get_pulsar_teleport_interval(phase)
+		_pulsar_teleport_at = now + _get_pulsar_teleport_interval()
 	if _pulsar_emp_at <= 0.0:
-		_pulsar_emp_at = now + lerpf(15.0, 12.0, phase)
+		_pulsar_emp_at = now + 13.0 * _champion_attack_cooldown_mult
 	if _pulsar_telegraph_until > now:
 		return Vector2.ZERO
 	if _distance <= PULSAR_REACTIVE_TELEPORT_DISTANCE and now + 0.5 < _pulsar_teleport_at:
@@ -988,52 +824,35 @@ func _update_pulsar_behavior(direction: Vector2, _distance: float, now: float) -
 		_start_pulsar_telegraph(now)
 		return Vector2.ZERO
 	if _pulsar_telegraph_until > 0.0 and now >= _pulsar_telegraph_until:
-		_finish_pulsar_teleport(now, phase)
+		_finish_pulsar_teleport(now)
 		return Vector2.ZERO
 	if now >= _pulsar_emp_at:
 		_profile_attack_first_use("pulsar_emp")
-		_pulsar_emp_at = now + lerpf(15.0, 12.0, phase)
+		_pulsar_emp_at = now + 13.0
 		_spawn_boss_attack_telegraph(520.0)
 		if _combat_owner != null and _combat_owner.has_method("schedule_pulsar_emp"):
 			_combat_owner.schedule_pulsar_emp(global_position, 2.0, _feedback_color, 0.8)
 	if now >= _next_ability_at:
 		_profile_attack_first_use("pulsar_shockwave_hazard")
-		_next_ability_at = now + (4.0 if phase < 0.25 else 3.0 if phase < 0.5 else 2.4 if phase < 0.75 else 2.0)
+		_next_ability_at = now + 3.0 * _champion_attack_cooldown_mult
 		_spawn_boss_attack_telegraph(210.0)
 		if _combat_owner != null and _combat_owner.has_method("schedule_enemy_shockwave"):
-			_combat_owner.schedule_enemy_shockwave(global_position, 180.0 + phase * 60.0, 0, 780.0, _feedback_color, 0.8, false)
+			_combat_owner.schedule_enemy_shockwave(global_position, 220.0, 0, 780.0, _feedback_color, 0.8, false)
 		if _combat_owner != null and _combat_owner.has_method("schedule_enemy_hazard_zone"):
-			_combat_owner.schedule_enemy_hazard_zone(global_position, 180.0 + phase * 50.0, 3.0 if phase < 0.5 else 5.0 if phase < 0.75 else 7.0, 5, Color(0.4, 0.84, 1.0, 0.32), 0.8)
+			_combat_owner.schedule_enemy_hazard_zone(global_position, 220.0, 5.0, 5, Color(0.4, 0.84, 1.0, 0.32), 0.8)
 			if _combat_owner.has_method("get_player_target_nodes"):
 				for player in _combat_owner.get_player_target_nodes():
 					if player != null and is_instance_valid(player) and player.has_method("is_alive") and player.is_alive():
 						_combat_owner.schedule_enemy_hazard_zone(player.global_position, 126.0, 2.8, 5, Color(0.52, 0.9, 1.0, 0.22), 0.8)
-	if now >= _next_spawn_at:
-		_profile_attack_first_use("pulsar_minions")
-		_next_spawn_at = now + (7.0 if phase < 0.66 else 4.5)
-		if _combat_owner != null and _combat_owner.has_method("spawn_enemy_minions"):
-			_combat_owner.spawn_enemy_minions(global_position, 1 + _boss_phase_index, phase)
-	if now >= _next_fire_at and _combat_owner != null and _combat_owner.has_method("get_player_target_nodes"):
-		_profile_attack_first_use("pulsar_aimed_fire")
-		_next_fire_at = now + (1.0 if phase < 0.25 else 0.75 if phase < 0.5 else 0.48 if phase < 0.75 else 0.18)
-		for player in _combat_owner.get_player_target_nodes():
-			if player == null or not is_instance_valid(player) or not player.has_method("is_alive") or not player.is_alive():
-				continue
-			var player_direction: Vector2 = (player.global_position - global_position).normalized()
-			if player_direction.length() <= 0.0:
-				player_direction = direction.normalized() if direction.length() > 0.0 else Vector2.RIGHT
-			_emit_projectiles_at(player_direction, 3 if phase < 0.5 else 5 if phase < 0.75 else 7, 0.09, 0.95)
 	return Vector2.ZERO
 
 func _get_contact_knockback_force() -> float:
-	if is_boss():
+	if is_champion():
 		return 500.0
-	if get_type_name().begins_with("elite_"):
-		return 350.0
 	return 200.0
 
-func _get_pulsar_teleport_interval(phase: float) -> float:
-	return lerpf(5.0, 3.5, clampf(phase, 0.0, 1.0))
+func _get_pulsar_teleport_interval() -> float:
+	return 4.5 * _champion_attack_cooldown_mult
 
 func _start_pulsar_telegraph(now: float) -> void:
 	_pulsar_teleport_at = INF
@@ -1047,17 +866,17 @@ func _start_pulsar_telegraph(now: float) -> void:
 	ring.global_position = global_position
 	parent_node.add_child(ring)
 
-func _finish_pulsar_teleport(now: float, phase: float) -> void:
+func _finish_pulsar_teleport(now: float) -> void:
 	_pulsar_telegraph_until = 0.0
 	global_position = _find_pulsar_teleport_position()
 	if _combat_owner != null and _combat_owner.has_method("spawn_enemy_shockwave"):
-		_combat_owner.spawn_enemy_shockwave(global_position, 180.0 + phase * 60.0, 0, 780.0, _feedback_color, false)
+		_combat_owner.spawn_enemy_shockwave(global_position, 220.0, 0, 780.0, _feedback_color, false)
 	var parent_node := get_parent()
 	if parent_node != null:
 		var burst := ParticleFactoryData.create_explosion_burst(_feedback_color, 0.95)
 		burst.global_position = global_position
 		parent_node.add_child(burst)
-	_pulsar_teleport_at = now + _get_pulsar_teleport_interval(phase)
+	_pulsar_teleport_at = now + _get_pulsar_teleport_interval()
 	_next_ability_at = maxf(_next_ability_at, now + 0.45)
 
 func _find_pulsar_teleport_position() -> Vector2:
@@ -1217,16 +1036,16 @@ func _spawn_death_particles() -> void:
 	var parent_node := get_parent()
 	if parent_node == null:
 		return
-	var death_weight := 2.2 if is_boss() else _feedback_weight * 1.25
+	var death_weight := 2.2 if is_champion() else _feedback_weight * 1.25
 	var burst := ParticleFactoryData.create_death_burst(_feedback_color.lightened(0.08), death_weight)
 	burst.global_position = global_position
 	parent_node.add_child(burst)
-	if is_boss() or get_type_name().begins_with("elite_"):
-		var ring_radius := 150.0 if is_boss() else 96.0
+	if is_champion():
+		var ring_radius := 150.0
 		var ring := ParticleFactoryData.create_explosion_ring(_feedback_color, ring_radius, 4.0)
 		ring.global_position = global_position
 		parent_node.add_child(ring)
-		var debris := ParticleFactoryData.create_debris_ring(_feedback_color.lightened(0.18), ring_radius * 0.9, 18 if is_boss() else 12, 0.34 if is_boss() else 0.24)
+		var debris := ParticleFactoryData.create_debris_ring(_feedback_color.lightened(0.18), ring_radius * 0.9, 18, 0.34)
 		debris.global_position = global_position
 		parent_node.add_child(debris)
 	else:
@@ -1240,15 +1059,14 @@ func _update_visual_state() -> void:
 func _refresh_static_visuals() -> void:
 	if visual == null:
 		return
-	var is_elite := get_type_name().begins_with("elite_")
 	var scale_mult := 1.0
 	match enemy_type:
 		EnemyType.SPLITTER_MINI:
 			scale_mult = 0.55
 		EnemyType.BOSS_WARDEN, EnemyType.BOSS_HYDRA, EnemyType.BOSS_HIVE, EnemyType.BOSS_PULSAR:
-			scale_mult = 2.5
+			scale_mult = 2.25
 		EnemyType.ELITE_CHARGER, EnemyType.ELITE_SPITTER, EnemyType.ELITE_SUPPORT:
-			scale_mult = 1.7
+			scale_mult = 1.9
 		EnemyType.BOMBER:
 			scale_mult = 1.2
 		EnemyType.SPLITTER:
@@ -1257,10 +1075,7 @@ func _refresh_static_visuals() -> void:
 	visual.color = _bloom_color(_feedback_color.lightened(0.24)) if _shield_active else _bloom_color(_feedback_color)
 	if collision_shape != null and collision_shape.shape is CircleShape2D:
 		(collision_shape.shape as CircleShape2D).radius = _base_collision_radius * max(0.7, scale_mult)
-	if is_elite:
-		body_root.scale = Vector2.ONE * 1.06
-	else:
-		body_root.scale = Vector2.ONE
+	body_root.scale = Vector2.ONE * (1.08 if is_champion() else 1.0)
 
 func _update_dynamic_visuals() -> void:
 	if visual == null or body_root == null:

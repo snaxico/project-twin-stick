@@ -47,8 +47,6 @@ const MENU_BINDING_ACTIONS := [
 @onready var setup_title_label: Label = $MenuPanel/MarginContainer/MenuScroll/MenuLayout/Title
 @onready var setup_subtitle_label: Label = $MenuPanel/MarginContainer/MenuScroll/MenuLayout/Subtitle
 @onready var player_count_option: OptionButton = $MenuPanel/MarginContainer/MenuScroll/MenuLayout/PlayerCountRow/PlayerCountOption
-@onready var run_mode_row: HBoxContainer = $MenuPanel/MarginContainer/MenuScroll/MenuLayout/RunModeRow
-@onready var run_mode_option: OptionButton = $MenuPanel/MarginContainer/MenuScroll/MenuLayout/RunModeRow/RunModeOption
 @onready var player_1_control_option: OptionButton = $MenuPanel/MarginContainer/MenuScroll/MenuLayout/Player1ControlRow/Player1ControlOption
 @onready var player_2_control_option: OptionButton = $MenuPanel/MarginContainer/MenuScroll/MenuLayout/Player2ControlRow/Player2ControlOption
 @onready var player_3_control_row: HBoxContainer = $MenuPanel/MarginContainer/MenuScroll/MenuLayout/Player3ControlRow
@@ -134,7 +132,6 @@ func _ready() -> void:
 	home_debug_button.pressed.connect(_on_home_debug_button_pressed)
 	_add_home_encyclopedia_button()
 	player_count_option.item_selected.connect(_refresh_menu_state)
-	run_mode_option.item_selected.connect(_refresh_menu_state)
 	debug_room_type_option.item_selected.connect(_refresh_menu_state)
 	debug_room_objective_option.item_selected.connect(_refresh_menu_state)
 	setup_back_button.pressed.connect(_on_setup_back_button_pressed)
@@ -195,10 +192,6 @@ func _populate_menu() -> void:
 	player_count_option.add_item("1 Player")
 	player_count_option.add_item("2 Players")
 	player_count_option.select(0)
-	_populate_profile_option(run_mode_option, [
-		{"label": "Structured", "value": "structured"},
-		{"label": "Endless", "value": "endless"},
-	], "structured")
 	_populate_control_option(player_1_control_option, "gamepad")
 	_populate_player_2_control_option()
 	_populate_profile_option(debug_primary_option, [{"label": "Rifle", "value": "rifle"}], "rifle")
@@ -207,11 +200,13 @@ func _populate_menu() -> void:
 		{"label": "Hydra", "value": "hydra"},
 		{"label": "Hive", "value": "hive"},
 		{"label": "Pulsar", "value": "pulsar"},
+		{"label": "Charger", "value": "elite_charger"},
+		{"label": "Spitter", "value": "elite_spitter"},
+		{"label": "Support", "value": "elite_support"},
 	], "warden")
 	_populate_profile_option(debug_room_type_option, [
 		{"label": "Combat", "value": "combat"},
-		{"label": "Elite", "value": "elite"},
-		{"label": "Boss", "value": "boss"},
+		{"label": "Champion", "value": "boss"},
 	], "combat")
 	_populate_profile_option(debug_room_objective_option, [
 		{"label": "Kill All", "value": "kill_all"},
@@ -280,7 +275,6 @@ func _populate_profile_option(option_button: OptionButton, entries: Array, defau
 func _refresh_menu_state(_unused: Variant = null) -> void:
 	var encounter_builder_mode := _setup_mode == "encounter_builder"
 	var player_count := get_selected_player_count()
-	run_mode_row.visible = not encounter_builder_mode
 	player_2_control_option.get_parent().visible = player_count > 1
 	debug_primary_row.visible = false
 	debug_secondary_row.visible = encounter_builder_mode and str(debug_room_type_option.get_selected_metadata()) == "boss"
@@ -298,16 +292,15 @@ func _refresh_menu_state(_unused: Variant = null) -> void:
 		launch_cheat_row.visible = false
 	settings_player_2_row.visible = false
 	setup_title_label.text = "Encounter Builder" if encounter_builder_mode else "Run Setup"
-	setup_subtitle_label.text = "Pick one room, one objective, and iterate fast." if encounter_builder_mode else "Choose players, controls, and run mode before the run starts."
+	setup_subtitle_label.text = "Pick one room, one objective, and iterate fast." if encounter_builder_mode else "Choose players, controls, and loadout before the run starts."
 	var summary_lines: Array = []
 	summary_lines.append("Players: %d" % player_count)
 	if not encounter_builder_mode:
-		summary_lines.append("Run Mode: %s" % run_mode_option.get_item_text(run_mode_option.selected))
-		summary_lines.append("Focus: bigger arena, one weapon, mutation snowball.")
+		summary_lines.append("Run: room choices, champion checks, mutation snowball.")
 	else:
 		summary_lines.append("Encounter: %s" % debug_room_type_option.get_item_text(debug_room_type_option.selected))
 		if debug_secondary_row.visible:
-			summary_lines.append("Boss: %s" % debug_secondary_option.get_item_text(debug_secondary_option.selected))
+			summary_lines.append("Champion: %s" % debug_secondary_option.get_item_text(debug_secondary_option.selected))
 		if debug_room_objective_row.visible:
 			summary_lines.append("Objective: %s" % debug_room_objective_option.get_item_text(debug_room_objective_option.selected))
 		if debug_layout_row.visible:
@@ -364,7 +357,6 @@ func _build_player_configs() -> Array:
 
 func _build_debug_start_options() -> Dictionary:
 	var options := {
-		"run_mode": str(run_mode_option.get_selected_metadata()),
 		"enabled": _setup_mode == "encounter_builder",
 		"launch_mode": "single_room" if _setup_mode == "encounter_builder" else "normal_run",
 		"primary_profile": "rifle",
@@ -459,9 +451,7 @@ func _on_settings_back_pressed() -> void:
 		call_deferred("_focus_home_panel")
 
 func _refresh_home_panel() -> void:
-	home_status_label.text = "V3 content branch\nCurrent Run Mode: %s\nTarget: 1-2 players only" % [
-		run_mode_option.get_item_text(run_mode_option.selected),
-	]
+	home_status_label.text = "V3 structure rework\nRun: linear room choices + champion checks\nTarget: 1-2 players only"
 
 func _focus_home_panel() -> void:
 	if not is_inside_tree():
@@ -474,7 +464,7 @@ func _focus_menu_panel() -> void:
 	if _setup_mode == "encounter_builder":
 		debug_room_type_option.grab_focus()
 	else:
-		run_mode_option.grab_focus()
+		player_count_option.grab_focus()
 
 func _set_panel_state(panel: Control, should_show: bool) -> void:
 	panel.visible = should_show
@@ -1007,11 +997,11 @@ func _create_perf_launcher_row() -> void:
 	_debug_perf_option = OptionButton.new()
 	_debug_perf_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_populate_profile_option(_debug_perf_option, [
-		{"label": "Boss Hive Heavy", "value": "boss:hive|heavy"},
-		{"label": "Boss Pulsar Heavy", "value": "boss:pulsar|heavy"},
+		{"label": "Champion Hive Heavy", "value": "champion:hive|heavy"},
+		{"label": "Champion Pulsar Heavy", "value": "champion:pulsar|heavy"},
+		{"label": "Champion Support Heavy", "value": "champion:elite_support|heavy"},
 		{"label": "Combat Base", "value": "room:combat|base"},
-		{"label": "Elite Base", "value": "room:elite|base"},
-	], "boss:hive|heavy")
+	], "champion:hive|heavy")
 	row.add_child(_debug_perf_option)
 	_debug_perf_button = Button.new()
 	_debug_perf_button.text = "Run Perf"
@@ -1023,7 +1013,7 @@ func _on_debug_perf_pressed() -> void:
 		return
 	var value := str(_debug_perf_option.get_selected_metadata())
 	var parts := value.split("|")
-	var scenario := str(parts[0]) if parts.size() > 0 else "boss:hive"
+	var scenario := str(parts[0]) if parts.size() > 0 else "champion:hive"
 	var build := str(parts[1]) if parts.size() > 1 else "base"
 	if PerfRunner != null and PerfRunner.has_method("run_from_menu"):
 		PerfRunner.run_from_menu(scenario, get_selected_player_count(), build)

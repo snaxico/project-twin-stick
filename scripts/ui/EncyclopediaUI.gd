@@ -12,13 +12,13 @@ const ENEMY_ENTRIES := [
 	{"id": "spitter", "name": "Spitter", "description": "Ranged enemy that fires enemy projectiles from outside melee range."},
 	{"id": "splitter", "name": "Splitter", "description": "Breaks into smaller enemies when destroyed."},
 	{"id": "bomber", "name": "Bomber", "description": "Closes distance and detonates to deny space."},
-	{"id": "elite_charger", "name": "Elite Charger", "description": "Tougher charger variant with heavier pressure."},
-	{"id": "elite_spitter", "name": "Elite Spitter", "description": "Fires wider ranged patterns."},
-	{"id": "elite_support", "name": "Elite Support", "description": "Supports enemy packs and extends combat pressure."},
-	{"id": "boss_warden", "name": "Boss Warden", "description": "Charge-focused boss with slam and ground-pound patterns."},
-	{"id": "boss_hydra", "name": "Boss Hydra", "description": "Multi-angle projectile boss with add pressure."},
-	{"id": "boss_hive", "name": "Boss Hive", "description": "Relocates and sustains pressure with minion waves."},
-	{"id": "boss_pulsar", "name": "Boss Pulsar", "description": "Teleports ahead of players and layers projectile and hazard pressure."},
+	{"id": "elite_charger", "name": "Champion Charger", "description": "Champion that chains charge-slams and radial bursts."},
+	{"id": "elite_spitter", "name": "Champion Spitter", "description": "Champion that mixes rapid aimed fire with pressure shockwaves."},
+	{"id": "elite_support", "name": "Champion Support", "description": "Champion that buffs nearby wave enemies and casts shockwaves."},
+	{"id": "boss_warden", "name": "Champion Warden", "description": "Champion that uses charge-combos and ground-pounds."},
+	{"id": "boss_hydra", "name": "Champion Hydra", "description": "Champion that uses rotating arm-fire and sweeping projectile arcs."},
+	{"id": "boss_hive", "name": "Champion Hive", "description": "Champion that uses deflectors and poison clouds."},
+	{"id": "boss_pulsar", "name": "Champion Pulsar", "description": "Champion that teleports, casts EMP, and drops shockwave hazards."},
 ]
 
 var _tabs: HBoxContainer = null

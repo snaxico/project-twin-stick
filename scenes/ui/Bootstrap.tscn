@@ -139,7 +139,7 @@ horizontal_alignment = 1
 [node name="Subtitle" type="Label" parent="MenuPanel/MarginContainer/MenuScroll/MenuLayout"]
 layout_mode = 2
 autowrap_mode = 2
-text = "Choose players, controls, and run mode"
+text = "Choose players, controls, and loadout"
 horizontal_alignment = 1
 
 [node name="PlayerCountRow" type="HBoxContainer" parent="MenuPanel/MarginContainer/MenuScroll/MenuLayout"]
@@ -152,19 +152,6 @@ size_flags_horizontal = 3
 text = "Player Count"
 
 [node name="PlayerCountOption" type="OptionButton" parent="MenuPanel/MarginContainer/MenuScroll/MenuLayout/PlayerCountRow"]
-layout_mode = 2
-size_flags_horizontal = 3
-
-[node name="RunModeRow" type="HBoxContainer" parent="MenuPanel/MarginContainer/MenuScroll/MenuLayout"]
-layout_mode = 2
-theme_override_constants/separation = 12
-
-[node name="RunModeLabel" type="Label" parent="MenuPanel/MarginContainer/MenuScroll/MenuLayout/RunModeRow"]
-layout_mode = 2
-size_flags_horizontal = 3
-text = "Run Mode"
-
-[node name="RunModeOption" type="OptionButton" parent="MenuPanel/MarginContainer/MenuScroll/MenuLayout/RunModeRow"]
 layout_mode = 2
 size_flags_horizontal = 3
 
