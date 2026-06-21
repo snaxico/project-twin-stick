@@ -158,9 +158,13 @@ the 3 former Elite mini-bosses (Charger / Spitter / Support).
 ## Cleanup audit (delete / strip as part of this patch)
 
 Cleanup is **part of each phase**, not an afterthought. Every phase's acceptance test ends with a
-**no-dangling-references gate**: grep the codebase for the symbols it removed → expect **zero** hits, and
-headless parse must stay clean (catches orphaned `@onready` / deleted scene-node references). **Scene
-(`.tscn`) nodes must be deleted in the same change as their script refs** or Godot errors.
+**no-dangling-references gate**: grep **runtime paths only** for the removed symbols → expect **zero**
+hits, and headless parse must stay clean (catches orphaned `@onready` / deleted scene-node references).
+**Scene (`.tscn`) nodes must be deleted in the same change as their script refs** or Godot errors.
+
+> **Grep scope:** run the gate over runtime paths only — `rg <symbol> scripts scenes data project.godot`
+> — **not** over `docs/` (the plan/history/archive intentionally still name the removed symbols, so a
+> repo-wide grep would false-fail even when the code is clean).
 
 ### Phase 1 — map / endless / mode-select
 
@@ -226,9 +230,10 @@ Beyond the headline UI (map removal, win screen), these secondary surfaces need 
   boss-room depth scale, ~1450 room-duration past room 20) with **unified depth-based** logic so
   scaling applies continuously, not only in "endless."
 - **Encounter Builder room type** (`Bootstrap.gd` `debug_room_type_option`, ~line 211–213): **drop the
-  "Elite" option** — room types become **Combat / Champion** (the "boss" option is renamed to
-  "Champion"). The dependent visibility logic (`debug_secondary_row`, `debug_room_objective_row`,
-  `debug_layout_row` keyed on `"boss"`/`"combat"`) updates to the new values.
+  "Elite" option** — the dropdown shows **Combat / Champion**. In Phase 1 "Champion" is a **label only**:
+  its **metadata value stays `"boss"`** (the dependent visibility logic `debug_secondary_row` /
+  `debug_room_objective_row` / `debug_layout_row` still keys on `"boss"`/`"combat"`). Phase 2 is what
+  changes the metadata to `"champion"`.
 
 ### Phase 2
 
@@ -312,7 +317,7 @@ cadence**. **Loot and modifier generation do not change** — only the map is re
 
 ```
 const RUN_LENGTH := 10     # tunable; the win milestone (Phase 3)
-# No ROOMS_PER_ACT / acts — difficulty, pool, rare odds, and color all key off `depth` (see
+# No ROOMS_PER_ACT / acts — difficulty, pool, and rare odds key off `depth` (arena color is fixed; see
 # "Mechanical fixes folded in").
 # Champion cadence: a depth-banded interval that TIGHTENS with depth, with a floor.
 # Numbers are placeholders pinned in playtest — e.g.:
@@ -362,7 +367,7 @@ func _build_run_node(room_number: int, room_type: String) -> Dictionary:
     var is_champ := room_type != "combat"
     return {
         "id": "room_%d" % room_number,
-        "room_type": room_type,                       # "combat" or "boss" (Phase 1 placeholder → "champion" in P2)
+        "room_type": room_type,                       # "combat" or "boss" — KEEP "boss" in Phase 1 (see rule below)
         "depth": room_number,
         "title": ("Champion — Room %d" if is_champ else "Room %d") % room_number,
         "description": "",                            # cosmetic; fill if desired
@@ -376,6 +381,11 @@ func _build_run_node(room_number: int, room_type: String) -> Dictionary:
     }
 ```
 
+- **Room-type metadata rule (important):** in **Phase 1 the champion step's `room_type` stays `"boss"`**
+  so the **existing boss-room runtime runs unchanged** (CoopManager branches on `"boss"`). "Champion" is a
+  **UI label only** in Phase 1. **Phase 2** is what switches the metadata to `"champion"` *and* the
+  runtime that goes with it. Do **not** write `"champion"` metadata in Phase 1 — it would bypass the
+  current boss-room code.
 - **`_champion_boss_type(room_number)`:** `_structured_mid_boss_type` at the first arc champion,
   `_structured_final_boss_type` at `RUN_LENGTH`, else `_roll_boss_type()`. Keep `_assign_structured_boss_types()`.
 - **Two-option step:** call `_build_run_node(room_number, "combat")` **twice**, then run
@@ -475,7 +485,8 @@ func _build_run_node(room_number: int, room_type: String) -> Dictionary:
   one loads it; champions appear on the cadence (incl. room 10); play continues past room 10.
 - **Cleanup gate:** grep for the Phase-1 removed symbols (`_generate_node_map`, `_build_endless_node`,
   `_build_map_node`, `current_act`, `_apply_arena_color_for_act`, `run_mode_option`, `MapNodeButton`, …)
-  → zero references; `Bootstrap.tscn` / `RunFlow.tscn` scene nodes deleted; headless parse clean.
+  **over runtime paths only** (`scripts scenes data project.godot`, not `docs/`) → zero references;
+  `Bootstrap.tscn` / `RunFlow.tscn` scene nodes deleted; headless parse clean.
 
 ### Sub-task slicing — hand to Codex ONE at a time
 
@@ -569,6 +580,11 @@ flat, readable 2-attack threat.
 - **No "elite" tier** → former elites are handled **identically** to former bosses (champions); no elite
   room type / scaling / state survives.
 - **Beat selection** → **random from the 7-pool, no repeat until the pool cycles.**
+  - **Implementation:** the "bag" must live in **`RunState`** (not `CoopManager`, which is per-room, nor a
+    local in the lazy generator) — e.g. `_champion_bag: Array` (shuffled pool) + draw on each champion,
+    **refill+shuffle when empty**. `_champion_boss_type()` draws from it. In **Phase 1** the bag holds the
+    4 boss types (`_assign_structured_boss_types` still seeds the arc mid/final); **Phase 2** expands it to
+    all **7** champions.
 - **Depth scaling** → **per-champion base stat block × a depth multiplier** (preserves identity;
   exact multiplier curve = last-phase tuning).
 
@@ -598,9 +614,10 @@ multi-phase / minion-spawn / extra-attack code is removed.
 - Manual: a beat room shows a normal wave; the champion drops in partway with a telegraph, has a named
   HP bar (no pips), uses 2 attacks with no phase jumps; room clears on champion death; former elites now
   appear as champions, never as the old elite mini-bosses.
-- **Cleanup gate:** grep for the Phase-2 removed symbols (`_update_boss_phase_transition`,
+- **Cleanup gate:** grep the Phase-2 removed symbols (`_update_boss_phase_transition`,
   `_spawn_elite_miniboss`, `_update_elite_add_waves`, `begin_boss_windup`, `apply_elite_act_scale`,
-  dropped-attack vars) → zero references; headless parse clean.
+  dropped-attack vars) **over runtime paths only** (`scripts scenes data project.godot`, not `docs/`;
+  and **not** `elite_` broadly — keep the `elite_*` type IDs) → zero references; headless parse clean.
 
 ---
 
