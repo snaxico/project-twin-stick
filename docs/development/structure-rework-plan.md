@@ -93,7 +93,7 @@ existing systems** — no new reward economy, no risk-kind taxonomy, no custom m
   enemy/modifier signatures), so it's a real choice — typically "which modifier / room flavor do I
   want," same as picking between two map nodes today.
 - **Loot is unchanged.** The post-clear pick uses the **existing reward sequencing** — no forced
-  category, no rarity nudge. Rare odds stay the current depth/act-based values.
+  category, no rarity nudge. Rare odds use the **depth curve** (Phase 1 — see *Mechanical fixes*).
 - **No card on champion steps.** When the next room is a champion step (on the depth-scaling cadence,
   or the milestone), it's forced — no 2-option choice that step. Non-champion steps are always two
   `combat` options.
@@ -110,10 +110,14 @@ Elites and bosses **collapse into one "champion" tier** above trash — a **two-
 champion**. The champion pool = **7 champions**: the 4 former bosses (Warden / Hydra / Hive / Pulsar) +
 the 3 former Elite mini-bosses (Charger / Spitter / Support).
 
-> **No "elite" concept survives anywhere** — no elite room type, no elite generation
+> **No "elite" *tier/concept* survives** — no elite room type, no elite generation
 > (`_should_place_elite_node`), no elite scaling (`apply_elite_act_scale`/`_elite_cd_mult`), no
 > elite-specific state (`_active_elite`, `_next_elite_add_spawn_at`, `_pending_elite_bonus_pick`). The
 > former elites are handled **identically** to the former bosses: just champions.
+>
+> **BUT the enemy type IDs `elite_charger` / `elite_spitter` / `elite_support` are KEPT** as internal
+> stable IDs (relabeled only in UI / Encyclopedia) — renaming them is a larger migration, out of scope.
+> So cleanup gates grep the **elite tier symbols** listed above, **never `elite_` broadly**.
 
 - Champions **spawn into a live wave room**, not a dedicated room.
 - Each keeps **two signature telegraphed attacks** — the finalized per-champion kits are in the
@@ -163,17 +167,20 @@ headless parse must stay clean (catches orphaned `@onready` / deleted scene-node
 - **RunState.gd functions:** `_generate_node_map`, `_build_branching_row`, `_roll_row_columns`,
   `_build_endless_node`, `_roll_endless_modifiers`, `is_endless_mode`, `_get_starting_reachable_node_ids`,
   and the reachability/visited accessors (`get_reachable_node_ids`, `get_visited_node_ids`). Keep
-  `_get_endless_enemy_pool` / `_get_endless_wave_count` (reused for continuation scaling).
+  **`_get_endless_enemy_pool`** (reused as the single depth-based pool). **Remove `_get_endless_wave_count`**
+  too — `wave_count` is dead data (`CoopManager` never reads it; rooms are time-based), so the new node
+  builder does **not** write it.
 - **RunState.gd constants/vars:** `ACT_1_ROW_MIN/MAX`, `ACT_2_ROW_MIN/MAX`, `MAP_COLUMN_COUNT`,
   `START_ROW_COLUMNS`, `ENDLESS_BOSS_INTERVAL`, `ROOMS_PER_ACT` (acts dropped), `_should_place_elite_node`
   (no elite room type), `endless_room_index`, `reachable_node_ids` / `visited_node_ids`.
 - **RunState.gd acts → depth:** remove `current_act` / `get_current_act` / `set_current_act` and the
   `act` field on nodes; `_build_enemy_pool` folds into the single depth-based pool.
 - **CoopManager.gd:** the `_room_type == "elite"` room-duration `+10` branch (no elite rooms); rework
-  `_get_current_rare_chance()` → depth curve; rework `_apply_arena_color_for_act()` → depth-based color;
-  drop the `set_current_act` call in `_start_room`.
-- **RunFlow.gd:** `_show_map` + the map-render/route-graph helpers; the `@onready` map refs
-  (`map_title_label`, `map_detail_body_label`, …). Reuse `_build_route_card` for the 2-card choice.
+  `_get_current_rare_chance()` → depth curve; replace `_apply_arena_color_for_act(act)` → no-arg
+  `_apply_arena_color()` (**single fixed neon**); drop the `set_current_act` call in `_start_room`.
+- **RunFlow.gd:** delete `_show_map` / `_rebuild_map_graph` + the route-graph helpers + the `@onready`
+  map refs — a **new Next-Room panel** (`_show_next_room_choice()`) replaces them (see Phase 1 UI). May
+  reuse `_build_route_card`'s card styling.
 - **Bootstrap.gd:** `run_mode_row` / `run_mode_option` and all ~8 references (lines ~50–51, 137,
   198–200, 283, 305, 367, 463, 477).
 - **Files:** delete `scripts/ui/MapNodeButton.gd` and its preload/usages (verify in `RunFlow` / others).
@@ -211,8 +218,8 @@ Beyond the headline UI (map removal, win screen), these secondary surfaces need 
 
 ### Phase 1
 
-- **Remove** the map-view UI (`RunFlow.tscn` map nodes + `_show_map` render) → present the **2-card
-  choice** via `_build_route_card`.
+- **Remove** the map-view UI (`RunFlow.tscn` map nodes + `_show_map`) → present the choice via the **new
+  Next-Room panel** (2 cards / 1 forced champion card).
 - **Remove** the mode-select (`Bootstrap.tscn` `RunModeRow`/`RunModeOption`); menu = single **Play**.
 - **In-run HUD:** keep `_room_label` showing **"Room N" always**; **delete `_score_label`** (the room
   number *is* the score). Replace the `is_endless_mode()` HUD/scaling gates (`CoopManager.gd` ~1422
@@ -361,8 +368,8 @@ func _build_run_node(room_number: int, room_type: String) -> Dictionary:
         "description": "",                            # cosmetic; fill if desired
         "objective": "kill_all",
         "side_objective": "" if is_champ else _roll_side_objective("combat"),
-        "wave_count": _get_endless_wave_count(room_number, is_champ),   # reuse — depth-banded, exists
         "enemy_pool": _get_endless_enemy_pool(room_number),            # reuse — depth-banded, exists
+        # NOTE: no "wave_count" — it is dead data (CoopManager never reads it; rooms are time-based)
         "boss_type": _champion_boss_type(room_number) if is_champ else "",
         "modifiers": _roll_modifiers_for_depth(room_number, room_type),# reworked, see Modifier ramp
         "next_node_ids": [],
@@ -396,9 +403,13 @@ func _build_run_node(room_number: int, room_type: String) -> Dictionary:
 ### Difficulty / continuation
 
 - Cadence (room duration / spawn interval / opening burst) keeps scaling off `get_run_progress()`,
-  which **clamps at 1.0 by `RUN_LENGTH`** — so cadence *plateaus* at the milestone. **Continuation
-  pressure past the milestone comes from the depth-banded `enemy_pool` + `wave_count`** (already rising
-  with `room_number`), not from uncapping cadence. Net: one steady climb, no reset, no runaway cadence.
+  which **clamps at 1.0 by `RUN_LENGTH`** — so cadence *plateaus* at the milestone. Past the milestone
+  the only thing still rising is the depth-banded **`enemy_pool`** (more enemy *types*) — **not**
+  `wave_count` (dead) and **not** cadence (clamped).
+- ⚠️ **Open tuning gap (Phase 4):** with cadence clamped and `wave_count` dead, deep continuation may
+  **not actually escalate** beyond enemy variety. The Phase-4 re-tune must add a real continuation
+  difficulty driver (e.g. uncap/scale the cadence past `RUN_LENGTH`, or a depth HP/count multiplier).
+  Phase 1 just keeps generating; it does **not** solve deep-run escalation.
 
 ### Mechanical fixes folded in — concrete specs (decided 2026-06-21)
 
@@ -426,24 +437,31 @@ func _build_run_node(room_number: int, room_type: String) -> Dictionary:
   `_apply_arena_color()` using **one fixed hue** (keep the current cyan, `hue 0.55`) for all rooms; drop
   the `set_current_act` / `get_current_act` calls in `_start_room`. No depth dependency.
 
-### UI
+### UI — replace the map panel with a new Next-Room panel (decided)
 
-- **The card row already exists.** `_rebuild_map_graph` (`RunFlow.gd`) already renders
-  `RunState.get_current_options()` as a **centered `HBoxContainer` of `_build_route_card` buttons** — so
-  feeding it 2 options renders 2 centered cards with **no layout work**. Keep `_rebuild_map_graph` /
-  `_build_route_card`.
-- **Retitle** in `_show_map`: `map_title_label` "Choose Route" → "Next Room"; `map_status_label`
-  "Floor X of Y …" → "Room N | Lv … | …". A 1-option champion step renders a single card (or auto-advance).
-- **Remove** the `is_run_complete()` victory branch in `_show_map` — in Phase 1 the run never completes
-  (`is_run_complete()` returns **false always**; the milestone/win is Phase 3).
+- **Build a new `NextRoom` panel** (scene nodes in `RunFlow.tscn`) + a new `_show_next_room_choice()`
+  flow, and **delete the old map-view nodes** (`MapTitle`, `MapStatus`, `MapGraphArea`, `MapLineLayer`,
+  `MapButtonLayer`, detail labels) and `_show_map` / `_rebuild_map_graph`. The new panel renders the
+  step's option cards in a centered row.
+  - Option cards: reuse `_build_route_card`'s *styling* if convenient (it returns a plain `Button`, not
+    tied to map nodes), or write a small card builder — implementer's choice, but **don't keep the old
+    map scene nodes**.
+- **Normal step → 2 option cards.** **Champion step → ONE forced card** "Champion incoming — [name]"
+  with a single confirm to enter (no skip — champions are **mandatory** at cadence steps). It is *not* a
+  choice; it's a heads-up before a forced fight.
+- **No `is_run_complete()` victory branch** — in Phase 1 the run never completes (`is_run_complete()`
+  returns **false always**; the milestone/win is Phase 3).
 - **Remove** the Structured/Endless mode selection in `Bootstrap.gd`; menu = a single **Play** entry.
-- **Delete `MapNodeButton.gd`** only if unused after the above (verify — `_build_route_card` returns a
-  plain `Button`, so it's likely already unused by the route cards).
+- **Delete `MapNodeButton.gd`** if unused after the above (verify).
 
 ### Out of scope for Phase 1
 
 - Champion conversion / unified tier (Phase 2); win screen + "continue?" (Phase 3); enemy re-tune
-  (Phase 4). Phase 1 keeps current bosses at beats and the existing loot/modifier systems untouched.
+  (Phase 4).
+- **Boss-room runtime is unchanged in Phase 1.** Champion (`"boss"`) steps keep the **current
+  boss-room behavior exactly** (boss spawns after its delay, room clears on boss death — whatever the
+  code does today); only the room *placement* moves to the cadence. The "champion drops into a normal
+  wave that must also be cleared" behavior is **Phase 2**, not Phase 1.
 
 ### Acceptance test
 
@@ -472,9 +490,13 @@ Phase 1 is too big for a single hand-off; build it as three bounded tasks, each 
   → no-arg fixed `_apply_arena_color()`; remove the `is_endless_mode()` / act / `_room_type=="elite"`
   gates (room duration, boss scale, set_current_act). **Accept:** headless boot; grep `is_endless_mode` /
   `current_act` / `_apply_arena_color_for_act(` → zero.
-- **1c — UI + scene + cleanup.** `_show_map` retitle + drop victory branch; `Bootstrap.gd` mode-select
-  removal; delete `Bootstrap.tscn RunModeRow/RunModeOption` + `RunFlow.tscn` stale map nodes; delete
-  `MapNodeButton.gd` if unused. **Accept:** manual launch (no map/mode-select; 2 cards; bosses on cadence;
+- **1c — UI + scene + cleanup.** **Build a new Next-Room panel** (`RunFlow.tscn` nodes +
+  `_show_next_room_choice()`) rendering 2 option cards on a normal step / 1 forced "Champion incoming"
+  card on a champion step; **delete the old map-view nodes** (`MapTitle`/`MapStatus`/`MapGraphArea`/
+  `MapLineLayer`/`MapButtonLayer`/detail labels) + `_show_map` / `_rebuild_map_graph`; remove the
+  `is_run_complete()` victory branch; `Bootstrap.gd` mode-select removal + delete `Bootstrap.tscn
+  RunModeRow/RunModeOption`; delete `MapNodeButton.gd` if unused. **Accept:** manual launch (no
+  map/mode-select; 2 cards on normal steps; forced single card on champion steps; bosses on cadence;
   past room 10); full cleanup gate; headless parse clean.
 
 ---
@@ -622,13 +644,21 @@ keeps the same run climbing seamlessly until death. Reuses the existing `RunFlow
 
 ### Momentum → build across the run (decided 2026-06-21)
 
-- **Remove the per-room reset.** `_start_room()` currently calls `_reset_momentum()` — drop that call so
-  momentum tier/progress **persist room to room**. Reset only at **run start** (keep `_reset_momentum`
-  invoked from the run-init path, not per room).
-- The **damaging-hit −2-tier drop is unchanged**, so momentum builds over a run but a deep hit costs
-  more. This makes the flow run-scoped (rewards the continuation/score-chase).
-- **Watch (playtest):** deep-run power could get oppressive — the −2 drop + the tightening champion
-  cadence are the intended counters; tune if needed.
+> **Important — `CoopManager` is per-room.** `RunFlow._launch_room` does `_clear_active_game()` then
+> `GAME_WORLD_SCENE.instantiate()` **every room** ([RunFlow.gd:310](scripts/ui/RunFlow.gd:310)), so
+> momentum state in `CoopManager` is destroyed/recreated each room. **Just removing `_reset_momentum()`
+> does nothing.** Momentum must persist in `RunState` (which lives for the whole run).
+
+- **Store momentum in `RunState`:** add `momentum_tier` / `momentum_progress` (per player) to `RunState`;
+  it's reset only in `start_new_run()`.
+- **Restore on room start:** in `CoopManager` room setup (`configure_room` / `_start_room`), **seed the
+  momentum tier/progress from `RunState`** instead of zeroing — and re-apply the tier bonuses to players.
+- **Write back on change:** `_gain_shared_momentum` / `_drop_player_momentum` push the new tier/progress
+  back to `RunState` so the next room's fresh `CoopManager` reads them.
+- The **damaging-hit −2-tier drop is unchanged**. Net: momentum builds over a run (HP still resets per
+  room because the GameWorld is fresh — that's intended).
+- **Watch (playtest):** deep-run power could get oppressive — the −2 drop + tightening champion cadence
+  are the intended counters; tune if needed.
 
 ### Out of scope
 
@@ -701,13 +731,12 @@ A critical pass over current gameplay systems vs the rework surfaced these.
 
 - ✅ **HP pickups → KEEP as-is** (10% drop / +5 HP). Intra-room safety net stays; no change.
 - ✅ **Side objectives → KEEP as-is** (Hold Zone / Kill Streak / Collector + room buffs). No change.
-- ✅ **Momentum → BUILD ACROSS THE RUN** (was per-room reset). Implementation: **stop calling
-  `_reset_momentum()` in `_start_room()`** — momentum tier/progress now persist across rooms within a
-  run and reset only at run start (`start_new_run` / `_reset_momentum` on new run). The damaging-hit
-  **−2-tier drop still applies**, so it builds over the run but a hit deep costs more. This makes the
-  flow run-scoped (rewards the continuation/score-chase), matching the uncapped-is-intended ethos.
-  Small standalone change; slot with the **Phase 3** run-framing work. Watch in playtest that deep-run
-  power isn't unfun-oppressive (the −2 drop + the new depth-scaling champion cadence are the counters).
+- ✅ **Momentum → BUILD ACROSS THE RUN** (was per-room reset). **NOT just "remove the reset"** —
+  `CoopManager` is re-instantiated per room ([RunFlow.gd:310](scripts/ui/RunFlow.gd:310)), so momentum
+  must be **stored in `RunState`** (persists for the run), **restored into `CoopManager` on room start**,
+  **written back on gain/loss**, and reset only in `start_new_run`. The damaging-hit **−2-tier drop still
+  applies**. Slotted with **Phase 3**. See the Phase 3 *Momentum* sub-section for the concrete spec.
+  (HP still resets per room "for free" because the GameWorld is fresh.)
 
 **Mechanical fixes — RESOLVED (2026-06-21), folded into Phase 1:**
 
@@ -716,10 +745,10 @@ A critical pass over current gameplay systems vs the rework surfaced these.
   `depth`** (exact curve in playtest tuning).
 - ⚠️ **Enemy pool → one depth-based curve.** Drop `_build_enemy_pool` (act); use a single depth-scaled
   pool for all rooms.
-- 🟢 **"Acts" → generalized fully to depth.** Drop the `current_act` concept entirely; **arena color,
-  rare odds, and enemy pool all scale continuously with `depth`** (no binary act, no freeze at "act 2").
-  Removes `current_act` / `get_current_act` / `set_current_act` and reworks `_apply_arena_color_for_act`
-  into a depth-based color (gradient/curve).
+- 🟢 **"Acts" → dropped.** Remove the `current_act` concept entirely (`current_act` / `get_current_act`
+  / `set_current_act`); **rare odds and enemy pool scale continuously with `depth`**. **Arena color is a
+  single fixed neon** (decided 2026-06-21) — `_apply_arena_color_for_act` becomes a no-arg
+  `_apply_arena_color()`, *not* depth-driven.
 
 **Notes for the re-tune / future (not blocking):**
 
