@@ -363,10 +363,10 @@ act_total_rows`, and it calls `_build_room_title/_description`, `_determine_wave
 **all act-keyed**). The new builder uses only depth:
 
 ```
-func _build_run_node(room_number: int, room_type: String) -> Dictionary:
+func _build_run_node(room_number: int, room_type: String, slot: String) -> Dictionary:
     var is_champ := room_type != "combat"
     return {
-        "id": "room_%d" % room_number,
+        "id": "room_%d_%s" % [room_number, slot],     # UNIQUE per option — e.g. room_3_a / room_3_b / room_5_champion
         "room_type": room_type,                       # "combat" or "boss" — KEEP "boss" in Phase 1 (see rule below)
         "depth": room_number,
         "title": ("Champion — Room %d" if is_champ else "Room %d") % room_number,
@@ -388,9 +388,11 @@ func _build_run_node(room_number: int, room_type: String) -> Dictionary:
   current boss-room code.
 - **`_champion_boss_type(room_number)`:** `_structured_mid_boss_type` at the first arc champion,
   `_structured_final_boss_type` at `RUN_LENGTH`, else `_roll_boss_type()`. Keep `_assign_structured_boss_types()`.
-- **Two-option step:** call `_build_run_node(room_number, "combat")` **twice**, then run
-  `_ensure_route_options_differ([a, b])` so the two differ (distinct enemy/modifier signature). Both are
-  `combat` — **no "elite" room type**. (`_ensure_route_options_differ` already operates on a node array.)
+- **`_build_choice_step(room_number)`:** champion step → `[_build_run_node(room_number, "boss", "champion")]`
+  (one node). Normal step → `[_build_run_node(room_number, "combat", "a"), _build_run_node(room_number,
+  "combat", "b")]` — **distinct slots so the two IDs differ** (`room_N_a` / `room_N_b`) — then run
+  `_ensure_route_options_differ([a, b])` so they also differ in enemy/modifier signature. Both `combat`,
+  **no "elite" room type**. (`_ensure_route_options_differ` already operates on a node array.)
 - The old act-keyed `_build_map_node`, `_build_room_title`, `_build_room_description`,
   `_determine_wave_count`, `_build_enemy_pool` are **removed** (the debug single-room path uses the new
   builder too).
@@ -398,17 +400,25 @@ func _build_run_node(room_number: int, room_type: String) -> Dictionary:
 ### Generation + advancement (RunState.gd)
 
 - `start_new_run`: drop the `is_endless_mode()` branch. `node_map = [ _build_choice_step(1) ]`;
-  `current_step_index = 0`; set `_structured_total_combat_depth = RUN_LENGTH` (so `get_run_progress()`
-  reaches 1.0 at the milestone).
-- On advance (player picks an option, or clears a beat): `current_step_index += 1`, append
-  `_build_choice_step(current_step_index + 1)`, present it. Lazy, one step at a time, unbounded.
+  `current_step_index = 0`; `reachable_node_ids` = step-1 node IDs; `current_node = {}`; set
+  `_structured_total_combat_depth = RUN_LENGTH` (so `get_run_progress()` reaches 1.0 at the milestone).
+- **Advancement happens in exactly ONE place — on room *clear*, not on select** (avoids a double-advance):
+  - **`select_map_node(id)`** keeps its current behavior: **only** sets `current_node` / `current_node_id`
+    from the chosen option (does **not** advance or append). A champion step has 1 option → UI confirms it.
+  - **`resolve_current_combat_victory()`** (on clear) is the only advancer — generalize its existing
+    `endless_next` branch to **all** rooms (no `is_endless_mode` / final-boss branches; Phase 1 never
+    "completes"): `rooms_completed += 1`; `current_step_index += 1`; **append** `_build_choice_step(current_step_index + 1)`
+    to `node_map`; `_rebuild_node_lookup()`; `reachable_node_ids` = the new step's node IDs; clear
+    `current_node` / `current_node_id`; return a `"next"` outcome. The UI then shows `get_current_options()`.
+  - Replace the structured `_advance_progress()` + endless-rebuild branches with this single linear advance.
 - **Remove** the multi-row graph + branching + elite-room helpers: `_generate_node_map`,
   `_build_branching_row`, `_build_endless_node`, `_roll_row_columns`, **`_should_place_elite_node`**
   (no elite room type anymore).
 - **Keep** the modifier helpers listed in *What stays* — they are reused, not removed.
-- Navigation: `get_current_options()` returns the current step's nodes (2, or 1 on a beat);
-  `select_map_node(id)` sets the chosen node current and advances; drop reachability/visited. Keep
-  `run_mode` (effectively one mode now).
+- Navigation: `get_current_options()` returns the current step's nodes (2, or 1 champion) — i.e. the
+  nodes for `reachable_node_ids`. `select_map_node(id)` only sets `current_node` (per the advance rule
+  above — **it does not advance**). `reachable_node_ids` now holds just the current step's IDs; the
+  visited list is unused. Keep `run_mode` (effectively one mode now).
 
 ### Difficulty / continuation
 
@@ -478,9 +488,10 @@ func _build_run_node(room_number: int, room_type: String) -> Dictionary:
 - `git diff --check`; headless parse; headless boot (`--quit-after 1`).
 - Temporary headless walk of `_build_choice_step(1..25)`: champion steps follow the **band intervals**
   (every 5 in 1–10, every 4 in 11–20, every 3 deeper) and `RUN_LENGTH` is always a champion; every other
-  step returns **exactly 2** `combat` nodes with a **distinct route signature** (no `elite` room type);
-  enemy pool + rare odds rise with `depth`; arena color is the single fixed neon; steps keep generating
-  past `RUN_LENGTH`.
+  step returns **exactly 2** `combat` nodes with **distinct `id`s** (`room_N_a` / `room_N_b`) **and** a
+  distinct route signature (no `elite` room type); enemy pool + rare odds rise with `depth`; arena color
+  is the single fixed neon; steps keep generating past `RUN_LENGTH`. Also assert advancing one room
+  bumps `current_step_index` by **exactly 1** (no double-advance on select + clear).
 - Manual: launch a run → no map / mode-select screen; each non-champion step shows **2 cards**; picking
   one loads it; champions appear on the cadence (incl. room 10); play continues past room 10.
 - **Cleanup gate:** grep for the Phase-1 removed symbols (`_generate_node_map`, `_build_endless_node`,
