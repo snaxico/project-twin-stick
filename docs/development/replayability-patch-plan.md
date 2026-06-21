@@ -31,13 +31,53 @@ identity, with Momentum/Flow staying a supporting buff (no full score/heat econo
 
 Build order matters: the replay *hook* first, the reason-to-*return* second, the *skin* last.
 
-### Phase A — Build depth & synergies *(the hook — biggest piece)*
-Make upgrades transformative so runs diverge and you chase builds:
-- **Build-defining rares** that change *how* weapons/abilities behave (not just numbers).
-- **Synergies** — upgrades that amplify each other (mechanism TBD: tags/keywords vs explicit combos).
-- **Risk/reward "parasite" upgrades** — real downsides for real power; tension in every pick.
-- Likely needs the upgrade-pool depth fix (parked: 9 commons cap-3 is too shallow).
-- *Detail via Q&A next.*
+### Phase A — Build depth via tag synergies *(the hook — biggest piece)*
+
+**Decided:** keyword/tag synergies · a new "Signature" tier above current rares · mixed parasites
+(stat + mechanical) · a minimal first cut that grows via unlocks.
+
+**Tags.** Every upgrade carries one or more tags. Starter set, grounded in existing systems (expand via
+unlocks later):
+- `Fire` (Fire Bullets), `Frost` (Freeze Shot), `Toxic` (Poison), `Split` (Split) — the 4 existing
+  weapon-rare effects become the first build themes.
+- `Momentum` — the signature mechanic as a build axis.
+- `Pierce` / `Projectile` — weapon-behavior builds. `Ability` — ability-focused builds.
+
+**The new "Signature" tier** (rare/legendary, rolls above the current rares). Three card kinds:
+1. **Amplifiers** — the synergy glue: boost *everything* of a tag. e.g. "Accelerant — Fire effects deal
+   more." Worthless without tagged upgrades → a real commit.
+2. **Transformers** — change behavior + carry a tag. e.g. "Chain Reaction — Split bolts can split again
+   `[Split]`"; "Momentum Surge — at max Momentum your shots pierce `[Momentum][Pierce]`".
+3. **Parasites** (mixed, tagged): +big power / -real cost. Stat ("Glass Cannon: +80% damage / -40% max
+   HP") and mechanical ("Pyromaniac: Fire effects way up, but you can't heal `[Fire]`").
+
+**Compilation** (`MutationSystem.gd`): add a `tags` field to upgrade data; compute a per-tag power value
+from equipped amplifiers; tagged effects scale by their tag's power during the existing mutation compile.
+The Signature tier rolls through the existing rare path (rare-weighted; the next-room rare-nudge feeds it).
+
+**Amplifier model = tag-count scaling (decided).** Every owned upgrade of a tag boosts *all* effects of
+that tag:
+```
+PER_TAG_RATE := 0.12                                   # +12% per tagged upgrade (tunable)
+tag_count[tag] = (#equipped upgrades tagged `tag`) + bonus stacks from amplifiers
+tag_power[tag] = 1.0 + tag_count[tag] * PER_TAG_RATE
+# during compile, each tagged effect's magnitude *= tag_power[its tag]
+```
+So a Fire build snowballs the more Fire you stack; **amplifier** cards just add bonus stacks (e.g.
+"+2 Fire") to accelerate it. Implemented in `MutationSystem` compile: count tags across equipped
+upgrades → `tag_power`, scale tagged effect magnitudes by it.
+
+**First cut (~12, illustrative — tune in playtest):**
+- Tag the 4 existing weapon rares: Fire Bullets `[Fire]`, Freeze Shot `[Frost]`, Poison `[Toxic]`,
+  Split `[Split]`.
+- New Signature cards: **Accelerant** `[Fire]` (amplifier +2 Fire) · **Ember Spread** `[Fire]`
+  (transformer: enemies dying while burning ignite nearby) · **Pyromaniac** `[Fire]` (parasite: +3 Fire,
+  but can't heal) · **Chain Reaction** `[Split]` (transformer: split bolts split once more) · **Momentum
+  Surge** `[Momentum][Pierce]` (transformer: at max momentum, shots pierce +3) · **Glass Cannon**
+  (parasite, stat: +80% damage / −40% max HP) · **Cryo Shatter** `[Frost]` (transformer: frozen enemies
+  shatter for AoE on death) · **Virulent** `[Toxic]` (amplifier +2 Toxic).
+- Covers Fire (deep), Split, Frost, Toxic, Momentum + one mechanical and one stat parasite — enough to
+  prove the loop. Everything else grows via Phase-B unlocks.
 
 ### Phase B — Meta unlock pool *(reason to return)*
 - Play to **unlock** weapons / abilities / upgrades into the run pool (recycles Phase-A content).
@@ -52,9 +92,13 @@ Make upgrades transformative so runs diverge and you chase builds:
 
 ## Open questions (to resolve via guided Q&A)
 
-Phase A first: synergy mechanism, how many/what scale of new upgrades, a new rare tier vs reworking
-commons, what parasite downsides look like, and how this interacts with the just-planned next-room
-rare-odds. Then Phase B unlock triggers + currency, then Phase C.
+- **Phase A — SHAPE DECIDED** (tag synergies · Signature tier · mixed parasites · count-scaling ·
+  minimal-then-grow). Remaining = numbers (`PER_TAG_RATE`, amplifier stack values, Signature rare
+  weighting), the final card list, and the `MutationSystem` wiring detail (where `tag_power` multiplies
+  in the compile). To turn into a Codex-ready task next, like the structure rework.
+- **Phase B — not yet shaped:** unlock *triggers* (depth reached / kills / challenges?), unlock
+  *currency* (or direct milestone unlocks), what's in the unlock tree, and where the score readout sits.
+- **Phase C — later:** the rubberhose restyle scope.
 
 ## Relationship to other plans
 
