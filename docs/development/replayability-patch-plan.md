@@ -90,11 +90,31 @@ upgrades → `tag_power`, scale tagged effect magnitudes by it.
 - Covers Fire (deep), Split, Frost, Toxic, Momentum + one mechanical and one stat parasite — enough to
   prove the loop. Everything else grows via Phase-B unlocks.
 
-### Phase B — Meta unlock pool *(reason to return)*
-- Play to **unlock** weapons / abilities / upgrades into the run pool (recycles Phase-A content).
-- Add the **score readout** (light flow surfacing) here.
-- Unlock *triggers* (depth reached, kills, challenges?) — TBD.
-- *Detail via Q&A.*
+### Phase B — Meta: score currency + unlock menu *(reason to return)*
+
+**Decided:** score is a **banked currency** spent in an **unlock menu** (VS-style); a **lean starting
+pool** grown by unlocking weapons / abilities / Signature cards / loadout perks; **persistent save**.
+
+- **Score = currency.** Earned per run from depth + kills + champion kills + momentum peaks (formula
+  tunable, e.g. `rooms*100 + kills + champions*250 + max_momentum_tier*50`). **Banked cumulatively**
+  across *every* run (win or death) into the save. The light "flow surfacing" is this score being
+  visible and mattering.
+- **Unlock menu** (new screen off the main menu): locked items listed with a score cost; spend banked
+  score → unlock permanently → it enters the run pool / pre-run selection. Costs scale (cheap early →
+  expensive deep).
+- **Everything is gated** (your pick): Signature cards (this is where the Phase-A "grow via unlocks"
+  lives), weapons, abilities, loadout perks/start options.
+- **Lean start:** begin with a small free core (e.g. Rifle + 1 weapon, 2 abilities, base commons),
+  unlock the rest. ⚠️ Note: this **re-gates content you already have** and shrinks the new-player
+  starting set — more progression arc, but confirm it doesn't make early runs feel thin.
+- **Persistent save:** extend `ProfileState.gd` (today only a screen-effect stub) with
+  `banked_score: int` + `unlocked_ids: Array`; load on boot; `Bootstrap` setup + the run upgrade pool
+  **filter by unlocked**. This **re-introduces meta progression** (deliberately removed in V3) — a real
+  new system, the biggest part of Phase B.
+- **Score readout:** current score on the in-run HUD; earned + new banked total on the win/death
+  screens; banked total in the unlock menu.
+
+*Open:* the score formula, the free starting set, unlock costs/order, and the unlock-menu UX.
 
 ### Phase C — Rubberhose art restyle *(identity skin)*
 - The committed 1930s rubberhose (Cuphead-lineage) restyle, done once systems are stable.
@@ -122,8 +142,9 @@ Phase 0 and Phase A touch the *same* rare roll, so define it once:
   minimal-then-grow). Remaining = numbers (`PER_TAG_RATE`, amplifier stack values, Signature rare
   weighting), the final card list, and the `MutationSystem` wiring detail (where `tag_power` multiplies
   in the compile). To turn into a Codex-ready task next, like the structure rework.
-- **Phase B — not yet shaped:** unlock *triggers* (depth reached / kills / challenges?), unlock
-  *currency* (or direct milestone unlocks), what's in the unlock tree, and where the score readout sits.
+- **Phase B — SHAPE DECIDED** (score = banked currency · unlock menu · all categories gated · lean
+  start · persistent save via `ProfileState`). Remaining = the score formula, the free starting set,
+  unlock costs/order, the unlock-menu UX, and the pool/setup unlock-filter wiring.
 - **Phase C — later:** the rubberhose restyle scope.
 
 ## Relationship to other plans
