@@ -176,7 +176,9 @@ hits, and headless parse must stay clean (catches orphaned `@onready` / deleted 
   builder does **not** write it.
 - **RunState.gd constants/vars:** `ACT_1_ROW_MIN/MAX`, `ACT_2_ROW_MIN/MAX`, `MAP_COLUMN_COUNT`,
   `START_ROW_COLUMNS`, `ENDLESS_BOSS_INTERVAL`, `ROOMS_PER_ACT` (acts dropped), `_should_place_elite_node`
-  (no elite room type), `endless_room_index`, `reachable_node_ids` / `visited_node_ids`.
+  (no elite room type), `endless_room_index`, and **`visited_node_ids`** only.
+  **KEEP `reachable_node_ids`** — it's reused as the current step's option IDs (already wired into
+  `select_map_node` / `get_current_options`); name retained to avoid churn (it now means "current options").
 - **RunState.gd acts → depth:** remove `current_act` / `get_current_act` / `set_current_act` and the
   `act` field on nodes; `_build_enemy_pool` folds into the single depth-based pool.
 - **CoopManager.gd:** the `_room_type == "elite"` room-duration `+10` branch (no elite rooms); rework
