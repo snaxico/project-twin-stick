@@ -642,11 +642,31 @@ A critical pass over current gameplay systems vs the rework surfaced these.
 
 **Notes for the re-tune / future (not blocking):**
 
-- **Cannon's "boss-killer" niche** weakens — it was built for isolated boss rooms; champions now fight
-  inside waves where AoE/clear matters more. Watch in the Phase-4 re-tune.
+- **Cannon ↔ Beam niche overlap (Phase-4 re-tune).** Cannon was the "boss-killer / big single hit" for
+  isolated boss rooms; but **Beam** ramps its DPS on a single tough target (a champion) and barely ramps
+  sweeping a wave → Beam is now the de-facto single-target champion-killer, **overlapping Cannon**.
+  Rethink Cannon's identity (pivot toward burst-AoE/wave, or accept overlap) in the re-tune. No weapon is
+  broken; the other five are wave-friendly.
+- **Mutation × momentum × depth balance (Phase-4 tuning).** Additive-uncapped stat mutations + momentum
+  now **persisting across the run** + depth scaling = very strong deep play (intended "OP", but watch it
+  doesn't trivialize). No mutation needs *structural* rework — none reference bosses/elites/modes/acts.
 - **`CoopManager` is a ~3000-line god-object** (room runtime + spawning + projectiles + abilities +
   champions + HUD + modifiers + objectives + momentum). The rework removes some of it but doesn't
   decompose it. Candidate for a later structural pass — **not** part of this rework.
+
+**Parked (revisit after playtest):**
+
+- **Upgrade-pool depth for deep runs.** Only **9 commons (cap lvl 3) + rares** → a long continuable run
+  maxes the build and picks go hollow. **Decided to leave for now** (2026-06-21) — only bites in very
+  deep runs; revisit once we see how far real runs go. Candidate fixes when we do: uncap commons with a
+  soft curve, add depth-gated upgrade tiers, or convert dead picks to a flat bonus.
+- **Debug weapon dropdown lists `shockwave`** (a `primary_skill` in `weapons.json`) — pre-existing minor
+  nit, optional cleanup; not rework-caused.
+
+**Audit confirmed covered (no new gaps):** in-room debugger (only the spawn-catalog relabel, in the UI
+audit), Encounter Builder (room-type / champion dropdown, in the UI audit), PerfRunner (champion taxonomy
++ champion-in-dense-wave, in Phase 2), and the HUD (all items in the UI audit; momentum-persist is
+display-fine).
 
 ## Carried forward from Part B/C/D (unaffected by this rework)
 
