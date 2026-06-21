@@ -114,6 +114,25 @@ Per card, top→bottom:
 
 The spicier option gets a subtle accent (brighter border) so the light risk/reward reads at a glance.
 
+### Concrete Godot construction (Codex-ready)
+
+`_build_route_card(node)` returns a `Button` (keeps focus/controller nav) with `flat`-ish neon styling
+and a child `VBoxContainer` (`mouse_filter = IGNORE` so clicks fall through to the button):
+
+- Button: `custom_minimum_size = (252, 196)`, a `StyleBoxFlat` (dark bg `~0.04,0.05,0.08`, 1px border in
+  the player/neon accent; **2px brighter border** when `node.rare_bonus > 0`), `border-radius 10`.
+- VBox rows: (1) `HBox` — trait icon (a small `TextureRect`/`Label` glyph) + `trait_label` Label · spacer
+  · **danger pips** (`danger_pips` filled dots + remaining muted, drawn as small `ColorRect`s or a tiny
+  `_draw`). (2) `HFlowContainer` of modifier chips — each a `PanelContainer`+`Label` "name". (3) two
+  `HBox` info rows (Enemies / Objective). (4) reward `HBox` — "Rare odds NN%" + a small `+N%` Label when
+  nudged. Use the existing HUD neon colors; no new theme.
+- A `modifier_id → display_name` map (read `modifiers.json` `display_name`) and `trait_icon → glyph`
+  map replace `_modifier_abbreviation` / `_build_modifier_badge_text`.
+
+**Slices:** Phase-0a = RunState data (danger/trait/nudge + differ guarantee) + CoopManager rare-bonus
+read [headless-testable]; Phase-0b = the RunFlow styled card. 0a can land before 0b (cards still render,
+just with the old button until 0b).
+
 ### Touch points
 
 - **`RunState.gd`:** `_build_choice_step` (compute danger/trait/nudge after building both options + the

@@ -1,7 +1,8 @@
 # Choices & Builds Patch — vision & roadmap
 
-> Status: **vision drafting (guided Q&A in progress).** Sits on top of the implemented structure rework
-> (`v3/structure-rework`). The "what makes it replayable" patch — a phased roadmap, not a single commit.
+> Status: **all phases Codex-ready (specs below), not built yet.** Sits on top of the implemented
+> structure rework (`v3/structure-rework`). The "what makes it replayable" patch — a phased roadmap, not
+> a single commit. (Phase C is scaffolding-only — art assets are a human/art task, not Codex-buildable.)
 >
 > **Absorbs the next-room-choice patch** (now **Phase 0**) — the two share one rarity/reward economy
 > (room rare-nudge ↔ Signature-tier roll), so they're designed together here. The theme that unifies
@@ -136,16 +137,95 @@ Phase 0 and Phase A touch the *same* rare roll, so define it once:
 - Tuning lever: Signature-share curve, the `rare_bonus` size, and the rare-chance cap are one balance
   problem now, not two.
 
-## Open questions (to resolve via guided Q&A)
+## Remaining = tuning only (specs are Codex-ready)
 
-- **Phase A — SHAPE DECIDED** (tag synergies · Signature tier · mixed parasites · count-scaling ·
-  minimal-then-grow). Remaining = numbers (`PER_TAG_RATE`, amplifier stack values, Signature rare
-  weighting), the final card list, and the `MutationSystem` wiring detail (where `tag_power` multiplies
-  in the compile). To turn into a Codex-ready task next, like the structure rework.
-- **Phase B — SHAPE DECIDED** (score = banked currency · unlock menu · all categories gated · lean
-  start · persistent save via `ProfileState`). Remaining = the score formula, the free starting set,
-  unlock costs/order, the unlock-menu UX, and the pool/setup unlock-filter wiring.
-- **Phase C — later:** the rubberhose restyle scope.
+The Codex-ready specs above leave only **playtest-tunable numbers**, not design gaps:
+- Phase 0: `RARE_NUDGE`, danger-pip thresholds/weights.
+- Phase A: `PER_TAG_RATE`, amplifier stack sizes, `_signature_share(depth)` curve, parasite values, the
+  final card list.
+- Phase B: the score formula constants, the free starting set + unlock costs/order, unlock-menu UX.
+- Phase C: the full art-asset effort (separate, human/art) + the re-skin scaffolding scope.
+
+Recommended next: a **review pass** (the loop that's caught real bugs each time), then build **Phase 0**.
+
+## Codex-ready specs (per phase)
+
+Numbers are placeholders (tune in playtest); shapes/touch-points are decided. Each phase is sliced into
+bounded hand-offs. Every slice: `git diff --check` + headless parse/boot; symbol-removal greps over
+runtime paths only.
+
+### Phase 0 — Next-room choice
+Detailed in **`next-room-choice-plan.md`** (data side ~ready; card-UI tightened there). Its `rare_bonus`
+obeys *Rarity & reward economy* above.
+
+### Phase A — Build depth (tag synergies)
+
+**A1 — Tag infrastructure.**
+- `data/mutations.json`: add `"tags": [...]` to upgrades. Seed: `fire_trail→["fire"]`,
+  `freeze_shot→["frost"]`, `poison→["toxic"]`, `ricochet→["split"]`.
+- `MutationSystem.gd`: `_compute_tag_power(player_index) -> Dictionary` — per tag, `count` = equipped
+  upgrades carrying it (+ amplifier bonus stacks); `tag_power[tag] = 1.0 + count * PER_TAG_RATE`
+  (`const PER_TAG_RATE := 0.12`). In `get_compiled_weapon_stats` / `_get_compiled_beam_stats`, **after**
+  the existing fire/frost/toxic/split blocks, multiply their magnitudes by the tag power:
+  fire → `trail_damage_percent`, `impact_pool_damage_percent`; toxic → `poison_dps`, `poison_duration`;
+  frost → `slow_step`, `slow_duration`; split → `split_count += round((tag_power["split"]-1)/PER_TAG_RATE)`
+  (split is integer). **Accept:** equipping N fire upgrades scales the fire magnitudes by `1+N*0.12`.
+
+**A2 — Signature tier + rolling.**
+- `data/mutations.json`: new cards with `"rarity":"signature"`. `MutationSystem.roll_mutation_options`:
+  when a rare is rolled, draw from `{existing rares} + {signature pool}` weighted by `_signature_share(depth)`
+  (0 shallow → ~0.5 deep). Cards (effects in params): **Accelerant** `[fire]` (+2 fire stacks),
+  **Virulent** `[toxic]` (+2 toxic stacks), **Ember Spread** `[fire]` (`ignite_on_death`), **Chain
+  Reaction** `[split]` (`split_count += 1`, `split_can_split=true`), **Cryo Shatter** `[frost]`
+  (`shatter_on_frozen_death`), **Momentum Surge** `[momentum][pierce]` (`pierce_at_max_momentum=3`).
+- Amplifier stacks read in `_compute_tag_power`; transformer flags compiled into the weapon stats and
+  consumed by `Projectile`/`CoopManager` (ignite/shatter on death, split-can-split, momentum pierce
+  hook in `Player`/`CoopManager`).
+
+**A3 — Parasites (mixed, declinable).**
+- Cards with a downside param: **Glass Cannon** (`damage_bonus +0.8` / `max_health_mult -0.4`),
+  **Pyromaniac** `[fire]` (`+3 fire stacks` / `heal_disabled=true`). Compile applies stat ones;
+  `heal_disabled` read by the HP-pickup path. Per the economy section, parasites appear **alongside
+  non-parasite options** (never the only choice).
+
+**Slices:** A1 (tags + scale existing effects) → A2 (Signature cards + rolling + amplifiers/transformers
++ their behavior flags) → A3 (parasites + heal-disabled). **Touch:** `mutations.json`, `MutationSystem`,
+`Projectile`/`CoopManager`/`Player` (behavior flags), `MutationPickUI` (show tags + parasite downside).
+
+### Phase B — Meta: score currency + unlock menu
+
+**B1 — Save + score.**
+- `ProfileState.gd` (today a screen-effect stub): add `banked_score: int`, `unlocked_ids: Array[String]`;
+  real `load_profile`/`save_profile` for them; `add_score(n)`, `spend_score(n)->bool`,
+  `is_unlocked(id)`, `unlock(id)`.
+- Score tracking: `CoopManager` accumulates a run score (`rooms_cleared*100 + kills + champion_kills*250
+  + max_momentum_tier_seen*50`); on run end (win/death, in `RunFlow._on_room_failed` /
+  milestone/`End run`) → `ProfileState.add_score(run_score)`. Surface current score on the in-run HUD
+  (reuse the dropped `_score_label` slot) + on the win/death resolution screens.
+**B2 — Unlock menu.**
+- New `UnlockMenu` screen behind the **existing `MetaButton`** (`home_meta_button` / `meta_button` are
+  already wired). Lists locked items (weapons / abilities / signature cards / perks) with a score cost;
+  `spend_score` → `unlock(id)`; shows banked total. (`reset_profile_button` already exists for wipes.)
+**B3 — Lean start + filtering.**
+- Define `UNLOCK_TABLE` (id → cost, with a small **free starting set**: e.g. `rifle` + 1 weapon, 2
+  abilities, base commons). `Bootstrap` pre-run weapon/ability options (`debug_*`/loadout populators)
+  **filter to unlocked**; `MutationSystem` upgrade/weapon-card pool **filters to unlocked**.
+- ⚠️ Re-gates existing content — confirm early runs don't feel thin; tune the free set + costs.
+
+**Slices:** B1 (save+score, no spending) → B2 (unlock menu) → B3 (lean start + pool/setup filtering).
+**Touch:** `ProfileState`, `CoopManager` (score), `RunFlow` (HUD/resolution surfacing), `Bootstrap`
+(+`Bootstrap.tscn` new UnlockMenu panel + filtering), `MutationSystem`/`RunState` (pool filter).
+
+### Phase C — Rubberhose art *(scaffolding only — assets are human/art work)*
+
+**Honest scope:** art *assets* (hand-drawn rubberhose sprites/animation) are **not Codex-buildable** —
+that's an artist task. What an agent *can* do is the **re-skin scaffolding**:
+- Replace the procedural `_draw()`-based visuals (player/enemy/projectile polygons in `Player`/`Enemy`/
+  `ProjectileRenderer`) with a **sprite/AnimatedSprite swap layer** gated behind a flag, so art can be
+  dropped in without touching gameplay. Catalog every procedural-draw site to convert.
+- Keep the bloom/HDR pipeline; define the asset slots (idle/move/attack per entity, projectile frames).
+- This is a **separate later effort**; spec the pipeline when Phases 0/A/B are in. Listed here for
+  completeness, not as a near-term Codex task.
 
 ## Relationship to other plans
 
