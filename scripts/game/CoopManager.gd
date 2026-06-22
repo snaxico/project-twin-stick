@@ -122,6 +122,7 @@ signal return_to_menu_requested
 @onready var exit_zone_visual: Polygon2D = $ExitZone/Visual
 @onready var floor_visual: Polygon2D = $Floor
 @onready var floor_grid: Node2D = $FloorGrid
+@onready var modifier_tint: CanvasModulate = $ModifierTint
 @onready var camera: Camera2D = $Camera2D
 @onready var screen_shake = $Camera2D/ScreenShake
 @onready var screen_effects = $ScreenEffects
@@ -190,6 +191,7 @@ var _objective_progress_bar: ProgressBar = null
 var _boss_health_bar = null
 var _mutation_pick_ui = null
 var _active_modifiers: Array = []
+var _grid_pulse_time := 0.0
 var _modifier_definitions: Dictionary = {}
 var _minor_modifier_flags := {
 	"accelerating_waves": false,
@@ -935,10 +937,18 @@ func _apply_arena_color() -> void:
 	var wall := Color.from_hsv(hue, 0.62, 1.0, 0.68)
 	if floor_visual != null:
 		floor_visual.color = Color(0.0, 0.0, 0.0, 1.0)
+	var max_dist := (ARENA_SIZE * 0.5).length()
 	for child in floor_grid.get_children():
 		if child is Line2D:
 			var line := child as Line2D
-			line.default_color = wall if line.width >= ARENA_WALL_VISUAL_WIDTH else (major if line.width >= 3.0 else minor)
+			if line.width >= ARENA_WALL_VISUAL_WIDTH:
+				line.default_color = wall  # arena frame stays bright
+				continue
+			var base_color := major if line.width >= 3.0 else minor
+			# Depth focus: dim grid lines the farther their midpoint sits from arena center.
+			var mid := (line.points[0] + line.points[line.points.size() - 1]) * 0.5
+			var depth := 1.0 - clampf(mid.distance_to(ARENA_CENTER) / max_dist, 0.0, 1.0)
+			line.default_color = Color(base_color.r, base_color.g, base_color.b, base_color.a * (0.32 + 0.68 * depth))
 
 func _apply_collision_bounds_from_floor() -> void:
 	_set_wall_rect(top_wall, Vector2(ARENA_CENTER.x, ARENA_MARGIN * 0.5), Vector2(ARENA_SIZE.x - ARENA_MARGIN * 2.0, ARENA_MARGIN))
@@ -1160,9 +1170,35 @@ func _apply_active_modifiers() -> void:
 		_shrinking_arena_modifier.setup(ARENA_RECT)
 		effects.add_child(_shrinking_arena_modifier)
 		_spawn_modifier_activation_vfx("shrinking_arena", Color(0.96, 0.32, 0.28, 0.72))
+	_apply_modifier_tint()
 	_populate_modifier_hud()
 
+func _apply_modifier_tint() -> void:
+	# Reset to neutral each room; a MAJOR hazard washes the world (not the UI layer) with its
+	# signature color, by fixed priority. Passive-only / unmodified rooms stay neutral white.
+	if modifier_tint == null:
+		return
+	var tint := Color(1.0, 1.0, 1.0, 1.0)
+	if _active_modifiers.has("fire_floor"):
+		tint = Color(1.0, 0.88, 0.82)
+	elif _active_modifiers.has("ice_zone"):
+		tint = Color(0.84, 0.92, 1.0)
+	elif _active_modifiers.has("mine_field"):
+		tint = Color(1.0, 0.95, 0.82)
+	elif _active_modifiers.has("shrinking_arena"):
+		tint = Color(1.0, 0.85, 0.84)
+	modifier_tint.color = tint
+
+func _update_grid_pulse(delta: float) -> void:
+	# Subtle breathing so the arena reads as alive, not a static backdrop.
+	if floor_grid == null:
+		return
+	_grid_pulse_time += delta
+	var pulse := 0.94 + 0.06 * sin(_grid_pulse_time * 1.6)
+	floor_grid.modulate = Color(pulse, pulse, pulse, 1.0)
+
 func _physics_process(delta: float) -> void:
+	_update_grid_pulse(delta)
 	if _awaiting_mutation_pick:
 		return
 	if _game_paused or pause_panel.visible or get_tree().paused:
