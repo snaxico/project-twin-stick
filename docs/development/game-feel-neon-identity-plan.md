@@ -98,7 +98,7 @@ victory/defeat flourish. Polish layer once 1–4 land.
 
 ## Build order
 
-1. **Phase 1** (arena + glow + hide debug HUD) — loudest tell, cheapest fix.
+1. **Phase 1** (arena + glow + legacy debug HUD cleanup) — loudest tell, cheapest fix.
 2. **Phase 2** (silhouettes + motion) — biggest "alive" gain; encyclopedia benefits free.
 3. **Phase 3** (impact tuning) — make it hit.
 4. **Phase 4** (audio) — the other half of "not a prototype".
