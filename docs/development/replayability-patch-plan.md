@@ -216,6 +216,11 @@ node; manual = cards read as different fights with real modifier names and the `
 - Amplifier stacks read in `_compute_tag_power`; transformer flags compiled into the weapon stats and
   consumed by `Projectile`/`CoopManager` (ignite/shatter on death, split-can-split, momentum pierce
   hook in `Player`/`CoopManager`).
+- **Rarity rank (required):** code today checks `rarity == "rare"` literally for the dry-streak reset
+  (`CoopManager._options_contain_rare` ~1403) and pick presentation (`MutationPickUI` ~262). Add a
+  `_rarity_rank(rarity)` helper (`common 0 / rare 1 / signature 2`) and use **rank ≥ rare** at those
+  sites so **Signature counts as rare-or-better** (resets dry streak, satisfies `force_rare`), and give
+  Signature its **own distinct color/label** in `MutationPickUI`.
 
 **A3 — Parasites (mixed, declinable).**
 - Cards with a downside param: **Glass Cannon** (`damage_bonus +0.8` / `max_health_mult -0.4`),
@@ -237,14 +242,20 @@ depth; **a forced all-parasite roll with a non-parasite available replaces ≥1*
 - `ProfileState.gd` (today a screen-effect stub): add `banked_score: int`, `unlocked_ids: Array[String]`;
   real `load_profile`/`save_profile` for them; `add_score(n)`, `spend_score(n)->bool`,
   `is_unlocked(id)`, `unlock(id)`.
-- Score tracking: `CoopManager` accumulates a run score (`rooms_cleared*100 + kills + champion_kills*250
-  + max_momentum_tier_seen*50`). **Bank ONCE, only at terminal run end** — i.e. **death**
-  (`RunFlow._on_room_failed`) or **End Run** (the milestone secondary button → `return_to_menu`). **Do
-  NOT bank at the room-10 milestone itself** — `Continue` keeps the same run going
-  ([RunFlow.gd:172](scripts/ui/RunFlow.gd:172)), so banking there would double-count when the player later
-  dies. (Equivalent alternative: track `banked_so_far` and add only the delta — pick one; terminal-only
-  is simpler.) Surface current score on the in-run HUD (reuse the dropped `_score_label` slot) + on the
-  win/death resolution screens.
+- **Run-score state lives in `RunState`** (persists the whole run). `CoopManager` is **re-instantiated
+  per room** and `_start_room()` resets its room counters (`_enemies_killed`, etc.), so run score
+  **cannot** live there. Add `RunState.run_score: int` + `add_run_score(delta)`.
+- `CoopManager` tracks only the **current room's** contribution (`+100 cleared + kills +
+  champion_kills*250 + room_max_momentum_tier*50`) and **writes the room delta to `RunState` on BOTH
+  room clear AND player death** — i.e. call `RunState.add_run_score(room_delta)` in `_handle_room_clear`
+  **and** right before emitting `all_players_dead` (which is **arg-less today** — the failed room's
+  kills/champion/momentum would otherwise be lost). So `RunState.run_score` is always current with no
+  signal-payload change. (Alt: emit `all_players_dead(score_context)` and bank in `RunFlow`; the
+  live-write is simpler.)
+- **Bank ONCE at terminal run end only** — death (`RunFlow._on_room_failed`) or End Run (milestone
+  secondary): `ProfileState.add_score(RunState.run_score)`. **Not** at the room-10 milestone (`Continue`
+  keeps the run going, [RunFlow.gd:172](scripts/ui/RunFlow.gd:172) → double-count). Surface
+  `RunState.run_score` on the in-run HUD (reuse the dropped `_score_label` slot) + on the resolution screens.
 **B2 — Unlock menu.**
 - The scene **already has** `MetaButton`s + a `meta_panel`, **but `Bootstrap` hides them and does not
   connect them** (`home_meta_button`/`meta_button`/`reset_profile_button`/`meta_panel` set
@@ -259,9 +270,10 @@ depth; **a forced all-parasite roll with a non-parasite available replaces ≥1*
 - ⚠️ Re-gates existing content — confirm early runs don't feel thin; tune the free set + costs.
 
 **Slices:** B1 (save+score, no spending) → B2 (unlock menu) → B3 (lean start + pool/setup filtering).
-**Touch:** `ProfileState`, `CoopManager` (score), `RunFlow` (HUD/resolution surfacing), `Bootstrap`
-(+`Bootstrap.tscn` `meta_panel` unlock UI + show/wire meta buttons + filtering), `MutationSystem`/`RunState`
-(pool filter). **Accept:** a run that reaches the milestone, Continues, then dies banks the score **once**
+**Touch:** `ProfileState`, `CoopManager` (room-delta score + write on clear/`all_players_dead`), `RunState`
+(`run_score` + `add_run_score` + pool filter), `RunFlow` (HUD/resolution surfacing + bank on terminal end),
+`Bootstrap` (+`Bootstrap.tscn` `meta_panel` unlock UI + show/wire meta buttons + filtering),
+`MutationSystem` (pool filter). **Accept:** a run that reaches the milestone, Continues, then dies banks the score **once**
 (not the milestone portion twice); spending in the menu unlocks and persists across a restart.
 
 ### Phase C — Rubberhose art *(scaffolding only — assets are human/art work)*
