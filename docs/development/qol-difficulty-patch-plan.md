@@ -6,6 +6,11 @@
 Playtest findings → reward-UX, early-game difficulty, and encyclopedia polish. Build order: reward UX
 first (fixes a felt frustration), then the early-game balance pass, then encyclopedia visuals.
 
+**Co-op economy is SHARED (confirmed).** Both players share one `RunState.run_score` (the reroll budget),
+and meta unlocks + banked score in `ProfileState` apply to both. So rerolls spend from a **single shared
+pool** — if both players have simultaneous picks, they draw from and deplete the same budget (coordinate,
+not separate wallets).
+
 ## 1. Reroll + Skip *(reward UX — fixes "all-weapon-cards, didn't want to swap")*
 
 **Decided:** reroll costs the **current run's unbanked score** (so rerolling = less to bank for unlocks —
