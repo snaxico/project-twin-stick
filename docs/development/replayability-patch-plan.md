@@ -178,7 +178,7 @@ the two options are different *kinds* of fight; the spicier one carries the smal
 **Card UI (`RunFlow._build_route_card` rewrite):** a `Button` (focus/controller nav) + child VBox
 (`mouse_filter=IGNORE`), `custom_minimum_size (252,196)`, `StyleBoxFlat` dark neon bg, 1px accent border
 (**2px brighter when `rare_bonus>0`**). Rows: (1) trait icon + `trait_label` · danger pips (filled dots);
-(2) `HFlowContainer` modifier chips with **real names** (`modifier_id→display_name` from `modifiers.json`,
+(2) `HFlowContainer` modifier chips with **real names** (read `modifiers.json` **`name`** by id,
 replacing `_modifier_abbreviation`); (3) Enemies / Objective; (4) "Rare odds NN%" + a `+N%` marker when
 nudged. Existing HUD neon colors, no new theme.
 
@@ -204,9 +204,12 @@ node; manual = cards read as different fights with real modifier names and the `
   (split is integer). **Accept:** equipping N fire upgrades scales the fire magnitudes by `1+N*0.12`.
 
 **A2 — Signature tier + rolling.**
-- `data/mutations.json`: new cards with `"rarity":"signature"`. `MutationSystem.roll_mutation_options`:
-  when a rare is rolled, draw from `{existing rares} + {signature pool}` weighted by `_signature_share(depth)`
-  (0 shallow → ~0.5 deep). Cards (effects in params): **Accelerant** `[fire]` (+2 fire stacks),
+- `data/mutations.json`: new cards with `"rarity":"signature"`. **Depth input:** `roll_mutation_options`
+  has no depth arg today — **add a `signature_share: float` parameter** that `CoopManager` computes from
+  `_room_depth` (`_signature_share(_room_depth)`, 0 shallow → ~0.5 deep) and passes at the existing call
+  site (`CoopManager` ~1384). `MutationSystem`: when a rare is rolled, draw from `{existing rares} +
+  {signature pool}`, choosing the signature pool with probability `signature_share`. Cards (effects in
+  params): **Accelerant** `[fire]` (+2 fire stacks),
   **Virulent** `[toxic]` (+2 toxic stacks), **Ember Spread** `[fire]` (`ignite_on_death`), **Chain
   Reaction** `[split]` (`split_count += 1`, `split_can_split=true`), **Cryo Shatter** `[frost]`
   (`shatter_on_frozen_death`), **Momentum Surge** `[momentum][pierce]` (`pierce_at_max_momentum=3`).
@@ -217,12 +220,16 @@ node; manual = cards read as different fights with real modifier names and the `
 **A3 — Parasites (mixed, declinable).**
 - Cards with a downside param: **Glass Cannon** (`damage_bonus +0.8` / `max_health_mult -0.4`),
   **Pyromaniac** `[fire]` (`+3 fire stacks` / `heal_disabled=true`). Compile applies stat ones;
-  `heal_disabled` read by the HP-pickup path. Per the economy section, parasites appear **alongside
-  non-parasite options** (never the only choice).
+  `heal_disabled` read by the HP-pickup path.
+- **Roll invariant (concrete):** after `roll_mutation_options` fills the option set, if **every** option
+  is a parasite **and** a non-parasite is available in the eligible pool, **replace at least one** with a
+  non-parasite. So a pick is never all-downside. (`is_parasite` = a flag on the card.)
 
 **Slices:** A1 (tags + scale existing effects) → A2 (Signature cards + rolling + amplifiers/transformers
 + their behavior flags) → A3 (parasites + heal-disabled). **Touch:** `mutations.json`, `MutationSystem`,
 `Projectile`/`CoopManager`/`Player` (behavior flags), `MutationPickUI` (show tags + parasite downside).
+**Accept:** equipping N fire upgrades scales fire magnitudes ×`(1+N*0.12)`; signature share rises with
+depth; **a forced all-parasite roll with a non-parasite available replaces ≥1** (headless-testable).
 
 ### Phase B — Meta: score currency + unlock menu
 
@@ -231,13 +238,20 @@ node; manual = cards read as different fights with real modifier names and the `
   real `load_profile`/`save_profile` for them; `add_score(n)`, `spend_score(n)->bool`,
   `is_unlocked(id)`, `unlock(id)`.
 - Score tracking: `CoopManager` accumulates a run score (`rooms_cleared*100 + kills + champion_kills*250
-  + max_momentum_tier_seen*50`); on run end (win/death, in `RunFlow._on_room_failed` /
-  milestone/`End run`) → `ProfileState.add_score(run_score)`. Surface current score on the in-run HUD
-  (reuse the dropped `_score_label` slot) + on the win/death resolution screens.
+  + max_momentum_tier_seen*50`). **Bank ONCE, only at terminal run end** — i.e. **death**
+  (`RunFlow._on_room_failed`) or **End Run** (the milestone secondary button → `return_to_menu`). **Do
+  NOT bank at the room-10 milestone itself** — `Continue` keeps the same run going
+  ([RunFlow.gd:172](scripts/ui/RunFlow.gd:172)), so banking there would double-count when the player later
+  dies. (Equivalent alternative: track `banked_so_far` and add only the delta — pick one; terminal-only
+  is simpler.) Surface current score on the in-run HUD (reuse the dropped `_score_label` slot) + on the
+  win/death resolution screens.
 **B2 — Unlock menu.**
-- New `UnlockMenu` screen behind the **existing `MetaButton`** (`home_meta_button` / `meta_button` are
-  already wired). Lists locked items (weapons / abilities / signature cards / perks) with a score cost;
-  `spend_score` → `unlock(id)`; shows banked total. (`reset_profile_button` already exists for wipes.)
+- The scene **already has** `MetaButton`s + a `meta_panel`, **but `Bootstrap` hides them and does not
+  connect them** (`home_meta_button`/`meta_button`/`reset_profile_button`/`meta_panel` set
+  `visible = false` at `Bootstrap.gd` ~141–146). So B2 must: **make them visible + wire**
+  open (show `meta_panel`) / back / reset. Build the `UnlockMenu` UI **into the existing `meta_panel`**:
+  lists locked items (weapons / abilities / signature cards / perks) with a score cost; `spend_score` →
+  `unlock(id)`; shows banked total; `reset_profile_button` → `ProfileState.reset_profile()`.
 **B3 — Lean start + filtering.**
 - Define `UNLOCK_TABLE` (id → cost, with a small **free starting set**: e.g. `rifle` + 1 weapon, 2
   abilities, base commons). `Bootstrap` pre-run weapon/ability options (`debug_*`/loadout populators)
@@ -246,7 +260,9 @@ node; manual = cards read as different fights with real modifier names and the `
 
 **Slices:** B1 (save+score, no spending) → B2 (unlock menu) → B3 (lean start + pool/setup filtering).
 **Touch:** `ProfileState`, `CoopManager` (score), `RunFlow` (HUD/resolution surfacing), `Bootstrap`
-(+`Bootstrap.tscn` new UnlockMenu panel + filtering), `MutationSystem`/`RunState` (pool filter).
+(+`Bootstrap.tscn` `meta_panel` unlock UI + show/wire meta buttons + filtering), `MutationSystem`/`RunState`
+(pool filter). **Accept:** a run that reaches the milestone, Continues, then dies banks the score **once**
+(not the milestone portion twice); spending in the menu unlocks and persists across a restart.
 
 ### Phase C — Rubberhose art *(scaffolding only — assets are human/art work)*
 
