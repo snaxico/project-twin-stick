@@ -216,11 +216,14 @@ node; manual = cards read as different fights with real modifier names and the `
 - Amplifier stacks read in `_compute_tag_power`; transformer flags compiled into the weapon stats and
   consumed by `Projectile`/`CoopManager` (ignite/shatter on death, split-can-split, momentum pierce
   hook in `Player`/`CoopManager`).
-- **Rarity rank (required):** code today checks `rarity == "rare"` literally for the dry-streak reset
-  (`CoopManager._options_contain_rare` ~1403) and pick presentation (`MutationPickUI` ~262). Add a
-  `_rarity_rank(rarity)` helper (`common 0 / rare 1 / signature 2`) and use **rank ≥ rare** at those
-  sites so **Signature counts as rare-or-better** (resets dry streak, satisfies `force_rare`), and give
-  Signature its **own distinct color/label** in `MutationPickUI`.
+- **Rarity rank (required) — replace ALL literal `rarity == "rare"` checks**, not a couple. Add a
+  `_rarity_rank(rarity)` helper (`common 0 / rare 1 / signature 2`); **logic** sites use **rank ≥ rare**,
+  **presentation/sort** sites give Signature its **own color + sort it above rare**. Known sites:
+  `CoopManager._options_contain_rare` (~1406, dry-streak), `CoopManager` mutation-chip styling + sort
+  (~3087, 3092–3093, 3107, 3115–3116), `MutationPickUI` (~262, 339, 396),
+  `PlayerLoadoutSummaryRow` (~118–121, 131). **Note:** `MutationSystem`'s rare-pool building (~218, 225,
+  376) is the *existing rare pool*; Signature is a **separate pool added in A2's rolling**, so those
+  stay as-is.
 
 **A3 — Parasites (mixed, declinable).**
 - Cards with a downside param: **Glass Cannon** (`damage_bonus +0.8` / `max_health_mult -0.4`),
@@ -231,8 +234,9 @@ node; manual = cards read as different fights with real modifier names and the `
   non-parasite. So a pick is never all-downside. (`is_parasite` = a flag on the card.)
 
 **Slices:** A1 (tags + scale existing effects) → A2 (Signature cards + rolling + amplifiers/transformers
-+ their behavior flags) → A3 (parasites + heal-disabled). **Touch:** `mutations.json`, `MutationSystem`,
-`Projectile`/`CoopManager`/`Player` (behavior flags), `MutationPickUI` (show tags + parasite downside).
++ their behavior flags) → A3 (parasites + heal-disabled). **Touch:** `mutations.json`, `MutationSystem`
+(compile/roll/`_rarity_rank`), `Projectile`/`CoopManager`/`Player` (behavior flags), `MutationPickUI` +
+`CoopManager` chips + `PlayerLoadoutSummaryRow` (tags/parasite display + Signature rarity-rank everywhere).
 **Accept:** equipping N fire upgrades scales fire magnitudes ×`(1+N*0.12)`; signature share rises with
 depth; **a forced all-parasite roll with a non-parasite available replaces ≥1** (headless-testable).
 
@@ -245,13 +249,15 @@ depth; **a forced all-parasite roll with a non-parasite available replaces ≥1*
 - **Run-score state lives in `RunState`** (persists the whole run). `CoopManager` is **re-instantiated
   per room** and `_start_room()` resets its room counters (`_enemies_killed`, etc.), so run score
   **cannot** live there. Add `RunState.run_score: int` + `add_run_score(delta)`.
-- `CoopManager` tracks only the **current room's** contribution (`+100 cleared + kills +
-  champion_kills*250 + room_max_momentum_tier*50`) and **writes the room delta to `RunState` on BOTH
-  room clear AND player death** — i.e. call `RunState.add_run_score(room_delta)` in `_handle_room_clear`
-  **and** right before emitting `all_players_dead` (which is **arg-less today** — the failed room's
-  kills/champion/momentum would otherwise be lost). So `RunState.run_score` is always current with no
-  signal-payload change. (Alt: emit `all_players_dead(score_context)` and bank in `RunFlow`; the
-  live-write is simpler.)
+- `CoopManager` writes the current room's delta to `RunState.add_run_score(...)` at room end, **and the
+  delta differs by outcome:**
+  - **on clear** (`_handle_room_clear`): `delta = 100 (clear credit) + kills + champion_kills*250 +
+    room_max_momentum_tier*50`.
+  - **on death** (right before emitting the arg-less `all_players_dead`): `delta = kills +
+    champion_kills*250 + room_max_momentum_tier*50` — **no `+100` clear credit** (the room wasn't
+    cleared). Without writing here the failed room's stats would be lost.
+  So `RunState.run_score` is always current with no signal-payload change. (Alt: emit
+  `all_players_dead(score_context)` and bank in `RunFlow`; the live-write is simpler.)
 - **Bank ONCE at terminal run end only** — death (`RunFlow._on_room_failed`) or End Run (milestone
   secondary): `ProfileState.add_score(RunState.run_score)`. **Not** at the room-10 milestone (`Continue`
   keeps the run going, [RunFlow.gd:172](scripts/ui/RunFlow.gd:172) → double-count). Surface
