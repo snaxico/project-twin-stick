@@ -49,22 +49,28 @@ heal amount). **Open:** final values.
 
 `_kill_streak_target = 18` is too low → raise (~28–32). **Touch:** `CoopManager` (~1129). **Open:** value.
 
-## 5. Encyclopedia procedural visuals
+## 5. Encyclopedia visuals = the in-game visuals
 
-**Decided:** procedural previews now (replaced when the rubberhose art lands).
+**Decided:** the encyclopedia shows the **same visual each thing has in-game** — not a separate icon
+set — so what you see in the encyclopedia is exactly what you fight/use. (Replaced wholesale when the
+rubberhose art lands.)
 
-- **Weapons / abilities / mutations:** reuse `IconFactory.get_weapon_icon` / `get_passive_icon` /
-  `get_mutation_icon` in the list rows + detail panel.
-- **Enemies (new):** a procedural shape preview from the enemy's representative polygon + feedback color.
-  Add `IconFactory.get_enemy_icon(enemy_id)` (draw the enemy shape to a texture), sourced from the
-  per-type shapes/colors in `Enemy.gd`.
-- **Modifiers (new):** a representative glyph + color (reuse the Phase-0 `trait_icon`/modifier mapping
-  where it applies, else a colored dot/letter).
-- `EncyclopediaUI`: render an icon/preview per list entry + in the detail panel; entries carry an
-  `icon` / `icon_kind` so the UI knows what to draw per category.
-- **Touch:** `EncyclopediaUI`, `IconFactory` (+ enemy/modifier rendering), enemy-shape source in `Enemy.gd`.
-- **Open:** enemy-shape source (extract `Enemy.gd` polygons vs simple representative shapes); modifier
-  glyph set.
+- **Single source of truth.** Where a visual is built inline today (e.g. the enemy `Polygon2D`
+  shape/color set per type in `Enemy.gd._update_visual_state`), **extract it into a reusable builder**
+  that both the live node and the encyclopedia preview call — so the preview can never drift from the
+  real thing.
+- **Enemies:** render the enemy's actual shape + feedback color (via the shared builder) as a small
+  static preview of the real in-game body.
+- **Weapons:** the actual projectile/weapon visual the weapon fires in-game.
+- **Abilities / mutations:** their in-game icons (`IconFactory`) — these are already the same ones shown
+  on reward cards, so reuse is automatically "same as in-game".
+- **Modifiers:** the modifier's actual visual (e.g. the Ice Zone ring, Fire Floor zone) rendered small.
+- `EncyclopediaUI`: add the preview to each list row + detail panel; prefer a lightweight `_draw` that
+  calls the shared shape builder over a per-entry `SubViewport` where the visual is a simple polygon.
+- **Touch:** `EncyclopediaUI`, `Enemy.gd` (extract the per-type visual builder), `IconFactory`, the
+  modifier draw code.
+- **Open:** the render surface for the live previews (`_draw` + shared builder, preferred) vs a
+  `SubViewport` per entry for anything that's an animated/composite node.
 
 ## Build order / slicing
 
