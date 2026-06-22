@@ -25,24 +25,33 @@ a power-now-vs-progress-later tradeoff, no new currency); **escalating cost** pe
   updated when offers are *generated* (`CoopManager._show_mutation_pick` ~1408–1411: reset if the offered
   set contains a rare, else +1). If reroll reused that, one pick round would increment/reset the streak
   multiple times before the player chooses. **Rule:** the streak updates **only on a round's initial
-  offer**; the reroll path regenerates options **without touching `rare_dry_streak`** (and without
-  re-applying `force_rare` pity — pity is decided once, at the initial offer).
-- **UI signal contract (`MutationPickUI` today only emits `selections_confirmed`, and input is custom
-  per-player navigation, not button focus).** Add:
-  - signals `reroll_requested(player_index)`, `skip_requested(player_index)`;
-  - method `replace_options_for_player(player_index, options)` so `CoopManager` can swap a player's cards
-    in place after a reroll;
-  - per-player **Reroll (cost)** + **Skip** affordances reachable via the existing per-player
-    navigation/confirm inputs (not Control focus) — define the input action (e.g. a dedicated button or
-    a navigation slot), and disable Reroll when `run_score < cost`.
+  offer**; the reroll path regenerates options **without touching `rare_dry_streak`**.
+- **Force-rare split (champion reward vs pity).** `_show_mutation_pick(force_rare, …)` mixes two things:
+  the **round-level** `force_rare` (true for Champion Reward, false for level-ups) and the **per-player
+  dry-streak pity** (`force_rare or inventory.rare_dry_streak >= 3`). A reroll must **keep the round-level
+  `force_rare`** (so a Champion Reward reroll still guarantees a rare) but **NOT** re-apply the
+  dry-streak pity. Concretely: store the round's `force_rare`; reroll calls
+  `roll_mutation_options(p, 3, rare_chance, round_force_rare, signature_share)` — passing the round flag
+  only, *not* OR-ed with `rare_dry_streak`. Pity is applied (and the streak updated) only at the initial offer.
+- **Input = two extra navigable slots (decided).** `MutationPickUI` navigates a horizontal row of
+  `options.size()` cards via per-player left/right (`_get_player_menu_direction`) + confirm
+  (`_is_player_confirm_pressed`); there is no Control focus. So **append two pseudo-slots — `[Reroll
+  (cost)]` and `[Skip]` — to that row** (navigable count = cards + 2). Reusing the existing nav/confirm
+  means **no new input bindings**. In `_confirm_player_selection`, branch on the selected slot:
+  - a **card** → pick it (current behavior);
+  - the **Reroll** slot → emit `reroll_requested(player_index)` (do **not** confirm the player); render it
+    **disabled/greyed when `run_score < cost`** so confirming it is a no-op;
+  - the **Skip** slot → emit `skip_requested(player_index)` (resolve the player with no upgrade).
+  Cancel (`_is_player_cancel_pressed`) still unconfirms a confirmed card.
+- **UI additions:** signals `reroll_requested(player_index)` / `skip_requested(player_index)`; method
+  `replace_options_for_player(player_index, options)` for `CoopManager` to swap a player's cards in place
+  after a reroll; show the player's `run_score` + the next reroll cost on the Reroll slot.
 - `CoopManager`: on `reroll_requested(p)` → if `RunState.spend_run_score(cost(p))` succeeds, re-roll p's
-  options (dry-streak-neutral) → `replace_options_for_player(p, new_options)` + bump p's reroll counter;
-  on `skip_requested(p)` → mark p resolved with **no upgrade**. Owns the per-pick reroll counters; show
-  `run_score` + next cost in the UI.
-- **Reroll cost** = `base * 2^reroll_count_this_pick` (placeholder base `100` → 100/200/400/…); counter
-  **resets at the start of each pick round**.
+  options (dry-streak-neutral, round-level `force_rare` only) → `replace_options_for_player(p, new_options)`
+  + bump p's reroll counter; on `skip_requested(p)` → mark p resolved with **no upgrade** (still consumes
+  the pick round). Owns the per-pick reroll counters.
 - **Touch:** `RunState` (`spend_run_score`), `CoopManager` (`_show_mutation_pick` + reroll/skip handlers
-  + dry-streak-neutral reroll), `MutationPickUI` (signals/method/inputs above).
+  + dry-streak-neutral / force-rare-split reroll), `MutationPickUI` (slots/signals/method above).
 - **Open:** base cost + escalation factor; confirm Skip still consumes the banked pick round (yes).
 
 ## 2. Buff chasers + early-game difficulty *(balance — "mainly early game")*
