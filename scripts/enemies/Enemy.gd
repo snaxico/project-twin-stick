@@ -9,6 +9,7 @@ const SEPARATION_STRENGTH := 120.0
 const HIVE_DEFLECTOR_VULNERABLE_WINDOW := 6.0
 const BLOOM_COLOR_MULTIPLIER := 1.45
 const READABILITY_VISUAL_SCALE := 1.2
+const BASE_VISUAL_SCALE := Vector2(1.08, 1.22)
 
 signal enemy_died(enemy)
 signal fire_requested(origin, direction, speed, damage, team, color, projectile_scale)
@@ -29,6 +30,73 @@ enum EnemyType {
 	BOSS_HIVE,
 	BOSS_PULSAR,
 }
+
+static func get_visual_profile(type_name: String, shielded: bool = false) -> Dictionary:
+	var feedback_color := get_feedback_color_for_type(type_name)
+	return {
+		"polygon": get_base_visual_polygon(),
+		"scale": BASE_VISUAL_SCALE * get_visual_scale_multiplier(type_name) * READABILITY_VISUAL_SCALE,
+		"color": _bloom_visual_color(feedback_color.lightened(0.24) if shielded else feedback_color),
+	}
+
+static func get_base_visual_polygon() -> PackedVector2Array:
+	return PackedVector2Array([
+		Vector2(0.0, -22.0),
+		Vector2(12.0, -14.0),
+		Vector2(16.0, -3.0),
+		Vector2(14.0, 14.0),
+		Vector2(0.0, 22.0),
+		Vector2(-14.0, 14.0),
+		Vector2(-16.0, -3.0),
+		Vector2(-12.0, -14.0),
+	])
+
+static func get_visual_scale_multiplier(type_name: String) -> float:
+	match type_name:
+		"splitter_mini":
+			return 0.55
+		"boss_warden", "boss_hydra", "boss_hive", "boss_pulsar":
+			return 2.25
+		"elite_charger", "elite_spitter", "elite_support":
+			return 1.9
+		"bomber":
+			return 1.2
+		"splitter":
+			return 1.1
+		_:
+			return 1.0
+
+static func get_feedback_color_for_type(type_name: String) -> Color:
+	match type_name:
+		"charger":
+			return Color(1.0, 0.48, 0.18, 1.0)
+		"spitter":
+			return Color(0.4, 0.9, 1.0, 1.0)
+		"splitter":
+			return Color(0.3, 0.9, 0.4, 1.0)
+		"splitter_mini":
+			return Color(1.0, 0.7, 0.95, 1.0)
+		"bomber":
+			return Color(0.9, 0.3, 0.15, 1.0)
+		"elite_charger":
+			return Color(1.0, 0.54, 0.18, 1.0)
+		"elite_spitter":
+			return Color(0.46, 0.98, 1.0, 1.0)
+		"elite_support":
+			return Color(0.72, 0.98, 0.48, 1.0)
+		"boss_warden":
+			return Color(1.0, 0.32, 0.26, 1.0)
+		"boss_hydra":
+			return Color(0.44, 0.78, 1.0, 1.0)
+		"boss_hive":
+			return Color(0.8, 0.36, 0.9, 1.0)
+		"boss_pulsar":
+			return Color(0.88, 0.96, 1.0, 1.0)
+		_:
+			return Color(0.96, 0.24, 0.26, 1.0)
+
+static func _bloom_visual_color(color: Color) -> Color:
+	return Color(color.r * BLOOM_COLOR_MULTIPLIER, color.g * BLOOM_COLOR_MULTIPLIER, color.b * BLOOM_COLOR_MULTIPLIER, color.a)
 
 @export var contact_damage: int = 10
 @export var projectile_speed: float = 340.0
@@ -158,22 +226,22 @@ func _configure_type(type_name: String) -> void:
 	match type_name:
 		"chaser":
 			enemy_type = EnemyType.CHASER
-			max_health = 20.0
-			move_speed = 150.0
+			max_health = 30.0
+			move_speed = 175.0
 			fire_interval = 99.0
 			projectile_damage = 0
 			projectile_speed = 0.0
-			contact_damage = 8
+			contact_damage = 12
 			_feedback_color = Color(0.96, 0.24, 0.26, 1.0)
 			_feedback_weight = 0.9
 		"charger":
 			enemy_type = EnemyType.CHARGER
-			max_health = 45.0
-			move_speed = 196.0
+			max_health = 52.0
+			move_speed = 208.0
 			fire_interval = 99.0
 			projectile_damage = 0
 			projectile_speed = 0.0
-			contact_damage = 18
+			contact_damage = 20
 			_feedback_color = Color(1.0, 0.48, 0.18, 1.0)
 			_feedback_weight = 1.1
 		"spitter":
@@ -674,7 +742,6 @@ func _update_spitter_behavior(direction: Vector2, distance: float, now: float) -
 	elif distance > 640.0:
 		desired_velocity = direction * _get_effective_move_speed() * 0.8
 	if now >= _next_fire_at and distance > 120.0:
-		var is_elite := enemy_type == EnemyType.ELITE_SPITTER
 		_next_fire_at = now + _get_effective_fire_interval()
 		var attack_direction := _get_lead_direction(direction, projectile_speed, 0.35) if enemy_type == EnemyType.ELITE_SPITTER else direction
 		_emit_projectiles_at(attack_direction, 1 if enemy_type == EnemyType.SPITTER else 5, 0.16 if enemy_type == EnemyType.ELITE_SPITTER else 0.0, 0.9 if enemy_type == EnemyType.ELITE_SPITTER else 0.7)
@@ -855,7 +922,7 @@ func _find_hive_relocate_position() -> Vector2:
 			best_position = candidate
 	return best_position
 
-func _update_pulsar_behavior(direction: Vector2, _distance: float, now: float) -> Vector2:
+func _update_pulsar_behavior(_direction: Vector2, _distance: float, now: float) -> Vector2:
 	if _pulsar_teleport_at <= 0.0:
 		_pulsar_teleport_at = now + _get_pulsar_teleport_interval()
 	if _pulsar_emp_at <= 0.0:
@@ -1104,20 +1171,12 @@ func _update_visual_state() -> void:
 func _refresh_static_visuals() -> void:
 	if visual == null:
 		return
-	var scale_mult := 1.0
-	match enemy_type:
-		EnemyType.SPLITTER_MINI:
-			scale_mult = 0.55
-		EnemyType.BOSS_WARDEN, EnemyType.BOSS_HYDRA, EnemyType.BOSS_HIVE, EnemyType.BOSS_PULSAR:
-			scale_mult = 2.25
-		EnemyType.ELITE_CHARGER, EnemyType.ELITE_SPITTER, EnemyType.ELITE_SUPPORT:
-			scale_mult = 1.9
-		EnemyType.BOMBER:
-			scale_mult = 1.2
-		EnemyType.SPLITTER:
-			scale_mult = 1.1
+	var type_name := get_type_name()
+	var scale_mult := get_visual_scale_multiplier(type_name)
+	var profile := get_visual_profile(type_name, _shield_active)
+	visual.polygon = profile.get("polygon", get_base_visual_polygon()) as PackedVector2Array
 	visual.scale = _base_visual_scale * scale_mult * READABILITY_VISUAL_SCALE
-	visual.color = _bloom_color(_feedback_color.lightened(0.24)) if _shield_active else _bloom_color(_feedback_color)
+	visual.color = profile.get("color", _bloom_color(_feedback_color)) as Color
 	if collision_shape != null and collision_shape.shape is CircleShape2D:
 		(collision_shape.shape as CircleShape2D).radius = _base_collision_radius * max(0.7, scale_mult)
 	body_root.scale = Vector2.ONE * (1.08 if is_champion() else 1.0)

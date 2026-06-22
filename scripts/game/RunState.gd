@@ -315,6 +315,14 @@ func add_run_score(delta: int) -> void:
 		return
 	run_score += delta
 
+func spend_run_score(amount: int) -> bool:
+	if amount <= 0:
+		return true
+	if run_score < amount:
+		return false
+	run_score -= amount
+	return true
+
 func bank_run_score_once() -> int:
 	if run_score_banked:
 		return 0

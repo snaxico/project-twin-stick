@@ -26,7 +26,13 @@ Read this first to restore project context quickly, then read `current-state.md`
 - The initial structure-rework playtest was approved.
 - Replayability patch Phases 0/A/B are implemented: route-choice cards, Signature/tag/parasite upgrades,
   banked score currency, persistent unlocks, and lean-start pool filtering.
-- Current next validation is a focused feel pass on the replayability patch plus Phase 4 tuning:
+- QoL/difficulty patch is implemented: reward reroll/skip, early pressure tuning, reduced HP drops, higher
+  kill-streak target, and encyclopedia visual previews.
+- Current next validation is a focused feel pass on the QoL/difficulty patch plus replayability/Phase 4 tuning:
+  - reroll/skip reward flow in `1P` and `2P`
+  - shared score spend pressure and reroll-cost escalation
+  - early-room pressure, HP drop frequency, and kill-streak target
+  - encyclopedia visual preview readability
   - Meta unlock flow and persistence
   - lean-start feel before unlocks
   - Signature/parasite offer quality and build divergence
@@ -55,6 +61,7 @@ Read this first to restore project context quickly, then read `current-state.md`
 - Enemy kills feed one shared XP bar.
 - Level-ups bank room-end pick rounds.
 - Champion rooms grant one additional forced-rare reward pick after XP picks resolve.
+- Reward picks support shared-score rerolls and free skips.
 - Rare odds scale continuously by depth and can receive a small room-choice nudge.
 - Upgrades now include a Signature tier with tag synergies and parasite tradeoffs.
 - `ProfileState` stores banked score and permanent unlocks. The Meta menu spends score to add weapons,
@@ -67,6 +74,8 @@ Read this first to restore project context quickly, then read `current-state.md`
   - deeper enemy-pool weighting
   - champion damage/cooldowns/speed
 - Enemy HP is intentionally not the main deep-run pressure driver.
+- The early game is more active after chaser/charger buffs, tighter spawn cadence, larger bursts, fewer HP
+  drops, and a higher kill-streak target.
 
 ## Live Loadout
 
@@ -114,7 +123,8 @@ Read this first to restore project context quickly, then read `current-state.md`
 ## Known Risks
 
 - Phase 4 tuning is first-pass and needs focused live validation.
-- Replayability patch values are first-pass and need live validation.
+- Replayability and QoL/difficulty patch values are first-pass and need live validation.
+- Reroll cost, skip frequency, and shared-score spend pressure need live validation.
 - The lean start may need a larger free set or cheaper early costs if early runs feel too narrow.
 - Champion readability inside dense waves still needs live validation.
 - Deep runs may exhaust upgrade variety; parked until real run depths are known.

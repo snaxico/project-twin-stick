@@ -49,7 +49,8 @@ const BOSS_HIT_FEEDBACK_INTERVAL := 0.22
 const COLLECTOR_TARGET := 8
 const COLLECTOR_TOTAL_SPAWN := 12
 const COLLECTOR_SPAWN_INTERVAL := 2.5
-const HEALTH_DROP_CHANCE := 0.10
+const HEALTH_DROP_CHANCE := 0.06
+const MUTATION_REROLL_BASE_COST := 100
 const BASE_RAMP_DURATION := 45.0
 const ENEMY_SEPARATION_CELL_SIZE := 96.0
 const MOMENTUM_THRESHOLDS := [10, 25, 45, 70]
@@ -164,6 +165,8 @@ var _burst_interval := 10.0
 var _next_burst_at := 0.0
 var _pending_pick_consumes_levelup := false
 var _pending_champion_bonus_pick := false
+var _mutation_pick_round_force_rare := false
+var _mutation_pick_reroll_counts: Array = []
 var _pending_clear_summary := ""
 var _active_boss = null
 var _next_boss_hit_feedback_at := 0.0
@@ -1126,7 +1129,7 @@ func _setup_side_objective() -> void:
 			effects.add_child(_hold_zone)
 			_hold_zone.completed.connect(_complete_side_objective)
 		"kill_streak":
-			_kill_streak_target = 18
+			_kill_streak_target = 30
 		"collector":
 			_collector_spawn_timer = 0.8
 
@@ -1348,7 +1351,7 @@ func _get_spawn_interval() -> float:
 	var progress := RunState.get_run_progress()
 	var arc_progress := clampf(progress, 0.0, 1.0)
 	var continuation := maxf(progress - 1.0, 0.0)
-	var base := lerpf(0.80, 0.50, arc_progress) - continuation * 0.18
+	var base := lerpf(0.68, 0.48, arc_progress) - continuation * 0.18
 	return maxf(base, 0.34)
 
 func _get_champion_spawn_delay() -> float:
@@ -1367,7 +1370,7 @@ func _get_burst_size(is_opening: bool) -> int:
 	var progress := RunState.get_run_progress()
 	var arc_progress := clampf(progress, 0.0, 1.0)
 	var continuation := maxf(progress - 1.0, 0.0)
-	var base := lerpf(4.0, 8.0 if is_opening else 9.0, arc_progress)
+	var base := lerpf(6.0 if is_opening else 5.0, 9.0 if is_opening else 10.0, arc_progress)
 	var continuation_bonus := continuation * (3.0 if is_opening else 5.0)
 	return maxi(1, int(round(base + continuation_bonus)))
 
@@ -1399,24 +1402,69 @@ func _show_progression_pick_if_needed() -> void:
 func _show_mutation_pick(force_rare: bool, title: String, subtitle: String) -> void:
 	if _mutation_pick_ui != null and is_instance_valid(_mutation_pick_ui):
 		_mutation_pick_ui.queue_free()
+	_mutation_pick_round_force_rare = force_rare
+	_reset_mutation_pick_reroll_counts()
 	var options_by_player: Array = []
 	for player_index in range(_player_nodes.size()):
-		var inventory: PlayerInventory = RunState.get_player_inventory(player_index)
-		var force_player_rare: bool = force_rare or (inventory != null and inventory.rare_dry_streak >= 3)
-		var options: Array = _mutation_system.roll_mutation_options(player_index, 3, _get_current_rare_chance(), force_player_rare, _signature_share(_room_depth))
-		if inventory != null:
-			if _options_contain_rare(options):
-				inventory.rare_dry_streak = 0
-			else:
-				inventory.rare_dry_streak += 1
-		options_by_player.append(options)
+		options_by_player.append(_roll_initial_mutation_options_for_player(player_index, force_rare))
 	_mutation_pick_ui = MutationPickUIScene.instantiate()
 	_mutation_pick_ui.configure_for_players(_player_configs, options_by_player, title, subtitle)
+	_mutation_pick_ui.set_reroll_state(RunState.get_current_score(), _build_mutation_pick_reroll_costs())
 	_mutation_pick_ui.selections_confirmed.connect(_on_mutation_selections_confirmed)
+	_mutation_pick_ui.reroll_requested.connect(_on_mutation_reroll_requested)
+	_mutation_pick_ui.skip_requested.connect(_on_mutation_skip_requested)
 	ui_layer.add_child(_mutation_pick_ui)
 	_awaiting_mutation_pick = true
 	if _hit_stop_manager != null and _hit_stop_manager.has_method("request_dilation"):
 		_hit_stop_manager.request_dilation(70, 0.18)
+
+func _roll_initial_mutation_options_for_player(player_index: int, round_force_rare: bool) -> Array:
+	var inventory: PlayerInventory = RunState.get_player_inventory(player_index)
+	var force_player_rare: bool = round_force_rare or (inventory != null and inventory.rare_dry_streak >= 3)
+	var options: Array = _mutation_system.roll_mutation_options(player_index, 3, _get_current_rare_chance(), force_player_rare, _signature_share(_room_depth))
+	if inventory != null:
+		if _options_contain_rare(options):
+			inventory.rare_dry_streak = 0
+		else:
+			inventory.rare_dry_streak += 1
+	return options
+
+func _roll_reroll_mutation_options_for_player(player_index: int) -> Array:
+	return _mutation_system.roll_mutation_options(player_index, 3, _get_current_rare_chance(), _mutation_pick_round_force_rare, _signature_share(_room_depth))
+
+func _reset_mutation_pick_reroll_counts() -> void:
+	_mutation_pick_reroll_counts.clear()
+	for _player_index in range(_player_nodes.size()):
+		_mutation_pick_reroll_counts.append(0)
+
+func _build_mutation_pick_reroll_costs() -> Array:
+	var costs: Array = []
+	for player_index in range(_player_nodes.size()):
+		costs.append(_get_mutation_pick_reroll_cost(player_index))
+	return costs
+
+func _get_mutation_pick_reroll_cost(player_index: int) -> int:
+	if player_index < 0 or player_index >= _mutation_pick_reroll_counts.size():
+		return MUTATION_REROLL_BASE_COST
+	return MUTATION_REROLL_BASE_COST * int(pow(2.0, float(maxi(int(_mutation_pick_reroll_counts[player_index]), 0))))
+
+func _on_mutation_reroll_requested(player_index: int) -> void:
+	if _mutation_pick_ui == null or not is_instance_valid(_mutation_pick_ui):
+		return
+	if player_index < 0 or player_index >= _player_nodes.size():
+		return
+	var cost := _get_mutation_pick_reroll_cost(player_index)
+	if not RunState.spend_run_score(cost):
+		_mutation_pick_ui.set_reroll_state(RunState.get_current_score(), _build_mutation_pick_reroll_costs())
+		return
+	_mutation_pick_reroll_counts[player_index] = int(_mutation_pick_reroll_counts[player_index]) + 1
+	_mutation_pick_ui.replace_options_for_player(player_index, _roll_reroll_mutation_options_for_player(player_index))
+	_mutation_pick_ui.set_reroll_state(RunState.get_current_score(), _build_mutation_pick_reroll_costs())
+	_refresh_hud()
+
+func _on_mutation_skip_requested(_player_index: int) -> void:
+	if _mutation_pick_ui != null and is_instance_valid(_mutation_pick_ui):
+		_mutation_pick_ui.set_reroll_state(RunState.get_current_score(), _build_mutation_pick_reroll_costs())
 
 func _options_contain_rare(options: Array) -> bool:
 	for option_variant in options:
@@ -1498,20 +1546,20 @@ func _process_beam_fire(origin: Vector2, direction: Vector2, projectile_config: 
 		"fire_pool": null,
 		"next_fire_pool_at": 0.0,
 	})
-	var range := float(projectile_config.get("range", projectile_config.get("max_distance", 750.0)))
+	var beam_range := float(projectile_config.get("range", projectile_config.get("max_distance", 750.0)))
 	var tick_interval := maxf(float(projectile_config.get("tick_interval", 0.1)), 0.05)
 	var beam_width := maxf(float(projectile_config.get("area", 18.0)), 18.0)
 	var beam_direction := direction.normalized()
 	var held_targets: Dictionary = state.get("held_targets", {}) as Dictionary
 	var current_target_ids := {}
-	var hit_position := origin + beam_direction * range
-	for enemy in get_nearby_enemy_target_nodes(origin + beam_direction * range * 0.5, range * 0.6 + beam_width):
+	var hit_position := origin + beam_direction * beam_range
+	for enemy in get_nearby_enemy_target_nodes(origin + beam_direction * beam_range * 0.5, beam_range * 0.6 + beam_width):
 		if enemy == null or not is_instance_valid(enemy) or not enemy.has_method("is_alive") or not enemy.is_alive():
 			continue
 		var enemy_position: Vector2 = enemy.global_position
 		var offset := enemy_position - origin
 		var projected := offset.dot(beam_direction)
-		if projected < 0.0 or projected > range:
+		if projected < 0.0 or projected > beam_range:
 			continue
 		var closest := origin + beam_direction * projected
 		if enemy_position.distance_squared_to(closest) > beam_width * beam_width:
@@ -1548,11 +1596,11 @@ func _process_beam_fire(origin: Vector2, direction: Vector2, projectile_config: 
 		if not current_target_ids.has(target_id):
 			held_targets.erase(target_id)
 	state["held_targets"] = held_targets
-	_update_beam_visual(state, origin, beam_direction, range, projectile_config)
+	_update_beam_visual(state, origin, beam_direction, beam_range, projectile_config)
 	_update_beam_fire_pool(state, hit_position, projectile_config)
 	_beam_states[shooter_key] = state
 
-func _update_beam_visual(state: Dictionary, origin: Vector2, direction: Vector2, range: float, projectile_config: Dictionary) -> void:
+func _update_beam_visual(state: Dictionary, origin: Vector2, direction: Vector2, beam_range: float, projectile_config: Dictionary) -> void:
 	var line: Line2D = state.get("visual", null)
 	if line == null or not is_instance_valid(line):
 		line = Line2D.new()
@@ -1565,7 +1613,7 @@ func _update_beam_visual(state: Dictionary, origin: Vector2, direction: Vector2,
 	var color: Color = projectile_config.get("color", Color.WHITE)
 	line.default_color = Color(color.r, color.g, color.b, 0.55)
 	line.global_position = Vector2.ZERO
-	line.points = PackedVector2Array([origin, origin + direction.normalized() * range])
+	line.points = PackedVector2Array([origin, origin + direction.normalized() * beam_range])
 	line.modulate.a = 1.0
 	line.visible = true
 	state["last_update_at"] = _current_time_seconds()

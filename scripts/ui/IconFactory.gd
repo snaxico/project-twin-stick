@@ -1,6 +1,10 @@
 class_name IconFactory
 extends RefCounted
 
+const EnemyData = preload("res://scripts/enemies/Enemy.gd")
+const MutationSystemData = preload("res://scripts/game/MutationSystem.gd")
+const ProjectileData = preload("res://scripts/weapons/Projectile.gd")
+
 const ICON_SIZE: int = 64
 const UI_ICON_SIZE: int = 32
 
@@ -112,6 +116,39 @@ static func get_ui_icon(icon_name: String) -> Texture2D:
 	_texture_cache[cache_key] = texture
 	return texture
 
+static func get_enemy_preview_icon(enemy_id: String) -> Texture2D:
+	var normalized_id: String = enemy_id.strip_edges().to_lower()
+	if normalized_id.is_empty():
+		return null
+	var cache_key: String = "enemy_preview:%s" % normalized_id
+	if _texture_cache.has(cache_key):
+		return _texture_cache[cache_key] as Texture2D
+	var texture := _build_enemy_preview_icon(normalized_id)
+	_texture_cache[cache_key] = texture
+	return texture
+
+static func get_projectile_preview_icon(projectile_kind: String) -> Texture2D:
+	var normalized_kind: String = projectile_kind.strip_edges().to_lower()
+	if normalized_kind.is_empty():
+		return null
+	var cache_key: String = "projectile_preview:%s" % normalized_kind
+	if _texture_cache.has(cache_key):
+		return _texture_cache[cache_key] as Texture2D
+	var texture := _build_projectile_preview_icon(normalized_kind)
+	_texture_cache[cache_key] = texture
+	return texture
+
+static func get_modifier_preview_icon(modifier_id: String) -> Texture2D:
+	var normalized_id: String = modifier_id.strip_edges().to_lower()
+	if normalized_id.is_empty():
+		return null
+	var cache_key: String = "modifier_preview:%s" % normalized_id
+	if _texture_cache.has(cache_key):
+		return _texture_cache[cache_key] as Texture2D
+	var texture := _build_modifier_preview_icon(normalized_id)
+	_texture_cache[cache_key] = texture
+	return texture
+
 static func _get_real_weapon_texture(weapon_id: String) -> Texture2D:
 	if not REAL_WEAPON_TEXTURE_PATHS.has(weapon_id):
 		return null
@@ -211,6 +248,83 @@ static func _build_mutation_icon(mutation_id: String, group: String) -> Texture2
 		_:
 			_draw_filled_circle(image, Vector2(32.0, 32.0), 8.0, Color(0.08, 0.1, 0.14, 0.9))
 	return ImageTexture.create_from_image(image)
+
+static func _build_enemy_preview_icon(enemy_id: String) -> Texture2D:
+	var image: Image = Image.create(ICON_SIZE, ICON_SIZE, false, Image.FORMAT_RGBA8)
+	image.fill(Color(0.0, 0.0, 0.0, 0.0))
+	var profile: Dictionary = EnemyData.get_visual_profile(enemy_id)
+	var polygon := (profile.get("polygon", PackedVector2Array()) as PackedVector2Array)
+	var visual_scale := profile.get("scale", Vector2.ONE) as Vector2
+	var max_extent := 1.0
+	for point in polygon:
+		max_extent = maxf(max_extent, absf(point.x * visual_scale.x))
+		max_extent = maxf(max_extent, absf(point.y * visual_scale.y))
+	var fit_scale := 23.0 / max_extent
+	_draw_polygon(image, polygon, Vector2(32.0, 32.0), visual_scale * fit_scale, profile.get("color", Color.WHITE) as Color)
+	_draw_polygon_outline(image, polygon, Vector2(32.0, 32.0), visual_scale * fit_scale, Color(0.06, 0.08, 0.1, 0.82), 2.0)
+	return ImageTexture.create_from_image(image)
+
+static func _build_projectile_preview_icon(projectile_kind: String) -> Texture2D:
+	var image: Image = Image.create(ICON_SIZE, ICON_SIZE, false, Image.FORMAT_RGBA8)
+	image.fill(Color(0.0, 0.0, 0.0, 0.0))
+	var visual := MutationSystemData.get_base_projectile_visual(projectile_kind)
+	var shape := str(visual.get("projectile_shape", "small_orb"))
+	var polygon := ProjectileData.build_shape_polygon(shape)
+	var color := _projectile_preview_color(projectile_kind)
+	var visual_scale := _projectile_preview_scale(shape)
+	_draw_line_thick(image, Vector2(12.0, 32.0), Vector2(44.0, 32.0), 3.0, Color(color.r, color.g, color.b, 0.28))
+	_draw_polygon(image, polygon, Vector2(38.0, 32.0), visual_scale, color)
+	_draw_polygon_outline(image, polygon, Vector2(38.0, 32.0), visual_scale, Color(0.06, 0.08, 0.1, 0.82), 1.5)
+	return ImageTexture.create_from_image(image)
+
+static func _build_modifier_preview_icon(modifier_id: String) -> Texture2D:
+	var image: Image = Image.create(ICON_SIZE, ICON_SIZE, false, Image.FORMAT_RGBA8)
+	image.fill(Color(0.0, 0.0, 0.0, 0.0))
+	match modifier_id:
+		"fire_floor":
+			_draw_filled_circle(image, Vector2(32.0, 32.0), 22.0, Color(1.0, 0.24, 0.12, 0.20))
+			_draw_ring(image, Vector2(32.0, 32.0), 22.0, 4.0, Color(1.0, 0.72, 0.44, 0.78))
+		"ice_zone":
+			_draw_filled_circle(image, Vector2(32.0, 32.0), 19.0, Color(0.24, 0.72, 1.0, 0.18))
+			_draw_ring(image, Vector2(32.0, 32.0), 19.0, 4.0, Color(0.76, 0.92, 1.0, 0.62))
+		"mine_field":
+			_draw_line_thick(image, Vector2(14.0, 22.0), Vector2(50.0, 22.0), 4.0, Color(1.0, 0.86, 0.32, 0.72))
+			_draw_line_thick(image, Vector2(14.0, 42.0), Vector2(50.0, 42.0), 4.0, Color(1.0, 0.48, 0.18, 0.72))
+			_draw_filled_circle(image, Vector2(32.0, 32.0), 5.0, Color(0.12, 0.14, 0.16, 0.9))
+		"shrinking_arena":
+			_draw_rect_fill(image, Rect2(16.0, 16.0, 32.0, 32.0), Color(1.0, 0.36, 0.26, 0.08))
+			_draw_rect_outline(image, Rect2(16.0, 16.0, 32.0, 32.0), Color(1.0, 0.58, 0.44, 0.9), 4.0)
+		_:
+			_draw_ring(image, Vector2(32.0, 32.0), 20.0, 4.0, Color(0.72, 0.8, 0.9, 0.72))
+	return ImageTexture.create_from_image(image)
+
+static func _projectile_preview_color(projectile_kind: String) -> Color:
+	match projectile_kind:
+		"rocket":
+			return Color(1.0, 0.58, 0.24, 1.0)
+		"beam":
+			return Color(0.3, 0.95, 1.0, 1.0)
+		"boomerang":
+			return Color(0.86, 0.72, 0.28, 1.0)
+		"lance":
+			return Color(0.78, 0.95, 1.0, 1.0)
+		"pellet":
+			return Color(0.72, 0.86, 1.0, 1.0)
+		"slug":
+			return Color(0.9, 0.78, 0.54, 1.0)
+		_:
+			return Color(1.0, 0.96, 0.7, 1.0)
+
+static func _projectile_preview_scale(shape: String) -> Vector2:
+	match shape:
+		"lance":
+			return Vector2(2.8, 1.3)
+		"large_orb", "ember_orb":
+			return Vector2(2.1, 2.1)
+		"diamond":
+			return Vector2(2.0, 2.0)
+		_:
+			return Vector2(2.2, 2.2)
 
 static func _draw_primary_icon(image: Image, weapon_id: String) -> void:
 	var base_color: Color = Color(0.56, 0.7, 0.92, 1.0)
@@ -387,6 +501,45 @@ static func _draw_spikes(image: Image, center: Vector2, radius: float, spike_cou
 		var inner: Vector2 = center + Vector2.RIGHT.rotated(angle) * radius
 		var outer: Vector2 = center + Vector2.RIGHT.rotated(angle) * (radius + spike_length)
 		_draw_line_thick(image, inner, outer, 3.0, color)
+
+static func _draw_polygon(image: Image, polygon: PackedVector2Array, center: Vector2, scale: Vector2, color: Color) -> void:
+	if polygon.size() < 3:
+		return
+	var transformed := PackedVector2Array()
+	for point in polygon:
+		transformed.append(center + Vector2(point.x * scale.x, point.y * scale.y))
+	var indices := Geometry2D.triangulate_polygon(transformed)
+	for index in range(0, indices.size(), 3):
+		_draw_triangle(image, transformed[indices[index]], transformed[indices[index + 1]], transformed[indices[index + 2]], color)
+
+static func _draw_polygon_outline(image: Image, polygon: PackedVector2Array, center: Vector2, scale: Vector2, color: Color, thickness: float) -> void:
+	if polygon.size() < 2:
+		return
+	for index in range(polygon.size()):
+		var start_point := polygon[index]
+		var end_point := polygon[(index + 1) % polygon.size()]
+		_draw_line_thick(
+			image,
+			center + Vector2(start_point.x * scale.x, start_point.y * scale.y),
+			center + Vector2(end_point.x * scale.x, end_point.y * scale.y),
+			thickness,
+			color
+		)
+
+static func _draw_rect_fill(image: Image, rect: Rect2, color: Color) -> void:
+	var left: int = maxi(int(floor(rect.position.x)), 0)
+	var top: int = maxi(int(floor(rect.position.y)), 0)
+	var right: int = mini(int(ceil(rect.end.x)), image.get_width() - 1)
+	var bottom: int = mini(int(ceil(rect.end.y)), image.get_height() - 1)
+	for y in range(top, bottom + 1):
+		for x in range(left, right + 1):
+			image.set_pixel(x, y, color)
+
+static func _draw_rect_outline(image: Image, rect: Rect2, color: Color, thickness: float) -> void:
+	_draw_line_thick(image, rect.position, Vector2(rect.end.x, rect.position.y), thickness, color)
+	_draw_line_thick(image, Vector2(rect.end.x, rect.position.y), rect.end, thickness, color)
+	_draw_line_thick(image, rect.end, Vector2(rect.position.x, rect.end.y), thickness, color)
+	_draw_line_thick(image, Vector2(rect.position.x, rect.end.y), rect.position, thickness, color)
 
 static func _draw_rounded_rect(image: Image, rect: Rect2, radius: float, color: Color) -> void:
 	var left: int = int(rect.position.x)

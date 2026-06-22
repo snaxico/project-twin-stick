@@ -4,9 +4,12 @@ extends Control
 const IconFactoryData = preload("res://scripts/ui/IconFactory.gd")
 
 signal selections_confirmed(selections_per_player: Array)
+signal reroll_requested(player_index: int)
+signal skip_requested(player_index: int)
 
 var _player_configs: Array = []
 var _options_by_player: Array = []
+var _reroll_costs_by_player: Array = []
 var _selected_indices: Array = []
 var _confirmed: Array = []
 var _locked_selection_ids: Array = []
@@ -14,6 +17,7 @@ var _player_views: Array = []
 var _definition_cache: Dictionary = {}
 var _round_title := "Level Up"
 var _round_subtitle := "Choose one upgrade."
+var _shared_run_score := 0
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -27,11 +31,13 @@ func configure_for_players(configs: Array, options_by_player: Array, round_title
 	_selected_indices.clear()
 	_confirmed.clear()
 	_locked_selection_ids.clear()
+	_reroll_costs_by_player.clear()
 	_definition_cache.clear()
 	for player_index in range(_player_configs.size()):
 		_selected_indices.append(0)
 		_confirmed.append(false)
 		_locked_selection_ids.append("")
+		_reroll_costs_by_player.append(0)
 	_build()
 	for player_index in range(_player_configs.size()):
 		if (_options_by_player[player_index] as Array).is_empty():
@@ -50,9 +56,9 @@ func _unhandled_input(event: InputEvent) -> void:
 			continue
 		var move_direction := _get_player_menu_direction(event, player_index)
 		if move_direction != 0:
-			var option_count := (_options_by_player[player_index] as Array).size()
-			if option_count > 0:
-				_selected_indices[player_index] = wrapi(_selected_indices[player_index] + move_direction, 0, option_count)
+			var slot_count := _get_navigable_slot_count(player_index)
+			if slot_count > 0:
+				_selected_indices[player_index] = wrapi(_selected_indices[player_index] + move_direction, 0, slot_count)
 				_refresh_panels()
 				get_viewport().set_input_as_handled()
 				return
@@ -69,13 +75,41 @@ func _confirm_player_selection(player_index: int) -> void:
 		if _all_confirmed():
 			selections_confirmed.emit(_build_final_selections())
 		return
-	var selected_index := clampi(int(_selected_indices[player_index]), 0, max(options.size() - 1, 0))
+	var selected_index := clampi(int(_selected_indices[player_index]), 0, _get_navigable_slot_count(player_index) - 1)
+	if selected_index == options.size():
+		if _is_reroll_affordable(player_index):
+			reroll_requested.emit(player_index)
+		return
+	if selected_index == options.size() + 1:
+		_locked_selection_ids[player_index] = ""
+		_confirmed[player_index] = true
+		_refresh_panels()
+		skip_requested.emit(player_index)
+		if _all_confirmed():
+			selections_confirmed.emit(_build_final_selections())
+		return
 	var option: Dictionary = options[selected_index] as Dictionary
 	_locked_selection_ids[player_index] = str(option.get("id", ""))
 	_confirmed[player_index] = true
 	_refresh_panels()
 	if _all_confirmed():
 		selections_confirmed.emit(_build_final_selections())
+
+func set_reroll_state(shared_run_score: int, reroll_costs_by_player: Array) -> void:
+	_shared_run_score = max(shared_run_score, 0)
+	_reroll_costs_by_player = reroll_costs_by_player.duplicate()
+	while _reroll_costs_by_player.size() < _player_configs.size():
+		_reroll_costs_by_player.append(0)
+	_refresh_panels()
+
+func replace_options_for_player(player_index: int, options: Array) -> void:
+	if player_index < 0 or player_index >= _options_by_player.size():
+		return
+	_options_by_player[player_index] = options.duplicate(true)
+	_selected_indices[player_index] = 0
+	_confirmed[player_index] = false
+	_locked_selection_ids[player_index] = ""
+	_refresh_panels()
 
 func _unconfirm_player_selection(player_index: int) -> void:
 	var options: Array = _options_by_player[player_index]
@@ -243,6 +277,9 @@ func _refresh_panels() -> void:
 		var options: Array = _options_by_player[player_index]
 		for option_index in range(options.size()):
 			cards.add_child(_build_card(player_index, option_index))
+		if not options.is_empty():
+			cards.add_child(_build_action_slot(player_index, options.size(), "Reroll", "Score %d | Cost %d" % [_shared_run_score, _get_reroll_cost(player_index)], _is_reroll_affordable(player_index)))
+			cards.add_child(_build_action_slot(player_index, options.size() + 1, "Skip", "Decline this pick", true))
 		_refresh_detail_panel(view, player_index)
 
 func _build_card(player_index: int, option_index: int) -> Control:
@@ -319,6 +356,57 @@ func _build_card(player_index: int, option_index: int) -> Control:
 
 	return panel
 
+func _build_action_slot(player_index: int, slot_index: int, title_text: String, subtitle_text: String, enabled: bool) -> Control:
+	var panel := PanelContainer.new()
+	panel.custom_minimum_size = Vector2(112.0, 144.0)
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.07, 0.085, 0.11, 0.9) if enabled else Color(0.045, 0.05, 0.06, 0.82)
+	style.border_color = Color(0.34, 0.44, 0.56, 0.54) if enabled else Color(0.18, 0.2, 0.24, 0.5)
+	style.set_border_width_all(1)
+	style.corner_radius_top_left = 8
+	style.corner_radius_top_right = 8
+	style.corner_radius_bottom_left = 8
+	style.corner_radius_bottom_right = 8
+	var is_cursor := slot_index == int(_selected_indices[player_index]) and not bool(_confirmed[player_index])
+	if is_cursor:
+		style.set_border_width_all(2)
+		style.border_color = Color(0.42, 0.98, 0.8, 0.96) if enabled else Color(0.38, 0.44, 0.5, 0.7)
+	panel.add_theme_stylebox_override("panel", style)
+
+	var margin := MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 10)
+	margin.add_theme_constant_override("margin_top", 14)
+	margin.add_theme_constant_override("margin_right", 10)
+	margin.add_theme_constant_override("margin_bottom", 12)
+	panel.add_child(margin)
+	var layout := VBoxContainer.new()
+	layout.alignment = BoxContainer.ALIGNMENT_CENTER
+	layout.add_theme_constant_override("separation", 8)
+	margin.add_child(layout)
+
+	var title_label := Label.new()
+	title_label.text = title_text
+	title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title_label.add_theme_font_size_override("font_size", 15)
+	title_label.modulate = Color(0.9, 0.96, 1.0, 0.96) if enabled else Color(0.62, 0.68, 0.74, 0.7)
+	layout.add_child(title_label)
+
+	var icon_label := Label.new()
+	icon_label.text = "R" if title_text == "Reroll" else "X"
+	icon_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	icon_label.add_theme_font_size_override("font_size", 30)
+	icon_label.modulate = Color(0.42, 0.98, 0.8, 0.9) if enabled else Color(0.42, 0.46, 0.5, 0.64)
+	layout.add_child(icon_label)
+
+	var subtitle_label := Label.new()
+	subtitle_label.text = subtitle_text if enabled else "Not enough score"
+	subtitle_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	subtitle_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	subtitle_label.add_theme_font_size_override("font_size", 10)
+	subtitle_label.modulate = Color(0.78, 0.86, 0.96, 0.78) if enabled else Color(0.56, 0.6, 0.66, 0.66)
+	layout.add_child(subtitle_label)
+	return panel
+
 func _refresh_detail_panel(view: Dictionary, player_index: int) -> void:
 	var detail_title: Label = view["detail_title"]
 	var detail_meta: Label = view["detail_meta"]
@@ -329,7 +417,19 @@ func _refresh_detail_panel(view: Dictionary, player_index: int) -> void:
 		detail_meta.text = ""
 		detail_description.text = ""
 		return
-	var selected_index := clampi(int(_selected_indices[player_index]), 0, options.size() - 1)
+	var selected_index := clampi(int(_selected_indices[player_index]), 0, _get_navigable_slot_count(player_index) - 1)
+	if selected_index == options.size():
+		detail_title.text = "Reroll"
+		detail_title.modulate = Color(0.42, 0.98, 0.8, 0.96) if _is_reroll_affordable(player_index) else Color(0.62, 0.68, 0.74, 0.82)
+		detail_meta.text = "Shared score: %d | Cost: %d" % [_shared_run_score, _get_reroll_cost(player_index)]
+		detail_description.text = "Replace your offered cards without changing rare pity for this pick round."
+		return
+	if selected_index == options.size() + 1:
+		detail_title.text = "Skip"
+		detail_title.modulate = Color(0.92, 0.98, 1.0, 0.96)
+		detail_meta.text = "Free decline"
+		detail_description.text = "Take no upgrade and resolve this pick."
+		return
 	if bool(_confirmed[player_index]) and not str(_locked_selection_ids[player_index]).is_empty():
 		for index in range(options.size()):
 			if str((options[index] as Dictionary).get("id", "")) == str(_locked_selection_ids[player_index]):
@@ -519,6 +619,18 @@ func _is_player_cancel_pressed(event: InputEvent, player_index: int) -> bool:
 	if config.has_method("uses_gamepad") and config.uses_gamepad() and _gamepad_direction_button(event, config, JOY_BUTTON_B):
 		return true
 	return _event_matches_action(event, "ui_cancel") if config.has_method("uses_keyboard") and config.uses_keyboard() else false
+
+func _get_navigable_slot_count(player_index: int) -> int:
+	var options: Array = _options_by_player[player_index]
+	return options.size() + (2 if not options.is_empty() else 0)
+
+func _get_reroll_cost(player_index: int) -> int:
+	if player_index < 0 or player_index >= _reroll_costs_by_player.size():
+		return 0
+	return int(_reroll_costs_by_player[player_index])
+
+func _is_reroll_affordable(player_index: int) -> bool:
+	return _shared_run_score >= _get_reroll_cost(player_index)
 
 func _event_matches_action(event: InputEvent, action_name: String) -> bool:
 	if not (event is InputEventKey):

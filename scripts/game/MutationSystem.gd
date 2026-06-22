@@ -77,6 +77,25 @@ func get_definition(mutation_id: String) -> Dictionary:
 		return {}
 	return (_definition_map[mutation_id] as Dictionary).duplicate(true)
 
+static func get_base_projectile_visual(projectile_kind: String) -> Dictionary:
+	match projectile_kind:
+		"bullet":
+			return {"projectile_shape": "small_orb", "trail_style": "thin", "impact_sfx": "hit"}
+		"pellet":
+			return {"projectile_shape": "small_orb", "trail_style": "short", "impact_sfx": "spread"}
+		"slug":
+			return {"projectile_shape": "large_orb", "trail_style": "heavy_slow", "impact_sfx": "thump"}
+		"lance":
+			return {"projectile_shape": "lance", "trail_style": "sharp", "impact_sfx": "zip"}
+		"boomerang":
+			return {"projectile_shape": "diamond", "trail_style": "sharp", "impact_sfx": "ping"}
+		"rocket":
+			return {"projectile_shape": "ember_orb", "trail_style": "embers", "impact_sfx": "boom"}
+		"beam":
+			return {"projectile_shape": "lance", "trail_style": "beam", "impact_sfx": "beam"}
+		_:
+			return {"projectile_shape": "small_orb", "trail_style": "thin", "impact_sfx": "hit"}
+
 func get_compiled_weapon_stats(player_index: int, base_stats: Dictionary) -> Dictionary:
 	var compiled: Dictionary = base_stats.duplicate(true)
 	var tag_power := _compute_tag_power(player_index)
@@ -420,31 +439,10 @@ func _map_weapon_stats_to_projectile_keys(compiled: Dictionary) -> void:
 	if compiled.has("blast_damage_percent"):
 		compiled["explosion_damage_percent"] = float(compiled.get("blast_damage_percent", 0.0))
 	var projectile_kind := str(compiled.get("projectile_kind", "bullet"))
-	match projectile_kind:
-		"bullet":
-			compiled["projectile_shape"] = "small_orb"
-			compiled["trail_style"] = "thin"
-			compiled["impact_sfx"] = "hit"
-		"pellet":
-			compiled["projectile_shape"] = "small_orb"
-			compiled["trail_style"] = "short"
-			compiled["impact_sfx"] = "spread"
-		"slug":
-			compiled["projectile_shape"] = "large_orb"
-			compiled["trail_style"] = "heavy_slow"
-			compiled["impact_sfx"] = "thump"
-		"lance":
-			compiled["projectile_shape"] = "lance"
-			compiled["trail_style"] = "sharp"
-			compiled["impact_sfx"] = "zip"
-		"boomerang":
-			compiled["projectile_shape"] = "diamond"
-			compiled["trail_style"] = "sharp"
-			compiled["impact_sfx"] = "ping"
-		"rocket":
-			compiled["projectile_shape"] = "ember_orb"
-			compiled["trail_style"] = "embers"
-			compiled["impact_sfx"] = "boom"
+	var visual := get_base_projectile_visual(projectile_kind)
+	compiled["projectile_shape"] = str(visual.get("projectile_shape", "small_orb"))
+	compiled["trail_style"] = str(visual.get("trail_style", "thin"))
+	compiled["impact_sfx"] = str(visual.get("impact_sfx", "hit"))
 
 func _build_weapon_cards(player_index: int) -> Dictionary:
 	var common: Array = []

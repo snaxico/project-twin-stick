@@ -5,6 +5,7 @@ const WEAPONS_DATA_PATH := "res://data/weapons.json"
 const ABILITIES_DATA_PATH := "res://data/abilities.json"
 const MUTATIONS_DATA_PATH := "res://data/mutations.json"
 const MODIFIERS_DATA_PATH := "res://data/modifiers.json"
+const IconFactoryData = preload("res://scripts/ui/IconFactory.gd")
 
 const ENEMY_ENTRIES := [
 	{"id": "chaser", "name": "Chaser", "description": "Fast melee enemy that pressures player movement."},
@@ -29,6 +30,7 @@ const SYSTEM_ENTRIES := [
 
 var _tabs: HBoxContainer = null
 var _list: VBoxContainer = null
+var _detail_preview: TextureRect = null
 var _detail_title: Label = null
 var _detail_meta: Label = null
 var _detail_body: Label = null
@@ -138,6 +140,11 @@ func _build() -> void:
 	var detail := VBoxContainer.new()
 	detail.add_theme_constant_override("separation", 10)
 	detail_margin.add_child(detail)
+	_detail_preview = TextureRect.new()
+	_detail_preview.custom_minimum_size = Vector2(96.0, 96.0)
+	_detail_preview.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_detail_preview.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	detail.add_child(_detail_preview)
 	_detail_title = Label.new()
 	_detail_title.add_theme_font_size_override("font_size", 24)
 	detail.add_child(_detail_title)
@@ -169,13 +176,23 @@ func _refresh_list() -> void:
 	var entries: Array = _entries_by_category.get(_active_category, []) as Array
 	for index in range(entries.size()):
 		var entry: Dictionary = entries[index] as Dictionary
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 8)
+		_list.add_child(row)
+		var preview := TextureRect.new()
+		preview.custom_minimum_size = Vector2(32.0, 32.0)
+		preview.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		preview.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		preview.texture = _get_preview_texture(entry)
+		row.add_child(preview)
 		var button := Button.new()
 		button.text = str(entry.get("name", entry.get("id", "Entry")))
 		button.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		button.toggle_mode = true
+		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		button.set_pressed_no_signal(index == _active_index)
 		button.pressed.connect(_select_entry.bind(index))
-		_list.add_child(button)
+		row.add_child(button)
 	_refresh_detail()
 
 func _select_entry(index: int) -> void:
@@ -185,14 +202,33 @@ func _select_entry(index: int) -> void:
 func _refresh_detail() -> void:
 	var entries: Array = _entries_by_category.get(_active_category, []) as Array
 	if entries.is_empty():
+		_detail_preview.texture = null
 		_detail_title.text = "No Entries"
 		_detail_meta.text = ""
 		_detail_body.text = ""
 		return
 	var entry: Dictionary = entries[clampi(_active_index, 0, entries.size() - 1)] as Dictionary
+	_detail_preview.texture = _get_preview_texture(entry)
 	_detail_title.text = str(entry.get("name", entry.get("id", "Entry")))
 	_detail_meta.text = _build_meta_line(entry)
 	_detail_body.text = _build_body_text(entry)
+
+func _get_preview_texture(entry: Dictionary) -> Texture2D:
+	match _active_category:
+		"Weapons":
+			return IconFactoryData.get_projectile_preview_icon(str(entry.get("projectile_kind", "bullet")))
+		"Abilities":
+			return IconFactoryData.get_weapon_icon(str(entry.get("id", "")))
+		"Mutations":
+			return IconFactoryData.get_mutation_icon(str(entry.get("id", "")), str(entry.get("group", "attribute")))
+		"Modifiers":
+			return IconFactoryData.get_modifier_preview_icon(str(entry.get("id", "")))
+		"Enemies":
+			return IconFactoryData.get_enemy_preview_icon(str(entry.get("id", "")))
+		"Systems":
+			return IconFactoryData.get_ui_icon("score" if str(entry.get("id", "")) == "score" else "heart")
+		_:
+			return null
 
 func _build_meta_line(entry: Dictionary) -> String:
 	var parts: Array = [_active_category]

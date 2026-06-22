@@ -1,6 +1,6 @@
 # QoL & Difficulty Patch — plan
 
-> Status: **design shaped with the user (2026-06-22), not implemented.** On `v3/structure-rework`. The
+> Status: **implemented (2026-06-22).** On `v3/structure-rework`. The
 > next patch after Choices & Builds. Numbers below are placeholders tuned in playtest; shapes are decided.
 
 Playtest findings → reward-UX, early-game difficulty, and encyclopedia polish. Build order: reward UX
@@ -19,7 +19,7 @@ a power-now-vs-progress-later tradeoff, no new currency); **escalating cost** pe
 
 - `RunState`: `run_score` is the budget. Add `spend_run_score(amount) -> bool` (subtract if affordable,
   never below 0). **Shared in co-op** (one pool both players' rerolls draw from).
-- **Reroll cost** = `base * 2^reroll_count_this_pick` (placeholder base `100` → 100/200/400/…). The
+- **Reroll cost** = `base * 2^reroll_count_this_pick` (implemented base `100` → 100/200/400/…). The
   reroll counter **resets at the start of each pick round**.
 - **Rare dry-streak must stay neutral on reroll (functional trap).** Today `rare_dry_streak` is
   updated when offers are *generated* (`CoopManager._show_mutation_pick` ~1408–1411: reset if the offered
@@ -52,35 +52,35 @@ a power-now-vs-progress-later tradeoff, no new currency); **escalating cost** pe
   the pick round). Owns the per-pick reroll counters.
 - **Touch:** `RunState` (`spend_run_score`), `CoopManager` (`_show_mutation_pick` + reroll/skip handlers
   + dry-streak-neutral / force-rare-split reroll), `MutationPickUI` (slots/signals/method above).
-- **Open:** base cost + escalation factor; confirm Skip still consumes the banked pick round (yes).
+- **Implemented values:** base cost `100`, escalation factor `2x`; Skip consumes the banked pick round.
 
 ## 2. Buff chasers + early-game difficulty *(balance — "mainly early game")*
 
 **Decided:** the early game is the problem; fix by **buffing chasers** (keep the pool ramp, **no** early
 variety) and concentrating pressure on the opening rooms.
 
-- `Enemy.gd` **chaser** is HP 20 / speed 150 / contact 8 — buff toward a real threat (e.g. HP ~30,
-  speed ~175, contact ~12; tune in play). The other early enemies (charger) can take a smaller bump.
+- `Enemy.gd` **chaser** was buffed from HP 20 / speed 150 / contact 8 to HP 30 / speed 175 / contact 12.
+  Charger received a smaller bump to HP 52 / speed 208 / contact 20.
 - **Early spawn pressure** (`CoopManager`): `_get_room_duration` / `_get_spawn_interval` /
   `_get_burst_size` scale off `get_run_progress` (low early), so rooms 1–5 are too soft. Raise the
   **shallow-depth** end (bigger opening burst, tighter early spawn interval) so the opening feels active.
 - **Keep** `_get_endless_enemy_pool` (chaser-only early stays — chasers just hit harder and come in
   greater numbers).
 - **Touch:** `Enemy.gd` (chaser/charger stats), `CoopManager` (early spawn curves).
-- **Open:** exact chaser stats + early-curve values (playtest).
+- **Implemented first-pass values:** tighter early spawn interval and larger opening/periodic bursts; tune
+  after playtest.
 
 ## 3. HP drops — reduce *(balance)*
 
 **Decided:** too generous, especially with the harder early game. Two separate knobs in two files:
-- **Drop chance** = `HEALTH_DROP_CHANCE := 0.10` in `CoopManager` → lower (~`0.06`).
-- **Heal amount** = `heal_amount = 10` in **`HealthPickup.gd`** (not CoopManager) → lower if needed.
+- **Drop chance** = `HEALTH_DROP_CHANCE := 0.06` in `CoopManager`.
+- **Heal amount** = `heal_amount = 8` in **`HealthPickup.gd`** (not CoopManager).
 
-**Touch:** `CoopManager` (`HEALTH_DROP_CHANCE`) **and** `HealthPickup.gd` (`heal_amount`). **Open:** final
-values.
+**Touch:** `CoopManager` (`HEALTH_DROP_CHANCE`) **and** `HealthPickup.gd` (`heal_amount`).
 
 ## 4. Kill-streak target *(tuning)*
 
-`_kill_streak_target = 18` is too low → raise (~28–32). **Touch:** `CoopManager` (~1129). **Open:** value.
+`_kill_streak_target = 30`. **Touch:** `CoopManager` (~1129).
 
 ## 5. Encyclopedia visuals = the in-game visuals
 
@@ -105,8 +105,8 @@ rubberhose art lands.)
 - **Modifiers:** the modifier's actual visual (e.g. the Ice Zone ring, Fire Floor zone) rendered small.
 - `EncyclopediaUI`: add the preview to each list row + detail panel; prefer a lightweight `_draw` that
   calls the shared shape builder over a per-entry `SubViewport` where the visual is a simple polygon.
-- **Touch:** `EncyclopediaUI`, `Enemy.gd` (extract the per-type visual builder), `IconFactory`, the
-  modifier draw code.
+- **Touch:** `EncyclopediaUI`, `Enemy.gd` (extract the per-type visual builder), `MutationSystem`
+  (base projectile-kind visual mapping), `IconFactory`, the modifier draw code.
 - **Open:** the render surface for the live previews (`_draw` + shared builder, preferred) vs a
   `SubViewport` per entry for anything that's an animated/composite node.
 
