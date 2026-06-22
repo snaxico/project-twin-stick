@@ -30,9 +30,10 @@ Read this first to restore project context quickly, then read `current-state.md`
   kill-streak target, and encyclopedia visual previews.
 - Game-feel / neon identity patch is implemented: dark pulsing runtime arena grid/walls, player-proximity
   grid highlights, major-hazard room tinting, enemy silhouette/motion polish, projectile pulse/spin, broader
-  procedural SFX coverage, reactive music contexts, and room-start / room-clear flourish.
+  procedural SFX coverage, reactive music contexts, and room-start / room-clear flourish. Manual playtest is
+  approved.
 - Current next validation is a focused feel pass on the QoL/difficulty patch plus replayability/Phase 4 /
-  game-feel tuning:
+  tuning:
   - reroll/skip reward flow in `1P` and `2P`
   - shared score spend pressure and reroll-cost escalation
   - early-room pressure, HP drop frequency, and kill-streak target
@@ -45,8 +46,6 @@ Read this first to restore project context quickly, then read `current-state.md`
   - champion time-to-kill versus attack threat
   - Cannon burst-AOE versus Beam sustained single-target identity
   - modifier readability under deeper pressure
-  - arena/grid brightness and bloom under real play
-  - UI/gameplay SFX volume balance and music context intensity
 
 ## Live Runtime Summary
 

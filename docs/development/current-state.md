@@ -9,7 +9,7 @@ manual aim, Beam, Boomerang, Split, Momentum/Flow, XP, mutation, modifier, side-
 and Encounter Builder foundations, but replaces the old structure with one continuable run. The initial
 structure-rework playtest was approved, Phase 4 tuning has been applied, the replayability patch
 Phases 0/A/B are implemented, the QoL/difficulty patch is implemented, and the game-feel / neon identity
-patch is implemented.
+patch is implemented and playtest-approved.
 
 ## Current Runtime
 

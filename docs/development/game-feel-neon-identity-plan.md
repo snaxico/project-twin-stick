@@ -1,7 +1,7 @@
 # Game Feel & Neon Identity Patch — plan
 
-> Status: **implemented (2026-06-22): Phases 1-4 landed; Phase 5 received the scoped room-entry /
-> room-clear transition polish, with deeper transition work deferred.** On `v3/structure-rework`. Goal:
+> Status: **implemented and playtest-approved (2026-06-22): Phases 1-4 landed; Phase 5 received the scoped
+> room-entry / room-clear transition polish, with deeper transition work deferred.** On `v3/structure-rework`. Goal:
 > remove the "prototype feeling" with **pure in-engine work** — no external art/audio assets. Route locked
 > to **refine the procedural/neon style**. Lead = game feel/juice; all four prototype tells + audio in scope.
 
