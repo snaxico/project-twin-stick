@@ -7,6 +7,7 @@ const SPAWN_INTERVAL := 2.4
 const DAMAGE_INTERVAL := 0.5
 const DAMAGE_AMOUNT := 5
 const ZONE_RADIUS := 280.0
+const ARC_SEGMENTS := 18
 
 var _arena_rect := Rect2()
 var _player_nodes: Array = []
@@ -63,8 +64,8 @@ func _draw() -> void:
 		if elapsed < WARNING_DURATION:
 			var progress := elapsed / WARNING_DURATION
 			draw_circle(center, ZONE_RADIUS * (0.35 + progress * 0.65), Color(1.0, 0.3, 0.16, 0.08 + progress * 0.08))
-			draw_arc(center, ZONE_RADIUS, 0.0, TAU, 36, Color(1.0, 0.52, 0.24, 0.36 + progress * 0.26), 4.0)
+			draw_arc(center, ZONE_RADIUS, 0.0, TAU, ARC_SEGMENTS, Color(1.0, 0.52, 0.24, 0.36 + progress * 0.26), 4.0)
 		else:
 			var fade := 1.0 - clampf((elapsed - WARNING_DURATION) / ACTIVE_DURATION, 0.0, 1.0)
 			draw_circle(center, ZONE_RADIUS, Color(1.0, 0.24, 0.12, 0.22 * fade))
-			draw_arc(center, ZONE_RADIUS, 0.0, TAU, 36, Color(1.0, 0.72, 0.44, 0.58 * fade), 6.0)
+			draw_arc(center, ZONE_RADIUS, 0.0, TAU, ARC_SEGMENTS, Color(1.0, 0.72, 0.44, 0.58 * fade), 6.0)

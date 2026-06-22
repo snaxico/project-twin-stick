@@ -1,7 +1,15 @@
 # Performance Plan — high-density arenas
 
-> Status: **analysis done, fixes not built.** Triggered by playtest lag with "a lot of ice zones or
-> projectiles." On `v3/structure-rework`.
+> Status: **Findings 1 + 2 implemented; Finding 3 (enemy MultiMesh) deferred — real rooms don't hit the
+> ceiling.** On `v3/structure-rework`.
+
+## Re-profile conclusion (2026-06-22)
+
+A **real** heavy Hive champion room (`champion:hive --players=2 --build=heavy`) profiles at **439 avg /
+388 min FPS**, max frame 12.3ms, ~1134 nodes. That's far below the synthetic `entity_ramp` 200+200 case
+(56 FPS / 3079 nodes). **Real rooms don't approach the entity ceiling**, so the enemy-MultiMesh rewrite
+(Finding 3) is **not justified by real play** and stays parked. The felt lag was Ice Zones (Finding 1),
+now fixed.
 
 ## Data (PerfRunner `entity_ramp`, RX 580)
 
@@ -14,7 +22,11 @@
 
 `physics_ms` and `draw_calls` scale **linearly** with entity count; FPS falls off a cliff past ~150.
 
-## Finding 1 — Ice Zone: unbounded patches, one per kill *(HIGH impact, EASY fix)*
+## Finding 1 — Ice Zone: unbounded patches, one per kill *(HIGH impact — DONE)*
+
+> **Implemented:** `IceZoneModifier` now throttles spawns (`MIN_SPAWN_INTERVAL 0.6s`), caps at
+> `MAX_PATCHES 10` (recycles oldest), and draws 18-segment arcs instead of 40 — all inside the modifier,
+> so the per-kill call site was left untouched.
 
 The reported "lots of ice zones" lag. Root cause:
 - `CoopManager._on_enemy_died` calls `_ice_zone_modifier.spawn_patch(enemy.global_position)` for **every
@@ -31,7 +43,10 @@ The reported "lots of ice zones" lag. Root cause:
 3. **Cheaper draw** — drop arc segments (40→~20) and/or stop redrawing every frame (the fade is subtle —
    redraw on change or every few frames, or fade via `modulate` instead of re-emitting geometry).
 
-## Finding 2 — Hazard modifiers redraw every frame *(MEDIUM, quick)*
+## Finding 2 — Hazard modifiers redraw every frame *(MEDIUM — partly DONE)*
+
+> **Implemented:** Fire Floor + Ice Zone arc segments reduced to 18. Remaining (optional): the
+> every-frame `queue_redraw` could be throttled, but with the Ice Zone cap it's no longer a concern.
 
 Both `FireFloorModifier` (≤7 zones × 36-seg arc) and `IceZoneModifier` call `queue_redraw()` every
 physics frame and re-emit `draw_circle` + `draw_arc` geometry. The arcs dominate.
