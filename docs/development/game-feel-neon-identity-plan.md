@@ -1,7 +1,7 @@
 # Game Feel & Neon Identity Patch — plan
 
-> Status: **Phases 1–3 IMPLEMENTED (2026-06-22): arena/glow/tint, silhouettes + enemy motion, impact
-> tuning. Phase 4 (audio) + Phase 5 (transitions) pending.** On `v3/structure-rework`. Goal:
+> Status: **implemented (2026-06-22): Phases 1-4 landed; Phase 5 received the scoped room-entry /
+> room-clear transition polish, with deeper transition work deferred.** On `v3/structure-rework`. Goal:
 > remove the "prototype feeling" with **pure in-engine work** — no external art/audio assets. Route locked
 > to **refine the procedural/neon style**. Lead = game feel/juice; all four prototype tells + audio in scope.
 
@@ -48,6 +48,11 @@ code**, not left empty in the scene — refine the existing paths, do **not** ad
 **Open:** grid style (lines vs dot-field vs faint gradient) — default to a thin glowing line grid; tune in
 play. Major-hazard tint priority order when two majors co-occur (rare) — pick a fixed list.
 
+**Implemented:** existing runtime grid/wall builders now produce a dark neon arena with pulsing Line2D grid
+metadata, player-proximity line highlights, and layered glowing border lines. `ModifierTint` stays neutral
+unless a major hazard is active, then applies one fixed-priority subtle wash. Global bloom is raised in the
+scene; the legacy debug HUD remains unconditionally hidden.
+
 ## Phase 2 — Enemy/player shape identity + motion
 
 Every enemy renders the **same 8-point octagon** (`Enemy.get_base_visual_polygon`), separated only by
@@ -70,6 +75,10 @@ body-root rotation — see the Player note below; it needs *tuning*, not new mot
 
 **Open:** how distinct to push silhouettes vs keeping readability at small size — keep bold, low-vertex shapes.
 
+**Implemented:** enemy visual profiles now use distinct per-type silhouettes and procedural motion on the
+existing enemy visual update path. Projectiles have render-time spawn pop, pulse, and shape-specific spin /
+wobble through the MultiMesh renderer.
+
 ## Phase 3 — Impact / juice tuning + coverage
 
 Particles/shake/hit-stop exist; this is making every key moment *land* and be consistent.
@@ -82,6 +91,10 @@ Particles/shake/hit-stop exist; this is making every key moment *land* and be co
 - **Room clear / transition** — a satisfying flourish (see Phase 5).
 - Tune shake trauma / hit-stop durations / particle counts so it reads as punchy, not noisy.
 
+**Implemented:** key combat beats now have stronger, consistent VFX/SFX coverage: player hit feedback,
+weapon fire, projectile impacts, ability activations, champion entrance/death, enemy death, and room clear.
+Combat VFX still respect the existing load-suppression path.
+
 ## Phase 4 — Audio pass
 
 Audit `SfxEngine` / `MusicEngine` / `AudioBusConfig`: confirm fire/hit/death/champion/UI/pickup all
@@ -89,13 +102,19 @@ trigger, and that the procedural SFX feel satisfying (punchy transients, variati
 sameness). Verify music is present and ducks/intensifies with combat. Balance bus levels. (Procedural /
 synthesized — no external audio assets.)
 
-**Open:** how much music to invest now vs a later dedicated pass — default to "ensure present + reactive",
-deep musical design deferred.
+**Implemented:** existing procedural audio is wired for fire/hit/damage/death/champion/pickup/level-up/
+room-clear beats, dash now triggers its dash SFX, startup and dynamically rebuilt UI buttons route through
+`play_ui_click` including reward reroll/skip actions, and music contexts are set for menu/map/combat/boss.
+Deep musical composition remains deferred; this pass confirms presence, reactivity, and coverage.
 
 ## Phase 5 *(optional)* — Transitions & framing
 
 Room enter/exit transitions, camera punch on big events, score/momentum gain feedback, a clean
 victory/defeat flourish. Polish layer once 1–4 land.
+
+**Implemented scope:** room start receives a fade-in flash, room clear now plays a centered flourish
+(SFX, flash, shake, ring, debris), and momentum tier-ups get a subtle pickup chirp / screen pulse. Larger
+victory/defeat framing remains later polish.
 
 ## Build order
 

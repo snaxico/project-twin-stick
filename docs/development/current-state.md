@@ -8,7 +8,8 @@ The active branch is the structure rework / "trim" branch. The runtime now keeps
 manual aim, Beam, Boomerang, Split, Momentum/Flow, XP, mutation, modifier, side-objective, controller,
 and Encounter Builder foundations, but replaces the old structure with one continuable run. The initial
 structure-rework playtest was approved, Phase 4 tuning has been applied, the replayability patch
-Phases 0/A/B are implemented, and the QoL/difficulty patch is implemented.
+Phases 0/A/B are implemented, the QoL/difficulty patch is implemented, and the game-feel / neon identity
+patch is implemented.
 
 ## Current Runtime
 
@@ -28,6 +29,9 @@ Phases 0/A/B are implemented, and the QoL/difficulty patch is implemented.
 - Health resets each room because `CoopManager` / `GameWorld` is recreated per room.
 - Momentum now persists across the run through `RunState`; it resets only at run start and still drops by two tiers on damaging hits.
 - Current run score now lives in `RunState`, displays in-run, and banks once to `ProfileState` on terminal run end.
+- Presentation has a dark neon arena with runtime-pulsed grid/walls, player-proximity grid highlights,
+  subtle major-hazard room tinting, distinct enemy silhouettes/motion, projectile pulse/spin, broader
+  procedural SFX coverage, reactive music contexts, and room-start / room-clear transition polish.
 
 ## Progression Loop
 

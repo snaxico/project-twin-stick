@@ -43,7 +43,8 @@ func _update_shape_instances(shape: String, projectiles: Array) -> void:
 	for index in range(projectiles.size()):
 		var projectile = projectiles[index]
 		var render_scale: Vector2 = projectile.get_render_scale() if projectile.has_method("get_render_scale") else Vector2.ONE
-		var instance_transform := Transform2D(float(projectile.direction.angle()), render_scale, 0.0, projectile.global_position)
+		var render_rotation: float = projectile.get_render_rotation() if projectile.has_method("get_render_rotation") else float(projectile.direction.angle())
+		var instance_transform := Transform2D(render_rotation, render_scale, 0.0, projectile.global_position)
 		multimesh.set_instance_transform_2d(index, instance_transform)
 		if projectile.has_method("get_render_color"):
 			multimesh.set_instance_color(index, projectile.get_render_color())

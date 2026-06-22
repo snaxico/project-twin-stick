@@ -147,6 +147,7 @@ func _ready() -> void:
 	meta_back_button.pressed.connect(_on_meta_back_pressed)
 	start_button.pressed.connect(_on_start_pressed)
 	_configure_meta_panel()
+	_wire_ui_click_sfx(self)
 	home_meta_button.visible = true
 	home_settings_button.visible = true
 	meta_panel.visible = false
@@ -537,6 +538,7 @@ func _configure_meta_panel() -> void:
 		reset_button.pressed.connect(_on_reset_profile_pressed)
 		meta_layout.add_child(reset_button)
 		meta_layout.move_child(reset_button, meta_back_button.get_index())
+		_wire_ui_click_sfx(reset_button)
 
 func _rebuild_unlock_menu() -> void:
 	if ProfileState == null:
@@ -610,6 +612,7 @@ func _create_unlock_row(entry: Dictionary) -> PanelContainer:
 	button.tooltip_text = "Spend score to unlock permanently."
 	button.pressed.connect(_on_unlock_pressed.bind(str(entry.get("id", ""))))
 	layout.add_child(button)
+	_wire_ui_click_sfx(row)
 	return row
 
 func _on_unlock_pressed(unlock_id: String) -> void:
@@ -690,6 +693,7 @@ func _configure_settings_panel() -> void:
 	reset_button.pressed.connect(_reset_input_bindings_to_defaults)
 	settings_layout.add_child(reset_button)
 	settings_layout.move_child(reset_button, settings_back_button.get_index())
+	_wire_ui_click_sfx(reset_button)
 	_refresh_binding_buttons()
 
 func _configure_aim_mode_options() -> void:
@@ -781,6 +785,7 @@ func _add_binding_row(parent: VBoxContainer, label_text: String, action: String)
 	controller_button.custom_minimum_size = Vector2(180.0, 32.0)
 	controller_button.pressed.connect(_begin_binding.bind(action, "controller", controller_button))
 	row.add_child(controller_button)
+	_wire_ui_click_sfx(row)
 	_settings_binding_buttons[action] = {
 		"keyboard": keyboard_button,
 		"controller": controller_button,
@@ -1096,6 +1101,20 @@ func _set_music_context(context: String) -> void:
 	if MusicEngine != null and MusicEngine.has_method("set_context"):
 		MusicEngine.set_context(context)
 
+func _wire_ui_click_sfx(root: Node) -> void:
+	if root == null:
+		return
+	if root is Button:
+		var button := root as Button
+		if not button.pressed.is_connected(_play_ui_click_sfx):
+			button.pressed.connect(_play_ui_click_sfx)
+	for child in root.get_children():
+		_wire_ui_click_sfx(child)
+
+func _play_ui_click_sfx() -> void:
+	if sfx_engine != null and sfx_engine.has_method("play_ui_click"):
+		sfx_engine.play_ui_click()
+
 func _encode_input_event(event: InputEvent) -> Dictionary:
 	if event is InputEventKey:
 		var key_event := event as InputEventKey
@@ -1188,6 +1207,7 @@ func _create_perf_launcher_row() -> void:
 	_debug_perf_button.text = "Run Perf"
 	_debug_perf_button.pressed.connect(_on_debug_perf_pressed)
 	row.add_child(_debug_perf_button)
+	_wire_ui_click_sfx(row)
 
 func _on_debug_perf_pressed() -> void:
 	if _debug_perf_option == null:
@@ -1261,6 +1281,7 @@ func _build_weapon_rows() -> void:
 			card.tooltip_text = str(weapon.get("description", ""))
 			card.toggled.connect(_on_weapon_card_toggled.bind(player_index, weapon_id))
 			grid.add_child(card)
+			_wire_ui_click_sfx(card)
 			cards[weapon_id] = card
 		var summary := Label.new()
 		summary.add_theme_font_size_override("font_size", 10)
@@ -1392,6 +1413,7 @@ func _build_ability_rows() -> void:
 				off_grid.add_child(card)
 			else:
 				def_grid.add_child(card)
+			_wire_ui_click_sfx(card)
 			cards[ability_id] = card
 		var summary := Label.new()
 		summary.add_theme_font_size_override("font_size", 10)

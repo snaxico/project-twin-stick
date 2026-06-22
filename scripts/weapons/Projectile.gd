@@ -75,6 +75,8 @@ var _projectile_config: Dictionary = {}
 var _pooled := false
 var _active := true
 var _impact_pool_spawned := false
+var _spawned_at := 0.0
+var _visual_phase := 0.0
 
 func setup(projectile_team: String, projectile_direction: Vector2, projectile_speed: float, projectile_damage: int, projectile_color: Color = Color(1.0, 0.96, 0.7, 1.0), projectile_shooter: Node = null, projectile_feedback_profile: String = "rifle", projectile_impact_weight: float = 1.0) -> void:
 	team = projectile_team
@@ -215,6 +217,8 @@ func activate_from_config(projectile_team: String, projectile_direction: Vector2
 func _activate_projectile_runtime() -> void:
 	_active = true
 	visible = true
+	_spawned_at = _current_time_seconds()
+	_visual_phase = randf() * TAU
 	set_deferred("monitoring", true)
 	set_deferred("monitorable", true)
 	set_process(true)
@@ -388,8 +392,18 @@ func get_render_scale() -> Vector2:
 	var streak_scale: float = 1.0 + 0.18 * float(max(rapid_fire_level - 1, 0)) + 0.22 * float(max(velocity_level - 1, 0))
 	if team == "enemy":
 		var enemy_orb_scale := 1.36 * (8.0 / 6.0)
-		return Vector2(_base_visual_scale.x * enemy_orb_scale * size_scale * streak_scale, _base_visual_scale.y * enemy_orb_scale * size_scale)
-	return _get_shape_scale(size_scale, streak_scale)
+		return Vector2(_base_visual_scale.x * enemy_orb_scale * size_scale * streak_scale, _base_visual_scale.y * enemy_orb_scale * size_scale) * _get_visual_life_scale()
+	return _get_shape_scale(size_scale, streak_scale) * _get_visual_life_scale()
+
+func get_render_rotation() -> float:
+	var base_rotation := direction.angle()
+	match projectile_shape:
+		"diamond":
+			return base_rotation + (_current_time_seconds() - _spawned_at) * 5.5
+		"ember_orb", "large_orb", "small_orb":
+			return base_rotation + sin((_current_time_seconds() - _spawned_at) * 8.0 + _visual_phase) * 0.12
+		_:
+			return base_rotation
 
 func get_render_color() -> Color:
 	var projectile_color: Color = _get_projectile_color()
@@ -405,6 +419,12 @@ func _get_impact_color() -> Color:
 
 func _bloom_color(color: Color) -> Color:
 	return Color(color.r * BLOOM_COLOR_MULTIPLIER, color.g * BLOOM_COLOR_MULTIPLIER, color.b * BLOOM_COLOR_MULTIPLIER, color.a)
+
+func _get_visual_life_scale() -> float:
+	var age := maxf(_current_time_seconds() - _spawned_at, 0.0)
+	var spawn_pop := lerpf(0.72, 1.0, clampf(age / 0.08, 0.0, 1.0))
+	var pulse := 1.0 + sin(age * 10.0 + _visual_phase) * 0.035
+	return spawn_pop * pulse
 
 func _get_shape_scale(size_scale: float, streak_scale: float) -> Vector2:
 	match projectile_shape:

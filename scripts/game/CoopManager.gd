@@ -40,6 +40,7 @@ const BOSS_PLAYER_SPAWN_DISTANCE := 720.0
 const FLOOR_GRID_SPACING := 160.0
 const FLOOR_GRID_MAJOR_INTERVAL := 4
 const ARENA_WALL_VISUAL_WIDTH := 18.0
+const FLOOR_GRID_PLAYER_HIGHLIGHT_RADIUS := 520.0
 const REVIVE_RADIUS := 150.0
 const REVIVE_HOLD_DURATION := 1.2
 const MAX_ACTIVE_PROJECTILES := 180
@@ -801,6 +802,7 @@ func _drop_player_momentum(player_index: int) -> void:
 func _update_momentum_tier(player_index: int) -> void:
 	if player_index < 0 or player_index >= _momentum_progress_by_player.size():
 		return
+	var previous_tier := int(_momentum_tier_by_player[player_index]) if player_index < _momentum_tier_by_player.size() else 0
 	var progress := int(_momentum_progress_by_player[player_index])
 	var tier := 0
 	for threshold_index in range(MOMENTUM_THRESHOLDS.size()):
@@ -808,7 +810,14 @@ func _update_momentum_tier(player_index: int) -> void:
 			tier = threshold_index + 1
 	_momentum_tier_by_player[player_index] = tier
 	_room_max_momentum_tier = maxi(_room_max_momentum_tier, tier)
+	if tier > previous_tier:
+		_on_momentum_tier_gained(tier)
 	_apply_momentum_to_player(player_index)
+
+func _on_momentum_tier_gained(tier: int) -> void:
+	# Subtle reward pulse on climbing a momentum tier (kept light — these come often in good play).
+	_play_sfx("play_pickup", [0.6 + 0.18 * float(tier)])
+	_spawn_screen_flash(Color(0.42, 1.0, 0.86, 0.05 + 0.02 * float(tier)), 0.18)
 
 func _store_momentum(player_index: int) -> void:
 	if player_index < 0 or player_index >= _momentum_tier_by_player.size() or player_index >= _momentum_progress_by_player.size():
@@ -890,24 +899,26 @@ func _rebuild_floor_grid() -> void:
 	var x := 0.0
 	var column_index := 0
 	while x <= ARENA_SIZE.x:
-		var line := Line2D.new()
 		var is_major_line := column_index % FLOOR_GRID_MAJOR_INTERVAL == 0
-		line.width = 3.0 if is_major_line else 1.5
-		line.antialiased = true
-		line.default_color = Color(0.34, 0.8, 1.0, 0.3) if is_major_line else Color(0.24, 0.52, 0.68, 0.18)
-		line.points = PackedVector2Array([Vector2(x, 0.0), Vector2(x, ARENA_SIZE.y)])
+		var line := _build_grid_line(
+			PackedVector2Array([Vector2(x, 0.0), Vector2(x, ARENA_SIZE.y)]),
+			3.0 if is_major_line else 1.5,
+			Color(0.34, 0.8, 1.0, 0.3) if is_major_line else Color(0.24, 0.52, 0.68, 0.18),
+			false
+		)
 		floor_grid.add_child(line)
 		x += FLOOR_GRID_SPACING
 		column_index += 1
 	var y := 0.0
 	var row_index := 0
 	while y <= ARENA_SIZE.y:
-		var line := Line2D.new()
 		var is_major_line := row_index % FLOOR_GRID_MAJOR_INTERVAL == 0
-		line.width = 3.0 if is_major_line else 1.5
-		line.antialiased = true
-		line.default_color = Color(0.34, 0.8, 1.0, 0.3) if is_major_line else Color(0.24, 0.52, 0.68, 0.18)
-		line.points = PackedVector2Array([Vector2(0.0, y), Vector2(ARENA_SIZE.x, y)])
+		var line := _build_grid_line(
+			PackedVector2Array([Vector2(0.0, y), Vector2(ARENA_SIZE.x, y)]),
+			3.0 if is_major_line else 1.5,
+			Color(0.34, 0.8, 1.0, 0.3) if is_major_line else Color(0.24, 0.52, 0.68, 0.18),
+			false
+		)
 		floor_grid.add_child(line)
 		y += FLOOR_GRID_SPACING
 		row_index += 1
@@ -921,14 +932,20 @@ func _add_arena_wall_visuals() -> void:
 		PackedVector2Array([Vector2(ARENA_RECT.end.x - ARENA_MARGIN, ARENA_MARGIN), Vector2(ARENA_RECT.end.x - ARENA_MARGIN, ARENA_RECT.end.y - ARENA_MARGIN)]),
 	]
 	for segment in wall_segments:
-		var wall_line := Line2D.new()
-		wall_line.width = ARENA_WALL_VISUAL_WIDTH
-		wall_line.default_color = Color(0.26, 0.84, 1.0, 0.66)
-		wall_line.antialiased = true
-		wall_line.begin_cap_mode = Line2D.LINE_CAP_ROUND
-		wall_line.end_cap_mode = Line2D.LINE_CAP_ROUND
-		wall_line.points = segment
-		floor_grid.add_child(wall_line)
+		floor_grid.add_child(_build_grid_line(segment, ARENA_WALL_VISUAL_WIDTH * 2.8, Color(0.18, 0.7, 1.0, 0.16), true))
+		floor_grid.add_child(_build_grid_line(segment, ARENA_WALL_VISUAL_WIDTH, Color(0.26, 0.84, 1.0, 0.66), true))
+
+func _build_grid_line(points: PackedVector2Array, width: float, color: Color, is_wall: bool) -> Line2D:
+	var line := Line2D.new()
+	line.width = width
+	line.antialiased = true
+	line.default_color = color
+	line.begin_cap_mode = Line2D.LINE_CAP_ROUND if is_wall else Line2D.LINE_CAP_NONE
+	line.end_cap_mode = Line2D.LINE_CAP_ROUND if is_wall else Line2D.LINE_CAP_NONE
+	line.points = points
+	line.set_meta("grid_base_color", color)
+	line.set_meta("grid_is_wall", is_wall)
+	return line
 
 func _apply_arena_color() -> void:
 	var hue := 0.55
@@ -936,19 +953,23 @@ func _apply_arena_color() -> void:
 	var major := Color.from_hsv(hue, 0.58, 1.0, 0.34)
 	var wall := Color.from_hsv(hue, 0.62, 1.0, 0.68)
 	if floor_visual != null:
-		floor_visual.color = Color(0.0, 0.0, 0.0, 1.0)
+		floor_visual.color = Color(0.012, 0.017, 0.032, 1.0)
 	var max_dist := (ARENA_SIZE * 0.5).length()
 	for child in floor_grid.get_children():
 		if child is Line2D:
 			var line := child as Line2D
 			if line.width >= ARENA_WALL_VISUAL_WIDTH:
-				line.default_color = wall  # arena frame stays bright
+				var wall_color := Color(wall.r, wall.g, wall.b, line.default_color.a)
+				line.default_color = wall_color
+				line.set_meta("grid_base_color", wall_color)
 				continue
 			var base_color := major if line.width >= 3.0 else minor
 			# Depth focus: dim grid lines the farther their midpoint sits from arena center.
 			var mid := (line.points[0] + line.points[line.points.size() - 1]) * 0.5
 			var depth := 1.0 - clampf(mid.distance_to(ARENA_CENTER) / max_dist, 0.0, 1.0)
-			line.default_color = Color(base_color.r, base_color.g, base_color.b, base_color.a * (0.32 + 0.68 * depth))
+			var line_color := Color(base_color.r, base_color.g, base_color.b, base_color.a * (0.32 + 0.68 * depth))
+			line.default_color = line_color
+			line.set_meta("grid_base_color", line_color)
 
 func _apply_collision_bounds_from_floor() -> void:
 	_set_wall_rect(top_wall, Vector2(ARENA_CENTER.x, ARENA_MARGIN * 0.5), Vector2(ARENA_SIZE.x - ARENA_MARGIN * 2.0, ARENA_MARGIN))
@@ -967,6 +988,8 @@ func _start_room() -> void:
 	_ensure_projectile_renderer()
 	_prewarm_combat_vfx()
 	_set_game_paused(false)
+	_set_music_context("combat")
+	_spawn_screen_flash(Color(0.0, 0.0, 0.0, 0.5), 0.4)  # room-intro fade-in from black
 	_rebuild_player_loadouts()
 	_room_max_momentum_tier = 0
 	_restore_momentum()
@@ -1195,7 +1218,41 @@ func _update_grid_pulse(delta: float) -> void:
 		return
 	_grid_pulse_time += delta
 	var pulse := 0.94 + 0.06 * sin(_grid_pulse_time * 1.6)
-	floor_grid.modulate = Color(pulse, pulse, pulse, 1.0)
+	for child in floor_grid.get_children():
+		if not (child is Line2D):
+			continue
+		var line := child as Line2D
+		var base_color: Color = line.get_meta("grid_base_color", line.default_color) as Color
+		var is_wall := bool(line.get_meta("grid_is_wall", false))
+		if is_wall:
+			line.default_color = Color(base_color.r * pulse, base_color.g * pulse, base_color.b * pulse, base_color.a)
+			continue
+		var player_glow := _get_grid_player_glow(line)
+		var alpha_mult := pulse * (0.78 + player_glow * 0.65)
+		line.default_color = Color(base_color.r, base_color.g, base_color.b, clampf(base_color.a * alpha_mult, 0.02, 0.52))
+
+func _get_grid_player_glow(line: Line2D) -> float:
+	if line.points.size() < 2:
+		return 0.0
+	var best := 0.0
+	var start := line.points[0]
+	var end := line.points[line.points.size() - 1]
+	for player in _player_nodes:
+		if player == null or not is_instance_valid(player) or not (player is Node2D):
+			continue
+		if player.has_method("is_alive") and not player.is_alive():
+			continue
+		var distance := _distance_to_segment((player as Node2D).global_position, start, end)
+		best = maxf(best, 1.0 - clampf(distance / FLOOR_GRID_PLAYER_HIGHLIGHT_RADIUS, 0.0, 1.0))
+	return best * best
+
+func _distance_to_segment(point: Vector2, start: Vector2, end: Vector2) -> float:
+	var segment := end - start
+	var length_sq := segment.length_squared()
+	if length_sq <= 0.001:
+		return point.distance_to(start)
+	var t := clampf((point - start).dot(segment) / length_sq, 0.0, 1.0)
+	return point.distance_to(start + segment * t)
 
 func _physics_process(delta: float) -> void:
 	_update_grid_pulse(delta)
@@ -1421,6 +1478,7 @@ func _handle_room_clear() -> void:
 	_record_room_score(true)
 	_set_runtime_pause_state(true)
 	_lock_player_input(true)
+	_spawn_room_clear_flourish()
 	_pending_clear_summary = _build_clear_summary()
 	_show_progression_pick_if_needed()
 
@@ -1497,9 +1555,11 @@ func _on_mutation_reroll_requested(player_index: int) -> void:
 	_mutation_pick_reroll_counts[player_index] = int(_mutation_pick_reroll_counts[player_index]) + 1
 	_mutation_pick_ui.replace_options_for_player(player_index, _roll_reroll_mutation_options_for_player(player_index))
 	_mutation_pick_ui.set_reroll_state(RunState.get_current_score(), _build_mutation_pick_reroll_costs())
+	_play_sfx("play_ui_click", [])
 	_refresh_hud()
 
 func _on_mutation_skip_requested(_player_index: int) -> void:
+	_play_sfx("play_ui_click", [])
 	if _mutation_pick_ui != null and is_instance_valid(_mutation_pick_ui):
 		_mutation_pick_ui.set_reroll_state(RunState.get_current_score(), _build_mutation_pick_reroll_costs())
 
@@ -1790,6 +1850,7 @@ func _spawn_dash_effect(origin: Vector2, direction: Vector2, color: Color) -> vo
 	var burst := ParticleFactoryData.create_dash_burst(color, direction, 1.0)
 	burst.global_position = origin
 	effects.add_child(burst)
+	_play_sfx("play_dash", [1.0])
 
 func _spawn_blink_effect(origin: Vector2, color: Color) -> void:
 	var burst := ParticleFactoryData.create_explosion_burst(color, 0.75)
@@ -1882,7 +1943,21 @@ func _spawn_modifier_activation_vfx(_modifier_id: String, color: Color) -> void:
 	effects.add_child(ring)
 	_spawn_screen_flash(Color(color.r, color.g, color.b, 0.16), 0.28)
 
+func _spawn_room_clear_flourish() -> void:
+	var color := Color(0.42, 1.0, 0.76, 0.82)
+	_play_sfx("play_room_clear", [])
+	if _screen_effects_enabled() and screen_shake != null and screen_shake.has_method("add_trauma"):
+		screen_shake.add_trauma(0.18)
+	_spawn_screen_flash(Color(color.r, color.g, color.b, 0.14), 0.24)
+	var ring := ParticleFactoryData.create_explosion_ring(color, 220.0, 5.0)
+	ring.global_position = ARENA_CENTER
+	effects.add_child(ring)
+	var debris := ParticleFactoryData.create_debris_ring(color.lightened(0.12), 180.0, 16, 0.28)
+	debris.global_position = ARENA_CENTER
+	effects.add_child(debris)
+
 func _spawn_boss_entrance_vfx() -> void:
+	_set_music_context("boss")
 	if _screen_effects_enabled() and screen_shake != null and screen_shake.has_method("add_trauma"):
 		screen_shake.add_trauma(0.32)
 	_request_hit_stop(0.65, 42)
@@ -1894,6 +1969,7 @@ func _spawn_boss_entrance_vfx() -> void:
 
 func _spawn_enemy_death_global_vfx(enemy_type_name: String) -> void:
 	if _is_champion_enemy_type(enemy_type_name):
+		_set_music_context("combat")
 		if _screen_effects_enabled() and screen_shake != null and screen_shake.has_method("add_trauma"):
 			screen_shake.add_trauma(0.42)
 		_request_hit_stop(0.85, 52)
@@ -2300,6 +2376,10 @@ func _play_sfx(method_name: String, args: Array) -> void:
 		if node != null and is_instance_valid(node) and node.has_method(method_name):
 			node.callv(method_name, args)
 			return
+
+func _set_music_context(context: String) -> void:
+	if MusicEngine != null and MusicEngine.has_method("set_context"):
+		MusicEngine.set_context(context)
 
 func _overbright_color(color: Color, multiplier: float) -> Color:
 	return Color(color.r * multiplier, color.g * multiplier, color.b * multiplier, color.a)
