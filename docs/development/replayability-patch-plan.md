@@ -1,8 +1,8 @@
 # Choices & Builds Patch — vision & roadmap
 
-> Status: **all phases Codex-ready (specs below), not built yet.** Sits on top of the implemented
-> structure rework (`v3/structure-rework`). The "what makes it replayable" patch — a phased roadmap, not
-> a single commit. (Phase C is scaffolding-only — art assets are a human/art task, not Codex-buildable.)
+> Status: **Phases 0/A/B implemented on `v3/structure-rework`; Phase C remains a later art/scaffolding
+> effort.** The "what makes it replayable" patch is now in first-pass implementation and needs tuning
+> playtests.
 >
 > **Includes the next-room-choice work as Phase 0** — it shares one rarity/reward economy with the
 > build-depth Signature tier (room rare-nudge ↔ Signature roll), so it's designed here. The theme that
@@ -146,7 +146,8 @@ The Codex-ready specs above leave only **playtest-tunable numbers**, not design 
 - Phase B: the score formula constants, the free starting set + unlock costs/order, unlock-menu UX.
 - Phase C: the full art-asset effort (separate, human/art) + the re-skin scaffolding scope.
 
-Recommended next: a **review pass** (the loop that's caught real bugs each time), then build **Phase 0**.
+Recommended next: review/playtest the implemented Phases 0/A/B, then tune the free unlock set, costs,
+Signature values, parasite downsides, and route-card readability.
 
 ## Codex-ready specs (per phase)
 
@@ -154,7 +155,7 @@ Numbers are placeholders (tune in playtest); shapes/touch-points are decided. Ea
 bounded hand-offs. Every slice: `git diff --check` + headless parse/boot; symbol-removal greps over
 runtime paths only.
 
-### Phase 0 — Next-room choice
+### Phase 0 — Next-room choice *(implemented 2026-06-22)*
 
 Turn the placeholder 2-room choice (random-differ, same reward, text button) into a readable pick with a
 light push-your-luck layer + a styled card. **Modifier-led, flavor / near-equal reward, fully shown**:
@@ -190,7 +191,7 @@ nudged. Existing HUD neon colors, no new theme.
 differ in `trait_label`, `danger_pips∈1..3`, exactly one `rare_bonus>0` (unless tie) on the higher-danger
 node; manual = cards read as different fights with real modifier names and the `+N%` marker.
 
-### Phase A — Build depth (tag synergies)
+### Phase A — Build depth (tag synergies) *(implemented 2026-06-22)*
 
 **A1 — Tag infrastructure.**
 - `data/mutations.json`: add `"tags": [...]` to upgrades. Seed: `fire_trail→["fire"]`,
@@ -245,7 +246,7 @@ node; manual = cards read as different fights with real modifier names and the `
 **Accept:** equipping N fire upgrades scales fire magnitudes ×`(1+N*0.12)`; signature share rises with
 depth; **a forced all-parasite roll with a non-parasite available replaces ≥1** (headless-testable).
 
-### Phase B — Meta: score currency + unlock menu
+### Phase B — Meta: score currency + unlock menu *(implemented 2026-06-22)*
 
 **B1 — Save + score.**
 - `ProfileState.gd` (today a screen-effect stub): add `banked_score: int`, `unlocked_ids: Array[String]`;

@@ -8,6 +8,7 @@ const CONTACT_INVULN_DURATION := 0.35
 const BLOOM_COLOR_MULTIPLIER := 1.45
 const MANUAL_AIM_DEADZONE := 0.35
 const MOUSE_AIM_IDLE_SECONDS := 0.65
+const MAX_MOMENTUM_TIER := 4
 
 const FLASH_SHADER_CODE := """
 shader_type canvas_item;
@@ -79,6 +80,7 @@ var _base_move_speed: float = 560.0
 var _base_max_health: int = 100
 var _base_weapon_fire_interval: float = 0.25
 var _base_projectile_damage: int = 10
+var _heal_disabled := false
 var _modifier_move_speed_sources: Dictionary = {}
 var _modifier_attack_speed_sources: Dictionary = {}
 var _modifier_damage_sources: Dictionary = {}
@@ -198,6 +200,7 @@ func apply_loadout(loadout: Dictionary) -> void:
 	_weapon_id = str(loadout.get("weapon_id", "rifle"))
 	_weapon_profile_name = str(loadout.get("weapon_name", "Rifle"))
 	_weapon_stats = (loadout.get("weapon_stats", {}) as Dictionary).duplicate(true)
+	_heal_disabled = bool(loadout.get("heal_disabled", false))
 	_base_projectile_damage = int(round(float(_weapon_stats.get("damage", _weapon_stats.get("max_damage_per_second", projectile_damage)))))
 	if str(_weapon_stats.get("projectile_kind", "bullet")) == "beam":
 		_base_weapon_fire_interval = maxf(float(_weapon_stats.get("tick_interval", 0.1)), 0.05)
@@ -288,7 +291,7 @@ func revive(health_amount: int) -> void:
 	health_changed.emit(current_health, max_health)
 
 func heal(amount: int) -> bool:
-	if amount <= 0 or _is_downed or current_health >= max_health:
+	if _heal_disabled or amount <= 0 or _is_downed or current_health >= max_health:
 		return false
 	current_health = clampi(current_health + amount, 0, max_health)
 	health_changed.emit(current_health, max_health)
@@ -709,6 +712,9 @@ func _fire_weapon(now: float, fire_direction: Vector2) -> void:
 		var projectile_speed_mult := float(overcharge_stats.get("projectile_speed_mult", 1.0))
 		if projectile_speed_mult > 1.0:
 			projectile_config["speed"] = float(projectile_config.get("speed", projectile_speed)) * projectile_speed_mult
+	var max_momentum_pierce := int(projectile_config.get("pierce_at_max_momentum", 0))
+	if max_momentum_pierce > 0 and _momentum_tier >= MAX_MOMENTUM_TIER and str(projectile_config.get("projectile_kind", "bullet")) != "beam":
+		projectile_config["pierce_count"] = int(projectile_config.get("pierce_count", 0)) + max_momentum_pierce
 	projectile_config["rapid_fire_level"] = rapid_fire_level
 	projectile_config["velocity_level"] = velocity_level
 	projectile_config["source_type"] = "weapon"

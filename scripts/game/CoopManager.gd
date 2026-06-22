@@ -144,6 +144,7 @@ var _room_config: Dictionary = {}
 var _room_type := "combat"
 var _room_enemy_pool: Array = []
 var _room_depth := 1
+var _room_rare_bonus := 0.0
 var _room_clear_started := false
 var _awaiting_mutation_pick := false
 var _boss_spawned := false
@@ -154,6 +155,9 @@ var _next_spawn_at := 0.0
 var _spawn_count_accumulator := 0.0
 var _enemies_spawned := 0
 var _enemies_killed := 0
+var _champions_killed := 0
+var _room_max_momentum_tier := 0
+var _room_score_recorded := false
 var _pending_enemy_spawns := 0
 var _spawning_done := false
 var _burst_interval := 10.0
@@ -172,6 +176,7 @@ var _bottom_player_hud_cards: Array = []
 var _objective_label: Label = null
 var _room_label: Label = null
 var _xp_label: Label = null
+var _score_label: Label = null
 var _xp_fill: ColorRect = null
 var _modifier_hud: VBoxContainer = null
 var _objective_panel: PanelContainer = null
@@ -317,7 +322,7 @@ func _build_hud() -> void:
 
 	var xp_panel := PanelContainer.new()
 	xp_panel.position = Vector2(700.0, 20.0)
-	xp_panel.size = Vector2(520.0, 72.0)
+	xp_panel.size = Vector2(520.0, 88.0)
 	_hud_root.add_child(xp_panel)
 	var xp_margin := MarginContainer.new()
 	xp_margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -344,9 +349,14 @@ func _build_hud() -> void:
 	_xp_label = Label.new()
 	_xp_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	xp_layout.add_child(_xp_label)
+	_score_label = Label.new()
+	_score_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_score_label.add_theme_font_size_override("font_size", 12)
+	_score_label.add_theme_color_override("font_color", Color(1.0, 0.9, 0.46, 0.96))
+	xp_layout.add_child(_score_label)
 
 	_boss_health_bar = HealthBarHUDData.new()
-	_boss_health_bar.position = Vector2(700.0, 98.0)
+	_boss_health_bar.position = Vector2(700.0, 114.0)
 	_boss_health_bar.size = Vector2(520.0, 36.0)
 	_boss_health_bar.configure("Boss", Color(1.0, 0.22, 0.14, 0.95))
 	_boss_health_bar.visible = false
@@ -751,6 +761,7 @@ func _rebuild_player_loadouts() -> void:
 			"move_speed": float(base_loadout.get("move_speed", 560.0)),
 			"move_speed_bonus": _mutation_system.get_move_speed_bonus(index),
 			"max_health": int(round(float(base_loadout.get("max_health", 100)) * _mutation_system.get_max_health_multiplier(index))),
+			"heal_disabled": _mutation_system.is_healing_disabled(index),
 		}
 		_compiled_loadouts.append(compiled_loadout)
 		_player_nodes[index].apply_loadout(compiled_loadout)
@@ -764,6 +775,7 @@ func _restore_momentum() -> void:
 		var state := RunState.get_momentum_state(index)
 		_momentum_progress_by_player.append(int(state.get("progress", 0)))
 		_momentum_tier_by_player.append(int(state.get("tier", 0)))
+		_room_max_momentum_tier = maxi(_room_max_momentum_tier, int(state.get("tier", 0)))
 		_apply_momentum_to_player(index)
 
 func _gain_shared_momentum() -> void:
@@ -790,6 +802,7 @@ func _update_momentum_tier(player_index: int) -> void:
 		if progress >= int(MOMENTUM_THRESHOLDS[threshold_index]):
 			tier = threshold_index + 1
 	_momentum_tier_by_player[player_index] = tier
+	_room_max_momentum_tier = maxi(_room_max_momentum_tier, tier)
 	_apply_momentum_to_player(player_index)
 
 func _store_momentum(player_index: int) -> void:
@@ -942,6 +955,7 @@ func _start_room() -> void:
 	_prewarm_combat_vfx()
 	_set_game_paused(false)
 	_rebuild_player_loadouts()
+	_room_max_momentum_tier = 0
 	_restore_momentum()
 	_room_clear_started = false
 	_awaiting_mutation_pick = false
@@ -954,12 +968,15 @@ func _start_room() -> void:
 	_room_type = str(_room_config.get("room_type", "combat"))
 	_room_enemy_pool = ( _room_config.get("enemy_pool", []) as Array).duplicate()
 	_room_depth = int(_room_config.get("depth", 1))
+	_room_rare_bonus = maxf(float(_room_config.get("rare_bonus", 0.0)), 0.0)
 	_room_duration = _get_room_duration()
 	_spawn_interval = _get_spawn_interval()
 	_next_spawn_at = 0.4
 	_spawn_count_accumulator = 0.0
 	_enemies_spawned = 0
 	_enemies_killed = 0
+	_champions_killed = 0
+	_room_score_recorded = false
 	_pending_enemy_spawns = 0
 	_spawning_done = false
 	_burst_interval = _get_burst_interval()
@@ -1361,6 +1378,7 @@ func _handle_room_clear() -> void:
 	if _room_clear_started:
 		return
 	_room_clear_started = true
+	_record_room_score(true)
 	_set_runtime_pause_state(true)
 	_lock_player_input(true)
 	_pending_clear_summary = _build_clear_summary()
@@ -1385,7 +1403,7 @@ func _show_mutation_pick(force_rare: bool, title: String, subtitle: String) -> v
 	for player_index in range(_player_nodes.size()):
 		var inventory: PlayerInventory = RunState.get_player_inventory(player_index)
 		var force_player_rare: bool = force_rare or (inventory != null and inventory.rare_dry_streak >= 3)
-		var options: Array = _mutation_system.roll_mutation_options(player_index, 3, _get_current_rare_chance(), force_player_rare)
+		var options: Array = _mutation_system.roll_mutation_options(player_index, 3, _get_current_rare_chance(), force_player_rare, _signature_share(_room_depth))
 		if inventory != null:
 			if _options_contain_rare(options):
 				inventory.rare_dry_streak = 0
@@ -1403,7 +1421,7 @@ func _show_mutation_pick(force_rare: bool, title: String, subtitle: String) -> v
 func _options_contain_rare(options: Array) -> bool:
 	for option_variant in options:
 		var option := option_variant as Dictionary
-		if str(option.get("rarity", "common")) == "rare":
+		if _rarity_rank(str(option.get("rarity", "common"))) >= 1:
 			return true
 	return false
 
@@ -1515,6 +1533,16 @@ func _process_beam_fire(origin: Vector2, direction: Vector2, projectile_config: 
 				enemy.apply_slow(float(projectile_config.get("slow_multiplier", 1.0)), float(projectile_config.get("slow_duration", 0.0)))
 		if float(projectile_config.get("poison_duration", 0.0)) > 0.0 and float(projectile_config.get("poison_dps", 0.0)) > 0.0 and enemy.has_method("apply_poison"):
 			enemy.apply_poison(float(projectile_config.get("poison_dps", 0.0)), float(projectile_config.get("poison_duration", 0.0)))
+		if bool(projectile_config.get("ignite_on_death", false)) and enemy.has_method("apply_ignite_on_death"):
+			enemy.apply_ignite_on_death(
+				float(projectile_config.get("ignite_radius", 0.0)),
+				maxi(1, int(round(float(damage) * float(projectile_config.get("ignite_damage_percent", 0.0)))))
+			)
+		if bool(projectile_config.get("shatter_on_frozen_death", false)) and enemy.has_method("apply_shatter_on_death"):
+			enemy.apply_shatter_on_death(
+				float(projectile_config.get("shatter_radius", 0.0)),
+				maxi(1, int(round(float(damage) * float(projectile_config.get("shatter_damage_percent", 0.0)))))
+			)
 		hit_position = closest
 	for target_id in held_targets.keys():
 		if not current_target_ids.has(target_id):
@@ -1964,6 +1992,31 @@ func _on_projectile_impact(origin: Vector2, direction: Vector2, team: String, co
 			ring.global_position = origin
 			effects.add_child(ring)
 
+func _apply_enemy_death_effects(enemy) -> void:
+	if enemy == null or not is_instance_valid(enemy) or not enemy.has_method("get_death_effects"):
+		return
+	var death_position: Vector2 = enemy.global_position
+	for effect_variant in enemy.get_death_effects():
+		var effect := effect_variant as Dictionary
+		var radius := float(effect.get("radius", 0.0))
+		var damage := int(effect.get("damage", 0))
+		if radius <= 0.0 or damage <= 0:
+			continue
+		for nearby in get_nearby_enemy_target_nodes(death_position, radius):
+			if nearby == null or not is_instance_valid(nearby) or nearby == enemy:
+				continue
+			if nearby.has_method("is_alive") and not nearby.is_alive():
+				continue
+			if nearby.global_position.distance_squared_to(death_position) > radius * radius:
+				continue
+			if nearby.has_method("apply_damage"):
+				nearby.apply_damage(damage)
+		if not _should_suppress_combat_vfx():
+			var effect_color := Color(1.0, 0.52, 0.18, 0.78) if str(effect.get("type", "")) == "ignite" else Color(0.42, 0.92, 1.0, 0.78)
+			var ring := ParticleFactoryData.create_explosion_ring(effect_color, radius, 2.4)
+			ring.global_position = death_position
+			effects.add_child(ring)
+
 func _spawn_projectile_hit_effect(origin: Vector2, direction: Vector2, color: Color, impact_weight: float, target: Node) -> void:
 	var effect_color := color.lightened(0.2)
 	if target != null and is_instance_valid(target) and target.has_method("get_feedback_color"):
@@ -1989,7 +2042,10 @@ func _on_enemy_died(enemy) -> void:
 	_enemies_killed += 1
 	_gain_shared_momentum()
 	var enemy_type_name := str(enemy.get_type_name())
+	if _is_champion_enemy_type(enemy_type_name):
+		_champions_killed += 1
 	_spawn_enemy_death_global_vfx(enemy_type_name)
+	_apply_enemy_death_effects(enemy)
 	if _is_champion_enemy_type(enemy_type_name):
 		RunState.add_xp(0)
 	else:
@@ -2086,7 +2142,18 @@ func _check_failure() -> void:
 	for player in _player_nodes:
 		if player != null and is_instance_valid(player) and player.is_alive():
 			return
+	_record_room_score(false)
 	all_players_dead.emit()
+
+func _record_room_score(cleared: bool) -> void:
+	if _room_score_recorded:
+		return
+	_room_score_recorded = true
+	RunState.add_run_score(_build_room_score_delta(cleared))
+
+func _build_room_score_delta(cleared: bool) -> int:
+	var clear_credit := 100 if cleared else 0
+	return clear_credit + _enemies_killed + _champions_killed * 250 + _room_max_momentum_tier * 50
 
 func _refresh_hud() -> void:
 	var xp_progress := RunState.get_xp_progress()
@@ -2099,6 +2166,8 @@ func _refresh_hud() -> void:
 		int(xp_progress.get("needed", 80)),
 		int(xp_progress.get("pending", 0)),
 	]
+	if _score_label != null:
+		_score_label.text = "Score %d" % RunState.get_current_score()
 	_room_label.text = _build_room_status_text()
 	_objective_label.text = _build_side_objective_text()
 	_refresh_objective_panel()
@@ -2160,7 +2229,20 @@ func _format_boss_type() -> String:
 	return " ".join(parts)
 
 func _get_current_rare_chance() -> float:
-	return lerpf(0.20, 0.45, clampf(float(_room_depth - 1) / 19.0, 0.0, 1.0))
+	var base_chance := lerpf(0.20, 0.45, clampf(float(_room_depth - 1) / 19.0, 0.0, 1.0))
+	return clampf(base_chance + _room_rare_bonus, 0.0, 0.60)
+
+func _signature_share(depth: int) -> float:
+	return clampf(float(depth - 4) / 16.0, 0.0, 0.5)
+
+func _rarity_rank(rarity: String) -> int:
+	match rarity:
+		"signature":
+			return 2
+		"rare":
+			return 1
+		_:
+			return 0
 
 func _format_objective_text() -> String:
 	if _side_objective_completed:
@@ -3084,13 +3166,14 @@ func _create_build_ability_card(player, player_tint: Color, slot_index: int) -> 
 
 func _create_mutation_chip(entry: Dictionary) -> PanelContainer:
 	var rarity := str(entry.get("rarity", "common"))
-	var rarity_color := Color(1.0, 0.78, 0.32, 1.0) if rarity == "rare" else Color(0.48, 0.74, 1.0, 1.0)
+	var rarity_rank := _rarity_rank(rarity)
+	var rarity_color := Color(1.0, 0.42, 0.92, 1.0) if rarity_rank >= 2 else (Color(1.0, 0.78, 0.32, 1.0) if rarity_rank == 1 else Color(0.48, 0.74, 1.0, 1.0))
 	var group_color := IconFactoryData.get_group_color(str(entry.get("group", "attribute")))
 	var chip := PanelContainer.new()
 	chip.tooltip_text = str(entry.get("description", ""))
 	var style := StyleBoxFlat.new()
-	style.bg_color = Color(group_color.r, group_color.g, group_color.b, 0.18 if rarity == "rare" else 0.14)
-	style.border_color = rarity_color if rarity == "rare" else group_color
+	style.bg_color = Color(group_color.r, group_color.g, group_color.b, 0.18 if rarity_rank >= 1 else 0.14)
+	style.border_color = rarity_color if rarity_rank >= 1 else group_color
 	style.set_border_width_all(1)
 	style.corner_radius_top_left = 4
 	style.corner_radius_top_right = 4
@@ -3104,7 +3187,7 @@ func _create_mutation_chip(entry: Dictionary) -> PanelContainer:
 	margin.add_theme_constant_override("margin_bottom", 3)
 	chip.add_child(margin)
 	var label := Label.new()
-	var level_text := " Lv%d" % int(entry.get("count", 1)) if int(entry.get("count", 1)) > 1 and rarity != "rare" else ""
+	var level_text := " Lv%d" % int(entry.get("count", 1)) if int(entry.get("count", 1)) > 1 and rarity_rank <= 0 else ""
 	label.text = "%s%s" % [str(entry.get("name", "")), level_text]
 	label.add_theme_font_size_override("font_size", 11)
 	label.add_theme_color_override("font_color", rarity_color.lightened(0.18))
@@ -3112,10 +3195,10 @@ func _create_mutation_chip(entry: Dictionary) -> PanelContainer:
 	return chip
 
 func _compare_mutation_entries(left: Dictionary, right: Dictionary) -> bool:
-	var left_rarity_score := 0 if str(left.get("rarity", "common")) == "rare" else 1
-	var right_rarity_score := 0 if str(right.get("rarity", "common")) == "rare" else 1
-	if left_rarity_score != right_rarity_score:
-		return left_rarity_score < right_rarity_score
+	var left_rarity_rank := _rarity_rank(str(left.get("rarity", "common")))
+	var right_rarity_rank := _rarity_rank(str(right.get("rarity", "common")))
+	if left_rarity_rank != right_rarity_rank:
+		return left_rarity_rank > right_rarity_rank
 	return str(left.get("name", "")).naturalnocasecmp_to(str(right.get("name", ""))) < 0
 
 func _current_time_seconds() -> float:

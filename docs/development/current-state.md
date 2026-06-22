@@ -7,12 +7,14 @@ Godot `4.6.2` same-screen local co-op neon roguelite prototype.
 The active branch is the structure rework / "trim" branch. The runtime now keeps the Round 14 weapon,
 manual aim, Beam, Boomerang, Split, Momentum/Flow, XP, mutation, modifier, side-objective, controller,
 and Encounter Builder foundations, but replaces the old structure with one continuable run. The initial
-structure-rework playtest was approved, and Phase 4 tuning has been applied.
+structure-rework playtest was approved, Phase 4 tuning has been applied, and the replayability patch
+Phases 0/A/B are implemented.
 
 ## Current Runtime
 
 - Front menu paths:
   - `Play`
+  - `Meta`
   - `Settings`
   - `Encounter Builder` in debug builds or when launched with `--debug-menu`
 - There is one run mode. The old Structured / Endless split and pre-run mode selector are removed.
@@ -25,6 +27,7 @@ structure-rework playtest was approved, and Phase 4 tuning has been applied.
 - The branching map UI and graph generation are removed.
 - Health resets each room because `CoopManager` / `GameWorld` is recreated per room.
 - Momentum now persists across the run through `RunState`; it resets only at run start and still drops by two tiers on damaging hits.
+- Current run score now lives in `RunState`, displays in-run, and banks once to `ProfileState` on terminal run end.
 
 ## Progression Loop
 
@@ -32,8 +35,11 @@ structure-rework playtest was approved, and Phase 4 tuning has been applied.
 - Level-ups bank room-end pick rounds.
 - In co-op, both players level together and each gets an independent pick per round.
 - Champion rooms grant one additional forced-rare reward pick after XP picks resolve.
-- Rare odds now use a continuous depth curve instead of act/endless buckets.
-- Gold, shops, rest nodes, and the old purchase loop remain removed.
+- Rare odds now use a continuous depth curve, with a small per-room nudge on the higher-danger route.
+- The old purchase loop remains removed; meta progression is now a banked-score unlock pool.
+- Upgrade rolls support common / rare / Signature rarity. Signature upgrades include tag amplifiers,
+  transformers, and parasites.
+- Tags currently seed Fire, Frost, Toxic, Split, Momentum, and Pierce build axes.
 
 ## Loadout / Combat
 
@@ -62,6 +68,8 @@ structure-rework playtest was approved, and Phase 4 tuning has been applied.
   - `Turret`
   - `Minefield`
   - `Orbit`
+- New profiles start lean: `Rifle`, `Shotgun`, `Overcharge`, `Dash`, and base common upgrades are free;
+  the rest enters pre-run and upgrade pools through Meta unlocks.
 - Aim modes are `auto`, `movement`, and `manual`.
 
 ## Encounter Systems
@@ -98,6 +106,7 @@ structure-rework playtest was approved, and Phase 4 tuning has been applied.
 - `Bootstrap.gd` now owns:
   - single Play setup
   - player/controller/loadout setup
+  - Meta unlock menu backed by `ProfileState`
   - Encounter Builder with `Combat / Champion`
   - champion picker over all seven champions
 - Encyclopedia entries label all heavy enemies as champions.
@@ -111,16 +120,13 @@ Last validation run in this state:
 - `git diff --check`
 - Godot headless parse:
   - `Godot_v4.6.2-stable_win64_console.exe --headless --path D:\GameDev\Project_Twin_stick --quit`
-- Champion dense-wave perf:
-  - `--profile=champion:hive --players=2 --build=heavy`
-  - result after Phase 4 tuning: completed, attack markers emitted, average `144.9 FPS`, max frame `6.944 ms` in headless profile
-- Cleanup greps over runtime paths returned zero hits for removed map/endless/mode/phase/elite-tier symbols.
-- Post-implementation code review passed; three minor hardening fixes applied (bounded `node_map`/lookup
-  growth, removed vestigial `"elite"` UI branch, defensive champion-must-spawn-before-clear guard).
-  Headless parse + boot (`--quit-after 1`) clean after the fixes.
+- Replayability patch code review pass completed locally during implementation.
 
 ## Known Risks
 
+- Replayability patch tuning is first-pass and needs a live `1P` / `2P` feel check.
+- The new lean start may feel too thin; tune free unlocks and costs if early runs feel starved.
+- Signature values, tag scaling, and parasite downsides are first-pass numbers.
 - Phase 4 tuning is first-pass and should get one more live `1P` / `2P` feel check, especially rooms `10+`.
 - Champion readability inside dense waves still needs live validation after the cooldown/damage tuning.
 - The two next-room cards depend on existing enemy/modifier differentiation; keep watching whether choices feel meaningful.
@@ -131,8 +137,12 @@ Last validation run in this state:
 
 ## Next Step
 
-Playtest the Phase 4 tuned structure rework on `v3/structure-rework`:
+Playtest the replayability patch on `v3/structure-rework`:
 
+- Meta unlock flow: earn score, bank once, spend, restart, confirm persistence
+- lean-start feel before unlocks
+- Signature/parasite offer quality and build divergence
+- route-card readability and rare-odds nudge readability
 - continuation pressure after room `10`
 - champion time-to-kill versus attack threat
 - Cannon burst-AOE versus Beam sustained single-target identity

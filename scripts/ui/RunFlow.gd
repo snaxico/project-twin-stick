@@ -49,8 +49,9 @@ func _show_next_room_choice() -> void:
 	var xp_progress: Dictionary = RunState.get_xp_progress()
 	var room_number := int(options[0].get("depth", RunState.rooms_completed + 1))
 	next_room_title_label.text = "Choose Next Room"
-	next_room_status_label.text = "Room %d  |  Lv %d  |  XP %d/%d  |  Pending Picks %d" % [
+	next_room_status_label.text = "Room %d  |  Score %d  |  Lv %d  |  XP %d/%d  |  Pending Picks %d" % [
 		room_number,
+		RunState.get_current_score(),
 		int(xp_progress.get("level", 0)),
 		int(xp_progress.get("current", 0)),
 		int(xp_progress.get("needed", 80)),
@@ -74,59 +75,163 @@ func _build_route_card(node: Dictionary) -> Button:
 	button.custom_minimum_size = Vector2(252.0, 196.0)
 	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	button.focus_mode = Control.FOCUS_ALL
-	button.alignment = HORIZONTAL_ALIGNMENT_LEFT
-	button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	button.text = ""
+	var rare_bonus := float(node.get("rare_bonus", 0.0))
+	_apply_route_card_style(button, rare_bonus)
+	var margin := MarginContainer.new()
+	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	margin.add_theme_constant_override("margin_left", 12)
+	margin.add_theme_constant_override("margin_top", 10)
+	margin.add_theme_constant_override("margin_right", 12)
+	margin.add_theme_constant_override("margin_bottom", 10)
+	button.add_child(margin)
+	var layout := VBoxContainer.new()
+	layout.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	layout.add_theme_constant_override("separation", 8)
+	margin.add_child(layout)
+
 	var room_type := str(node.get("room_type", "combat"))
-	var tag := "COMBAT"
-	if room_type == "boss":
-		tag = "CHAMPION: %s" % _format_boss_name(str(node.get("boss_type", "Boss")))
+	var title_row := HBoxContainer.new()
+	title_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	title_row.add_theme_constant_override("separation", 8)
+	layout.add_child(title_row)
+	var trait_label := Label.new()
+	trait_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	trait_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	trait_label.text = "%s  %s" % [_trait_icon_text(str(node.get("trait_icon", "open"))), str(node.get("trait_label", "Open room"))]
+	trait_label.add_theme_font_size_override("font_size", 15)
+	trait_label.add_theme_color_override("font_color", Color(0.88, 0.98, 1.0, 0.96))
+	title_row.add_child(trait_label)
+	var danger_label := Label.new()
+	danger_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	danger_label.text = _danger_pips_text(int(node.get("danger_pips", 1)))
+	danger_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	danger_label.add_theme_font_size_override("font_size", 15)
+	danger_label.add_theme_color_override("font_color", Color(1.0, 0.72, 0.28, 0.96))
+	title_row.add_child(danger_label)
+
 	var modifiers: Array = node.get("modifiers", []) as Array
-	var modifier_text := "None" if modifiers.is_empty() else _build_modifier_badge_text(modifiers)
+	var chip_flow := HFlowContainer.new()
+	chip_flow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	chip_flow.add_theme_constant_override("h_separation", 5)
+	chip_flow.add_theme_constant_override("v_separation", 5)
+	layout.add_child(chip_flow)
+	if modifiers.is_empty():
+		chip_flow.add_child(_build_modifier_chip("Open"))
+	else:
+		for mod_id_variant in modifiers:
+			chip_flow.add_child(_build_modifier_chip(_format_modifier_name(str(mod_id_variant))))
+
 	var enemies: Array = node.get("enemy_pool", []) as Array
 	var enemy_text := "Champion" if room_type == "boss" else ", ".join(enemies)
 	var side_objective := str(node.get("side_objective", ""))
 	var objective_text := "Objective: %s" % _format_modifier_name(side_objective) if not side_objective.is_empty() else "Objective: Clear"
-	button.text = "%s\n%s\nRoom %d\n%s\nMods: %s\nEnemies: %s\n%s" % [
-		str(node.get("title", "Room")),
-		tag,
+	var detail_label := Label.new()
+	detail_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	detail_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	detail_label.add_theme_font_size_override("font_size", 12)
+	detail_label.add_theme_color_override("font_color", Color(0.78, 0.88, 0.94, 0.92))
+	var room_label := "Champion: %s" % _format_boss_name(str(node.get("boss_type", "Champion"))) if room_type == "boss" else "Enemies: %s" % enemy_text
+	detail_label.text = "Room %d\n%s\n%s" % [
 		int(node.get("depth", 1)),
+		room_label,
 		objective_text,
-		modifier_text,
-		enemy_text,
-		str(node.get("description", "")),
 	]
+	layout.add_child(detail_label)
+
+	var spacer := Control.new()
+	spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	layout.add_child(spacer)
+
+	var rare_label := Label.new()
+	rare_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	rare_label.add_theme_font_size_override("font_size", 12)
+	rare_label.add_theme_color_override("font_color", Color(1.0, 0.84, 0.36, 0.96) if rare_bonus > 0.0 else Color(0.74, 0.86, 0.92, 0.9))
+	var rare_text := "Rare odds %d%%" % int(round(float(node.get("rare_chance", 0.0)) * 100.0))
+	if rare_bonus > 0.0:
+		rare_text += "  +%d%%" % int(round(rare_bonus * 100.0))
+	rare_label.text = rare_text
+	layout.add_child(rare_label)
+
 	button.pressed.connect(_on_next_room_card_pressed.bind(str(node.get("id", ""))))
 	return button
 
-func _build_modifier_badge_text(modifiers: Array) -> String:
-	var badges: Array = []
-	for mod_id_variant in modifiers:
-		var mod_id := str(mod_id_variant)
-		badges.append(_modifier_abbreviation(mod_id))
-	return " ".join(badges)
+func _apply_route_card_style(button: Button, rare_bonus: float) -> void:
+	var border_color := Color(0.32, 0.86, 1.0, 0.72)
+	if rare_bonus > 0.0:
+		border_color = Color(1.0, 0.80, 0.26, 0.96)
+	for state in ["normal", "hover", "pressed", "focus"]:
+		var style := StyleBoxFlat.new()
+		style.bg_color = Color(0.035, 0.055, 0.075, 0.96)
+		if state == "hover":
+			style.bg_color = Color(0.055, 0.085, 0.11, 0.98)
+		elif state == "pressed":
+			style.bg_color = Color(0.025, 0.045, 0.065, 0.98)
+		style.border_color = border_color.lightened(0.22) if state == "focus" else border_color
+		style.set_border_width_all(2 if rare_bonus > 0.0 or state == "focus" else 1)
+		style.corner_radius_top_left = 8
+		style.corner_radius_top_right = 8
+		style.corner_radius_bottom_left = 8
+		style.corner_radius_bottom_right = 8
+		button.add_theme_stylebox_override(state, style)
 
-func _modifier_abbreviation(mod_id: String) -> String:
-	match mod_id:
-		"accelerating_waves":
-			return "AW"
-		"enemy_speed":
-			return "ES"
+func _build_modifier_chip(display_name: String) -> PanelContainer:
+	var chip := PanelContainer.new()
+	chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.12, 0.18, 0.22, 0.82)
+	style.border_color = Color(0.42, 0.82, 0.95, 0.52)
+	style.set_border_width_all(1)
+	style.corner_radius_top_left = 5
+	style.corner_radius_top_right = 5
+	style.corner_radius_bottom_left = 5
+	style.corner_radius_bottom_right = 5
+	chip.add_theme_stylebox_override("panel", style)
+	var margin := MarginContainer.new()
+	margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	margin.add_theme_constant_override("margin_left", 6)
+	margin.add_theme_constant_override("margin_top", 3)
+	margin.add_theme_constant_override("margin_right", 6)
+	margin.add_theme_constant_override("margin_bottom", 3)
+	chip.add_child(margin)
+	var label := Label.new()
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	label.text = display_name
+	label.add_theme_font_size_override("font_size", 10)
+	label.add_theme_color_override("font_color", Color(0.86, 0.94, 1.0, 0.94))
+	margin.add_child(label)
+	return chip
+
+func _trait_icon_text(icon_id: String) -> String:
+	match icon_id:
+		"flame":
+			return "F"
+		"snow":
+			return "*"
+		"scan":
+			return "#"
+		"shrink":
+			return "<>"
 		"swarm":
-			return "SW"
-		"shielded":
-			return "SH"
-		"explosive_death":
-			return "XD"
-		"fire_floor":
-			return "FF"
-		"ice_zone":
-			return "IZ"
-		"mine_field":
-			return "MF"
-		"shrinking_arena":
-			return "SA"
+			return "S"
+		"shield":
+			return "[]"
+		"bolt":
+			return "!"
+		"rising":
+			return "^"
+		"bomb":
+			return "!"
 		_:
-			return mod_id.substr(0, mini(mod_id.length(), 2)).to_upper()
+			return "O"
+
+func _danger_pips_text(pip_count: int) -> String:
+	var filled := ""
+	for _index in range(clampi(pip_count, 1, 3)):
+		filled += "●"
+	return filled
 
 func _on_next_room_card_pressed(node_id: String) -> void:
 	if not RunState.select_map_node(node_id):
@@ -159,10 +264,16 @@ func _on_room_cleared(health_states: Array, clear_context: Dictionary = {}) -> v
 func _on_room_failed() -> void:
 	if RunState.run_outcome != "won":
 		RunState.run_outcome = "failed"
-	_show_resolution("Run Failed", "The party was defeated.\nReached room %d.\n%s" % [max(RunState.rooms_completed + 1, 1), RunState.get_run_summary_text()], "Return to Menu")
+	var bank_context := _bank_run_score_once()
+	_show_resolution("Run Failed", "The party was defeated.\nReached room %d.\n%s\n%s" % [
+		max(RunState.rooms_completed + 1, 1),
+		RunState.get_run_summary_text(),
+		_format_banked_score_text(bank_context),
+	], "Return to Menu")
 	_post_resolution_action = "return_to_menu"
 
 func _on_game_return_to_menu_requested() -> void:
+	_bank_run_score_once()
 	_clear_active_game()
 	return_to_menu_requested.emit(false)
 
@@ -198,7 +309,23 @@ func _on_resolution_button_pressed() -> void:
 
 func _on_resolution_secondary_button_pressed() -> void:
 	if _secondary_resolution_action == "return_to_menu":
-		return_to_menu_requested.emit(false)
+		_bank_run_score_once()
+		return_to_menu_requested.emit(true)
+
+func _bank_run_score_once() -> Dictionary:
+	if RunState.is_debug_single_room_mode():
+		return {"earned": 0, "total": ProfileState.banked_score if ProfileState != null else 0}
+	var earned := RunState.bank_run_score_once()
+	var total := ProfileState.banked_score if ProfileState != null else 0
+	if earned > 0 and ProfileState != null:
+		total = ProfileState.add_score(earned)
+	return {"earned": earned, "total": total}
+
+func _format_banked_score_text(bank_context: Dictionary) -> String:
+	return "Score earned: %d\nBanked total: %d" % [
+		int(bank_context.get("earned", 0)),
+		int(bank_context.get("total", 0)),
+	]
 
 func _launch_single_debug_room() -> void:
 	var options: Array = RunState.get_current_options()

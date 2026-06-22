@@ -2,6 +2,7 @@ class_name MutationSystem
 extends RefCounted
 
 const MUTATIONS_DATA_PATH := "res://data/mutations.json"
+const PER_TAG_RATE := 0.12
 
 var _definitions: Array = []
 var _definition_map: Dictionary = {}
@@ -78,8 +79,9 @@ func get_definition(mutation_id: String) -> Dictionary:
 
 func get_compiled_weapon_stats(player_index: int, base_stats: Dictionary) -> Dictionary:
 	var compiled: Dictionary = base_stats.duplicate(true)
+	var tag_power := _compute_tag_power(player_index)
 	if str(compiled.get("projectile_kind", "bullet")) == "beam":
-		return _get_compiled_beam_stats(player_index, compiled)
+		return _get_compiled_beam_stats(player_index, compiled, tag_power)
 	var rapid_fire_count := get_mutation_level(player_index, "rapid_fire")
 	compiled["rapid_fire_level"] = rapid_fire_count
 	if rapid_fire_count > 0:
@@ -115,10 +117,12 @@ func get_compiled_weapon_stats(player_index: int, base_stats: Dictionary) -> Dic
 		compiled["poison_dps"] = float(_get_param("poison", "poison_dps", 8.0))
 		compiled["poison_duration"] = float(_get_param("poison", "poison_duration", 2.5))
 		_apply_projectile_visual_fields(compiled, "poison")
+	_apply_tag_power_to_weapon_effects(compiled, tag_power)
+	_apply_signature_weapon_flags(player_index, compiled)
 	_map_weapon_stats_to_projectile_keys(compiled)
 	return compiled
 
-func _get_compiled_beam_stats(player_index: int, compiled: Dictionary) -> Dictionary:
+func _get_compiled_beam_stats(player_index: int, compiled: Dictionary, tag_power: Dictionary) -> Dictionary:
 	var rapid_fire_count := get_mutation_level(player_index, "rapid_fire")
 	compiled["rapid_fire_level"] = rapid_fire_count
 	var dps_bonuses := []
@@ -154,6 +158,8 @@ func _get_compiled_beam_stats(player_index: int, compiled: Dictionary) -> Dictio
 		compiled["poison_dps"] = float(_get_param("poison", "poison_dps", 8.0))
 		compiled["poison_duration"] = float(_get_param("poison", "poison_duration", 2.5))
 		_apply_projectile_visual_fields(compiled, "poison")
+	_apply_tag_power_to_weapon_effects(compiled, tag_power)
+	_apply_signature_weapon_flags(player_index, compiled)
 	return compiled
 
 func get_ability_rare_effects(player_index: int, ability_id: String) -> Dictionary:
@@ -200,22 +206,45 @@ func get_move_speed_bonus(player_index: int) -> float:
 
 func get_max_health_multiplier(player_index: int) -> float:
 	var level := get_mutation_level(player_index, "tough")
+	var multiplier := 1.0
 	if level <= 0:
-		return 1.0
-	var values: Array = _get_param("tough", "max_health_values", [0.2, 0.4, 0.6]) as Array
-	return 1.0 + float(values[mini(level - 1, values.size() - 1)])
+		multiplier = 1.0
+	else:
+		var values: Array = _get_param("tough", "max_health_values", [0.2, 0.4, 0.6]) as Array
+		multiplier = 1.0 + float(values[mini(level - 1, values.size() - 1)])
+	for mutation_id in RunState.get_mutations(player_index):
+		if not _definition_map.has(str(mutation_id)):
+			continue
+		var params: Dictionary = (_definition_map[str(mutation_id)] as Dictionary).get("params", {}) as Dictionary
+		multiplier += float(params.get("max_health_mult", 0.0))
+	return maxf(multiplier, 0.1)
 
-func roll_mutation_options(player_index: int, count: int, rare_chance: float = 0.0, force_rare: bool = false) -> Array:
+func is_healing_disabled(player_index: int) -> bool:
+	for mutation_id in RunState.get_mutations(player_index):
+		if not _definition_map.has(str(mutation_id)):
+			continue
+		var params: Dictionary = (_definition_map[str(mutation_id)] as Dictionary).get("params", {}) as Dictionary
+		if bool(params.get("heal_disabled", false)):
+			return true
+	return false
+
+func roll_mutation_options(player_index: int, count: int, rare_chance: float = 0.0, force_rare: bool = false, signature_share: float = 0.0) -> Array:
 	var common_pool: Array = []
 	var rare_pool: Array = []
+	var signature_pool: Array = []
 	for mutation in _definitions:
 		var mutation_dict: Dictionary = mutation as Dictionary
 		var mutation_id := str(mutation_dict.get("id", ""))
 		if mutation_id.is_empty():
 			continue
+		if not _is_mutation_unlocked(mutation_id):
+			continue
 		if not _can_still_pick(player_index, mutation_id):
 			continue
-		if _get_rarity(mutation_id) == "rare":
+		var rarity := _get_rarity(mutation_id)
+		if rarity == "signature":
+			signature_pool.append(mutation_dict.duplicate(true))
+		elif rarity == "rare":
 			rare_pool.append(mutation_dict.duplicate(true))
 		else:
 			common_pool.append(mutation_dict.duplicate(true))
@@ -226,22 +255,26 @@ func roll_mutation_options(player_index: int, count: int, rare_chance: float = 0
 		rare_pool.append((weapon_rare as Dictionary).duplicate(true))
 	common_pool.shuffle()
 	rare_pool.shuffle()
+	signature_pool.shuffle()
 	var selected: Array = []
 	var clamped_rare_chance := clampf(rare_chance, 0.0, 1.0)
-	if force_rare and not rare_pool.is_empty():
-		selected.append(_pop_option(rare_pool))
+	var clamped_signature_share := clampf(signature_share, 0.0, 1.0)
+	if force_rare and (not rare_pool.is_empty() or not signature_pool.is_empty()):
+		selected.append(_pop_rare_or_better_option(rare_pool, signature_pool, clamped_signature_share))
 	while selected.size() < count:
 		var use_rare := false
-		if not rare_pool.is_empty():
+		if not rare_pool.is_empty() or not signature_pool.is_empty():
 			use_rare = common_pool.is_empty() or _random.randf() < clamped_rare_chance
 		if use_rare:
-			selected.append(_pop_option(rare_pool))
+			selected.append(_pop_rare_or_better_option(rare_pool, signature_pool, clamped_signature_share))
 		elif not common_pool.is_empty():
 			selected.append(_pop_option(common_pool))
-		elif not rare_pool.is_empty():
-			selected.append(_pop_option(rare_pool))
+		elif not rare_pool.is_empty() or not signature_pool.is_empty():
+			selected.append(_pop_rare_or_better_option(rare_pool, signature_pool, clamped_signature_share))
 		else:
 			break
+	_remove_empty_options(selected)
+	_enforce_parasite_choice_invariant(selected, common_pool, rare_pool, signature_pool)
 	selected.shuffle()
 	return selected
 
@@ -255,6 +288,8 @@ func _is_stackable(mutation_id: String) -> bool:
 	return _get_rarity(mutation_id) == "common"
 
 func _can_still_pick(player_index: int, mutation_id: String) -> bool:
+	if not _is_mutation_unlocked(mutation_id):
+		return false
 	if not _required_ability_is_equipped(player_index, mutation_id):
 		return false
 	if _is_stackable(mutation_id):
@@ -282,11 +317,76 @@ func _get_max_level(mutation_id: String) -> int:
 		return 1
 	return max(int((_definition_map[mutation_id] as Dictionary).get("max_level", 1)), 1)
 
+func _is_mutation_unlocked(mutation_id: String) -> bool:
+	return ProfileState == null or ProfileState.is_content_unlocked("mutation", mutation_id)
+
 func _get_param(mutation_id: String, param_name: String, default_value: Variant) -> Variant:
 	if not _definition_map.has(mutation_id):
 		return default_value
 	var params: Dictionary = (_definition_map[mutation_id] as Dictionary).get("params", {})
 	return params.get(param_name, default_value)
+
+func _compute_tag_power(player_index: int) -> Dictionary:
+	var tag_counts: Dictionary = {}
+	for mutation_id_variant in RunState.get_mutations(player_index):
+		var mutation_id := str(mutation_id_variant)
+		if not _definition_map.has(mutation_id):
+			continue
+		var definition: Dictionary = _definition_map[mutation_id] as Dictionary
+		for tag_variant in (definition.get("tags", []) as Array):
+			var tag := str(tag_variant)
+			tag_counts[tag] = int(tag_counts.get(tag, 0)) + 1
+		var params: Dictionary = definition.get("params", {}) as Dictionary
+		var tag_stacks: Dictionary = params.get("tag_stacks", {}) as Dictionary
+		for tag_variant in tag_stacks.keys():
+			var tag := str(tag_variant)
+			tag_counts[tag] = int(tag_counts.get(tag, 0)) + int(tag_stacks[tag_variant])
+	var tag_power: Dictionary = {}
+	for tag_variant in tag_counts.keys():
+		var tag := str(tag_variant)
+		tag_power[tag] = 1.0 + float(tag_counts[tag]) * PER_TAG_RATE
+	return tag_power
+
+func _apply_tag_power_to_weapon_effects(compiled: Dictionary, tag_power: Dictionary) -> void:
+	var fire_power := float(tag_power.get("fire", 1.0))
+	if fire_power > 1.0:
+		if compiled.has("trail_damage_percent"):
+			compiled["trail_damage_percent"] = float(compiled.get("trail_damage_percent", 0.0)) * fire_power
+		if compiled.has("impact_pool_damage_percent"):
+			compiled["impact_pool_damage_percent"] = float(compiled.get("impact_pool_damage_percent", 0.0)) * fire_power
+	var toxic_power := float(tag_power.get("toxic", 1.0))
+	if toxic_power > 1.0:
+		if compiled.has("poison_dps"):
+			compiled["poison_dps"] = float(compiled.get("poison_dps", 0.0)) * toxic_power
+		if compiled.has("poison_duration"):
+			compiled["poison_duration"] = float(compiled.get("poison_duration", 0.0)) * toxic_power
+	var frost_power := float(tag_power.get("frost", 1.0))
+	if frost_power > 1.0:
+		if compiled.has("slow_step"):
+			var slow_step := float(compiled.get("slow_step", 1.0))
+			compiled["slow_step"] = clampf(1.0 - ((1.0 - slow_step) * frost_power), 0.01, 1.0)
+		if compiled.has("slow_duration"):
+			compiled["slow_duration"] = float(compiled.get("slow_duration", 0.0)) * frost_power
+	var split_power := float(tag_power.get("split", 1.0))
+	if split_power > 1.0 and compiled.has("split_count"):
+		compiled["split_count"] = int(compiled.get("split_count", 0)) + int(round((split_power - 1.0) / PER_TAG_RATE))
+
+func _apply_signature_weapon_flags(player_index: int, compiled: Dictionary) -> void:
+	if has_mutation(player_index, "chain_reaction"):
+		compiled["split_count"] = int(compiled.get("split_count", 0)) + int(_get_param("chain_reaction", "split_count_bonus", 1))
+		compiled["split_can_split"] = true
+	if has_mutation(player_index, "ember_spread"):
+		compiled["ignite_on_death"] = true
+		compiled["ignite_radius"] = float(_get_param("ember_spread", "ignite_radius", 130.0))
+		compiled["ignite_damage_percent"] = float(_get_param("ember_spread", "ignite_damage_percent", 0.55))
+	if has_mutation(player_index, "cryo_shatter"):
+		compiled["shatter_on_frozen_death"] = true
+		compiled["shatter_radius"] = float(_get_param("cryo_shatter", "shatter_radius", 125.0))
+		compiled["shatter_damage_percent"] = float(_get_param("cryo_shatter", "shatter_damage_percent", 0.5))
+	if has_mutation(player_index, "momentum_surge"):
+		compiled["pierce_at_max_momentum"] = int(_get_param("momentum_surge", "pierce_at_max_momentum", 3))
+	if has_mutation(player_index, "glass_cannon"):
+		compiled["damage_bonus"] = float(compiled.get("damage_bonus", 0.0)) + float(_get_param("glass_cannon", "damage_bonus", 0.8))
 
 func _sum_percent_bonuses(percent_bonuses: Array) -> float:
 	var total := 0.0
@@ -401,3 +501,54 @@ func _pop_option(pool: Array) -> Dictionary:
 	var option: Dictionary = pool[0] as Dictionary
 	pool.remove_at(0)
 	return option
+
+func _pop_rare_or_better_option(rare_pool: Array, signature_pool: Array, signature_share: float) -> Dictionary:
+	var prefer_signature := _random.randf() < clampf(signature_share, 0.0, 1.0)
+	if prefer_signature:
+		if not signature_pool.is_empty():
+			return _pop_option(signature_pool)
+		if not rare_pool.is_empty():
+			return _pop_option(rare_pool)
+	else:
+		if not rare_pool.is_empty():
+			return _pop_option(rare_pool)
+		if not signature_pool.is_empty():
+			return _pop_option(signature_pool)
+	return {}
+
+func _remove_empty_options(options: Array) -> void:
+	for index in range(options.size() - 1, -1, -1):
+		if not (options[index] is Dictionary) or (options[index] as Dictionary).is_empty():
+			options.remove_at(index)
+
+func _enforce_parasite_choice_invariant(selected: Array, common_pool: Array, rare_pool: Array, signature_pool: Array) -> void:
+	if selected.is_empty():
+		return
+	for option_variant in selected:
+		var option := option_variant as Dictionary
+		if not bool(option.get("is_parasite", false)):
+			return
+	var selected_ids: Dictionary = {}
+	for option_variant in selected:
+		var option := option_variant as Dictionary
+		selected_ids[str(option.get("id", ""))] = true
+	var replacement := _pop_first_non_parasite(common_pool, selected_ids)
+	if replacement.is_empty():
+		replacement = _pop_first_non_parasite(rare_pool, selected_ids)
+	if replacement.is_empty():
+		replacement = _pop_first_non_parasite(signature_pool, selected_ids)
+	if replacement.is_empty():
+		return
+	selected[0] = replacement
+
+func _pop_first_non_parasite(pool: Array, excluded_ids: Dictionary) -> Dictionary:
+	for index in range(pool.size()):
+		var option := pool[index] as Dictionary
+		var option_id := str(option.get("id", ""))
+		if excluded_ids.has(option_id):
+			continue
+		if bool(option.get("is_parasite", false)):
+			continue
+		pool.remove_at(index)
+		return option
+	return {}

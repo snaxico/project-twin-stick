@@ -118,7 +118,7 @@ func _aggregate_mutations(mutations: Array) -> Array:
 		var rarity_a := str(a.get("rarity", "common"))
 		var rarity_b := str(b.get("rarity", "common"))
 		if rarity_a != rarity_b:
-			return rarity_a == "rare"
+			return _rarity_rank(rarity_a) > _rarity_rank(rarity_b)
 		return str(a.get("name", "")).naturalnocasecmp_to(str(b.get("name", ""))) < 0
 	)
 	return result
@@ -128,8 +128,9 @@ func _build_mutation_chip(mutation: Dictionary) -> Control:
 	chip.custom_minimum_size = Vector2(18.0, 18.0)
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color(0.12, 0.16, 0.2, 0.28)
-	var is_rare := str(mutation.get("rarity", "common")) == "rare"
-	style.border_color = Color(0.95, 0.8, 0.28, 0.64) if is_rare else Color(0.8, 0.88, 0.98, 0.26)
+	var rarity := str(mutation.get("rarity", "common"))
+	var rarity_rank := _rarity_rank(rarity)
+	style.border_color = _rarity_color(rarity) if rarity_rank >= 1 else Color(0.8, 0.88, 0.98, 0.26)
 	style.set_border_width_all(1)
 	style.corner_radius_top_left = 4
 	style.corner_radius_top_right = 4
@@ -163,3 +164,19 @@ func _build_mutation_chip(mutation: Dictionary) -> Control:
 		badge.add_theme_color_override("font_color", Color(0.98, 0.98, 1.0, 0.96))
 		chip.add_child(badge)
 	return chip
+
+func _rarity_rank(rarity: String) -> int:
+	match rarity:
+		"signature":
+			return 2
+		"rare":
+			return 1
+		_:
+			return 0
+
+func _rarity_color(rarity: String) -> Color:
+	if rarity == "signature":
+		return Color(1.0, 0.44, 0.96, 0.72)
+	if rarity == "rare":
+		return Color(0.95, 0.8, 0.28, 0.64)
+	return Color(0.8, 0.88, 0.98, 0.26)

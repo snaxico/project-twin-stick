@@ -24,7 +24,13 @@ Read this first to restore project context quickly, then read `current-state.md`
 - Target player count is `1-2`.
 - The structure rework / "trim" is implemented through Phase 4 first-pass tuning.
 - The initial structure-rework playtest was approved.
-- Current next validation is a focused feel pass on Phase 4 tuning:
+- Replayability patch Phases 0/A/B are implemented: route-choice cards, Signature/tag/parasite upgrades,
+  banked score currency, persistent unlocks, and lean-start pool filtering.
+- Current next validation is a focused feel pass on the replayability patch plus Phase 4 tuning:
+  - Meta unlock flow and persistence
+  - lean-start feel before unlocks
+  - Signature/parasite offer quality and build divergence
+  - route-card readability and rare-odds nudge readability
   - continuation pressure after room `10`
   - champion time-to-kill versus attack threat
   - Cannon burst-AOE versus Beam sustained single-target identity
@@ -35,19 +41,24 @@ Read this first to restore project context quickly, then read `current-state.md`
 - There is one continuable run, no Structured / Endless mode split.
 - Normal steps show two next-room cards.
 - Champion steps show one forced champion card.
+- Next-room cards show trait, danger pips, real modifier names, and rare-odds nudge.
 - Room `10` is the milestone champion room.
 - Clearing room `10` banks a win and offers `Continue` / `End Run`.
 - Continuing keeps the same run scaling past room `10`.
 - Branching map UI and graph generation are removed.
 - Health resets every room because `GameWorld` / `CoopManager` is recreated.
 - Momentum persists across the run through `RunState`; damaging hits still drop two tiers.
+- Run score persists in `RunState` and banks once to `ProfileState` on terminal run end.
 
 ## Combat / Progression
 
 - Enemy kills feed one shared XP bar.
 - Level-ups bank room-end pick rounds.
 - Champion rooms grant one additional forced-rare reward pick after XP picks resolve.
-- Rare odds scale continuously by depth.
+- Rare odds scale continuously by depth and can receive a small room-choice nudge.
+- Upgrades now include a Signature tier with tag synergies and parasite tradeoffs.
+- `ProfileState` stores banked score and permanent unlocks. The Meta menu spends score to add weapons,
+  abilities, rares, and Signatures into future pools.
 - Continuation pressure now keeps rising past the milestone through:
   - room duration
   - spawn interval
@@ -83,6 +94,8 @@ Read this first to restore project context quickly, then read `current-state.md`
   - `Turret`
   - `Minefield`
   - `Orbit`
+- New profiles start with `Rifle`, `Shotgun`, `Overcharge`, `Dash`, and base common upgrades unlocked.
+  Other weapons, abilities, rare upgrades, and Signature upgrades are meta unlocks.
 
 ## Champions
 
@@ -101,6 +114,8 @@ Read this first to restore project context quickly, then read `current-state.md`
 ## Known Risks
 
 - Phase 4 tuning is first-pass and needs focused live validation.
+- Replayability patch values are first-pass and need live validation.
+- The lean start may need a larger free set or cheaper early costs if early runs feel too narrow.
 - Champion readability inside dense waves still needs live validation.
 - Deep runs may exhaust upgrade variety; parked until real run depths are known.
 - Objective-panel icons still use simple letter fallback glyphs (`H` / `K` / `C`).

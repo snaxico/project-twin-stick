@@ -259,12 +259,13 @@ func _build_card(player_index: int, option_index: int) -> Control:
 	style.corner_radius_bottom_right = 8
 	var is_cursor := option_index == int(_selected_indices[player_index]) and not bool(_confirmed[player_index])
 	var is_locked := str(_locked_selection_ids[player_index]) == str(option.get("id", ""))
-	var is_rare := str(option.get("rarity", "common")) == "rare"
-	if is_rare:
-		style.border_color = Color(0.95, 0.78, 0.18, 0.9)
+	var rarity := str(option.get("rarity", "common"))
+	var rarity_rank := _rarity_rank(rarity)
+	if rarity_rank >= 1:
+		style.border_color = _rarity_color(rarity)
 	if is_cursor:
 		style.set_border_width_all(2)
-		style.border_color = Color(0.42, 0.98, 0.8, 0.96) if not is_rare else Color(1.0, 0.86, 0.32, 0.98)
+		style.border_color = Color(0.42, 0.98, 0.8, 0.96) if rarity_rank <= 0 else _rarity_color(rarity).lightened(0.12)
 	if is_locked:
 		style.bg_color = Color(0.12, 0.22, 0.16, 0.98)
 	if bool(_confirmed[player_index]) and not is_locked:
@@ -285,10 +286,10 @@ func _build_card(player_index: int, option_index: int) -> Control:
 
 	var group := str(option.get("group", "attribute"))
 	var meta_label := Label.new()
-	meta_label.text = "%s | %s" % ["RARE" if is_rare else "COMMON", group.to_upper()]
+	meta_label.text = "%s | %s" % [_rarity_label(rarity).to_upper(), group.to_upper()]
 	meta_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	meta_label.add_theme_font_size_override("font_size", 10)
-	meta_label.modulate = Color(1.0, 0.82, 0.28, 0.9) if is_rare else IconFactoryData.get_group_color(group).lightened(0.18)
+	meta_label.modulate = _rarity_color(rarity) if rarity_rank >= 1 else IconFactoryData.get_group_color(group).lightened(0.18)
 	layout.add_child(meta_label)
 
 	var icon := TextureRect.new()
@@ -307,7 +308,7 @@ func _build_card(player_index: int, option_index: int) -> Control:
 	mutation_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	layout.add_child(mutation_title)
 
-	if not is_rare and group != "weapon":
+	if rarity_rank <= 0 and group != "weapon":
 		var current_level := _get_current_mutation_level(player_index, str(option.get("id", "")))
 		var level_label := Label.new()
 		level_label.text = "Lv %d -> Lv %d" % [current_level, current_level + 1]
@@ -336,11 +337,20 @@ func _refresh_detail_panel(view: Dictionary, player_index: int) -> void:
 				break
 	var option: Dictionary = options[selected_index] as Dictionary
 	var group := str(option.get("group", "attribute"))
-	var is_rare := str(option.get("rarity", "common")) == "rare"
+	var rarity := str(option.get("rarity", "common"))
+	var rarity_rank := _rarity_rank(rarity)
 	detail_title.text = str(option.get("name", "Upgrade"))
-	detail_title.modulate = Color(1.0, 0.86, 0.3, 0.98) if is_rare else Color(0.92, 0.98, 1.0, 0.96)
-	var meta_parts: Array = ["Rare" if is_rare else "Common", group.capitalize()]
-	if not is_rare and group != "weapon":
+	detail_title.modulate = _rarity_color(rarity) if rarity_rank >= 1 else Color(0.92, 0.98, 1.0, 0.96)
+	var meta_parts: Array = [_rarity_label(rarity), group.capitalize()]
+	if bool(option.get("is_parasite", false)):
+		meta_parts.append("Parasite")
+	var tags: Array = option.get("tags", []) as Array
+	if not tags.is_empty():
+		var tag_labels: Array = []
+		for tag_variant in tags:
+			tag_labels.append(str(tag_variant).capitalize())
+		meta_parts.append("Tags: %s" % ", ".join(PackedStringArray(tag_labels)))
+	if rarity_rank <= 0 and group != "weapon":
 		var current_level := _get_current_mutation_level(player_index, str(option.get("id", "")))
 		meta_parts.append("Lv %d -> Lv %d" % [current_level, current_level + 1])
 	detail_meta.text = " | ".join(meta_parts)
@@ -393,10 +403,11 @@ func _build_inventory_entries(player_index: int) -> Array:
 func _build_inventory_chip(entry: Dictionary) -> Control:
 	var chip := PanelContainer.new()
 	var style := StyleBoxFlat.new()
-	var is_rare := str(entry.get("rarity", "common")) == "rare"
+	var rarity := str(entry.get("rarity", "common"))
+	var rarity_rank := _rarity_rank(rarity)
 	var group_color := IconFactoryData.get_group_color(str(entry.get("group", "attribute")))
 	style.bg_color = Color(group_color.r * 0.16, group_color.g * 0.16, group_color.b * 0.16, 0.96)
-	style.border_color = Color(0.98, 0.82, 0.28, 0.92) if is_rare else Color(group_color.r, group_color.g, group_color.b, 0.78)
+	style.border_color = _rarity_color(rarity) if rarity_rank >= 1 else Color(group_color.r, group_color.g, group_color.b, 0.78)
 	style.set_border_width_all(1)
 	style.corner_radius_top_left = 8
 	style.corner_radius_top_right = 8
@@ -406,12 +417,35 @@ func _build_inventory_chip(entry: Dictionary) -> Control:
 	chip.add_theme_stylebox_override("panel", style)
 	var label := Label.new()
 	label.text = str(entry.get("name", "Mutation"))
-	if int(entry.get("level", 1)) > 1 and not is_rare:
+	if int(entry.get("level", 1)) > 1 and rarity_rank <= 0:
 		label.text += " Lv%d" % int(entry.get("level", 1))
 	label.add_theme_font_size_override("font_size", 11)
-	label.modulate = Color(1.0, 0.86, 0.34, 0.98) if is_rare else Color(0.92, 0.96, 1.0, 0.94)
+	label.modulate = _rarity_color(rarity) if rarity_rank >= 1 else Color(0.92, 0.96, 1.0, 0.94)
 	chip.add_child(label)
 	return chip
+
+func _rarity_rank(rarity: String) -> int:
+	match rarity:
+		"signature":
+			return 2
+		"rare":
+			return 1
+		_:
+			return 0
+
+func _rarity_label(rarity: String) -> String:
+	if rarity == "signature":
+		return "Signature"
+	if rarity == "rare":
+		return "Rare"
+	return "Common"
+
+func _rarity_color(rarity: String) -> Color:
+	if rarity == "signature":
+		return Color(1.0, 0.44, 0.96, 0.96)
+	if rarity == "rare":
+		return Color(1.0, 0.82, 0.28, 0.9)
+	return Color(0.92, 0.96, 1.0, 0.94)
 
 func _get_mutation_definition(mutation_id: String) -> Dictionary:
 	if _definition_cache.has(mutation_id):

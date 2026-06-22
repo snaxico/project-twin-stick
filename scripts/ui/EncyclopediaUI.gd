@@ -21,6 +21,11 @@ const ENEMY_ENTRIES := [
 	{"id": "boss_pulsar", "name": "Champion Pulsar", "description": "Champion that teleports, casts EMP, and drops shockwave hazards."},
 ]
 
+const SYSTEM_ENTRIES := [
+	{"id": "score", "name": "Score", "description": "Score is the meta-currency you spend in the Meta menu to unlock weapons, abilities, and upgrades. Each room awards: +100 for clearing it, +1 per enemy killed, +250 per champion killed, and +50 per momentum tier you reached. A failed room still awards its kills, champions, and momentum, but not the +100 clear bonus. Your run's total banks once, when the run ends: on death or when you pick 'End Run'. Continuing past the milestone does not bank early, and banked score carries across all runs."},
+	{"id": "momentum", "name": "Momentum / Flow", "description": "Momentum rewards relentless killing. Every enemy death advances all players one step; crossing 10 / 25 / 45 / 70 steps raises your tier from 1 to 4. Each tier adds move speed (up to +50%) and fire rate (up to +75%), stacking additively with no cap. Taking a damaging hit drops you 2 tiers, so staying untouched keeps you fast. Momentum persists across rooms within a run and only resets at the start of a new run. The pips by your health bar show your current tier."},
+]
+
 var _tabs: HBoxContainer = null
 var _list: VBoxContainer = null
 var _detail_title: Label = null
@@ -49,6 +54,7 @@ func _load_entries() -> void:
 		"Mutations": _load_array_entries(MUTATIONS_DATA_PATH, "mutations"),
 		"Modifiers": _load_array_entries(MODIFIERS_DATA_PATH, "modifiers"),
 		"Enemies": ENEMY_ENTRIES.duplicate(true),
+		"Systems": SYSTEM_ENTRIES.duplicate(true),
 	}
 
 func _load_array_entries(path: String, key: String) -> Array:

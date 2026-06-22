@@ -6,6 +6,7 @@ const PULSAR_TELEPORT_MIN_DISTANCE := 400.0
 const PULSAR_REACTIVE_TELEPORT_DISTANCE := 250.0
 const SEPARATION_RADIUS := 64.0
 const SEPARATION_STRENGTH := 120.0
+const HIVE_DEFLECTOR_VULNERABLE_WINDOW := 6.0
 const BLOOM_COLOR_MULTIPLIER := 1.45
 const READABILITY_VISUAL_SCALE := 1.2
 
@@ -67,6 +68,10 @@ var _slow_until := 0.0
 var _poison_dps := 0.0
 var _poison_until := 0.0
 var _poison_tick_at := 0.0
+var _ignite_on_death_radius := 0.0
+var _ignite_on_death_damage := 0
+var _shatter_on_death_radius := 0.0
+var _shatter_on_death_damage := 0
 var _death_explosion_radius := 0.0
 var _death_explosion_damage := 0
 var _fuse_active := false
@@ -91,6 +96,8 @@ var _hydra_sweep_started_at := 0.0
 var _hydra_next_sweep_shot_at := 0.0
 var _hydra_sweep_start_angle := 0.0
 var _champion_deflector_nodes: Array = []
+var _champion_deflectors_present := false
+var _next_champion_deflector_at := 0.0
 var _champion_attack_cooldown_mult := 1.0
 var _target_refresh_frame_offset := 0
 var _target_refresh_interval := 4
@@ -115,6 +122,10 @@ func setup(type_name: String, combat_owner: Node) -> void:
 	_poison_dps = 0.0
 	_poison_until = 0.0
 	_poison_tick_at = 0.0
+	_ignite_on_death_radius = 0.0
+	_ignite_on_death_damage = 0
+	_shatter_on_death_radius = 0.0
+	_shatter_on_death_damage = 0
 	_death_explosion_radius = 0.0
 	_death_explosion_damage = 0
 	_fuse_active = false
@@ -136,6 +147,8 @@ func setup(type_name: String, combat_owner: Node) -> void:
 	_hydra_next_sweep_shot_at = 0.0
 	_hydra_sweep_start_angle = 0.0
 	_champion_deflector_nodes.clear()
+	_champion_deflectors_present = false
+	_next_champion_deflector_at = 0.0
 	_target_refresh_frame_offset = int(get_instance_id() % _target_refresh_interval)
 	_configure_type(type_name)
 	current_health = max_health
@@ -432,6 +445,30 @@ func apply_poison(dps: float, duration: float) -> void:
 	_poison_dps += max(dps, 0.0)
 	_poison_until = max(_poison_until, _current_time_seconds() + max(duration, 0.1))
 	_poison_tick_at = min(_poison_tick_at, _current_time_seconds() + 0.2) if _poison_tick_at > 0.0 else _current_time_seconds() + 0.2
+
+func apply_ignite_on_death(radius: float, damage_amount: int) -> void:
+	_ignite_on_death_radius = maxf(_ignite_on_death_radius, radius)
+	_ignite_on_death_damage = maxi(_ignite_on_death_damage, damage_amount)
+
+func apply_shatter_on_death(radius: float, damage_amount: int) -> void:
+	_shatter_on_death_radius = maxf(_shatter_on_death_radius, radius)
+	_shatter_on_death_damage = maxi(_shatter_on_death_damage, damage_amount)
+
+func get_death_effects() -> Array:
+	var effects: Array = []
+	if _ignite_on_death_radius > 0.0 and _ignite_on_death_damage > 0:
+		effects.append({
+			"type": "ignite",
+			"radius": _ignite_on_death_radius,
+			"damage": _ignite_on_death_damage,
+		})
+	if _shatter_on_death_radius > 0.0 and _shatter_on_death_damage > 0:
+		effects.append({
+			"type": "shatter",
+			"radius": _shatter_on_death_radius,
+			"damage": _shatter_on_death_damage,
+		})
+	return effects
 
 func _physics_process(delta: float) -> void:
 	if not _alive:
@@ -745,9 +782,17 @@ func _update_hydra_behavior(now: float) -> Vector2:
 
 func _update_hive_behavior(direction: Vector2, distance: float, now: float) -> Vector2:
 	_update_champion_deflector_positions(now)
-	if _champion_deflector_nodes.is_empty():
+	# Deflectors block all damage while up. They must be CLEARABLE with a real damage window,
+	# or the Hive is permanently invincible (the old phase-gated respawn was dropped in the champion
+	# conversion). On clear, open a vulnerable window before the next set can spawn.
+	var have_deflectors := _champion_deflector_nodes.size() > 0
+	if _champion_deflectors_present and not have_deflectors:
+		_next_champion_deflector_at = now + HIVE_DEFLECTOR_VULNERABLE_WINDOW
+	_champion_deflectors_present = have_deflectors
+	if not have_deflectors and now >= _next_champion_deflector_at:
 		_profile_attack_first_use("hive_deflectors")
 		_spawn_champion_deflectors(4)
+		_champion_deflectors_present = true
 	if distance < 240.0:
 		direction = -direction
 	if now >= _next_burst_at:

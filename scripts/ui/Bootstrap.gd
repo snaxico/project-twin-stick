@@ -88,6 +88,9 @@ const MENU_BINDING_ACTIONS := [
 @onready var settings_layout: VBoxContainer = $SettingsPanel/MarginContainer/SettingsLayout
 @onready var settings_detail_label: Label = $SettingsPanel/MarginContainer/SettingsLayout/SettingsDetail
 @onready var meta_panel: Panel = $MetaPanel
+@onready var meta_layout: VBoxContainer = $MetaPanel/MarginContainer/MetaLayout
+@onready var meta_status_label: Label = $MetaPanel/MarginContainer/MetaLayout/MetaStatusLabel
+@onready var meta_back_button: Button = $MetaPanel/MarginContainer/MetaLayout/MetaBackButton
 
 var _active_game = null
 var _player_tints := [
@@ -107,6 +110,7 @@ var _weapon_rows: Array = []
 var _ability_rows: Array = []
 var _settings_binding_buttons: Dictionary = {}
 var _settings_return_panel: Control = null
+var _meta_return_panel: Control = null
 var _settings_vsync_check: CheckBox = null
 var _settings_audio_sliders: Dictionary = {}
 var _loadout_columns: HBoxContainer = null
@@ -128,6 +132,7 @@ func _ready() -> void:
 	_configure_aim_mode_options()
 	_configure_setup_panel_layout()
 	home_play_button.pressed.connect(_on_home_play_button_pressed)
+	home_meta_button.pressed.connect(_open_meta_from_home)
 	home_settings_button.pressed.connect(_open_settings_from_home)
 	home_debug_button.pressed.connect(_on_home_debug_button_pressed)
 	_add_home_encyclopedia_button()
@@ -136,14 +141,18 @@ func _ready() -> void:
 	debug_room_objective_option.item_selected.connect(_refresh_menu_state)
 	setup_back_button.pressed.connect(_on_setup_back_button_pressed)
 	settings_button.pressed.connect(_open_settings_from_setup)
+	meta_button.pressed.connect(_open_meta_from_setup)
+	reset_profile_button.pressed.connect(_on_reset_profile_pressed)
 	settings_back_button.pressed.connect(_on_settings_back_pressed)
+	meta_back_button.pressed.connect(_on_meta_back_pressed)
 	start_button.pressed.connect(_on_start_pressed)
-	home_meta_button.visible = false
+	_configure_meta_panel()
+	home_meta_button.visible = true
 	home_settings_button.visible = true
 	meta_panel.visible = false
-	meta_button.visible = false
+	meta_button.visible = true
 	settings_button.visible = true
-	reset_profile_button.visible = false
+	reset_profile_button.visible = true
 	player_3_control_row.visible = false
 	player_4_control_row.visible = false
 	debug_mode_check.visible = false
@@ -180,6 +189,10 @@ func _unhandled_input(event: InputEvent) -> void:
 			_cancel_pending_binding()
 		else:
 			_on_settings_back_pressed()
+		get_viewport().set_input_as_handled()
+		return
+	if meta_panel.visible:
+		_on_meta_back_pressed()
 		get_viewport().set_input_as_handled()
 		return
 	if menu_panel.visible:
@@ -386,6 +399,7 @@ func _launch_game(player_configs: Array) -> void:
 	_set_panel_state(home_panel, false)
 	_set_panel_state(menu_panel, false)
 	_set_panel_state(settings_panel, false)
+	_set_panel_state(meta_panel, false)
 
 func _on_return_to_menu_requested(_open_meta_menu: bool = false) -> void:
 	if _active_game != null and is_instance_valid(_active_game):
@@ -393,6 +407,9 @@ func _on_return_to_menu_requested(_open_meta_menu: bool = false) -> void:
 	_active_game = null
 	if _setup_mode == "encounter_builder":
 		_open_setup_panel("encounter_builder")
+		return
+	if _open_meta_menu:
+		_open_meta_panel(home_panel)
 		return
 	_open_home_panel()
 
@@ -404,6 +421,7 @@ func _open_home_panel() -> void:
 	_refresh_menu_state()
 	_set_panel_state(menu_panel, false)
 	_set_panel_state(settings_panel, false)
+	_set_panel_state(meta_panel, false)
 	_set_panel_state(home_panel, true)
 	call_deferred("_focus_home_panel")
 
@@ -413,6 +431,7 @@ func _open_setup_panel(mode: String) -> void:
 	_refresh_menu_state()
 	_set_panel_state(home_panel, false)
 	_set_panel_state(settings_panel, false)
+	_set_panel_state(meta_panel, false)
 	_set_panel_state(menu_panel, true)
 	call_deferred("_focus_menu_panel")
 
@@ -421,6 +440,12 @@ func _open_settings_from_home() -> void:
 
 func _open_settings_from_setup() -> void:
 	_open_settings_panel(menu_panel)
+
+func _open_meta_from_home() -> void:
+	_open_meta_panel(home_panel)
+
+func _open_meta_from_setup() -> void:
+	_open_meta_panel(menu_panel)
 
 func _open_encyclopedia_overlay() -> void:
 	var existing := get_node_or_null("EncyclopediaUI")
@@ -437,6 +462,7 @@ func _open_settings_panel(return_panel: Control) -> void:
 	_refresh_binding_buttons()
 	_set_panel_state(home_panel, false)
 	_set_panel_state(menu_panel, false)
+	_set_panel_state(meta_panel, false)
 	_set_panel_state(settings_panel, true)
 	settings_back_button.grab_focus()
 
@@ -450,8 +476,163 @@ func _on_settings_back_pressed() -> void:
 		_set_panel_state(home_panel, true)
 		call_deferred("_focus_home_panel")
 
+func _open_meta_panel(return_panel: Control) -> void:
+	_set_music_context("menu")
+	_meta_return_panel = return_panel
+	_rebuild_unlock_menu()
+	_set_panel_state(home_panel, false)
+	_set_panel_state(menu_panel, false)
+	_set_panel_state(settings_panel, false)
+	_set_panel_state(meta_panel, true)
+	meta_back_button.grab_focus()
+
+func _on_meta_back_pressed() -> void:
+	_set_panel_state(meta_panel, false)
+	_rebuild_loadout_rows()
+	if _meta_return_panel == menu_panel:
+		_set_panel_state(menu_panel, true)
+		call_deferred("_focus_menu_panel")
+	else:
+		_set_panel_state(home_panel, true)
+		call_deferred("_focus_home_panel")
+
+func _on_reset_profile_pressed() -> void:
+	if ProfileState != null:
+		ProfileState.reset_profile()
+	_rebuild_loadout_rows()
+	_rebuild_unlock_menu()
+	_refresh_menu_state()
+
+func _configure_meta_panel() -> void:
+	for child in meta_layout.get_children():
+		if str(child.name).begins_with("UnlockButton"):
+			meta_layout.remove_child(child)
+			child.queue_free()
+	meta_panel.anchor_left = 0.5
+	meta_panel.anchor_top = 0.5
+	meta_panel.anchor_right = 0.5
+	meta_panel.anchor_bottom = 0.5
+	meta_panel.offset_left = -380.0
+	meta_panel.offset_top = -330.0
+	meta_panel.offset_right = 380.0
+	meta_panel.offset_bottom = 330.0
+	if meta_layout.get_node_or_null("UnlockScroll") == null:
+		var scroll := ScrollContainer.new()
+		scroll.name = "UnlockScroll"
+		scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		scroll.custom_minimum_size = Vector2(0.0, 430.0)
+		meta_layout.add_child(scroll)
+		meta_layout.move_child(scroll, meta_back_button.get_index())
+		var list := VBoxContainer.new()
+		list.name = "UnlockList"
+		list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		list.add_theme_constant_override("separation", 8)
+		scroll.add_child(list)
+	var reset_button := meta_layout.get_node_or_null("MetaResetButton") as Button
+	if reset_button == null:
+		reset_button = Button.new()
+		reset_button.name = "MetaResetButton"
+		reset_button.text = "Reset Meta Profile"
+		reset_button.pressed.connect(_on_reset_profile_pressed)
+		meta_layout.add_child(reset_button)
+		meta_layout.move_child(reset_button, meta_back_button.get_index())
+
+func _rebuild_unlock_menu() -> void:
+	if ProfileState == null:
+		meta_status_label.text = "Profile unavailable."
+		return
+	var list := meta_layout.get_node_or_null("UnlockScroll/UnlockList") as VBoxContainer
+	if list == null:
+		return
+	for child in list.get_children():
+		list.remove_child(child)
+		child.queue_free()
+	var locked_entries := ProfileState.get_locked_entries()
+	locked_entries.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		var cost_compare := int(a.get("cost", 0)) - int(b.get("cost", 0))
+		if cost_compare != 0:
+			return cost_compare < 0
+		return str(a.get("name", "")).naturalnocasecmp_to(str(b.get("name", ""))) < 0
+	)
+	meta_status_label.text = "Banked score: %d\nUnlocked: %d / %d" % [
+		int(ProfileState.banked_score),
+		ProfileState.unlocked_ids.size(),
+		ProfileState.get_unlock_table().size(),
+	]
+	if locked_entries.is_empty():
+		var complete_label := Label.new()
+		complete_label.text = "All unlocks purchased."
+		complete_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		list.add_child(complete_label)
+		return
+	for entry in locked_entries:
+		list.add_child(_create_unlock_row(entry as Dictionary))
+
+func _create_unlock_row(entry: Dictionary) -> PanelContainer:
+	var row := PanelContainer.new()
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.055, 0.075, 0.105, 0.96)
+	style.border_color = Color(0.26, 0.34, 0.46, 0.78)
+	style.set_border_width_all(1)
+	style.corner_radius_top_left = 8
+	style.corner_radius_top_right = 8
+	style.corner_radius_bottom_left = 8
+	style.corner_radius_bottom_right = 8
+	row.add_theme_stylebox_override("panel", style)
+	var margin := MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 10)
+	margin.add_theme_constant_override("margin_top", 8)
+	margin.add_theme_constant_override("margin_right", 10)
+	margin.add_theme_constant_override("margin_bottom", 8)
+	row.add_child(margin)
+	var layout := HBoxContainer.new()
+	layout.add_theme_constant_override("separation", 10)
+	margin.add_child(layout)
+	var text_box := VBoxContainer.new()
+	text_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	layout.add_child(text_box)
+	var title := Label.new()
+	title.text = "%s  |  %s" % [str(entry.get("name", "Unlock")), _format_name(str(entry.get("kind", "")))]
+	title.add_theme_font_size_override("font_size", 14)
+	text_box.add_child(title)
+	var detail := Label.new()
+	detail.text = "Adds this item to future run pools."
+	detail.add_theme_font_size_override("font_size", 11)
+	detail.modulate = Color(0.78, 0.86, 0.94, 0.86)
+	text_box.add_child(detail)
+	var button := Button.new()
+	var cost := int(entry.get("cost", 0))
+	button.text = "%d" % cost
+	button.custom_minimum_size = Vector2(92.0, 34.0)
+	button.disabled = ProfileState == null or ProfileState.banked_score < cost
+	button.tooltip_text = "Spend score to unlock permanently."
+	button.pressed.connect(_on_unlock_pressed.bind(str(entry.get("id", ""))))
+	layout.add_child(button)
+	return row
+
+func _on_unlock_pressed(unlock_id: String) -> void:
+	if ProfileState == null:
+		return
+	if ProfileState.unlock(unlock_id):
+		_rebuild_loadout_rows()
+		_rebuild_unlock_menu()
+		_refresh_menu_state()
+
+func _rebuild_loadout_rows() -> void:
+	if _loadout_columns != null and is_instance_valid(_loadout_columns):
+		for column in _loadout_columns.get_children():
+			for child in column.get_children():
+				column.remove_child(child)
+				child.queue_free()
+	_weapon_rows.clear()
+	_ability_rows.clear()
+	_build_weapon_rows()
+	_build_ability_rows()
+
 func _refresh_home_panel() -> void:
-	home_status_label.text = "V3 structure rework\nRun: linear room choices + champion checks\nTarget: 1-2 players only"
+	home_status_label.text = "V3 structure rework\nRun: linear room choices + champion checks\nBanked score: %d\nTarget: 1-2 players only" % int(ProfileState.banked_score if ProfileState != null else 0)
 
 func _focus_home_panel() -> void:
 	if not is_inside_tree():
@@ -1099,11 +1280,20 @@ func _build_player_weapon_selection() -> Array:
 		selections.append(_get_player_weapon_selection(player_index))
 	return selections
 
+func _get_first_available_weapon_id() -> String:
+	var catalog := RunState.get_weapon_catalog()
+	if catalog.is_empty():
+		return "rifle"
+	return str((catalog[0] as Dictionary).get("id", "rifle"))
+
 func _get_player_weapon_selection(player_index: int) -> String:
 	if player_index < 0 or player_index >= _weapon_rows.size():
-		return "rifle"
+		return _get_first_available_weapon_id()
 	var row_data: Dictionary = _weapon_rows[player_index]
-	return str(row_data.get("selection", "rifle"))
+	var selection := str(row_data.get("selection", "rifle"))
+	if ProfileState != null and not ProfileState.is_content_unlocked("weapon", selection):
+		return _get_first_available_weapon_id()
+	return selection
 
 func _on_weapon_card_toggled(pressed: bool, player_index: int, weapon_id: String) -> void:
 	if not pressed or player_index < 0 or player_index >= _weapon_rows.size():
@@ -1120,6 +1310,10 @@ func _sync_weapon_row_buttons(player_index: int) -> void:
 	var row_data: Dictionary = _weapon_rows[player_index]
 	var cards: Dictionary = row_data.get("cards", {}) as Dictionary
 	var selection := str(row_data.get("selection", "rifle"))
+	if not cards.has(selection):
+		selection = _get_first_available_weapon_id()
+		row_data["selection"] = selection
+		_weapon_rows[player_index] = row_data
 	for weapon_id_variant in cards.keys():
 		var weapon_id := str(weapon_id_variant)
 		var button: Button = cards[weapon_id]
@@ -1128,7 +1322,9 @@ func _sync_weapon_row_buttons(player_index: int) -> void:
 		button.set_pressed_no_signal(weapon_id == selection)
 	var summary: Label = row_data.get("summary", null)
 	if summary != null:
-		summary.text = "Weapon: %s" % _format_name(selection)
+		var selected_card: Button = cards.get(selection, null)
+		var weapon_label := str(selected_card.text) if selected_card != null else _format_name(selection)
+		summary.text = "Weapon: %s" % weapon_label
 		summary.modulate = Color(0.84, 0.92, 1.0, 0.92)
 
 func _build_ability_rows() -> void:
@@ -1171,6 +1367,8 @@ func _build_ability_rows() -> void:
 			var ability_definition: Dictionary = ability_def as Dictionary
 			var ability_id := str(ability_definition.get("id", ""))
 			if ability_id.is_empty():
+				continue
+			if ProfileState != null and not ProfileState.is_content_unlocked("ability", ability_id):
 				continue
 			var ability_slot := str(ability_definition.get("slot", ""))
 			if ability_slot != "off" and ability_slot != "def":
@@ -1218,7 +1416,15 @@ func _get_player_ability_pair(player_index: int) -> Array:
 	if player_index < 0 or player_index >= _ability_rows.size():
 		return _ability_registry.get_default_loadout()
 	var row_data: Dictionary = _ability_rows[player_index]
-	return _ability_registry.normalize_loadout([row_data.get("off_selection", ""), row_data.get("def_selection", "")])
+	var chosen := []
+	for ability_id_variant in [row_data.get("off_selection", ""), row_data.get("def_selection", "")]:
+		var ability_id := str(ability_id_variant)
+		if ability_id.is_empty():
+			continue
+		if ProfileState != null and not ProfileState.is_content_unlocked("ability", ability_id):
+			continue
+		chosen.append(ability_id)
+	return _ability_registry.normalize_loadout(chosen)
 
 func _on_ability_card_toggled(pressed: bool, player_index: int, ability_id: String) -> void:
 	if player_index < 0 or player_index >= _ability_rows.size():

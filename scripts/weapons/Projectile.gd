@@ -37,6 +37,12 @@ var slow_floor: float = 0.15
 var slow_duration: float = 0.0
 var poison_dps: float = 0.0
 var poison_duration: float = 0.0
+var ignite_on_death := false
+var ignite_radius: float = 0.0
+var ignite_damage_percent: float = 0.0
+var shatter_on_frozen_death := false
+var shatter_radius: float = 0.0
+var shatter_damage_percent: float = 0.0
 var rapid_fire_level: int = 0
 var velocity_level: int = 0
 var projectile_shape: String = "orb"
@@ -98,6 +104,12 @@ func setup(projectile_team: String, projectile_direction: Vector2, projectile_sp
 	slow_duration = 0.0
 	poison_dps = 0.0
 	poison_duration = 0.0
+	ignite_on_death = false
+	ignite_radius = 0.0
+	ignite_damage_percent = 0.0
+	shatter_on_frozen_death = false
+	shatter_radius = 0.0
+	shatter_damage_percent = 0.0
 	rapid_fire_level = 0
 	velocity_level = 0
 	projectile_shape = "orb"
@@ -149,6 +161,12 @@ func setup_from_config(projectile_team: String, projectile_direction: Vector2, c
 	slow_duration = max(0.0, float(config.get("slow_duration", slow_duration)))
 	poison_dps = max(0.0, float(config.get("poison_dps", poison_dps)))
 	poison_duration = max(0.0, float(config.get("poison_duration", poison_duration)))
+	ignite_on_death = bool(config.get("ignite_on_death", ignite_on_death))
+	ignite_radius = max(0.0, float(config.get("ignite_radius", ignite_radius)))
+	ignite_damage_percent = max(0.0, float(config.get("ignite_damage_percent", ignite_damage_percent)))
+	shatter_on_frozen_death = bool(config.get("shatter_on_frozen_death", shatter_on_frozen_death))
+	shatter_radius = max(0.0, float(config.get("shatter_radius", shatter_radius)))
+	shatter_damage_percent = max(0.0, float(config.get("shatter_damage_percent", shatter_damage_percent)))
 	rapid_fire_level = max(0, int(config.get("rapid_fire_level", rapid_fire_level)))
 	velocity_level = max(0, int(config.get("velocity_level", velocity_level)))
 	projectile_shape = str(config.get("projectile_shape", projectile_shape))
@@ -254,6 +272,10 @@ func _attempt_hit_target(target: Node) -> void:
 			target.apply_slow(slow_multiplier, slow_duration)
 	if poison_duration > 0.0 and poison_dps > 0.0 and target.has_method("apply_poison"):
 		target.apply_poison(poison_dps, poison_duration)
+	if ignite_on_death and target.has_method("apply_ignite_on_death"):
+		target.apply_ignite_on_death(ignite_radius, maxi(1, int(round(float(damage) * ignite_damage_percent))))
+	if shatter_on_frozen_death and target.has_method("apply_shatter_on_death"):
+		target.apply_shatter_on_death(shatter_radius, maxi(1, int(round(float(damage) * shatter_damage_percent))))
 	_mark_target_hit_on_current_leg(target)
 	impact_requested.emit(global_position, -direction, team, _get_impact_color(), impact_sfx, impact_weight, target, _build_combat_context(target))
 	_request_split(target)
@@ -308,7 +330,12 @@ func _request_split(target: Node) -> void:
 		return
 	split_remaining -= 1
 	var split_config := _projectile_config.duplicate(true)
-	split_config["split_count"] = 0
+	var split_generation := int(split_config.get("split_generation", 0))
+	if bool(split_config.get("split_can_split", false)) and split_generation <= 0:
+		split_config["split_count"] = 1
+		split_config["split_generation"] = split_generation + 1
+	else:
+		split_config["split_count"] = 0
 	split_config["projectile_multiplier"] = 1
 	split_requested.emit(global_position, direction, team, split_config, target)
 
@@ -451,6 +478,12 @@ func _build_combat_context(target: Node) -> Dictionary:
 		"slow_duration": slow_duration,
 		"poison_dps": poison_dps,
 		"poison_duration": poison_duration,
+		"ignite_on_death": ignite_on_death,
+		"ignite_radius": ignite_radius,
+		"ignite_damage_percent": ignite_damage_percent,
+		"shatter_on_frozen_death": shatter_on_frozen_death,
+		"shatter_radius": shatter_radius,
+		"shatter_damage_percent": shatter_damage_percent,
 	}
 
 func _parse_color(value: Variant, fallback: Color) -> Color:

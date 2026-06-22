@@ -9,11 +9,14 @@ const WEAPONS_DATA_PATH := "res://data/weapons.json"
 const MODIFIERS_DATA_PATH := "res://data/modifiers.json"
 const RUN_LENGTH := 10
 const CONTINUATION_PROGRESS_CAP := 1.65
+const RARE_NUDGE := 0.06
+const RARE_CHANCE_CAP := 0.60
 const CHAMPION_INTERVAL_BANDS := [
 	{"until_depth": 10, "interval": 5},
 	{"until_depth": 20, "interval": 4},
 	{"until_depth": -1, "interval": 3},
 ]
+const TRAIT_FALLBACK := {"label": "Open room", "icon": "open"}
 
 var player_configs: Array = []
 var player_health_states: Array = []
@@ -32,6 +35,8 @@ var xp_current: int = 0
 var xp_level: int = 0
 var xp_to_next_level: int = 200
 var xp_pending_levelups: int = 0
+var run_score: int = 0
+var run_score_banked: bool = false
 var momentum_progress_by_player: Array = []
 var momentum_tier_by_player: Array = []
 
@@ -74,6 +79,8 @@ func start_new_run(configs: Array, debug_options: Dictionary = {}) -> void:
 	xp_level = 0
 	xp_to_next_level = 200
 	xp_pending_levelups = 0
+	run_score = 0
+	run_score_banked = false
 	momentum_progress_by_player.clear()
 	momentum_tier_by_player.clear()
 	_apply_debug_starting_progress()
@@ -148,7 +155,7 @@ func resolve_current_combat_victory(health_states: Array, clear_context: Diction
 		run_outcome = "won"
 		return _build_outcome(
 			"Run Milestone Cleared",
-			"%s\nScore: %d rooms cleared.\nContinue into endless scaling?" % [summary, rooms_completed],
+			"%s\nScore: %d.\nContinue into endless scaling?" % [summary, run_score],
 			"win_milestone",
 			"Continue"
 		)
@@ -207,6 +214,8 @@ func set_active_weapon(player_index: int, weapon_id: String) -> void:
 	var inventory = get_player_inventory(player_index)
 	if inventory == null:
 		return
+	if ProfileState != null and not ProfileState.is_content_unlocked("weapon", weapon_id):
+		return
 	if not _weapons_by_id.has(weapon_id):
 		return
 	var weapon: Dictionary = _weapons_by_id[weapon_id] as Dictionary
@@ -218,10 +227,13 @@ func get_weapon_catalog() -> Array:
 	var catalog: Array = []
 	for weapon_id_variant in _weapons_by_id.keys():
 		var weapon: Dictionary = _weapons_by_id[weapon_id_variant] as Dictionary
+		var weapon_id := str(weapon.get("id", weapon_id_variant))
+		if ProfileState != null and not ProfileState.is_content_unlocked("weapon", weapon_id):
+			continue
 		if str(weapon.get("type", "weapon")) != "weapon":
 			continue
 		catalog.append({
-			"id": str(weapon.get("id", weapon_id_variant)),
+			"id": weapon_id,
 			"name": str(weapon.get("name", weapon_id_variant)),
 			"description": str(weapon.get("description", "")),
 		})
@@ -296,7 +308,18 @@ func get_xp_progress() -> Dictionary:
 	}
 
 func get_current_score() -> int:
-	return rooms_completed
+	return run_score
+
+func add_run_score(delta: int) -> void:
+	if delta <= 0:
+		return
+	run_score += delta
+
+func bank_run_score_once() -> int:
+	if run_score_banked:
+		return 0
+	run_score_banked = true
+	return run_score
 
 func get_momentum_state(player_index: int) -> Dictionary:
 	if player_index < 0 or player_index >= momentum_tier_by_player.size():
@@ -372,14 +395,15 @@ func _build_default_player_inventories(player_count: int, selected_abilities: Ar
 	for index in range(player_count):
 		var inventory := PlayerInventoryData.new()
 		inventory.player_index = index
-		inventory.weapon_id = "rifle"
+		inventory.weapon_id = _first_unlocked_weapon_id()
 		if index < selected_weapons.size():
 			var selected_weapon := str(selected_weapons[index])
-			if _weapons_by_id.has(selected_weapon):
+			if _weapons_by_id.has(selected_weapon) and (ProfileState == null or ProfileState.is_content_unlocked("weapon", selected_weapon)):
 				inventory.weapon_id = selected_weapon
 		var chosen: Array = []
 		if index < selected_abilities.size() and selected_abilities[index] is Array:
 			chosen = (selected_abilities[index] as Array).duplicate()
+		chosen = _filter_unlocked_abilities(chosen)
 		var normalized := _ability_registry.normalize_loadout(chosen)
 		inventory.ability_slot_1 = str(normalized[0])
 		inventory.ability_slot_2 = str(normalized[1])
@@ -389,9 +413,29 @@ func _build_default_player_inventories(player_count: int, selected_abilities: Ar
 func _normalize_inventory_ability_slots(inventory) -> void:
 	if inventory == null:
 		return
-	var normalized := _ability_registry.normalize_loadout([inventory.ability_slot_1, inventory.ability_slot_2])
+	var normalized := _ability_registry.normalize_loadout(_filter_unlocked_abilities([inventory.ability_slot_1, inventory.ability_slot_2]))
 	inventory.ability_slot_1 = str(normalized[0])
 	inventory.ability_slot_2 = str(normalized[1])
+
+func _first_unlocked_weapon_id() -> String:
+	if _weapons_by_id.has("rifle") and (ProfileState == null or ProfileState.is_content_unlocked("weapon", "rifle")):
+		return "rifle"
+	for weapon_id_variant in _weapons_by_id.keys():
+		var weapon_id := str(weapon_id_variant)
+		if ProfileState == null or ProfileState.is_content_unlocked("weapon", weapon_id):
+			return weapon_id
+	return "rifle"
+
+func _filter_unlocked_abilities(ability_ids: Array) -> Array:
+	var filtered: Array = []
+	for ability_id_variant in ability_ids:
+		var ability_id := str(ability_id_variant)
+		if ability_id.is_empty():
+			continue
+		if ProfileState != null and not ProfileState.is_content_unlocked("ability", ability_id):
+			continue
+		filtered.append(ability_id)
+	return filtered
 
 func _build_single_room_map() -> Array:
 	var room_type := str(debug_run_setup.get("room_type", "combat"))
@@ -432,12 +476,14 @@ func _build_choice_step(room_number: int) -> Array:
 		_build_run_node(room_number, "combat", "a"),
 		_build_run_node(room_number, "combat", "b"),
 	]
+	_ensure_route_traits_differ(options)
 	_ensure_route_options_differ(options)
+	_assign_route_rare_bonus(options)
 	return options
 
 func _build_run_node(room_number: int, room_type: String, slot: String) -> Dictionary:
 	var is_champion := room_type != "combat"
-	return {
+	var node := {
 		"id": "room_%d_%s" % [room_number, slot],
 		"room_type": room_type,
 		"depth": room_number,
@@ -450,6 +496,8 @@ func _build_run_node(room_number: int, room_type: String, slot: String) -> Dicti
 		"modifiers": _roll_modifiers_for_depth(room_number, room_type),
 		"next_node_ids": [],
 	}
+	_refresh_route_metadata(node)
+	return node
 
 func _interval_for_depth(depth: int) -> int:
 	for band in CHAMPION_INTERVAL_BANDS:
@@ -529,8 +577,123 @@ func _ensure_route_options_differ(row: Array) -> void:
 		var replacement_modifiers := _build_distinct_modifier_load(node, seen_signatures)
 		if not replacement_modifiers.is_empty():
 			node["modifiers"] = replacement_modifiers
+			_refresh_route_metadata(node)
 			row[node_index] = node
 			seen_signatures[_build_route_option_signature(node)] = true
+
+func _ensure_route_traits_differ(row: Array) -> void:
+	if row.size() < 2:
+		return
+	var first := row[0] as Dictionary
+	var second := row[1] as Dictionary
+	if str(first.get("trait_label", "")) != str(second.get("trait_label", "")):
+		return
+	for _attempt in range(4):
+		second["modifiers"] = _roll_modifiers_for_depth(int(second.get("depth", 1)), str(second.get("room_type", "combat")))
+		_refresh_route_metadata(second)
+		if str(first.get("trait_label", "")) != str(second.get("trait_label", "")):
+			row[1] = second
+			return
+	row[1] = second
+
+func _assign_route_rare_bonus(row: Array) -> void:
+	if row.size() < 2:
+		for node_index in range(row.size()):
+			if row[node_index] is Dictionary:
+				var single_node: Dictionary = row[node_index]
+				single_node["rare_bonus"] = 0.0
+				single_node["rare_chance"] = _rare_chance_for_depth(int(single_node.get("depth", 1)), 0.0)
+				row[node_index] = single_node
+		return
+	var best_index := -1
+	var best_score := -1
+	var tied := false
+	for node_index in range(row.size()):
+		if not (row[node_index] is Dictionary):
+			continue
+		var node: Dictionary = row[node_index]
+		var score := int(node.get("danger_score", 0))
+		if score > best_score:
+			best_score = score
+			best_index = node_index
+			tied = false
+		elif score == best_score:
+			tied = true
+	for node_index in range(row.size()):
+		if not (row[node_index] is Dictionary):
+			continue
+		var node: Dictionary = row[node_index]
+		var bonus := RARE_NUDGE if not tied and node_index == best_index else 0.0
+		node["rare_bonus"] = bonus
+		node["rare_chance"] = _rare_chance_for_depth(int(node.get("depth", 1)), bonus)
+		row[node_index] = node
+
+func _refresh_route_metadata(node: Dictionary) -> void:
+	var danger_score := _danger_score_for(node)
+	var route_trait := _trait_for(node)
+	node["danger_score"] = danger_score
+	node["danger_pips"] = _danger_pips_for_score(danger_score)
+	node["trait_label"] = str(route_trait.get("label", TRAIT_FALLBACK["label"]))
+	node["trait_icon"] = str(route_trait.get("icon", TRAIT_FALLBACK["icon"]))
+	node["rare_bonus"] = float(node.get("rare_bonus", 0.0))
+	node["rare_chance"] = _rare_chance_for_depth(int(node.get("depth", 1)), float(node.get("rare_bonus", 0.0)))
+
+func _danger_score_for(node: Dictionary) -> int:
+	var minor_mods := 0
+	var major_mods := 0
+	for mod_id_variant in (node.get("modifiers", []) as Array):
+		var mod_id := str(mod_id_variant)
+		var category := str((_modifiers_by_id.get(mod_id, {}) as Dictionary).get("category", "minor"))
+		if category == "major":
+			major_mods += 1
+		else:
+			minor_mods += 1
+	var enemy_pool: Array = node.get("enemy_pool", []) as Array
+	return minor_mods + major_mods * 2 + clampi(enemy_pool.size() - 2, 0, 2)
+
+func _danger_pips_for_score(danger_score: int) -> int:
+	if danger_score <= 1:
+		return 1
+	if danger_score <= 3:
+		return 2
+	return 3
+
+func _trait_for(node: Dictionary) -> Dictionary:
+	var modifiers: Array = node.get("modifiers", []) as Array
+	for mod_id in ["fire_floor", "ice_zone", "mine_field", "shrinking_arena"]:
+		if modifiers.has(mod_id):
+			return _trait_for_modifier(mod_id)
+	for mod_id in ["swarm", "shielded", "enemy_speed", "accelerating_waves", "explosive_death"]:
+		if modifiers.has(mod_id):
+			return _trait_for_modifier(mod_id)
+	return TRAIT_FALLBACK.duplicate()
+
+func _trait_for_modifier(mod_id: String) -> Dictionary:
+	match mod_id:
+		"fire_floor":
+			return {"label": "Hazard zone", "icon": "flame"}
+		"ice_zone":
+			return {"label": "Frost field", "icon": "snow"}
+		"mine_field":
+			return {"label": "Scanlines", "icon": "scan"}
+		"shrinking_arena":
+			return {"label": "Closing walls", "icon": "shrink"}
+		"swarm":
+			return {"label": "Swarm", "icon": "swarm"}
+		"shielded":
+			return {"label": "Fortified", "icon": "shield"}
+		"enemy_speed":
+			return {"label": "Frenzied", "icon": "bolt"}
+		"accelerating_waves":
+			return {"label": "Escalating", "icon": "rising"}
+		"explosive_death":
+			return {"label": "Volatile", "icon": "bomb"}
+		_:
+			return TRAIT_FALLBACK.duplicate()
+
+func _rare_chance_for_depth(depth: int, rare_bonus: float = 0.0) -> float:
+	var base_chance := lerpf(0.20, 0.45, clampf(float(depth - 1) / 19.0, 0.0, 1.0))
+	return clampf(base_chance + rare_bonus, 0.0, RARE_CHANCE_CAP)
 
 func _build_route_option_signature(node: Dictionary) -> String:
 	var enemy_pool: Array = (node.get("enemy_pool", []) as Array).duplicate()
