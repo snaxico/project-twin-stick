@@ -208,8 +208,13 @@ node; manual = cards read as different fights with real modifier names and the `
   has no depth arg today — **add a `signature_share: float` parameter** that `CoopManager` computes from
   `_room_depth` (`_signature_share(_room_depth)`, 0 shallow → ~0.5 deep) and passes at the existing call
   site (`CoopManager` ~1384). `MutationSystem`: when a rare is rolled, draw from `{existing rares} +
-  {signature pool}`, choosing the signature pool with probability `signature_share`. Cards (effects in
-  params): **Accelerant** `[fire]` (+2 fire stacks),
+  {signature pool}`, choosing the signature pool with probability `signature_share`.
+- **Empty-pool fallback (required — both pools are unlock-filtered in B3, so either can be empty):** if
+  the chosen pool is empty (e.g. early profile with no Signature unlocked, or a deep run that exhausted
+  one pool), draw from the **other rare-or-better pool**; if **both** are empty, fall back to **common**
+  exactly as `roll_mutation_options` does today. Never return fewer than `count` options when a fallback
+  exists.
+- Cards (effects in params): **Accelerant** `[fire]` (+2 fire stacks),
   **Virulent** `[toxic]` (+2 toxic stacks), **Ember Spread** `[fire]` (`ignite_on_death`), **Chain
   Reaction** `[split]` (`split_count += 1`, `split_can_split=true`), **Cryo Shatter** `[frost]`
   (`shatter_on_frozen_death`), **Momentum Surge** `[momentum][pierce]` (`pierce_at_max_momentum=3`).
