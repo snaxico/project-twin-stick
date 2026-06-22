@@ -1,6 +1,7 @@
 # Game Feel & Neon Identity Patch — plan
 
-> Status: **design shaped with the user (2026-06-22), not implemented.** On `v3/structure-rework`. Goal:
+> Status: **Phase 1 (arena/glow/tint) + Phase 2 (silhouettes + enemy motion) IMPLEMENTED (2026-06-22);
+> Phases 3–5 pending.** On `v3/structure-rework`. Goal:
 > remove the "prototype feeling" with **pure in-engine work** — no external art/audio assets. Route locked
 > to **refine the procedural/neon style**. Lead = game feel/juice; all four prototype tells + audio in scope.
 

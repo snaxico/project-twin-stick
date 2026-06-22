@@ -34,10 +34,54 @@ enum EnemyType {
 static func get_visual_profile(type_name: String, shielded: bool = false) -> Dictionary:
 	var feedback_color := get_feedback_color_for_type(type_name)
 	return {
-		"polygon": get_base_visual_polygon(),
+		"polygon": get_visual_polygon_for_type(type_name),
 		"scale": BASE_VISUAL_SCALE * get_visual_scale_multiplier(type_name) * READABILITY_VISUAL_SCALE,
 		"color": _bloom_visual_color(feedback_color.lightened(0.24) if shielded else feedback_color),
 	}
+
+# Distinct silhouette per type so enemies read by shape, not just color/size.
+# Directional shapes point +x (forward) since body_root rotates to velocity.angle().
+# Drives both the live Polygon2D and the encyclopedia preview (single source of truth).
+static func get_visual_polygon_for_type(type_name: String) -> PackedVector2Array:
+	match type_name:
+		"chaser":  # sleek dart
+			return PackedVector2Array([Vector2(22, 0), Vector2(-12, -13), Vector2(-5, 0), Vector2(-12, 13)])
+		"charger", "elite_charger":  # heavy wedge
+			return PackedVector2Array([Vector2(21, 0), Vector2(-13, -17), Vector2(-13, 17)])
+		"spitter", "elite_spitter":  # ranged diamond / eye
+			return PackedVector2Array([Vector2(0, -19), Vector2(17, 0), Vector2(0, 19), Vector2(-17, 0)])
+		"splitter":  # 4-point cluster (about to break apart)
+			return PackedVector2Array([
+				Vector2(0, -20), Vector2(7, -7), Vector2(20, 0), Vector2(7, 7),
+				Vector2(0, 20), Vector2(-7, 7), Vector2(-20, 0), Vector2(-7, -7),
+			])
+		"splitter_mini":  # small shard
+			return PackedVector2Array([Vector2(16, 0), Vector2(-11, -11), Vector2(-11, 11)])
+		"bomber":  # spiky volatile orb
+			return PackedVector2Array([
+				Vector2(0, -20), Vector2(5, -7), Vector2(19, -6), Vector2(8, 3),
+				Vector2(12, 17), Vector2(0, 8), Vector2(-12, 17), Vector2(-8, 3),
+				Vector2(-19, -6), Vector2(-5, -7),
+			])
+		"elite_support":  # defensive pentagon
+			return PackedVector2Array([Vector2(0, -20), Vector2(19, -5), Vector2(12, 17), Vector2(-12, 17), Vector2(-19, -5)])
+		"boss_warden":  # broad fortress hexagon
+			return PackedVector2Array([Vector2(-11, -20), Vector2(11, -20), Vector2(21, 0), Vector2(11, 20), Vector2(-11, 20), Vector2(-21, 0)])
+		"boss_hydra":  # 6-point star
+			return PackedVector2Array([
+				Vector2(0, -21), Vector2(6, -10), Vector2(18, -10), Vector2(10, 0),
+				Vector2(18, 10), Vector2(6, 10), Vector2(0, 21), Vector2(-6, 10),
+				Vector2(-18, 10), Vector2(-10, 0), Vector2(-18, -10), Vector2(-6, -10),
+			])
+		"boss_hive":  # honeycomb hexagon
+			return PackedVector2Array([Vector2(0, -20), Vector2(17, -10), Vector2(17, 10), Vector2(0, 20), Vector2(-17, 10), Vector2(-17, -10)])
+		"boss_pulsar":  # energy burst star
+			return PackedVector2Array([
+				Vector2(0, -21), Vector2(6, -6), Vector2(21, 0), Vector2(6, 6),
+				Vector2(0, 21), Vector2(-6, 6), Vector2(-21, 0), Vector2(-6, -6),
+			])
+		_:
+			return get_base_visual_polygon()
 
 static func get_base_visual_polygon() -> PackedVector2Array:
 	return PackedVector2Array([
@@ -150,6 +194,10 @@ var _feedback_color := Color(1.0, 0.26, 0.22, 1.0)
 var _feedback_weight := 1.0
 var _alive := true
 var _base_visual_scale := Vector2.ONE
+var _visual_anim_base := Vector2.ONE
+var _spawn_anim := 0.0
+var _hit_punch := 0.0
+var _idle_phase := 0.0
 var _base_collision_radius := 19.0
 var _pulsar_teleport_at := 0.0
 var _pulsar_telegraph_until := 0.0
@@ -173,6 +221,8 @@ var _target_refresh_interval := 4
 func _ready() -> void:
 	_random.randomize()
 	add_to_group("aim_target")
+	_spawn_anim = 0.0
+	_idle_phase = randf() * TAU
 	if visual != null:
 		_base_visual_scale = visual.scale
 	if collision_shape != null and collision_shape.shape is CircleShape2D:
@@ -482,6 +532,7 @@ func apply_damage(amount: int) -> void:
 		_update_visual_state()
 		return
 	current_health = max(current_health - amount, 0.0)
+	_hit_punch = 1.0
 	var lethal := current_health <= 0.0
 	hit_received.emit(self, amount, lethal)
 	if lethal:
@@ -574,7 +625,7 @@ func _physics_process(delta: float) -> void:
 	desired_velocity += _apply_separation()
 	velocity = desired_velocity + _external_velocity
 	move_and_slide()
-	_update_dynamic_visuals()
+	_update_dynamic_visuals(delta)
 
 func _apply_separation() -> Vector2:
 	if is_champion() or _combat_owner == null:
@@ -1176,15 +1227,31 @@ func _refresh_static_visuals() -> void:
 	var profile := get_visual_profile(type_name, _shield_active)
 	visual.polygon = profile.get("polygon", get_base_visual_polygon()) as PackedVector2Array
 	visual.scale = _base_visual_scale * scale_mult * READABILITY_VISUAL_SCALE
+	_visual_anim_base = visual.scale
 	visual.color = profile.get("color", _bloom_color(_feedback_color)) as Color
 	if collision_shape != null and collision_shape.shape is CircleShape2D:
 		(collision_shape.shape as CircleShape2D).radius = _base_collision_radius * max(0.7, scale_mult)
 	body_root.scale = Vector2.ONE * (1.08 if is_champion() else 1.0)
 
-func _update_dynamic_visuals() -> void:
+func _update_dynamic_visuals(delta: float) -> void:
 	if visual == null or body_root == null:
 		return
 	body_root.rotation = lerp_angle(body_root.rotation, velocity.angle() if velocity.length() > 0.1 else body_root.rotation, 0.18)
+	# Procedural life, layered on the cached static scale so it never fights _refresh_static_visuals.
+	if _spawn_anim < 1.0:
+		_spawn_anim = minf(_spawn_anim + delta * 5.0, 1.0)
+	if _hit_punch > 0.0:
+		_hit_punch = maxf(_hit_punch - delta * 6.0, 0.0)
+	_idle_phase += delta * 2.2
+	var spawn_t := _spawn_anim * _spawn_anim * (3.0 - 2.0 * _spawn_anim)  # smoothstep
+	var spawn_scale := 0.3 + 0.7 * spawn_t  # pop in from 30%
+	var breathe := 1.0 + sin(_idle_phase) * 0.03
+	var squash_x := 1.0 - _hit_punch * 0.22  # recoil: squash along facing, bulge across
+	var squash_y := 1.0 + _hit_punch * 0.18
+	visual.scale = Vector2(
+		_visual_anim_base.x * spawn_scale * breathe * squash_x,
+		_visual_anim_base.y * spawn_scale * breathe * squash_y
+	)
 	if _fuse_active:
 		visual.modulate = Color(1.2, 1.0, 0.8, 1.0)
 	else:
