@@ -11,6 +11,7 @@ const ENEMY_ENTRIES := [
 	{"id": "charger", "name": "Charger", "description": "Telegraphs a rush, then commits to a straight charge."},
 	{"id": "spitter", "name": "Spitter", "description": "Ranged enemy that fires enemy projectiles from outside melee range."},
 	{"id": "splitter", "name": "Splitter", "description": "Breaks into smaller enemies when destroyed."},
+	{"id": "splitter_mini", "name": "Splitter Mini", "description": "Small, fast fragment spawned when a Splitter dies; weak but swarms."},
 	{"id": "bomber", "name": "Bomber", "description": "Closes distance and detonates to deny space."},
 	{"id": "elite_charger", "name": "Champion Charger", "description": "Champion that chains charge-slams and radial bursts."},
 	{"id": "elite_spitter", "name": "Champion Spitter", "description": "Champion that mixes rapid aimed fire with pressure shockwaves."},
