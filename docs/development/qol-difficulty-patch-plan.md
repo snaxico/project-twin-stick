@@ -94,10 +94,12 @@ rubberhose art lands.)
   real thing.
 - **Enemies:** render the enemy's actual shape + feedback color (via the shared builder) as a small
   static preview of the real in-game body.
-- **Weapons:** the **base** projectile visual from `weapons.json` (the weapon's default
-  `projectile_shape`/color), **not** the current-run *compiled* visual — mutations (fire/frost/split,
-  velocity streaks, etc.) modify the live projectile, and the encyclopedia should show the bounded,
-  stable base form, not whatever a particular run happens to compile.
+- **Weapons:** the **base** projectile visual, **not** the current-run *compiled* visual (mutations like
+  fire/frost/split + velocity streaks modify the live projectile — show the bounded, stable base form).
+  Note `weapons.json` has **no** `projectile_shape`/color field — only `projectile_kind`. Derive the base
+  shape/trail from `projectile_kind` via the **existing `projectile_kind → projectile_shape/trail_style`
+  mapping** in `MutationSystem` (`_map_weapon_stats_to_projectile_keys`, ~line 422), i.e. compile a base
+  visual with **no mutations applied**. (Don't read non-existent JSON fields.)
 - **Abilities / mutations:** their in-game icons (`IconFactory`) — these are already the same ones shown
   on reward cards, so reuse is automatically "same as in-game".
 - **Modifiers:** the modifier's actual visual (e.g. the Ice Zone ring, Fire Floor zone) rendered small.
@@ -112,7 +114,8 @@ rubberhose art lands.)
 
 1. **Reroll + Skip** (RunState `spend_run_score` → MutationPickUI buttons → CoopManager wiring).
 2. **Early-game balance** (chaser/charger stats + early spawn curves + HP-drop reduction + kill-streak)
-   — one tuning task, all in `Enemy.gd` + `CoopManager` constants.
-3. **Encyclopedia visuals** (IconFactory enemy/modifier rendering → EncyclopediaUI previews).
+   — one tuning task in `Enemy.gd` + `CoopManager` constants **+ `HealthPickup.gd`** (`heal_amount`).
+3. **Encyclopedia visuals** (shared enemy/modifier visual builders → EncyclopediaUI previews; weapons
+   via the base `projectile_kind` mapping; reuse `IconFactory` for abilities/mutations).
 
 Each: `git diff --check` + headless parse/boot; reroll/skip gets a manual pick-flow check.
