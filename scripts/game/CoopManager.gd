@@ -1204,6 +1204,7 @@ func _physics_process(delta: float) -> void:
 	if _game_paused or pause_panel.visible or get_tree().paused:
 		return
 	_room_elapsed += delta
+	_update_screen_atmosphere()
 	_update_scheduled_enemy_shockwaves()
 	_update_scheduled_player_shockwaves()
 	_update_scheduled_enemy_hazards()
@@ -1911,6 +1912,23 @@ func _request_hit_stop(weight: float, duration_ms: int) -> void:
 	if _hit_stop_manager != null and _hit_stop_manager.has_method("request_hit_stop"):
 		_hit_stop_manager.request_hit_stop(weight, duration_ms)
 
+func _update_screen_atmosphere() -> void:
+	# Drive the (previously unused) ScreenEffects shader: danger vignette from the lowest player's
+	# health, and a warm combat-intensity tint from how many enemies are on screen.
+	if screen_effects == null:
+		return
+	var lowest_ratio := 1.0
+	var any_alive := false
+	for player in _player_nodes:
+		if player == null or not is_instance_valid(player) or not player.has_method("is_alive") or not player.is_alive():
+			continue
+		any_alive = true
+		lowest_ratio = minf(lowest_ratio, float(player.current_health) / maxf(float(player.max_health), 1.0))
+	if screen_effects.has_method("set_low_health_ratio"):
+		screen_effects.set_low_health_ratio(lowest_ratio if any_alive else 1.0)
+	if screen_effects.has_method("set_combat_intensity"):
+		screen_effects.set_combat_intensity(clampf(float(enemies.get_child_count()) / 22.0, 0.0, 1.0))
+
 func _spawn_screen_flash(color: Color, duration: float) -> void:
 	if not _screen_effects_enabled():
 		return
@@ -2183,7 +2201,7 @@ func _on_player_revived(player) -> void:
 	_revive_progress_by_player_id.erase(player.player_id)
 	player_revived.emit(player)
 
-func _on_player_damage_taken(player, _amount: int, _current_health: int) -> void:
+func _on_player_damage_taken(player, amount: int, _current_health: int) -> void:
 	if player == null or not is_instance_valid(player):
 		return
 	if _side_objective_id == "kill_streak" and not _side_objective_completed:
@@ -2193,6 +2211,12 @@ func _on_player_damage_taken(player, _amount: int, _current_health: int) -> void
 	burst.global_position = player.global_position
 	effects.add_child(burst)
 	_play_sfx("play_damage", [])
+	# Taking damage should HURT: shake + hit-stop + red flash, scaled by hit size.
+	var hit_weight := clampf(float(amount) / 20.0, 0.5, 1.0)
+	if _screen_effects_enabled() and screen_shake != null and screen_shake.has_method("add_trauma"):
+		screen_shake.add_trauma(0.12 + 0.30 * hit_weight)
+	_request_hit_stop(0.7, 48)
+	_spawn_screen_flash(Color(0.95, 0.12, 0.12, 0.18 + 0.16 * hit_weight), 0.22)
 
 func _on_muzzle_flash_requested(origin: Vector2, direction: Vector2, color: Color, feedback_profile: String, impact_weight: float) -> void:
 	var flash := ParticleFactoryData.create_muzzle_flash(color, direction, feedback_profile, impact_weight + 0.18)
