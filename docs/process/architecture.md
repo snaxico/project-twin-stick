@@ -46,6 +46,9 @@
   weapon cards), champion helper attacks, modifier/objective orchestration, pause/clear runtime freeze.
 - `CoopFormat.gd` / `EnemyTypes.gd` / `ArenaGeometry.gd` — stateless CoopManager helpers for text/color
   formatting, champion type classification, and pure arena/spawn geometry.
+- `ProjectileSystem.gd` — CoopManager-owned child node for projectile pooling, beam state, homing orb
+  updates, projectile split/impact callbacks, and projectile VFX. CoopManager remains the public fire signal
+  entry point and enemy combat-owner facade.
 - Room types: `combat` / `elite` / `boss` (no rest/shop). Encounter Builder / Debug Menu use the
   single-room debug path — a fast-iteration entry, not a second source of truth.
 

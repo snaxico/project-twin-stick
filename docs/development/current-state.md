@@ -111,6 +111,9 @@ patch is implemented and playtest-approved.
   - `CoopFormat.gd` owns room/boss/modifier/buff text, slot color, overbright color, and rarity rank helpers.
   - `EnemyTypes.gd` owns champion ID/classifier helpers.
   - `ArenaGeometry.gd` owns pure spawn-position, spread-direction, and segment-distance math.
+  - `ProjectileSystem.gd` owns projectile pooling, beams, homing orb updates, projectile impact/split
+    callbacks, and projectile VFX suppression while `CoopManager.gd` keeps the signal entry points and
+    combat-owner facade delegators.
 - `RunFlow.gd` now owns:
   - next-room choice panel
   - room launch
