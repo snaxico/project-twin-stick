@@ -9,6 +9,7 @@ const MutationSystemData = preload("res://scripts/game/MutationSystem.gd")
 const AbilityRegistryData = preload("res://scripts/game/AbilityRegistry.gd")
 const HudPaletteData = preload("res://scripts/game/HudPalette.gd")
 const CoopFormat = preload("res://scripts/game/CoopFormat.gd")
+const EnemyTypes = preload("res://scripts/game/EnemyTypes.gd")
 const MutationPickUIScene = preload("res://scenes/ui/MutationPickUI.tscn")
 const TempBuffSystemData = preload("res://scripts/buffs/TempBuffSystem.gd")
 const HoldZoneObjectiveData = preload("res://scripts/objectives/HoldZoneObjective.gd")
@@ -1412,19 +1413,11 @@ func _spawn_boss() -> void:
 		return
 	_boss_spawned = true
 	var boss_type := str(_room_config.get("boss_type", "warden"))
-	var boss = _spawn_enemy_instance(_champion_enemy_id(boss_type), _get_champion_spawn_position(), 1.0)
+	var boss = _spawn_enemy_instance(EnemyTypes.champion_enemy_id(boss_type), _get_champion_spawn_position(), 1.0)
 	_active_boss = boss
 	if boss != null and boss.has_method("apply_champion_scale"):
 		boss.apply_champion_scale(_room_depth, _player_nodes.size())
 	_spawn_boss_entrance_vfx()
-
-func _champion_enemy_id(champion_id: String) -> String:
-	if champion_id.begins_with("elite_") or champion_id.begins_with("boss_"):
-		return champion_id
-	return "boss_%s" % champion_id
-
-func _is_champion_enemy_type(enemy_type_name: String) -> bool:
-	return enemy_type_name.begins_with("boss_") or enemy_type_name.begins_with("elite_")
 
 func _roll_wave_enemy_type(pool: Array) -> String:
 	if pool.is_empty():
@@ -1964,7 +1957,7 @@ func _spawn_boss_entrance_vfx() -> void:
 	effects.add_child(ring)
 
 func _spawn_enemy_death_global_vfx(enemy_type_name: String) -> void:
-	if _is_champion_enemy_type(enemy_type_name):
+	if EnemyTypes.is_champion(enemy_type_name):
 		_set_music_context("combat")
 		if _screen_effects_enabled() and screen_shake != null and screen_shake.has_method("add_trauma"):
 			screen_shake.add_trauma(0.42)
@@ -2216,15 +2209,15 @@ func _on_enemy_died(enemy) -> void:
 	_enemies_killed += 1
 	_gain_shared_momentum()
 	var enemy_type_name := str(enemy.get_type_name())
-	if _is_champion_enemy_type(enemy_type_name):
+	if EnemyTypes.is_champion(enemy_type_name):
 		_champions_killed += 1
 	_spawn_enemy_death_global_vfx(enemy_type_name)
 	_apply_enemy_death_effects(enemy)
-	if _is_champion_enemy_type(enemy_type_name):
+	if EnemyTypes.is_champion(enemy_type_name):
 		RunState.add_xp(0)
 	else:
 		RunState.add_xp(int(XP_PER_ENEMY_TYPE.get(enemy_type_name, 10)))
-	if not _is_champion_enemy_type(enemy_type_name) and randf() < HEALTH_DROP_CHANCE:
+	if not EnemyTypes.is_champion(enemy_type_name) and randf() < HEALTH_DROP_CHANCE:
 		call_deferred("_spawn_health_pickup", enemy.global_position)
 	if enemy_type_name == "splitter":
 		for mini_index in range(3):
@@ -3122,7 +3115,7 @@ func _on_debug_spawn_pressed() -> void:
 	if target != null and is_instance_valid(target):
 		spawn_position = target.global_position + Vector2.RIGHT.rotated(randf_range(0.0, TAU)) * 360.0
 	var spawned := _spawn_enemy_instance(enemy_type, spawn_position)
-	if spawned != null and spawned.has_method("apply_champion_scale") and _is_champion_enemy_type(enemy_type):
+	if spawned != null and spawned.has_method("apply_champion_scale") and EnemyTypes.is_champion(enemy_type):
 		spawned.apply_champion_scale(_room_depth, _player_nodes.size())
 
 func _on_debug_give_weapon_level_pressed() -> void:
