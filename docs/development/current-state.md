@@ -113,7 +113,7 @@ patch is implemented and playtest-approved.
   - `ArenaGeometry.gd` owns pure spawn-position, spread-direction, and segment-distance math.
   - `ProjectileSystem.gd` owns projectile pooling, beams, homing orb updates, projectile impact/split
     callbacks, and projectile VFX suppression while `CoopManager.gd` keeps the signal entry points and
-    combat-owner facade delegators.
+    combat-owner facade delegators. Player target lookup remains centralized on `CoopManager.gd`.
   - `ArenaVisuals.gd` owns floor polygon setup, grid/wall visuals, collision-bound sizing, exit-zone/camera
     arena setup, arena color application, and the grid pulse tick.
 - `RunFlow.gd` now owns:

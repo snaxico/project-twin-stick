@@ -48,7 +48,7 @@
   formatting, champion type classification, and pure arena/spawn geometry.
 - `ProjectileSystem.gd` — CoopManager-owned child node for projectile pooling, beam state, homing orb
   updates, projectile split/impact callbacks, and projectile VFX. CoopManager remains the public fire signal
-  entry point and enemy combat-owner facade.
+  entry point, enemy combat-owner facade, and source of player/enemy target accessors.
 - `ArenaVisuals.gd` — CoopManager-owned child node for floor/grid/wall visuals, arena collision bounds,
   exit-zone/camera arena setup, arena color application, and the grid pulse pump.
 - Room types: `combat` / `elite` / `boss` (no rest/shop). Encounter Builder / Debug Menu use the
