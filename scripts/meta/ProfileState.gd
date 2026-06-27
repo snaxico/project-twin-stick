@@ -126,6 +126,7 @@ func unlock(unlock_id: String) -> bool:
 
 func is_unlocked(unlock_id: String) -> bool:
 	if _find_unlock_index(unlock_id) < 0:
+		push_warning("Unknown unlock id: %s" % unlock_id)
 		return true
 	return unlocked_ids.has(unlock_id)
 
