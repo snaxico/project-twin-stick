@@ -82,7 +82,7 @@ func handle_enemy_fire(origin: Vector2, direction: Vector2, speed: float, damage
 
 func spawn_enemy_homing_orbs(origin: Vector2, count: int, speed: float, duration: float, damage: int, _color: Color) -> void:
 	for index in range(count):
-		var target: Node2D = _get_nearest_player_to(origin)
+		var target: Node2D = _coop.call("get_nearest_player_to", origin)
 		var direction := Vector2.RIGHT.rotated(TAU * float(index) / float(max(count, 1)))
 		if target != null:
 			direction = (target.global_position - origin).normalized()
@@ -254,7 +254,7 @@ func _update_homing_projectiles(_delta: float) -> void:
 			continue
 		var target = entry.get("target", null)
 		if target == null or not is_instance_valid(target) or not target.has_method("is_alive") or not target.is_alive():
-			target = _get_nearest_player_to(projectile.global_position)
+			target = _coop.call("get_nearest_player_to", projectile.global_position)
 			entry["target"] = target
 		if target != null and is_instance_valid(target):
 			var desired: Vector2 = (target.global_position - projectile.global_position).normalized()
@@ -370,21 +370,6 @@ func _spawn_projectile_hit_effect(origin: Vector2, direction: Vector2, color: Co
 		var ring := ParticleFactoryData.create_impact_ring(effect_color, 18.0 + impact_weight * 8.0, 2.5 + impact_weight)
 		ring.global_position = origin
 		_effects_container.add_child(ring)
-
-
-func _get_nearest_player_to(origin: Vector2):
-	var best_player = null
-	var best_distance_sq := INF
-	if _coop == null or not _coop.has_method("get_player_target_nodes"):
-		return null
-	for player in _coop.call("get_player_target_nodes"):
-		if player == null or not is_instance_valid(player) or not player.has_method("is_alive") or not player.is_alive():
-			continue
-		var distance_sq := origin.distance_squared_to(player.global_position)
-		if distance_sq < best_distance_sq:
-			best_distance_sq = distance_sq
-			best_player = player
-	return best_player
 
 
 func _current_time_seconds() -> float:

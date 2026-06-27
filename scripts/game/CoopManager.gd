@@ -2451,6 +2451,9 @@ func get_active_players() -> Array:
 	return active_players
 
 func _get_nearest_player_to(origin: Vector2):
+	return get_nearest_player_to(origin)
+
+func get_nearest_player_to(origin: Vector2):
 	var best_player = null
 	var best_distance_sq := INF
 	for player in _player_nodes:
