@@ -27,7 +27,6 @@ var current_node_id: String = ""
 var reachable_node_ids: Array = []
 var rooms_completed: int = 0
 var run_outcome: String = "in_progress"
-var run_mode: String = "structured"
 var debug_run_setup: Dictionary = {}
 var debug_profiling: bool = false  # dev: PerfRunner sets this so players are immortal during a profile run
 var player_inventories: Array = []
@@ -63,7 +62,6 @@ func start_new_run(configs: Array, debug_options: Dictionary = {}) -> void:
 	debug_run_setup = _build_default_debug_run_setup()
 	debug_run_setup.merge(debug_options, true)
 	player_configs = configs.duplicate()
-	run_mode = "structured"
 	run_outcome = "in_progress"
 	rooms_completed = 0
 	current_step_index = 0
@@ -115,12 +113,6 @@ func get_map_node(node_id: String) -> Dictionary:
 	if not _node_lookup.has(node_id):
 		return {}
 	return (_node_lookup[node_id] as Dictionary).duplicate(true)
-
-func is_easy_mode() -> bool:
-	return false
-
-func is_run_complete() -> bool:
-	return false
 
 func is_debug_single_room_mode() -> bool:
 	return bool(debug_run_setup.get("enabled", false)) and str(debug_run_setup.get("launch_mode", "normal_run")) == "single_room"
