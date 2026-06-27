@@ -10,6 +10,7 @@ const CoopFormat = preload("res://scripts/game/CoopFormat.gd")
 const EnemyTypes = preload("res://scripts/game/EnemyTypes.gd")
 const ArenaGeometry = preload("res://scripts/game/ArenaGeometry.gd")
 const ProjectileSystemData = preload("res://scripts/game/ProjectileSystem.gd")
+const ArenaVisualsData = preload("res://scripts/game/ArenaVisuals.gd")
 const MutationPickUIScene = preload("res://scenes/ui/MutationPickUI.tscn")
 const TempBuffSystemData = preload("res://scripts/buffs/TempBuffSystem.gd")
 const HoldZoneObjectiveData = preload("res://scripts/objectives/HoldZoneObjective.gd")
@@ -191,7 +192,7 @@ var _objective_progress_bar: ProgressBar = null
 var _boss_health_bar = null
 var _mutation_pick_ui = null
 var _active_modifiers: Array = []
-var _grid_pulse_time := 0.0
+var _arena_visuals = null
 var _modifier_definitions: Dictionary = {}
 var _minor_modifier_flags := {
 	"accelerating_waves": false,
@@ -260,7 +261,31 @@ func _ready() -> void:
 	_projectile_system.name = "ProjectileSystem"
 	_projectile_system.setup(self, projectiles, effects)
 	add_child(_projectile_system)
-	_rebuild_arena()
+	_arena_visuals = ArenaVisualsData.new()
+	_arena_visuals.name = "ArenaVisuals"
+	_arena_visuals.setup(
+		self,
+		floor_visual,
+		floor_grid,
+		top_wall,
+		bottom_wall,
+		left_wall,
+		right_wall,
+		exit_zone,
+		exit_zone_shape,
+		exit_zone_visual,
+		camera,
+		ARENA_SIZE,
+		ARENA_RECT,
+		ARENA_CENTER,
+		ARENA_MARGIN,
+		FLOOR_GRID_SPACING,
+		FLOOR_GRID_MAJOR_INTERVAL,
+		ARENA_WALL_VISUAL_WIDTH,
+		FLOOR_GRID_PLAYER_HIGHLIGHT_RADIUS
+	)
+	add_child(_arena_visuals)
+	_arena_visuals.rebuild_arena()
 	_build_hud()
 	_build_debug_overlay()
 	_spawn_players()
@@ -869,113 +894,6 @@ func _build_runtime_ability(player_index: int, ability_definition: Dictionary) -
 		"stats": stats,
 	}
 
-func _rebuild_arena() -> void:
-	floor_visual.polygon = PackedVector2Array([
-		Vector2.ZERO,
-		Vector2(ARENA_SIZE.x, 0.0),
-		ARENA_SIZE,
-		Vector2(0.0, ARENA_SIZE.y),
-	])
-	_rebuild_floor_grid()
-	_apply_collision_bounds_from_floor()
-	exit_zone.position = Vector2(ARENA_CENTER.x, ARENA_RECT.end.y - 220.0)
-	exit_zone_shape.shape = RectangleShape2D.new()
-	(exit_zone_shape.shape as RectangleShape2D).size = Vector2(360.0, 140.0)
-	exit_zone_visual.visible = false
-	if camera.has_method("set_arena_rect"):
-		camera.set_arena_rect(ARENA_RECT)
-		camera.global_position = ARENA_CENTER
-
-func _rebuild_floor_grid() -> void:
-	for child in floor_grid.get_children():
-		child.queue_free()
-	var x := 0.0
-	var column_index := 0
-	while x <= ARENA_SIZE.x:
-		var is_major_line := column_index % FLOOR_GRID_MAJOR_INTERVAL == 0
-		var line := _build_grid_line(
-			PackedVector2Array([Vector2(x, 0.0), Vector2(x, ARENA_SIZE.y)]),
-			3.0 if is_major_line else 1.5,
-			Color(0.34, 0.8, 1.0, 0.3) if is_major_line else Color(0.24, 0.52, 0.68, 0.18),
-			false
-		)
-		floor_grid.add_child(line)
-		x += FLOOR_GRID_SPACING
-		column_index += 1
-	var y := 0.0
-	var row_index := 0
-	while y <= ARENA_SIZE.y:
-		var is_major_line := row_index % FLOOR_GRID_MAJOR_INTERVAL == 0
-		var line := _build_grid_line(
-			PackedVector2Array([Vector2(0.0, y), Vector2(ARENA_SIZE.x, y)]),
-			3.0 if is_major_line else 1.5,
-			Color(0.34, 0.8, 1.0, 0.3) if is_major_line else Color(0.24, 0.52, 0.68, 0.18),
-			false
-		)
-		floor_grid.add_child(line)
-		y += FLOOR_GRID_SPACING
-		row_index += 1
-	_add_arena_wall_visuals()
-
-func _add_arena_wall_visuals() -> void:
-	var wall_segments := [
-		PackedVector2Array([Vector2(ARENA_MARGIN, ARENA_MARGIN), Vector2(ARENA_RECT.end.x - ARENA_MARGIN, ARENA_MARGIN)]),
-		PackedVector2Array([Vector2(ARENA_MARGIN, ARENA_RECT.end.y - ARENA_MARGIN), Vector2(ARENA_RECT.end.x - ARENA_MARGIN, ARENA_RECT.end.y - ARENA_MARGIN)]),
-		PackedVector2Array([Vector2(ARENA_MARGIN, ARENA_MARGIN), Vector2(ARENA_MARGIN, ARENA_RECT.end.y - ARENA_MARGIN)]),
-		PackedVector2Array([Vector2(ARENA_RECT.end.x - ARENA_MARGIN, ARENA_MARGIN), Vector2(ARENA_RECT.end.x - ARENA_MARGIN, ARENA_RECT.end.y - ARENA_MARGIN)]),
-	]
-	for segment in wall_segments:
-		floor_grid.add_child(_build_grid_line(segment, ARENA_WALL_VISUAL_WIDTH * 2.8, Color(0.18, 0.7, 1.0, 0.16), true))
-		floor_grid.add_child(_build_grid_line(segment, ARENA_WALL_VISUAL_WIDTH, Color(0.26, 0.84, 1.0, 0.66), true))
-
-func _build_grid_line(points: PackedVector2Array, width: float, color: Color, is_wall: bool) -> Line2D:
-	var line := Line2D.new()
-	line.width = width
-	line.antialiased = true
-	line.default_color = color
-	line.begin_cap_mode = Line2D.LINE_CAP_ROUND if is_wall else Line2D.LINE_CAP_NONE
-	line.end_cap_mode = Line2D.LINE_CAP_ROUND if is_wall else Line2D.LINE_CAP_NONE
-	line.points = points
-	line.set_meta("grid_base_color", color)
-	line.set_meta("grid_is_wall", is_wall)
-	return line
-
-func _apply_arena_color() -> void:
-	var hue := 0.55
-	var minor := Color.from_hsv(hue, 0.42, 0.92, 0.18)
-	var major := Color.from_hsv(hue, 0.58, 1.0, 0.34)
-	var wall := Color.from_hsv(hue, 0.62, 1.0, 0.68)
-	if floor_visual != null:
-		floor_visual.color = Color(0.012, 0.017, 0.032, 1.0)
-	var max_dist := (ARENA_SIZE * 0.5).length()
-	for child in floor_grid.get_children():
-		if child is Line2D:
-			var line := child as Line2D
-			if line.width >= ARENA_WALL_VISUAL_WIDTH:
-				var wall_color := Color(wall.r, wall.g, wall.b, line.default_color.a)
-				line.default_color = wall_color
-				line.set_meta("grid_base_color", wall_color)
-				continue
-			var base_color := major if line.width >= 3.0 else minor
-			# Depth focus: dim grid lines the farther their midpoint sits from arena center.
-			var mid := (line.points[0] + line.points[line.points.size() - 1]) * 0.5
-			var depth := 1.0 - clampf(mid.distance_to(ARENA_CENTER) / max_dist, 0.0, 1.0)
-			var line_color := Color(base_color.r, base_color.g, base_color.b, base_color.a * (0.32 + 0.68 * depth))
-			line.default_color = line_color
-			line.set_meta("grid_base_color", line_color)
-
-func _apply_collision_bounds_from_floor() -> void:
-	_set_wall_rect(top_wall, Vector2(ARENA_CENTER.x, ARENA_MARGIN * 0.5), Vector2(ARENA_SIZE.x - ARENA_MARGIN * 2.0, ARENA_MARGIN))
-	_set_wall_rect(bottom_wall, Vector2(ARENA_CENTER.x, ARENA_RECT.end.y - ARENA_MARGIN * 0.5), Vector2(ARENA_SIZE.x - ARENA_MARGIN * 2.0, ARENA_MARGIN))
-	_set_wall_rect(left_wall, Vector2(ARENA_MARGIN * 0.5, ARENA_CENTER.y), Vector2(ARENA_MARGIN, ARENA_SIZE.y - ARENA_MARGIN * 2.0))
-	_set_wall_rect(right_wall, Vector2(ARENA_RECT.end.x - ARENA_MARGIN * 0.5, ARENA_CENTER.y), Vector2(ARENA_MARGIN, ARENA_SIZE.y - ARENA_MARGIN * 2.0))
-
-func _set_wall_rect(node: CollisionShape2D, wall_position: Vector2, size: Vector2) -> void:
-	node.position = wall_position
-	if node.shape == null or not (node.shape is RectangleShape2D):
-		node.shape = RectangleShape2D.new()
-	(node.shape as RectangleShape2D).size = size
-
 func _start_room() -> void:
 	_clear_runtime_nodes()
 	_projectile_system.ensure_renderer()
@@ -1016,7 +934,7 @@ func _start_room() -> void:
 	_collector_collected = 0
 	_collector_spawned = 0
 	_collector_spawn_timer = COLLECTOR_SPAWN_INTERVAL
-	_apply_arena_color()
+	_arena_visuals.apply_arena_color()
 	if _temp_buff_system != null:
 		_temp_buff_system.clear_all_buffs(_player_nodes)
 	_temp_buff_system = TempBuffSystemData.new()
@@ -1194,42 +1112,8 @@ func _apply_modifier_tint() -> void:
 		tint = Color(1.0, 0.85, 0.84)
 	modifier_tint.color = tint
 
-func _update_grid_pulse(delta: float) -> void:
-	# Subtle breathing so the arena reads as alive, not a static backdrop.
-	if floor_grid == null:
-		return
-	_grid_pulse_time += delta
-	var pulse := 0.94 + 0.06 * sin(_grid_pulse_time * 1.6)
-	for child in floor_grid.get_children():
-		if not (child is Line2D):
-			continue
-		var line := child as Line2D
-		var base_color: Color = line.get_meta("grid_base_color", line.default_color) as Color
-		var is_wall := bool(line.get_meta("grid_is_wall", false))
-		if is_wall:
-			line.default_color = Color(base_color.r * pulse, base_color.g * pulse, base_color.b * pulse, base_color.a)
-			continue
-		var player_glow := _get_grid_player_glow(line)
-		var alpha_mult := pulse * (0.78 + player_glow * 0.65)
-		line.default_color = Color(base_color.r, base_color.g, base_color.b, clampf(base_color.a * alpha_mult, 0.02, 0.52))
-
-func _get_grid_player_glow(line: Line2D) -> float:
-	if line.points.size() < 2:
-		return 0.0
-	var best := 0.0
-	var start := line.points[0]
-	var end := line.points[line.points.size() - 1]
-	for player in _player_nodes:
-		if player == null or not is_instance_valid(player) or not (player is Node2D):
-			continue
-		if player.has_method("is_alive") and not player.is_alive():
-			continue
-		var distance := ArenaGeometry.distance_to_segment((player as Node2D).global_position, start, end)
-		best = maxf(best, 1.0 - clampf(distance / FLOOR_GRID_PLAYER_HIGHLIGHT_RADIUS, 0.0, 1.0))
-	return best * best
-
 func _physics_process(delta: float) -> void:
-	_update_grid_pulse(delta)
+	_arena_visuals.tick(delta)
 	if _awaiting_mutation_pick:
 		return
 	if _game_paused or pause_panel.visible or get_tree().paused:
