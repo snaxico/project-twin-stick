@@ -106,6 +106,11 @@ patch is implemented and playtest-approved.
 
 ## UI / Tooling
 
+- `CoopManager.gd` is still the in-room orchestrator and `Enemy._combat_owner` facade, but the
+  decomposition has started with stateless helpers extracted:
+  - `CoopFormat.gd` owns room/boss/modifier/buff text, slot color, overbright color, and rarity rank helpers.
+  - `EnemyTypes.gd` owns champion ID/classifier helpers.
+  - `ArenaGeometry.gd` owns pure spawn-position, spread-direction, and segment-distance math.
 - `RunFlow.gd` now owns:
   - next-room choice panel
   - room launch

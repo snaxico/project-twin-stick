@@ -41,9 +41,11 @@
   rebinding; P2 is keyboard-only for now), launches the run into `RunFlow`.
 - `RunFlow.gd` — structured route presentation (round 10: next-choices cards), endless chaining,
   resolution screens. Hosts the in-room game.
-- `CoopManager.gd` — in-room runtime: player/enemy spawning, continuous spawning, pooled
-  projectiles, ability dispatch, reward sequencing (XP picks + weapon cards), boss helper attacks,
-  elite + capped boss add-waves, modifier/objective orchestration, pause/clear runtime freeze.
+- `CoopManager.gd` — in-room runtime orchestrator and `Enemy._combat_owner` facade: player/enemy
+  spawning, continuous spawning, pooled projectiles, ability dispatch, reward sequencing (XP picks +
+  weapon cards), champion helper attacks, modifier/objective orchestration, pause/clear runtime freeze.
+- `CoopFormat.gd` / `EnemyTypes.gd` / `ArenaGeometry.gd` — stateless CoopManager helpers for text/color
+  formatting, champion type classification, and pure arena/spawn geometry.
 - Room types: `combat` / `elite` / `boss` (no rest/shop). Encounter Builder / Debug Menu use the
   single-room debug path — a fast-iteration entry, not a second source of truth.
 
