@@ -8,6 +8,7 @@ const ProjectileRendererData = preload("res://scripts/weapons/ProjectileRenderer
 const MutationSystemData = preload("res://scripts/game/MutationSystem.gd")
 const AbilityRegistryData = preload("res://scripts/game/AbilityRegistry.gd")
 const HudPaletteData = preload("res://scripts/game/HudPalette.gd")
+const CoopFormat = preload("res://scripts/game/CoopFormat.gd")
 const MutationPickUIScene = preload("res://scenes/ui/MutationPickUI.tscn")
 const TempBuffSystemData = preload("res://scripts/buffs/TempBuffSystem.gd")
 const HoldZoneObjectiveData = preload("res://scripts/objectives/HoldZoneObjective.gd")
@@ -404,8 +405,8 @@ func _build_hud() -> void:
 	for index in range(_player_configs.size()):
 		var indicator := PlayerCombatIndicatorData.new()
 		var tint: Color = _player_configs[index].tint
-		var slot_1_color := _get_slot_color(tint, 0)
-		var slot_2_color := _get_slot_color(tint, 1)
+		var slot_1_color := CoopFormat.get_slot_color(tint, 0, HUD_SLOT_2_COLOR)
+		var slot_2_color := CoopFormat.get_slot_color(tint, 1, HUD_SLOT_2_COLOR)
 		indicator.configure_player(tint, slot_1_color, slot_2_color)
 		_hud_root.add_child(indicator)
 		_player_combat_indicators.append(indicator)
@@ -650,11 +651,6 @@ func _build_objective_panel() -> void:
 	_objective_progress_bar.custom_minimum_size = Vector2(340.0, 10.0)
 	_apply_progress_bar_tint(_objective_progress_bar, Color(0.38, 0.88, 0.78, 1.0), 0.86)
 	layout.add_child(_objective_progress_bar)
-
-func _get_slot_color(player_tint: Color, slot_index: int) -> Color:
-	if slot_index == 0:
-		return player_tint.lightened(0.12)
-	return HUD_SLOT_2_COLOR
 
 func _create_hud_trigger_label(text: String, tint: Color) -> Label:
 	var trigger := Label.new()
@@ -1566,7 +1562,7 @@ func _on_mutation_skip_requested(_player_index: int) -> void:
 func _options_contain_rare(options: Array) -> bool:
 	for option_variant in options:
 		var option := option_variant as Dictionary
-		if _rarity_rank(str(option.get("rarity", "common"))) >= 1:
+		if CoopFormat.rarity_rank(str(option.get("rarity", "common"))) >= 1:
 			return true
 	return false
 
@@ -1613,7 +1609,7 @@ func _build_clear_summary() -> String:
 	if not _side_objective_id.is_empty():
 		lines.append("Objective: %s" % _format_objective_text())
 		if _side_objective_completed:
-			lines.append("Buff earned: %s" % _format_buff_name(str(_hold_buff_offer.get("type", ""))))
+			lines.append("Buff earned: %s" % CoopFormat.format_buff_name(str(_hold_buff_offer.get("type", ""))))
 	return "\n".join(lines)
 
 func _on_player_fire_requested(origin: Vector2, direction: Vector2, projectile_config: Dictionary) -> void:
@@ -2367,7 +2363,7 @@ func _refresh_boss_hud() -> void:
 		return
 	var current_health := int(round(float(_active_boss.current_health)))
 	var max_health := int(round(float(_active_boss.max_health)))
-	var title := _format_boss_type()
+	var title := CoopFormat.format_boss_type(str(_room_config.get("boss_type", "")))
 	_boss_health_bar.configure(title if not title.is_empty() else "Champion", Color(1.0, 0.22, 0.14, 0.95))
 	_boss_health_bar.set_health(current_health, max_health)
 
@@ -2381,40 +2377,13 @@ func _set_music_context(context: String) -> void:
 	if MusicEngine != null and MusicEngine.has_method("set_context"):
 		MusicEngine.set_context(context)
 
-func _overbright_color(color: Color, multiplier: float) -> Color:
-	return Color(color.r * multiplier, color.g * multiplier, color.b * multiplier, color.a)
-
 func _build_room_status_text() -> String:
 	if _room_type == "boss":
-		return "Room %d  |  %s  |  %s" % [_room_depth, _format_room_type(), _format_boss_type()]
+		return "Room %d  |  %s  |  %s" % [_room_depth, CoopFormat.format_room_type(_room_type), CoopFormat.format_boss_type(str(_room_config.get("boss_type", "")))]
 	var time_left := maxf(_room_duration - _room_elapsed, 0.0)
 	if _spawning_done:
-		return "Room %d  |  %s  |  %d remaining" % [_room_depth, _format_room_type(), _enemy_nodes.size()]
-	return "Room %d  |  %s  |  %ds  |  %d alive" % [_room_depth, _format_room_type(), int(ceil(time_left)), _enemy_nodes.size()]
-
-func _format_room_type() -> String:
-	match _room_type:
-		"elite":
-			return "Champion"
-		"boss":
-			return "Champion"
-		_:
-			return "Combat"
-
-func _format_boss_type() -> String:
-	var boss_type := str(_room_config.get("boss_type", ""))
-	if boss_type.is_empty():
-		return ""
-	if boss_type.begins_with("boss_"):
-		boss_type = boss_type.trim_prefix("boss_")
-	if boss_type.begins_with("elite_"):
-		boss_type = boss_type.trim_prefix("elite_")
-	var words := boss_type.split("_")
-	var parts: Array = []
-	for word in words:
-		if not word.is_empty():
-			parts.append(word.capitalize())
-	return " ".join(parts)
+		return "Room %d  |  %s  |  %d remaining" % [_room_depth, CoopFormat.format_room_type(_room_type), _enemy_nodes.size()]
+	return "Room %d  |  %s  |  %ds  |  %d alive" % [_room_depth, CoopFormat.format_room_type(_room_type), int(ceil(time_left)), _enemy_nodes.size()]
 
 func _get_current_rare_chance() -> float:
 	var base_chance := lerpf(0.20, 0.45, clampf(float(_room_depth - 1) / 19.0, 0.0, 1.0))
@@ -2422,15 +2391,6 @@ func _get_current_rare_chance() -> float:
 
 func _signature_share(depth: int) -> float:
 	return clampf(float(depth - 4) / 16.0, 0.0, 0.5)
-
-func _rarity_rank(rarity: String) -> int:
-	match rarity:
-		"signature":
-			return 2
-		"rare":
-			return 1
-		_:
-			return 0
 
 func _format_objective_text() -> String:
 	if _side_objective_completed:
@@ -2449,7 +2409,7 @@ func _build_side_objective_text() -> String:
 	if _side_objective_id.is_empty():
 		return ""
 	if _side_objective_completed:
-		return "Objective complete: %s Buff" % _format_buff_name(str(_hold_buff_offer.get("type", "")))
+		return "Objective complete: %s Buff" % CoopFormat.format_buff_name(str(_hold_buff_offer.get("type", "")))
 	match _side_objective_id:
 		"hold_zone":
 			return _hold_zone.get_progress_text() if _hold_zone != null and is_instance_valid(_hold_zone) else ""
@@ -2611,9 +2571,9 @@ func _populate_modifier_hud() -> void:
 		var chip := PanelContainer.new()
 		chip.custom_minimum_size = Vector2(0.0, 28.0)
 		var style := StyleBoxFlat.new()
-		style.bg_color = _get_modifier_chip_color(mod_id)
+		style.bg_color = CoopFormat.get_modifier_chip_color(mod_id, _modifier_definitions)
 		style.set_border_width_all(1)
-		style.border_color = _get_modifier_chip_color(mod_id).lightened(0.3)
+		style.border_color = CoopFormat.get_modifier_chip_color(mod_id, _modifier_definitions).lightened(0.3)
 		style.corner_radius_top_left = 4
 		style.corner_radius_top_right = 4
 		style.corner_radius_bottom_left = 4
@@ -2621,7 +2581,7 @@ func _populate_modifier_hud() -> void:
 		style.set_content_margin_all(6)
 		chip.add_theme_stylebox_override("panel", style)
 		var lbl := Label.new()
-		lbl.text = _format_modifier_display_name(mod_id)
+		lbl.text = CoopFormat.format_modifier_display_name(mod_id, _modifier_definitions)
 		chip.add_child(lbl)
 		_modifier_hud.add_child(chip)
 
@@ -2697,29 +2657,6 @@ func _load_modifier_definitions() -> void:
 		if modifier_id.is_empty():
 			continue
 		_modifier_definitions[modifier_id] = definition
-
-func _get_modifier_chip_color(mod_id: String) -> Color:
-	var category := str((_modifier_definitions.get(mod_id, {}) as Dictionary).get("category", "minor"))
-	return Color(0.86, 0.32, 0.22, 0.62) if category == "major" else Color(0.9, 0.68, 0.22, 0.62)
-
-func _format_modifier_display_name(mod_id: String) -> String:
-	var definition := _modifier_definitions.get(mod_id, {}) as Dictionary
-	if not definition.is_empty():
-		return str(definition.get("name", mod_id))
-	var parts: Array = []
-	for word in mod_id.split("_"):
-		if not word.is_empty():
-			parts.append(word.capitalize())
-	return " ".join(parts)
-
-func _format_buff_name(buff_type: String) -> String:
-	match buff_type:
-		"attack_speed":
-			return "Attack Speed"
-		"damage":
-			return "Damage"
-		_:
-			return "Speed"
 
 func spawn_enemy_shockwave(origin: Vector2, radius: float, damage: int, knockback_force: float, color: Color, destroy_projectiles: bool = false) -> void:
 	for player in _player_nodes:
@@ -3314,7 +3251,7 @@ func _create_build_ability_card(player, player_tint: Color, slot_index: int) -> 
 	var cooldown := float(slot_data.get("base_cooldown", 0.0))
 	if cooldown <= 0.0:
 		cooldown = float(_ability_registry.get_definition(ability_id).get("cooldown", 0.0))
-	var slot_color := _get_slot_color(player_tint, slot_index)
+	var slot_color := CoopFormat.get_slot_color(player_tint, slot_index, HUD_SLOT_2_COLOR)
 	var card := PanelContainer.new()
 	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var style := StyleBoxFlat.new()
@@ -3354,7 +3291,7 @@ func _create_build_ability_card(player, player_tint: Color, slot_index: int) -> 
 
 func _create_mutation_chip(entry: Dictionary) -> PanelContainer:
 	var rarity := str(entry.get("rarity", "common"))
-	var rarity_rank := _rarity_rank(rarity)
+	var rarity_rank := CoopFormat.rarity_rank(rarity)
 	var rarity_color := Color(1.0, 0.42, 0.92, 1.0) if rarity_rank >= 2 else (Color(1.0, 0.78, 0.32, 1.0) if rarity_rank == 1 else Color(0.48, 0.74, 1.0, 1.0))
 	var group_color := IconFactoryData.get_group_color(str(entry.get("group", "attribute")))
 	var chip := PanelContainer.new()
@@ -3383,8 +3320,8 @@ func _create_mutation_chip(entry: Dictionary) -> PanelContainer:
 	return chip
 
 func _compare_mutation_entries(left: Dictionary, right: Dictionary) -> bool:
-	var left_rarity_rank := _rarity_rank(str(left.get("rarity", "common")))
-	var right_rarity_rank := _rarity_rank(str(right.get("rarity", "common")))
+	var left_rarity_rank := CoopFormat.rarity_rank(str(left.get("rarity", "common")))
+	var right_rarity_rank := CoopFormat.rarity_rank(str(right.get("rarity", "common")))
 	if left_rarity_rank != right_rarity_rank:
 		return left_rarity_rank > right_rarity_rank
 	return str(left.get("name", "")).naturalnocasecmp_to(str(right.get("name", ""))) < 0
