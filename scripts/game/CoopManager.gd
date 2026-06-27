@@ -10,6 +10,7 @@ const AbilityRegistryData = preload("res://scripts/game/AbilityRegistry.gd")
 const HudPaletteData = preload("res://scripts/game/HudPalette.gd")
 const CoopFormat = preload("res://scripts/game/CoopFormat.gd")
 const EnemyTypes = preload("res://scripts/game/EnemyTypes.gd")
+const ArenaGeometry = preload("res://scripts/game/ArenaGeometry.gd")
 const MutationPickUIScene = preload("res://scenes/ui/MutationPickUI.tscn")
 const TempBuffSystemData = preload("res://scripts/buffs/TempBuffSystem.gd")
 const HoldZoneObjectiveData = preload("res://scripts/objectives/HoldZoneObjective.gd")
@@ -1239,17 +1240,9 @@ func _get_grid_player_glow(line: Line2D) -> float:
 			continue
 		if player.has_method("is_alive") and not player.is_alive():
 			continue
-		var distance := _distance_to_segment((player as Node2D).global_position, start, end)
+		var distance := ArenaGeometry.distance_to_segment((player as Node2D).global_position, start, end)
 		best = maxf(best, 1.0 - clampf(distance / FLOOR_GRID_PLAYER_HIGHLIGHT_RADIUS, 0.0, 1.0))
 	return best * best
-
-func _distance_to_segment(point: Vector2, start: Vector2, end: Vector2) -> float:
-	var segment := end - start
-	var length_sq := segment.length_squared()
-	if length_sq <= 0.001:
-		return point.distance_to(start)
-	var t := clampf((point - start).dot(segment) / length_sq, 0.0, 1.0)
-	return point.distance_to(start + segment * t)
 
 func _physics_process(delta: float) -> void:
 	_update_grid_pulse(delta)
@@ -1458,7 +1451,7 @@ func _get_burst_size(is_opening: bool) -> int:
 	return maxi(1, int(round(base + continuation_bonus)))
 
 func _get_champion_spawn_position() -> Vector2:
-	return ARENA_CENTER + Vector2(randf_range(-180.0, 180.0), randf_range(-120.0, 120.0))
+	return ArenaGeometry.champion_spawn_position(ARENA_CENTER)
 
 func _handle_room_clear() -> void:
 	if _room_clear_started:
@@ -1615,7 +1608,7 @@ func _on_player_fire_requested(origin: Vector2, direction: Vector2, projectile_c
 	var split_extra_count := int(projectile_config.get("split_extra_count", 0))
 	var spread_step := deg_to_rad(float(projectile_config.get("split_spread_degrees", 15.0)))
 	var projectile_count: int = (1 + split_extra_count) * maxi(1, int(projectile_config.get("projectile_multiplier", 1)))
-	var directions := _build_spread_directions(direction, projectile_count, spread_step)
+	var directions := ArenaGeometry.build_spread_directions(direction, projectile_count, spread_step)
 	for projectile_direction in directions:
 		if _active_projectiles.size() >= MAX_ACTIVE_PROJECTILES:
 			return
@@ -2945,21 +2938,16 @@ func _get_enemy_separation_cell(world_position: Vector2) -> Vector2i:
 func _get_player_spawn_position(index: int) -> Vector2:
 	if _room_type == "boss":
 		return _get_boss_room_player_spawn_position(index)
-	return ARENA_CENTER + Vector2((index % 2) * 160.0 - 80.0, floor(index / 2.0) * 120.0 - 60.0)
+	return ArenaGeometry.default_player_spawn_position(index, ARENA_CENTER)
 
 func _get_boss_room_player_spawn_position(index: int) -> Vector2:
 	var player_count := maxi(_player_nodes.size(), _player_configs.size())
-	var horizontal_spacing := 180.0
-	var center_offset := (float(index) - (float(maxi(player_count, 1)) - 1.0) * 0.5) * horizontal_spacing
-	return Vector2(
-		clampf(ARENA_CENTER.x + center_offset, ARENA_RECT.position.x + 220.0, ARENA_RECT.end.x - 220.0),
-		clampf(ARENA_CENTER.y + BOSS_PLAYER_SPAWN_DISTANCE, ARENA_RECT.position.y + 220.0, ARENA_RECT.end.y - 220.0)
-	)
+	return ArenaGeometry.boss_room_player_spawn_position(index, player_count, ARENA_CENTER, ARENA_RECT, BOSS_PLAYER_SPAWN_DISTANCE)
 
 func _get_enemy_spawn_position() -> Vector2:
 	var inner_margin := ARENA_MARGIN + 48.0
 	var edge := randi() % 4
-	return _get_enemy_spawn_position_for_edge(edge, inner_margin)
+	return ArenaGeometry.enemy_spawn_position_for_edge(edge, inner_margin, ARENA_SIZE)
 
 func _get_elite_spawn_position() -> Vector2:
 	var best_position := _get_enemy_spawn_position()
@@ -2968,7 +2956,7 @@ func _get_elite_spawn_position() -> Vector2:
 		var candidate := _get_enemy_spawn_position_for_index(attempt, randi() % 4)
 		var min_distance_sq := INF
 		for player_index in range(maxi(_player_configs.size(), 1)):
-			var spawn_position := ARENA_CENTER + Vector2((player_index % 2) * 160.0 - 80.0, floor(player_index / 2.0) * 120.0 - 60.0)
+			var spawn_position := ArenaGeometry.default_player_spawn_position(player_index, ARENA_CENTER)
 			min_distance_sq = minf(min_distance_sq, candidate.distance_squared_to(spawn_position))
 		if min_distance_sq >= 600.0 * 600.0:
 			return candidate
@@ -2979,31 +2967,7 @@ func _get_elite_spawn_position() -> Vector2:
 
 func _get_enemy_spawn_position_for_index(spawn_index: int, start_edge: int) -> Vector2:
 	var inner_margin := ARENA_MARGIN + 48.0
-	var edge := (start_edge + spawn_index) % 4
-	return _get_enemy_spawn_position_for_edge(edge, inner_margin)
-
-func _get_enemy_spawn_position_for_edge(edge: int, inner_margin: float) -> Vector2:
-	match edge:
-		0:
-			return Vector2(randf_range(inner_margin, ARENA_SIZE.x - inner_margin), inner_margin + randf_range(0.0, 60.0))
-		1:
-			return Vector2(randf_range(inner_margin, ARENA_SIZE.x - inner_margin), ARENA_SIZE.y - inner_margin - randf_range(0.0, 60.0))
-		2:
-			return Vector2(inner_margin + randf_range(0.0, 60.0), randf_range(inner_margin, ARENA_SIZE.y - inner_margin))
-		_:
-			return Vector2(ARENA_SIZE.x - inner_margin - randf_range(0.0, 60.0), randf_range(inner_margin, ARENA_SIZE.y - inner_margin))
-
-func _build_spread_directions(base_direction: Vector2, projectile_count: int, spread_step: float) -> Array:
-	var normalized := base_direction.normalized() if base_direction.length() > 0.0 else Vector2.RIGHT
-	if projectile_count <= 1 or spread_step <= 0.0:
-		return [normalized]
-	var directions: Array = [normalized]
-	var extras := projectile_count - 1
-	for index in range(1, extras + 1):
-		var side := 1 if index % 2 == 1 else -1
-		var rank := int(ceil(float(index) / 2.0))
-		directions.append(normalized.rotated(spread_step * float(rank) * float(side)))
-	return directions
+	return ArenaGeometry.enemy_spawn_position_for_index(spawn_index, start_edge, inner_margin, ARENA_SIZE)
 
 func _lock_player_input(locked: bool) -> void:
 	for player in _player_nodes:
