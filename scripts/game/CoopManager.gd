@@ -13,6 +13,7 @@ const ArenaVisualsData = preload("res://scripts/game/ArenaVisuals.gd")
 const GameHudData = preload("res://scripts/game/GameHud.gd")
 const WaveDirectorData = preload("res://scripts/game/WaveDirector.gd")
 const SideObjectiveControllerData = preload("res://scripts/game/SideObjectiveController.gd")
+const MomentumTrackerData = preload("res://scripts/game/MomentumTracker.gd")
 const MutationPickUIScene = preload("res://scenes/ui/MutationPickUI.tscn")
 const FireFloorModifierData = preload("res://scripts/modifiers/FireFloorModifier.gd")
 const IceZoneModifierData = preload("res://scripts/modifiers/IceZoneModifier.gd")
@@ -48,9 +49,6 @@ const BOSS_HIT_FEEDBACK_INTERVAL := 0.22
 const HEALTH_DROP_CHANCE := 0.06
 const MUTATION_REROLL_BASE_COST := 100
 const ENEMY_SEPARATION_CELL_SIZE := 96.0
-const MOMENTUM_THRESHOLDS := [10, 25, 45, 70]
-const MOMENTUM_MOVE_BONUSES := [0.0, 0.10, 0.20, 0.35, 0.50]
-const MOMENTUM_FIRE_RATE_BONUSES := [0.0, 0.15, 0.30, 0.50, 0.75]
 const HUD_SLOT_2_COLOR := HudPaletteData.SLOT_2_COLOR
 const GAMEPLAY_INPUT_SUFFIXES := [
 	"move_left",
@@ -144,7 +142,6 @@ var _awaiting_mutation_pick := false
 var _room_elapsed := 0.0
 var _enemies_killed := 0
 var _champions_killed := 0
-var _room_max_momentum_tier := 0
 var _room_score_recorded := false
 var _pending_pick_consumes_levelup := false
 var _pending_champion_bonus_pick := false
@@ -159,6 +156,7 @@ var _arena_visuals = null
 var _hud = null
 var _wave_director = null
 var _side_objectives = null
+var _momentum_tracker = null
 var _modifier_definitions: Dictionary = {}
 var _minor_modifier_flags := {
 	"accelerating_waves": false,
@@ -167,8 +165,6 @@ var _minor_modifier_flags := {
 	"shielded": false,
 	"explosive_death": false,
 }
-var _momentum_progress_by_player: Array = []
-var _momentum_tier_by_player: Array = []
 var _fire_floor_modifier = null
 var _ice_zone_modifier = null
 var _mine_field_modifier = null
@@ -249,6 +245,10 @@ func _ready() -> void:
 	_side_objectives.name = "SideObjectiveController"
 	_side_objectives.setup(self, effects, pickups, ARENA_RECT)
 	add_child(_side_objectives)
+	_momentum_tracker = MomentumTrackerData.new()
+	_momentum_tracker.name = "MomentumTracker"
+	_momentum_tracker.setup(self)
+	add_child(_momentum_tracker)
 	_hud = GameHudData.new()
 	_hud.name = "GameHud"
 	_hud.setup(self, ui_layer)
@@ -467,76 +467,21 @@ func _rebuild_player_loadouts() -> void:
 		}
 		_compiled_loadouts.append(compiled_loadout)
 		_player_nodes[index].apply_loadout(compiled_loadout)
-		if index < _momentum_tier_by_player.size():
-			_apply_momentum_to_player(index)
+		if _momentum_tracker != null:
+			_momentum_tracker.update_players(_player_nodes)
+			_momentum_tracker.apply_to_player(index)
 
 func _restore_momentum() -> void:
-	_momentum_progress_by_player.clear()
-	_momentum_tier_by_player.clear()
-	for index in range(_player_nodes.size()):
-		var state := RunState.get_momentum_state(index)
-		_momentum_progress_by_player.append(int(state.get("progress", 0)))
-		_momentum_tier_by_player.append(int(state.get("tier", 0)))
-		_room_max_momentum_tier = maxi(_room_max_momentum_tier, int(state.get("tier", 0)))
-		_apply_momentum_to_player(index)
+	if _momentum_tracker != null:
+		_momentum_tracker.start_room(_player_nodes)
 
 func _gain_shared_momentum() -> void:
-	for index in range(_player_nodes.size()):
-		_momentum_progress_by_player[index] = int(_momentum_progress_by_player[index]) + 1
-		_update_momentum_tier(index)
-		_store_momentum(index)
+	if _momentum_tracker != null:
+		_momentum_tracker.gain_shared_momentum()
 
 func _drop_player_momentum(player_index: int) -> void:
-	if player_index < 0 or player_index >= _momentum_tier_by_player.size():
-		return
-	var new_tier: int = max(0, int(_momentum_tier_by_player[player_index]) - 2)
-	_momentum_tier_by_player[player_index] = new_tier
-	_momentum_progress_by_player[player_index] = _get_min_progress_for_momentum_tier(new_tier)
-	_apply_momentum_to_player(player_index)
-	_store_momentum(player_index)
-
-func _update_momentum_tier(player_index: int) -> void:
-	if player_index < 0 or player_index >= _momentum_progress_by_player.size():
-		return
-	var previous_tier := int(_momentum_tier_by_player[player_index]) if player_index < _momentum_tier_by_player.size() else 0
-	var progress := int(_momentum_progress_by_player[player_index])
-	var tier := 0
-	for threshold_index in range(MOMENTUM_THRESHOLDS.size()):
-		if progress >= int(MOMENTUM_THRESHOLDS[threshold_index]):
-			tier = threshold_index + 1
-	_momentum_tier_by_player[player_index] = tier
-	_room_max_momentum_tier = maxi(_room_max_momentum_tier, tier)
-	if tier > previous_tier:
-		_on_momentum_tier_gained(tier)
-	_apply_momentum_to_player(player_index)
-
-func _on_momentum_tier_gained(tier: int) -> void:
-	# Subtle reward pulse on climbing a momentum tier (kept light — these come often in good play).
-	_play_sfx("play_pickup", [0.6 + 0.18 * float(tier)])
-	_spawn_screen_flash(Color(0.42, 1.0, 0.86, 0.05 + 0.02 * float(tier)), 0.18)
-
-func _store_momentum(player_index: int) -> void:
-	if player_index < 0 or player_index >= _momentum_tier_by_player.size() or player_index >= _momentum_progress_by_player.size():
-		return
-	RunState.set_momentum_state(player_index, int(_momentum_tier_by_player[player_index]), int(_momentum_progress_by_player[player_index]))
-
-func _apply_momentum_to_player(player_index: int) -> void:
-	if player_index < 0 or player_index >= _player_nodes.size():
-		return
-	var player = _player_nodes[player_index]
-	if player == null or not is_instance_valid(player) or not player.has_method("set_momentum_tier"):
-		return
-	var tier := int(_momentum_tier_by_player[player_index]) if player_index < _momentum_tier_by_player.size() else 0
-	player.set_momentum_tier(
-		tier,
-		float(MOMENTUM_MOVE_BONUSES[tier]),
-		float(MOMENTUM_FIRE_RATE_BONUSES[tier])
-	)
-
-func _get_min_progress_for_momentum_tier(tier: int) -> int:
-	if tier <= 0:
-		return 0
-	return int(MOMENTUM_THRESHOLDS[clampi(tier, 1, 4) - 1])
+	if _momentum_tracker != null:
+		_momentum_tracker.drop_player_momentum(player_index)
 
 func _build_runtime_ability(player_index: int, ability_definition: Dictionary) -> Dictionary:
 	if ability_definition.is_empty():
@@ -580,7 +525,6 @@ func _start_room() -> void:
 	_set_music_context("combat")
 	_spawn_screen_flash(Color(0.0, 0.0, 0.0, 0.5), 0.4)  # room-intro fade-in from black
 	_rebuild_player_loadouts()
-	_room_max_momentum_tier = 0
 	_restore_momentum()
 	_room_clear_started = false
 	_awaiting_mutation_pick = false
@@ -1222,6 +1166,9 @@ func _spawn_screen_flash(color: Color, duration: float) -> void:
 	tween.tween_property(flash, "modulate:a", 0.0, maxf(duration, 0.01))
 	tween.tween_callback(flash.queue_free)
 
+func spawn_screen_flash(color: Color, duration: float) -> void:
+	_spawn_screen_flash(color, duration)
+
 func _on_enemy_fire_requested(origin: Vector2, direction: Vector2, speed: float, damage: int, team: String, _color: Color, projectile_scale: float) -> void:
 	_projectile_system.handle_enemy_fire(origin, direction, speed, damage, team, projectile_scale)
 
@@ -1377,7 +1324,8 @@ func _record_room_score(cleared: bool) -> void:
 
 func _build_room_score_delta(cleared: bool) -> int:
 	var clear_credit := 100 if cleared else 0
-	return clear_credit + _enemies_killed + _champions_killed * 250 + _room_max_momentum_tier * 50
+	var room_max_momentum_tier: int = _momentum_tracker.get_room_max_tier() if _momentum_tracker != null else 0
+	return clear_credit + _enemies_killed + _champions_killed * 250 + room_max_momentum_tier * 50
 
 func _refresh_hud() -> void:
 	if _hud != null:
@@ -1742,7 +1690,7 @@ func get_modifier_definitions() -> Dictionary:
 	return _modifier_definitions
 
 func get_momentum_tier(player_index: int) -> int:
-	return int(_momentum_tier_by_player[player_index]) if player_index >= 0 and player_index < _momentum_tier_by_player.size() else 0
+	return _momentum_tracker.get_momentum_tier(player_index) if _momentum_tracker != null else 0
 
 func get_minor_modifier_flags() -> Dictionary:
 	return _minor_modifier_flags.duplicate()

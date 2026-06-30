@@ -125,6 +125,8 @@ patch is implemented and playtest-approved.
   - `SideObjectiveController.gd` owns hold-zone / kill-streak / collector state, temp-buff reward
     application, collector orb spawning, side-objective HUD view data, and clear-summary side-objective text.
     `CoopManager.gd` forwards enemy-killed and player-damaged events in the same runtime order.
+  - `MomentumTracker.gd` owns per-player momentum progress/tier persistence, momentum tier application,
+    tier feedback, and the room max momentum tier used by scoring.
 - `RunFlow.gd` now owns:
   - next-room choice panel
   - room launch

@@ -63,6 +63,9 @@
   hold-zone, kill-streak, collector orbs, temp-buff reward application, side-objective HUD view data, and
   clear-summary objective text. CoopManager forwards enemy-killed and player-damaged hooks at the existing
   callback sites.
+- `MomentumTracker.gd` — CoopManager-owned child node for per-player momentum progress/tier state,
+  RunState momentum persistence, tier feedback, momentum stat application, and room max tier reporting for
+  score calculation.
 - Room types: `combat` / `elite` / `boss` (no rest/shop). Encounter Builder / Debug Menu use the
   single-room debug path — a fast-iteration entry, not a second source of truth.
 
