@@ -11,6 +11,7 @@ const ArenaGeometry = preload("res://scripts/game/ArenaGeometry.gd")
 const ProjectileSystemData = preload("res://scripts/game/ProjectileSystem.gd")
 const ArenaVisualsData = preload("res://scripts/game/ArenaVisuals.gd")
 const GameHudData = preload("res://scripts/game/GameHud.gd")
+const WaveDirectorData = preload("res://scripts/game/WaveDirector.gd")
 const MutationPickUIScene = preload("res://scenes/ui/MutationPickUI.tscn")
 const TempBuffSystemData = preload("res://scripts/buffs/TempBuffSystem.gd")
 const HoldZoneObjectiveData = preload("res://scripts/objectives/HoldZoneObjective.gd")
@@ -45,14 +46,12 @@ const FLOOR_GRID_PLAYER_HIGHLIGHT_RADIUS := 520.0
 const REVIVE_RADIUS := 150.0
 const REVIVE_HOLD_DURATION := 1.2
 const HUD_REFRESH_INTERVAL := 0.08
-const CHAMPION_SPAWN_DELAY := 10.0
 const BOSS_HIT_FEEDBACK_INTERVAL := 0.22
 const COLLECTOR_TARGET := 8
 const COLLECTOR_TOTAL_SPAWN := 12
 const COLLECTOR_SPAWN_INTERVAL := 2.5
 const HEALTH_DROP_CHANCE := 0.06
 const MUTATION_REROLL_BASE_COST := 100
-const BASE_RAMP_DURATION := 45.0
 const ENEMY_SEPARATION_CELL_SIZE := 96.0
 const MOMENTUM_THRESHOLDS := [10, 25, 45, 70]
 const MOMENTUM_MOVE_BONUSES := [0.0, 0.10, 0.20, 0.35, 0.50]
@@ -147,33 +146,23 @@ var _room_depth := 1
 var _room_rare_bonus := 0.0
 var _room_clear_started := false
 var _awaiting_mutation_pick := false
-var _boss_spawned := false
-var _room_duration := 45.0
 var _room_elapsed := 0.0
-var _spawn_interval := 1.6
-var _next_spawn_at := 0.0
-var _spawn_count_accumulator := 0.0
-var _enemies_spawned := 0
 var _enemies_killed := 0
 var _champions_killed := 0
 var _room_max_momentum_tier := 0
 var _room_score_recorded := false
-var _pending_enemy_spawns := 0
-var _spawning_done := false
-var _burst_interval := 10.0
-var _next_burst_at := 0.0
 var _pending_pick_consumes_levelup := false
 var _pending_champion_bonus_pick := false
 var _mutation_pick_round_force_rare := false
 var _mutation_pick_reroll_counts: Array = []
 var _pending_clear_summary := ""
-var _active_boss = null
 var _next_boss_hit_feedback_at := 0.0
 var _revive_progress_by_player_id: Dictionary = {}
 var _mutation_pick_ui = null
 var _active_modifiers: Array = []
 var _arena_visuals = null
 var _hud = null
+var _wave_director = null
 var _modifier_definitions: Dictionary = {}
 var _minor_modifier_flags := {
 	"accelerating_waves": false,
@@ -267,6 +256,10 @@ func _ready() -> void:
 	)
 	add_child(_arena_visuals)
 	_arena_visuals.rebuild_arena()
+	_wave_director = WaveDirectorData.new()
+	_wave_director.name = "WaveDirector"
+	_wave_director.setup(self, enemies)
+	add_child(_wave_director)
 	_hud = GameHudData.new()
 	_hud.name = "GameHud"
 	_hud.setup(self, ui_layer)
@@ -604,26 +597,16 @@ func _start_room() -> void:
 	_awaiting_mutation_pick = false
 	_pending_pick_consumes_levelup = false
 	_pending_champion_bonus_pick = false
-	_active_boss = null
-	_boss_spawned = false
 	_next_boss_hit_feedback_at = 0.0
 	_room_elapsed = 0.0
 	_room_type = str(_room_config.get("room_type", "combat"))
 	_room_enemy_pool = ( _room_config.get("enemy_pool", []) as Array).duplicate()
 	_room_depth = int(_room_config.get("depth", 1))
 	_room_rare_bonus = maxf(float(_room_config.get("rare_bonus", 0.0)), 0.0)
-	_room_duration = _get_room_duration()
-	_spawn_interval = _get_spawn_interval()
-	_next_spawn_at = 0.4
-	_spawn_count_accumulator = 0.0
-	_enemies_spawned = 0
 	_enemies_killed = 0
 	_champions_killed = 0
 	_room_score_recorded = false
-	_pending_enemy_spawns = 0
-	_spawning_done = false
-	_burst_interval = _get_burst_interval()
-	_next_burst_at = _burst_interval
+	_wave_director.start_room(_room_config, _room_enemy_pool, _room_depth)
 	_side_objective_id = str(_room_config.get("side_objective", ""))
 	_side_objective_completed = false
 	_kill_streak_progress = 0
@@ -646,7 +629,7 @@ func _start_room() -> void:
 		player.global_position = _get_player_spawn_position(int(player.player_index))
 	_setup_side_objective()
 	_apply_active_modifiers()
-	_spawn_opening_burst()
+	_wave_director.spawn_opening_burst()
 	_refresh_hud()
 
 func _clear_runtime_nodes() -> void:
@@ -825,7 +808,7 @@ func _physics_process(delta: float) -> void:
 	_update_hazards(delta)
 	_update_revives(delta)
 	_clamp_runtime_nodes()
-	_check_wave_progress()
+	_wave_director.check_wave_progress()
 	var now := _current_time_seconds()
 	_projectile_system.update_beam_visual_timeouts(now)
 	if now >= _next_hud_refresh_at:
@@ -864,158 +847,34 @@ func _update_hazards(delta: float) -> void:
 			hazard.update_zone(delta, _player_nodes)
 	_cleanup_helpers()
 
-func _check_wave_progress() -> void:
-	if _room_clear_started:
-		return
-	if _room_type == "boss" and not _boss_spawned and _room_elapsed >= _get_champion_spawn_delay():
-		_spawn_boss()
-	if not _spawning_done:
-		_continuous_spawn()
-	# Defensive: a champion room must spawn its champion before it can clear, even if future
-	# tuning ever made the spawn delay exceed the room duration (otherwise it could soft-lock).
-	if _room_type == "boss" and not _boss_spawned and _spawning_done:
-		_spawn_boss()
-	if _spawning_done and _enemy_nodes.is_empty() and _pending_enemy_spawns <= 0:
-		_handle_room_clear()
-
-func _continuous_spawn() -> void:
-	if _room_elapsed >= _room_duration:
-		_spawning_done = true
-		return
-	var health_multiplier := 0.5 if bool(_minor_modifier_flags["swarm"]) else 1.0
-	if _room_elapsed >= _next_spawn_at:
-		var current_interval := _spawn_interval
-		var base_ramp := clampf(_room_elapsed / BASE_RAMP_DURATION, 0.0, 1.0)
-		current_interval = lerpf(_spawn_interval, _spawn_interval * 0.55, base_ramp)
-		if bool(_minor_modifier_flags["accelerating_waves"]):
-			var ramp := clampf(_room_elapsed / min(_room_duration, 25.0), 0.0, 1.0)
-			current_interval = lerpf(current_interval, current_interval * 0.6, ramp)
-		_next_spawn_at = _room_elapsed + current_interval
-		var batch := _consume_scaled_stream_count(2 if bool(_minor_modifier_flags["swarm"]) else 1)
-		var stream_start_edge := randi() % 4 if batch > 1 else 0
-		for index in range(batch):
-			var enemy_type := _roll_wave_enemy_type(_room_enemy_pool)
-			var spawn_position := _get_enemy_spawn_position() if batch == 1 else _get_enemy_spawn_position_for_index(index, stream_start_edge)
-			_queue_enemy_spawn(enemy_type, spawn_position, health_multiplier)
-			_enemies_spawned += 1
-	if _room_elapsed >= _next_burst_at:
-		_next_burst_at = _room_elapsed + _burst_interval
-		var burst_size := _get_burst_size(false)
-		if bool(_minor_modifier_flags["swarm"]):
-			burst_size *= 2
-		burst_size = _scale_spawn_count(burst_size)
-		var burst_start_edge := randi() % 4
-		for index in range(burst_size):
-			var enemy_type := _roll_wave_enemy_type(_room_enemy_pool)
-			var spawn_position := _get_enemy_spawn_position_for_index(index, burst_start_edge)
-			_queue_enemy_spawn(enemy_type, spawn_position, health_multiplier)
-			_enemies_spawned += 1
-
-func _spawn_opening_burst() -> void:
-	var burst_size := _get_burst_size(true)
-	if bool(_minor_modifier_flags["swarm"]):
-		burst_size *= 2
-	burst_size = _scale_spawn_count(burst_size)
-	var health_multiplier := 0.5 if bool(_minor_modifier_flags["swarm"]) else 1.0
-	var start_edge := randi() % 4
-	for index in range(burst_size):
-		var enemy_type := _roll_wave_enemy_type(_room_enemy_pool)
-		var spawn_position := _get_enemy_spawn_position_for_index(index, start_edge)
-		_queue_enemy_spawn(enemy_type, spawn_position, health_multiplier)
-		_enemies_spawned += 1
-
 func _spawn_enemy_instance(enemy_type: String, spawn_position: Vector2, health_multiplier: float = 1.0) -> Node2D:
-	var enemy = EnemySceneData.instantiate()
-	enemies.add_child(enemy)
-	enemy.global_position = spawn_position
-	enemy.setup(enemy_type, self)
-	enemy.apply_room_modifier({
-		"health_multiplier": health_multiplier,
-		"speed_multiplier": 1.33 if bool(_minor_modifier_flags["enemy_speed"]) else 1.0,
-		"fire_interval_multiplier": 0.75 if bool(_minor_modifier_flags["enemy_speed"]) else 1.0,
-		"shielded": bool(_minor_modifier_flags["shielded"]),
-		"death_explosion_radius": 80.0 if bool(_minor_modifier_flags["explosive_death"]) else 0.0,
-		"death_explosion_damage": 10 if bool(_minor_modifier_flags["explosive_death"]) else 0,
-	})
-	enemy.enemy_died.connect(_on_enemy_died)
-	enemy.fire_requested.connect(_on_enemy_fire_requested)
-	enemy.hit_received.connect(_on_enemy_hit_received)
-	_enemy_nodes.append(enemy)
-	return enemy
+	return _wave_director.spawn_enemy_instance(enemy_type, spawn_position, health_multiplier) if _wave_director != null else null
 
-func _get_enemy_count_multiplier() -> float:
-	return 1.5 if _player_configs.size() >= 2 else 1.0
-
-func _scale_spawn_count(base_count: int) -> int:
-	return maxi(0, int(round(float(base_count) * _get_enemy_count_multiplier())))
-
-func _consume_scaled_stream_count(base_batch: int) -> int:
-	_spawn_count_accumulator += float(base_batch) * _get_enemy_count_multiplier()
-	var spawn_count := int(floor(_spawn_count_accumulator))
-	_spawn_count_accumulator -= float(spawn_count)
-	return maxi(spawn_count, 0)
+func spawn_enemy_instance(enemy_type: String, spawn_position: Vector2, health_multiplier: float = 1.0) -> Node2D:
+	return _spawn_enemy_instance(enemy_type, spawn_position, health_multiplier)
 
 func _queue_enemy_spawn(enemy_type: String, spawn_position: Vector2, health_multiplier: float = 1.0) -> void:
-	_pending_enemy_spawns += 1
-	call_deferred("_spawn_queued_enemy_instance", enemy_type, spawn_position, health_multiplier)
+	if _wave_director != null:
+		_wave_director.queue_enemy_spawn(enemy_type, spawn_position, health_multiplier)
 
-func _spawn_queued_enemy_instance(enemy_type: String, spawn_position: Vector2, health_multiplier: float) -> void:
-	_pending_enemy_spawns = max(_pending_enemy_spawns - 1, 0)
-	if _room_clear_started or not is_inside_tree():
-		return
-	_spawn_enemy_instance(enemy_type, spawn_position, health_multiplier)
+func queue_enemy_spawn(enemy_type: String, spawn_position: Vector2, health_multiplier: float = 1.0) -> void:
+	_queue_enemy_spawn(enemy_type, spawn_position, health_multiplier)
 
-func _spawn_boss() -> void:
-	if _boss_spawned or _room_clear_started:
-		return
-	_boss_spawned = true
-	var boss_type := str(_room_config.get("boss_type", "warden"))
-	var boss = _spawn_enemy_instance(EnemyTypes.champion_enemy_id(boss_type), _get_champion_spawn_position(), 1.0)
-	_active_boss = boss
-	if boss != null and boss.has_method("apply_champion_scale"):
-		boss.apply_champion_scale(_room_depth, _player_nodes.size())
+func register_enemy(enemy: Node2D) -> void:
+	if enemy != null and is_instance_valid(enemy) and not _enemy_nodes.has(enemy):
+		_enemy_nodes.append(enemy)
+
+func is_enemy_list_empty() -> bool:
+	return _enemy_nodes.is_empty()
+
+func is_room_clear_started() -> bool:
+	return _room_clear_started
+
+func handle_wave_room_clear() -> void:
+	_handle_room_clear()
+
+func on_boss_spawned() -> void:
 	_spawn_boss_entrance_vfx()
-
-func _roll_wave_enemy_type(pool: Array) -> String:
-	if pool.is_empty():
-		return "chaser"
-	return str(pool[randi() % pool.size()])
-
-func _get_room_duration() -> float:
-	var progress := RunState.get_run_progress()
-	var arc_progress := clampf(progress, 0.0, 1.0)
-	var continuation := maxf(progress - 1.0, 0.0)
-	return lerpf(32.0, 43.0, arc_progress) + continuation * 4.0
-
-func _get_spawn_interval() -> float:
-	var progress := RunState.get_run_progress()
-	var arc_progress := clampf(progress, 0.0, 1.0)
-	var continuation := maxf(progress - 1.0, 0.0)
-	var base := lerpf(0.68, 0.48, arc_progress) - continuation * 0.18
-	return maxf(base, 0.34)
-
-func _get_champion_spawn_delay() -> float:
-	if _room_config.has("boss_spawn_delay"):
-		return maxf(0.0, float(_room_config.get("boss_spawn_delay", CHAMPION_SPAWN_DELAY)))
-	var continuation_depth := maxi(_room_depth - RunState.RUN_LENGTH, 0)
-	return maxf(7.0, CHAMPION_SPAWN_DELAY - float(continuation_depth) * 0.15)
-
-func _get_burst_interval() -> float:
-	var progress := RunState.get_run_progress()
-	var arc_progress := clampf(progress, 0.0, 1.0)
-	var continuation := maxf(progress - 1.0, 0.0)
-	return maxf(5.0, lerpf(11.0, 7.0, arc_progress) - continuation * 2.0)
-
-func _get_burst_size(is_opening: bool) -> int:
-	var progress := RunState.get_run_progress()
-	var arc_progress := clampf(progress, 0.0, 1.0)
-	var continuation := maxf(progress - 1.0, 0.0)
-	var base := lerpf(6.0 if is_opening else 5.0, 9.0 if is_opening else 10.0, arc_progress)
-	var continuation_bonus := continuation * (3.0 if is_opening else 5.0)
-	return maxi(1, int(round(base + continuation_bonus)))
-
-func _get_champion_spawn_position() -> Vector2:
-	return ArenaGeometry.champion_spawn_position(ARENA_CENTER)
 
 func _handle_room_clear() -> void:
 	if _room_clear_started:
@@ -1376,7 +1235,8 @@ func _spawn_boss_entrance_vfx() -> void:
 	_play_sfx("play_explosion", [1.35, "boss"])
 	_spawn_screen_flash(Color(0.82, 0.06, 0.04, 0.18), 0.32)
 	var ring := ParticleFactoryData.create_explosion_ring(Color(1.0, 0.14, 0.08, 0.78), 260.0, 6.0)
-	ring.global_position = _active_boss.global_position if _active_boss != null and is_instance_valid(_active_boss) and _active_boss is Node2D else ARENA_CENTER
+	var active_boss = get_active_boss()
+	ring.global_position = active_boss.global_position if active_boss != null and is_instance_valid(active_boss) and active_boss is Node2D else ARENA_CENTER
 	effects.add_child(ring)
 
 func _spawn_enemy_death_global_vfx(enemy_type_name: String) -> void:
@@ -1465,9 +1325,9 @@ func _should_suppress_combat_vfx() -> bool:
 
 func _on_enemy_died(enemy) -> void:
 	_enemy_nodes.erase(enemy)
-	var was_active_boss: bool = enemy == _active_boss
-	if enemy == _active_boss:
-		_active_boss = null
+	var was_active_boss: bool = enemy == get_active_boss()
+	if _wave_director != null:
+		_wave_director.clear_active_boss_if(enemy)
 	_enemies_killed += 1
 	_gain_shared_momentum()
 	var enemy_type_name := str(enemy.get_type_name())
@@ -1491,8 +1351,6 @@ func _on_enemy_died(enemy) -> void:
 		_kill_streak_progress += 1
 		if _kill_streak_progress >= _kill_streak_target:
 			_complete_side_objective()
-	if was_active_boss:
-		_active_boss = null
 
 func _on_enemy_hit_received(_enemy, _damage_amount: int, _lethal: bool) -> void:
 	if _enemy == null or not is_instance_valid(_enemy):
@@ -1939,7 +1797,7 @@ func get_player_configs() -> Array:
 	return _player_configs
 
 func get_active_boss():
-	return _active_boss
+	return _wave_director.get_active_boss() if _wave_director != null else null
 
 func get_room_config() -> Dictionary:
 	return _room_config.duplicate(true)
@@ -1951,13 +1809,13 @@ func get_room_depth() -> int:
 	return _room_depth
 
 func get_room_duration() -> float:
-	return _room_duration
+	return _wave_director.get_room_duration() if _wave_director != null else 0.0
 
 func get_room_elapsed() -> float:
 	return _room_elapsed
 
 func is_spawning_done() -> bool:
-	return _spawning_done
+	return _wave_director.is_spawning_done() if _wave_director != null else false
 
 func get_side_objective_view() -> Dictionary:
 	return {
@@ -1985,6 +1843,12 @@ func get_modifier_definitions() -> Dictionary:
 
 func get_momentum_tier(player_index: int) -> int:
 	return int(_momentum_tier_by_player[player_index]) if player_index >= 0 and player_index < _momentum_tier_by_player.size() else 0
+
+func get_minor_modifier_flags() -> Dictionary:
+	return _minor_modifier_flags.duplicate()
+
+func get_player_count() -> int:
+	return _player_nodes.size()
 
 func _get_nearest_player_to(origin: Vector2):
 	return get_nearest_player_to(origin)

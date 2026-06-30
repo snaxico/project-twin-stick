@@ -119,6 +119,9 @@ patch is implemented and playtest-approved.
   - `GameHud.gd` owns in-room HUD construction/refresh, player combat indicators, revive markers, bottom
     player cards, modifier chips, boss health, and objective panel presentation. `CoopManager.gd` keeps
     wrapper call sites and exposes read-only room/player/objective accessors for the HUD.
+  - `WaveDirector.gd` owns spawn cadence/scaling/progress, deferred enemy spawn queues, opening/burst/stream
+    spawns, champion spawn timing, and the active boss pointer. `CoopManager.gd` still owns `_enemy_nodes`,
+    enemy death/fire/hit callbacks, room clear handling, and the combat-owner facade.
 - `RunFlow.gd` now owns:
   - next-room choice panel
   - room launch

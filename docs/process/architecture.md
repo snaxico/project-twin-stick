@@ -55,6 +55,10 @@
   labels, boss health, side-objective panel, modifier chips, player combat indicators, revive markers, and
   bottom player cards. CoopManager exposes read-only room/player/objective accessors and keeps wrapper
   call sites until the remaining decomposition tasks move result/flow code.
+- `WaveDirector.gd` — CoopManager-owned child node for spawn cadence/scaling/progress, opening/burst/stream
+  enemy spawns, deferred spawn queues, champion spawn timing, and the active boss pointer. CoopManager
+  remains the single owner of `_enemy_nodes`, room clear handling, enemy signal callbacks, and the enemy
+  combat-owner facade.
 - Room types: `combat` / `elite` / `boss` (no rest/shop). Encounter Builder / Debug Menu use the
   single-room debug path — a fast-iteration entry, not a second source of truth.
 
