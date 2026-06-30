@@ -66,6 +66,10 @@
 - `MomentumTracker.gd` — CoopManager-owned child node for per-player momentum progress/tier state,
   RunState momentum persistence, tier feedback, momentum stat application, and room max tier reporting for
   score calculation.
+- `MutationPickFlow.gd` — CoopManager-owned child node for Upgrade pick UI lifetime, option rolling,
+  reroll/skip handling, reroll costs, and reroll score spending. CoopManager keeps mutation application,
+  level-up/champion-reward progression decisions, room completion emission, and the hot `_awaiting_mutation_pick`
+  pump gate.
 - Room types: `combat` / `elite` / `boss` (no rest/shop). Encounter Builder / Debug Menu use the
   single-room debug path — a fast-iteration entry, not a second source of truth.
 

@@ -127,6 +127,9 @@ patch is implemented and playtest-approved.
     `CoopManager.gd` forwards enemy-killed and player-damaged events in the same runtime order.
   - `MomentumTracker.gd` owns per-player momentum progress/tier persistence, momentum tier application,
     tier feedback, and the room max momentum tier used by scoring.
+  - `MutationPickFlow.gd` owns Upgrade pick UI lifetime, option rolling, reroll/skip requests, reroll costs,
+    and reroll score spending. `CoopManager.gd` keeps the room-progression ladder and `_awaiting_mutation_pick`
+    runtime gate.
 - `RunFlow.gd` now owns:
   - next-room choice panel
   - room launch

@@ -14,7 +14,7 @@ const GameHudData = preload("res://scripts/game/GameHud.gd")
 const WaveDirectorData = preload("res://scripts/game/WaveDirector.gd")
 const SideObjectiveControllerData = preload("res://scripts/game/SideObjectiveController.gd")
 const MomentumTrackerData = preload("res://scripts/game/MomentumTracker.gd")
-const MutationPickUIScene = preload("res://scenes/ui/MutationPickUI.tscn")
+const MutationPickFlowData = preload("res://scripts/game/MutationPickFlow.gd")
 const FireFloorModifierData = preload("res://scripts/modifiers/FireFloorModifier.gd")
 const IceZoneModifierData = preload("res://scripts/modifiers/IceZoneModifier.gd")
 const MineFieldModifierData = preload("res://scripts/modifiers/MineFieldModifier.gd")
@@ -47,7 +47,6 @@ const REVIVE_HOLD_DURATION := 1.2
 const HUD_REFRESH_INTERVAL := 0.08
 const BOSS_HIT_FEEDBACK_INTERVAL := 0.22
 const HEALTH_DROP_CHANCE := 0.06
-const MUTATION_REROLL_BASE_COST := 100
 const ENEMY_SEPARATION_CELL_SIZE := 96.0
 const HUD_SLOT_2_COLOR := HudPaletteData.SLOT_2_COLOR
 const GAMEPLAY_INPUT_SUFFIXES := [
@@ -145,18 +144,16 @@ var _champions_killed := 0
 var _room_score_recorded := false
 var _pending_pick_consumes_levelup := false
 var _pending_champion_bonus_pick := false
-var _mutation_pick_round_force_rare := false
-var _mutation_pick_reroll_counts: Array = []
 var _pending_clear_summary := ""
 var _next_boss_hit_feedback_at := 0.0
 var _revive_progress_by_player_id: Dictionary = {}
-var _mutation_pick_ui = null
 var _active_modifiers: Array = []
 var _arena_visuals = null
 var _hud = null
 var _wave_director = null
 var _side_objectives = null
 var _momentum_tracker = null
+var _mutation_pick_flow = null
 var _modifier_definitions: Dictionary = {}
 var _minor_modifier_flags := {
 	"accelerating_waves": false,
@@ -249,6 +246,10 @@ func _ready() -> void:
 	_momentum_tracker.name = "MomentumTracker"
 	_momentum_tracker.setup(self)
 	add_child(_momentum_tracker)
+	_mutation_pick_flow = MutationPickFlowData.new()
+	_mutation_pick_flow.name = "MutationPickFlow"
+	_mutation_pick_flow.setup(self, ui_layer, _mutation_system)
+	add_child(_mutation_pick_flow)
 	_hud = GameHudData.new()
 	_hud.name = "GameHud"
 	_hud.setup(self, ui_layer)
@@ -772,90 +773,17 @@ func _handle_room_clear() -> void:
 func _show_progression_pick_if_needed() -> void:
 	if RunState.get_pending_levelups() > 0:
 		_pending_pick_consumes_levelup = true
-		_show_mutation_pick(false, "Level Up", "Choose one upgrade.")
+		_mutation_pick_flow.show_pick(false, "Level Up", "Choose one upgrade.")
 		return
 	if _room_type == "boss" and not _pending_champion_bonus_pick:
 		_pending_champion_bonus_pick = true
 		_pending_pick_consumes_levelup = false
-		_show_mutation_pick(true, "Champion Reward", "Guaranteed rare pressure. Choose one upgrade.")
+		_mutation_pick_flow.show_pick(true, "Champion Reward", "Guaranteed rare pressure. Choose one upgrade.")
 		return
 	_finish_room_progression()
 
 func _show_mutation_pick(force_rare: bool, title: String, subtitle: String) -> void:
-	if _mutation_pick_ui != null and is_instance_valid(_mutation_pick_ui):
-		_mutation_pick_ui.queue_free()
-	_mutation_pick_round_force_rare = force_rare
-	_reset_mutation_pick_reroll_counts()
-	var options_by_player: Array = []
-	for player_index in range(_player_nodes.size()):
-		options_by_player.append(_roll_initial_mutation_options_for_player(player_index, force_rare))
-	_mutation_pick_ui = MutationPickUIScene.instantiate()
-	_mutation_pick_ui.configure_for_players(_player_configs, options_by_player, title, subtitle)
-	_mutation_pick_ui.set_reroll_state(RunState.get_current_score(), _build_mutation_pick_reroll_costs())
-	_mutation_pick_ui.selections_confirmed.connect(_on_mutation_selections_confirmed)
-	_mutation_pick_ui.reroll_requested.connect(_on_mutation_reroll_requested)
-	_mutation_pick_ui.skip_requested.connect(_on_mutation_skip_requested)
-	ui_layer.add_child(_mutation_pick_ui)
-	_awaiting_mutation_pick = true
-	if _hit_stop_manager != null and _hit_stop_manager.has_method("request_dilation"):
-		_hit_stop_manager.request_dilation(70, 0.18)
-
-func _roll_initial_mutation_options_for_player(player_index: int, round_force_rare: bool) -> Array:
-	var inventory: PlayerInventory = RunState.get_player_inventory(player_index)
-	var force_player_rare: bool = round_force_rare or (inventory != null and inventory.rare_dry_streak >= 3)
-	var options: Array = _mutation_system.roll_mutation_options(player_index, 3, _get_current_rare_chance(), force_player_rare, _signature_share(_room_depth))
-	if inventory != null:
-		if _options_contain_rare(options):
-			inventory.rare_dry_streak = 0
-		else:
-			inventory.rare_dry_streak += 1
-	return options
-
-func _roll_reroll_mutation_options_for_player(player_index: int) -> Array:
-	return _mutation_system.roll_mutation_options(player_index, 3, _get_current_rare_chance(), _mutation_pick_round_force_rare, _signature_share(_room_depth))
-
-func _reset_mutation_pick_reroll_counts() -> void:
-	_mutation_pick_reroll_counts.clear()
-	for _player_index in range(_player_nodes.size()):
-		_mutation_pick_reroll_counts.append(0)
-
-func _build_mutation_pick_reroll_costs() -> Array:
-	var costs: Array = []
-	for player_index in range(_player_nodes.size()):
-		costs.append(_get_mutation_pick_reroll_cost(player_index))
-	return costs
-
-func _get_mutation_pick_reroll_cost(player_index: int) -> int:
-	if player_index < 0 or player_index >= _mutation_pick_reroll_counts.size():
-		return MUTATION_REROLL_BASE_COST
-	return MUTATION_REROLL_BASE_COST * int(pow(2.0, float(maxi(int(_mutation_pick_reroll_counts[player_index]), 0))))
-
-func _on_mutation_reroll_requested(player_index: int) -> void:
-	if _mutation_pick_ui == null or not is_instance_valid(_mutation_pick_ui):
-		return
-	if player_index < 0 or player_index >= _player_nodes.size():
-		return
-	var cost := _get_mutation_pick_reroll_cost(player_index)
-	if not RunState.spend_run_score(cost):
-		_mutation_pick_ui.set_reroll_state(RunState.get_current_score(), _build_mutation_pick_reroll_costs())
-		return
-	_mutation_pick_reroll_counts[player_index] = int(_mutation_pick_reroll_counts[player_index]) + 1
-	_mutation_pick_ui.replace_options_for_player(player_index, _roll_reroll_mutation_options_for_player(player_index))
-	_mutation_pick_ui.set_reroll_state(RunState.get_current_score(), _build_mutation_pick_reroll_costs())
-	_play_sfx("play_ui_click", [])
-	_refresh_hud()
-
-func _on_mutation_skip_requested(_player_index: int) -> void:
-	_play_sfx("play_ui_click", [])
-	if _mutation_pick_ui != null and is_instance_valid(_mutation_pick_ui):
-		_mutation_pick_ui.set_reroll_state(RunState.get_current_score(), _build_mutation_pick_reroll_costs())
-
-func _options_contain_rare(options: Array) -> bool:
-	for option_variant in options:
-		var option := option_variant as Dictionary
-		if CoopFormat.rarity_rank(str(option.get("rarity", "common"))) >= 1:
-			return true
-	return false
+	_mutation_pick_flow.show_pick(force_rare, title, subtitle)
 
 func _on_mutation_selections_confirmed(selections_per_player: Array) -> void:
 	for player_index in range(min(selections_per_player.size(), _player_nodes.size())):
@@ -863,10 +791,7 @@ func _on_mutation_selections_confirmed(selections_per_player: Array) -> void:
 			_mutation_system.apply_mutation(player_index, str(mutation_id))
 	if _pending_pick_consumes_levelup:
 		RunState.spend_levelup()
-	if _mutation_pick_ui != null and is_instance_valid(_mutation_pick_ui):
-		_mutation_pick_ui.queue_free()
-	_mutation_pick_ui = null
-	_awaiting_mutation_pick = false
+	_mutation_pick_flow.close_pick()
 	_rebuild_player_loadouts()
 	if _pending_pick_consumes_levelup and RunState.get_pending_levelups() > 0:
 		_show_progression_pick_if_needed()
@@ -874,7 +799,7 @@ func _on_mutation_selections_confirmed(selections_per_player: Array) -> void:
 	if _pending_pick_consumes_levelup and _room_type == "boss" and not _pending_champion_bonus_pick:
 		_pending_pick_consumes_levelup = false
 		_pending_champion_bonus_pick = true
-		_show_mutation_pick(true, "Champion Reward", "Guaranteed rare pressure. Choose one upgrade.")
+		_mutation_pick_flow.show_pick(true, "Champion Reward", "Guaranteed rare pressure. Choose one upgrade.")
 		return
 	if not _pending_pick_consumes_levelup and _pending_champion_bonus_pick:
 		_pending_champion_bonus_pick = false
@@ -1169,6 +1094,13 @@ func _spawn_screen_flash(color: Color, duration: float) -> void:
 func spawn_screen_flash(color: Color, duration: float) -> void:
 	_spawn_screen_flash(color, duration)
 
+func request_pick_dilation() -> void:
+	if _hit_stop_manager != null and _hit_stop_manager.has_method("request_dilation"):
+		_hit_stop_manager.request_dilation(70, 0.18)
+
+func set_awaiting_pick(awaiting: bool) -> void:
+	_awaiting_mutation_pick = awaiting
+
 func _on_enemy_fire_requested(origin: Vector2, direction: Vector2, speed: float, damage: int, team: String, _color: Color, projectile_scale: float) -> void:
 	_projectile_system.handle_enemy_fire(origin, direction, speed, damage, team, projectile_scale)
 
@@ -1331,6 +1263,9 @@ func _refresh_hud() -> void:
 	if _hud != null:
 		_hud.refresh()
 
+func notify_run_score_changed() -> void:
+	_refresh_hud()
+
 func _refresh_boss_hud() -> void:
 	if _hud != null:
 		_hud.refresh_boss()
@@ -1354,6 +1289,12 @@ func _get_current_rare_chance() -> float:
 
 func _signature_share(depth: int) -> float:
 	return clampf(float(depth - 4) / 16.0, 0.0, 0.5)
+
+func get_current_rare_chance() -> float:
+	return _get_current_rare_chance()
+
+func get_signature_share(depth: int) -> float:
+	return _signature_share(depth)
 
 func _format_objective_text() -> String:
 	return _hud.format_objective_text() if _hud != null else ""
