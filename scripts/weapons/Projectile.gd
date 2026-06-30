@@ -198,13 +198,26 @@ func _ready() -> void:
 		area_entered.connect(_on_area_entered)
 	if visual != null and _base_visual_scale == Vector2.ONE:
 		_base_visual_scale = visual.scale
-	if collision_shape != null and collision_shape.shape is CircleShape2D and _base_collision_radius <= 0.0:
-		collision_shape.shape = (collision_shape.shape as CircleShape2D).duplicate()
-		_base_collision_radius = (collision_shape.shape as CircleShape2D).radius
+	_ensure_unique_collision_shape()
+	if _pooled:
+		_active = false
+		visible = false
+		return
 	_activate_projectile_runtime()
 
 func set_pooled(pooled: bool) -> void:
 	_pooled = pooled
+
+func prepare_for_pool() -> void:
+	_pooled = true
+	_active = false
+	visible = false
+	monitoring = false
+	monitorable = false
+	_ensure_unique_collision_shape()
+	var shape_node := get_node_or_null("CollisionShape2D") as CollisionShape2D
+	if shape_node != null:
+		shape_node.disabled = true
 
 func is_projectile_active() -> bool:
 	return _active
@@ -215,6 +228,7 @@ func activate_from_config(projectile_team: String, projectile_direction: Vector2
 	_activate_projectile_runtime()
 
 func _activate_projectile_runtime() -> void:
+	_ensure_unique_collision_shape()
 	_active = true
 	visible = true
 	_spawned_at = _current_time_seconds()
@@ -229,6 +243,14 @@ func _activate_projectile_runtime() -> void:
 	rotation = direction.angle()
 	_spawn_position = global_position
 	_apply_visual_state()
+
+func _ensure_unique_collision_shape() -> void:
+	var shape_node := collision_shape
+	if shape_node == null:
+		shape_node = get_node_or_null("CollisionShape2D") as CollisionShape2D
+	if shape_node != null and shape_node.shape is CircleShape2D and _base_collision_radius <= 0.0:
+		shape_node.shape = (shape_node.shape as CircleShape2D).duplicate()
+		_base_collision_radius = (shape_node.shape as CircleShape2D).radius
 
 func _physics_process(delta: float) -> void:
 	if not _active:

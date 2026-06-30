@@ -280,7 +280,10 @@ func _acquire_projectile():
 	if _projectile_pool.size() >= MAX_ACTIVE_PROJECTILES:
 		return null
 	var projectile = ProjectileSceneData.instantiate()
-	projectile.set_pooled(true)
+	if projectile.has_method("prepare_for_pool"):
+		projectile.prepare_for_pool()
+	else:
+		projectile.set_pooled(true)
 	projectile.impact_requested.connect(_on_projectile_impact)
 	projectile.split_requested.connect(_on_projectile_split_requested)
 	projectile.projectile_deactivated.connect(_on_projectile_deactivated)
