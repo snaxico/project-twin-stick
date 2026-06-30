@@ -70,6 +70,10 @@
   reroll/skip handling, reroll costs, and reroll score spending. CoopManager keeps mutation application,
   level-up/champion-reward progression decisions, room completion emission, and the hot `_awaiting_mutation_pick`
   pump gate.
+- `CombatEffects.gd` — CoopManager-owned child node for enemy-facing combat-effect bodies and scheduled
+  effect queues: shockwaves, hazard zones, minion bursts/mixes, support aura, Pulsar EMP, attack trails,
+  enemy death explosions, and player shockwave pulses. CoopManager keeps the facade methods used by
+  `Enemy.gd`, shared runtime helper lists, and hazard registration.
 - Room types: `combat` / `elite` / `boss` (no rest/shop). Encounter Builder / Debug Menu use the
   single-room debug path — a fast-iteration entry, not a second source of truth.
 

@@ -130,6 +130,10 @@ patch is implemented and playtest-approved.
   - `MutationPickFlow.gd` owns Upgrade pick UI lifetime, option rolling, reroll/skip requests, reroll costs,
     and reroll score spending. `CoopManager.gd` keeps the room-progression ladder and `_awaiting_mutation_pick`
     runtime gate.
+  - `CombatEffects.gd` owns the enemy-facing combat-effect bodies and scheduled effect queues: shockwaves,
+    hazard zones, minion bursts/mixes, support aura, Pulsar EMP, enemy attack trails, enemy death explosions,
+    and player shockwave pulses. `CoopManager.gd` keeps facade methods, shared runtime helper lists, and
+    hazard registration.
 - `RunFlow.gd` now owns:
   - next-room choice panel
   - room launch
