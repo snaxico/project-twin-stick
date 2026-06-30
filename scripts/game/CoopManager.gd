@@ -2,7 +2,6 @@ extends Node2D
 
 const EnemySceneData = preload("res://scenes/enemies/Enemy.tscn")
 const ProjectileSceneData = preload("res://scenes/weapons/Projectile.tscn")
-const PlayerCombatIndicatorData = preload("res://scripts/ui/PlayerCombatIndicator.gd")
 const MutationSystemData = preload("res://scripts/game/MutationSystem.gd")
 const AbilityRegistryData = preload("res://scripts/game/AbilityRegistry.gd")
 const HudPaletteData = preload("res://scripts/game/HudPalette.gd")
@@ -11,6 +10,7 @@ const EnemyTypes = preload("res://scripts/game/EnemyTypes.gd")
 const ArenaGeometry = preload("res://scripts/game/ArenaGeometry.gd")
 const ProjectileSystemData = preload("res://scripts/game/ProjectileSystem.gd")
 const ArenaVisualsData = preload("res://scripts/game/ArenaVisuals.gd")
+const GameHudData = preload("res://scripts/game/GameHud.gd")
 const MutationPickUIScene = preload("res://scenes/ui/MutationPickUI.tscn")
 const TempBuffSystemData = preload("res://scripts/buffs/TempBuffSystem.gd")
 const HoldZoneObjectiveData = preload("res://scripts/objectives/HoldZoneObjective.gd")
@@ -27,10 +27,8 @@ const HazardZoneData = preload("res://scripts/game/HazardZone.gd")
 const AbilityMineData = preload("res://scripts/game/AbilityMine.gd")
 const ParticleFactoryData = preload("res://scripts/juice/ParticleFactory.gd")
 const IconFactoryData = preload("res://scripts/ui/IconFactory.gd")
-const HealthBarHUDData = preload("res://scripts/juice/HealthBarHUD.gd")
 const HitStopManagerData = preload("res://scripts/juice/HitStopManager.gd")
 const PauseInputProxyData = preload("res://scripts/ui/PauseInputProxy.gd")
-const ReviveProgressMarkerData = preload("res://scripts/ui/ReviveProgressMarker.gd")
 const EncyclopediaUIData = preload("res://scripts/ui/EncyclopediaUI.gd")
 
 const MODIFIERS_DATA_PATH := "res://data/modifiers.json"
@@ -59,7 +57,6 @@ const ENEMY_SEPARATION_CELL_SIZE := 96.0
 const MOMENTUM_THRESHOLDS := [10, 25, 45, 70]
 const MOMENTUM_MOVE_BONUSES := [0.0, 0.10, 0.20, 0.35, 0.50]
 const MOMENTUM_FIRE_RATE_BONUSES := [0.0, 0.15, 0.30, 0.50, 0.75]
-const HUD_HEALTH_COLOR := Color(0.24, 0.92, 0.34, 1.0)
 const HUD_SLOT_2_COLOR := HudPaletteData.SLOT_2_COLOR
 const GAMEPLAY_INPUT_SUFFIXES := [
 	"move_left",
@@ -173,26 +170,10 @@ var _pending_clear_summary := ""
 var _active_boss = null
 var _next_boss_hit_feedback_at := 0.0
 var _revive_progress_by_player_id: Dictionary = {}
-var _hud_root: Control = null
-var _player_combat_indicators: Array = []
-var _revive_markers: Array = []
-var _bottom_hud: HBoxContainer = null
-var _bottom_player_hud_cards: Array = []
-var _objective_label: Label = null
-var _room_label: Label = null
-var _xp_label: Label = null
-var _score_label: Label = null
-var _xp_fill: ColorRect = null
-var _modifier_hud: VBoxContainer = null
-var _objective_panel: PanelContainer = null
-var _objective_icon_label: Label = null
-var _objective_title_label: Label = null
-var _objective_progress_label: Label = null
-var _objective_progress_bar: ProgressBar = null
-var _boss_health_bar = null
 var _mutation_pick_ui = null
 var _active_modifiers: Array = []
 var _arena_visuals = null
+var _hud = null
 var _modifier_definitions: Dictionary = {}
 var _minor_modifier_flags := {
 	"accelerating_waves": false,
@@ -286,6 +267,10 @@ func _ready() -> void:
 	)
 	add_child(_arena_visuals)
 	_arena_visuals.rebuild_arena()
+	_hud = GameHudData.new()
+	_hud.name = "GameHud"
+	_hud.setup(self, ui_layer)
+	ui_layer.add_child(_hud)
 	_build_hud()
 	_build_debug_overlay()
 	_spawn_players()
@@ -342,222 +327,7 @@ func _hide_legacy_ui() -> void:
 	pause_panel.visible = false
 
 func _build_hud() -> void:
-	if _hud_root != null:
-		_hud_root.queue_free()
-	_hud_root = Control.new()
-	_hud_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	_hud_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	ui_layer.add_child(_hud_root)
-
-	var xp_panel := PanelContainer.new()
-	xp_panel.position = Vector2(700.0, 20.0)
-	xp_panel.size = Vector2(520.0, 88.0)
-	_hud_root.add_child(xp_panel)
-	var xp_margin := MarginContainer.new()
-	xp_margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	xp_margin.add_theme_constant_override("margin_left", 12)
-	xp_margin.add_theme_constant_override("margin_top", 10)
-	xp_margin.add_theme_constant_override("margin_right", 12)
-	xp_margin.add_theme_constant_override("margin_bottom", 10)
-	xp_panel.add_child(xp_margin)
-	var xp_layout := VBoxContainer.new()
-	xp_layout.add_theme_constant_override("separation", 6)
-	xp_margin.add_child(xp_layout)
-	_room_label = Label.new()
-	_room_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_room_label.add_theme_font_size_override("font_size", 16)
-	xp_layout.add_child(_room_label)
-	var xp_track := ColorRect.new()
-	xp_track.custom_minimum_size = Vector2(488.0, 14.0)
-	xp_track.color = Color(0.07, 0.09, 0.12, 0.88)
-	xp_layout.add_child(xp_track)
-	_xp_fill = ColorRect.new()
-	_xp_fill.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	_xp_fill.color = Color(0.28, 0.9, 0.82, 0.82)
-	xp_track.add_child(_xp_fill)
-	_xp_label = Label.new()
-	_xp_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	xp_layout.add_child(_xp_label)
-	_score_label = Label.new()
-	_score_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_score_label.add_theme_font_size_override("font_size", 12)
-	_score_label.add_theme_color_override("font_color", Color(1.0, 0.9, 0.46, 0.96))
-	xp_layout.add_child(_score_label)
-
-	_boss_health_bar = HealthBarHUDData.new()
-	_boss_health_bar.position = Vector2(700.0, 114.0)
-	_boss_health_bar.size = Vector2(520.0, 36.0)
-	_boss_health_bar.configure("Boss", Color(1.0, 0.22, 0.14, 0.95))
-	_boss_health_bar.visible = false
-	_hud_root.add_child(_boss_health_bar)
-	_objective_label = Label.new()
-	_objective_label.position = Vector2(24.0, 24.0)
-	_objective_label.size = Vector2(520.0, 54.0)
-	_objective_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_objective_label.add_theme_font_size_override("font_size", 15)
-	_objective_label.visible = false
-	_hud_root.add_child(_objective_label)
-	_build_objective_panel()
-
-	_modifier_hud = VBoxContainer.new()
-	_modifier_hud.position = Vector2(1520.0, 60.0)
-	_modifier_hud.add_theme_constant_override("separation", 6)
-	_hud_root.add_child(_modifier_hud)
-
-	_bottom_hud = HBoxContainer.new()
-	_bottom_hud.anchor_left = 0.0
-	_bottom_hud.anchor_right = 1.0
-	_bottom_hud.anchor_top = 1.0
-	_bottom_hud.anchor_bottom = 1.0
-	_bottom_hud.offset_left = 36.0
-	_bottom_hud.offset_top = -118.0
-	_bottom_hud.offset_right = -36.0
-	_bottom_hud.offset_bottom = -20.0
-	_bottom_hud.alignment = BoxContainer.ALIGNMENT_CENTER
-	var player_count := _player_configs.size()
-	var card_width := 260.0 if player_count <= 2 else 200.0
-	var card_separation := 14 if player_count <= 2 else 8
-	var ability_font_size := 10 if player_count <= 2 else 9
-	_bottom_hud.add_theme_constant_override("separation", card_separation)
-	_hud_root.add_child(_bottom_hud)
-
-	_player_combat_indicators.clear()
-	_revive_markers.clear()
-	_bottom_player_hud_cards.clear()
-	for index in range(_player_configs.size()):
-		var indicator := PlayerCombatIndicatorData.new()
-		var tint: Color = _player_configs[index].tint
-		var slot_1_color := CoopFormat.get_slot_color(tint, 0, HUD_SLOT_2_COLOR)
-		var slot_2_color := CoopFormat.get_slot_color(tint, 1, HUD_SLOT_2_COLOR)
-		indicator.configure_player(tint, slot_1_color, slot_2_color)
-		_hud_root.add_child(indicator)
-		_player_combat_indicators.append(indicator)
-		var revive_marker := ReviveProgressMarkerData.new()
-		revive_marker.set_state(false, 0.0, tint)
-		_hud_root.add_child(revive_marker)
-		_revive_markers.append(revive_marker)
-
-		var card := PanelContainer.new()
-		card.custom_minimum_size = Vector2(card_width, 86.0)
-		var card_style := StyleBoxFlat.new()
-		card_style.bg_color = Color(tint.r * 0.14, tint.g * 0.14, tint.b * 0.14, 0.84)
-		card_style.border_color = tint.lightened(0.18)
-		card_style.set_border_width_all(1)
-		card_style.corner_radius_top_left = 8
-		card_style.corner_radius_top_right = 8
-		card_style.corner_radius_bottom_left = 8
-		card_style.corner_radius_bottom_right = 8
-		card.add_theme_stylebox_override("panel", card_style)
-		_bottom_hud.add_child(card)
-
-		var card_margin := MarginContainer.new()
-		card_margin.add_theme_constant_override("margin_left", 10)
-		card_margin.add_theme_constant_override("margin_top", 8)
-		card_margin.add_theme_constant_override("margin_right", 10)
-		card_margin.add_theme_constant_override("margin_bottom", 8)
-		card.add_child(card_margin)
-
-		var card_layout := VBoxContainer.new()
-		card_layout.add_theme_constant_override("separation", 4)
-		card_margin.add_child(card_layout)
-
-		var top_row := HBoxContainer.new()
-		top_row.add_theme_constant_override("separation", 8)
-		card_layout.add_child(top_row)
-
-		var header := Label.new()
-		header.text = "P%d" % (index + 1)
-		header.add_theme_font_size_override("font_size", 12)
-		header.add_theme_color_override("font_color", tint.lightened(0.18))
-		header.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		header.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		top_row.add_child(header)
-
-		var health_bar := ProgressBar.new()
-		health_bar.show_percentage = false
-		health_bar.min_value = 0.0
-		health_bar.max_value = 100.0
-		health_bar.value = 100.0
-		health_bar.custom_minimum_size = Vector2(120.0, 10.0)
-		_apply_progress_bar_tint(health_bar, HUD_HEALTH_COLOR, 0.92)
-		card_layout.add_child(health_bar)
-
-		var momentum_row := HBoxContainer.new()
-		momentum_row.alignment = BoxContainer.ALIGNMENT_CENTER
-		momentum_row.add_theme_constant_override("separation", 4)
-		card_layout.add_child(momentum_row)
-		var momentum_pips: Array = []
-		for pip_index in range(4):
-			var pip := ColorRect.new()
-			pip.custom_minimum_size = Vector2(18.0, 5.0)
-			pip.color = Color(tint.r, tint.g, tint.b, 0.18)
-			momentum_row.add_child(pip)
-			momentum_pips.append(pip)
-
-		var ability_row := HBoxContainer.new()
-		ability_row.add_theme_constant_override("separation", 8)
-		card_layout.add_child(ability_row)
-
-		var slot_1_box := VBoxContainer.new()
-		slot_1_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		slot_1_box.add_theme_constant_override("separation", 2)
-		ability_row.add_child(slot_1_box)
-		slot_1_box.add_child(_create_hud_trigger_label("LT", slot_1_color))
-		var slot_1_label := Label.new()
-		slot_1_label.add_theme_font_size_override("font_size", ability_font_size)
-		slot_1_label.add_theme_color_override("font_color", slot_1_color)
-		slot_1_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		slot_1_box.add_child(slot_1_label)
-		var slot_1_charge_label := Label.new()
-		slot_1_charge_label.add_theme_font_size_override("font_size", 9)
-		slot_1_charge_label.add_theme_color_override("font_color", slot_1_color.lightened(0.28))
-		slot_1_charge_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		slot_1_charge_label.visible = false
-		slot_1_box.add_child(slot_1_charge_label)
-		var slot_1_bar := ProgressBar.new()
-		slot_1_bar.show_percentage = false
-		slot_1_bar.min_value = 0.0
-		slot_1_bar.max_value = 100.0
-		slot_1_bar.value = 100.0
-		slot_1_bar.custom_minimum_size = Vector2(96.0, 8.0)
-		_apply_progress_bar_tint(slot_1_bar, slot_1_color, 0.82)
-		slot_1_box.add_child(slot_1_bar)
-
-		var slot_2_box := VBoxContainer.new()
-		slot_2_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		slot_2_box.add_theme_constant_override("separation", 2)
-		ability_row.add_child(slot_2_box)
-		slot_2_box.add_child(_create_hud_trigger_label("RT", slot_2_color))
-		var slot_2_label := Label.new()
-		slot_2_label.add_theme_font_size_override("font_size", ability_font_size)
-		slot_2_label.add_theme_color_override("font_color", slot_2_color)
-		slot_2_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		slot_2_box.add_child(slot_2_label)
-		var slot_2_charge_label := Label.new()
-		slot_2_charge_label.add_theme_font_size_override("font_size", 9)
-		slot_2_charge_label.add_theme_color_override("font_color", slot_2_color.lightened(0.28))
-		slot_2_charge_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		slot_2_charge_label.visible = false
-		slot_2_box.add_child(slot_2_charge_label)
-		var slot_2_bar := ProgressBar.new()
-		slot_2_bar.show_percentage = false
-		slot_2_bar.min_value = 0.0
-		slot_2_bar.max_value = 100.0
-		slot_2_bar.value = 100.0
-		slot_2_bar.custom_minimum_size = Vector2(96.0, 8.0)
-		_apply_progress_bar_tint(slot_2_bar, slot_2_color, 0.78)
-		slot_2_box.add_child(slot_2_bar)
-
-		_bottom_player_hud_cards.append({
-			"health_bar": health_bar,
-			"slot_1_label": slot_1_label,
-			"slot_1_charge_label": slot_1_charge_label,
-			"slot_1_bar": slot_1_bar,
-			"slot_2_label": slot_2_label,
-			"slot_2_charge_label": slot_2_charge_label,
-			"slot_2_bar": slot_2_bar,
-			"momentum_pips": momentum_pips,
-		})
+	_hud.build()
 
 func _build_debug_overlay() -> void:
 	if not _is_debug_menu_enabled():
@@ -623,80 +393,6 @@ func _build_debug_overlay() -> void:
 	_debug_god_check.button_pressed = RunState.debug_profiling
 	_debug_god_check.toggled.connect(_on_debug_god_toggled)
 	layout.add_child(_debug_god_check)
-
-func _build_objective_panel() -> void:
-	_objective_panel = PanelContainer.new()
-	_objective_panel.position = Vector2(24.0, 20.0)
-	_objective_panel.size = Vector2(460.0, 92.0)
-	var panel_style := StyleBoxFlat.new()
-	panel_style.bg_color = Color(0.035, 0.05, 0.08, 0.86)
-	panel_style.border_color = Color(0.38, 0.88, 0.78, 0.72)
-	panel_style.set_border_width_all(1)
-	panel_style.corner_radius_top_left = 10
-	panel_style.corner_radius_top_right = 10
-	panel_style.corner_radius_bottom_left = 10
-	panel_style.corner_radius_bottom_right = 10
-	_objective_panel.add_theme_stylebox_override("panel", panel_style)
-	_hud_root.add_child(_objective_panel)
-	var margin := MarginContainer.new()
-	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	margin.add_theme_constant_override("margin_left", 12)
-	margin.add_theme_constant_override("margin_top", 10)
-	margin.add_theme_constant_override("margin_right", 12)
-	margin.add_theme_constant_override("margin_bottom", 10)
-	_objective_panel.add_child(margin)
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 12)
-	margin.add_child(row)
-	_objective_icon_label = Label.new()
-	_objective_icon_label.custom_minimum_size = Vector2(42.0, 0.0)
-	_objective_icon_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_objective_icon_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_objective_icon_label.add_theme_font_size_override("font_size", 26)
-	row.add_child(_objective_icon_label)
-	var layout := VBoxContainer.new()
-	layout.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	layout.add_theme_constant_override("separation", 4)
-	row.add_child(layout)
-	_objective_title_label = Label.new()
-	_objective_title_label.add_theme_font_size_override("font_size", 15)
-	_objective_title_label.add_theme_color_override("font_color", Color(0.88, 0.98, 1.0, 0.96))
-	layout.add_child(_objective_title_label)
-	_objective_progress_label = Label.new()
-	_objective_progress_label.add_theme_font_size_override("font_size", 12)
-	_objective_progress_label.add_theme_color_override("font_color", Color(0.76, 0.86, 0.92, 0.9))
-	layout.add_child(_objective_progress_label)
-	_objective_progress_bar = ProgressBar.new()
-	_objective_progress_bar.show_percentage = false
-	_objective_progress_bar.min_value = 0.0
-	_objective_progress_bar.max_value = 100.0
-	_objective_progress_bar.custom_minimum_size = Vector2(340.0, 10.0)
-	_apply_progress_bar_tint(_objective_progress_bar, Color(0.38, 0.88, 0.78, 1.0), 0.86)
-	layout.add_child(_objective_progress_bar)
-
-func _create_hud_trigger_label(text: String, tint: Color) -> Label:
-	var trigger := Label.new()
-	trigger.text = text
-	trigger.add_theme_font_size_override("font_size", 9)
-	trigger.add_theme_color_override("font_color", tint.lightened(0.25))
-	trigger.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	return trigger
-
-func _apply_progress_bar_tint(bar: ProgressBar, tint: Color, alpha: float) -> void:
-	var background := StyleBoxFlat.new()
-	background.bg_color = Color(0.04, 0.06, 0.09, 0.72)
-	background.corner_radius_top_left = 3
-	background.corner_radius_top_right = 3
-	background.corner_radius_bottom_left = 3
-	background.corner_radius_bottom_right = 3
-	bar.add_theme_stylebox_override("background", background)
-	var fill := StyleBoxFlat.new()
-	fill.bg_color = Color(tint.r, tint.g, tint.b, alpha)
-	fill.corner_radius_top_left = 3
-	fill.corner_radius_top_right = 3
-	fill.corner_radius_bottom_left = 3
-	fill.corner_radius_bottom_right = 3
-	bar.add_theme_stylebox_override("fill", fill)
 
 func _spawn_players() -> void:
 	for child in players.get_children():
@@ -1895,36 +1591,12 @@ func _build_room_score_delta(cleared: bool) -> int:
 	return clear_credit + _enemies_killed + _champions_killed * 250 + _room_max_momentum_tier * 50
 
 func _refresh_hud() -> void:
-	var xp_progress := RunState.get_xp_progress()
-	var xp_ratio := clampf(float(xp_progress.get("current", 0)) / max(float(xp_progress.get("needed", 1)), 1.0), 0.0, 1.0)
-	_xp_fill.scale = Vector2(max(xp_ratio, 0.01), 1.0)
-	_xp_fill.anchor_right = xp_ratio
-	_xp_label.text = "Lv %d  |  XP %d/%d  |  Pending Picks %d" % [
-		int(xp_progress.get("level", 0)),
-		int(xp_progress.get("current", 0)),
-		int(xp_progress.get("needed", 80)),
-		int(xp_progress.get("pending", 0)),
-	]
-	if _score_label != null:
-		_score_label.text = "Score %d" % RunState.get_current_score()
-	_room_label.text = _build_room_status_text()
-	_objective_label.text = _build_side_objective_text()
-	_refresh_objective_panel()
-	_refresh_boss_hud()
-	_update_player_combat_indicators()
-	_refresh_bottom_hud()
+	if _hud != null:
+		_hud.refresh()
 
 func _refresh_boss_hud() -> void:
-	var boss_alive: bool = _active_boss != null and is_instance_valid(_active_boss) and _active_boss.has_method("is_alive") and bool(_active_boss.is_alive())
-	if _boss_health_bar != null:
-		_boss_health_bar.visible = boss_alive
-	if not boss_alive:
-		return
-	var current_health := int(round(float(_active_boss.current_health)))
-	var max_health := int(round(float(_active_boss.max_health)))
-	var title := CoopFormat.format_boss_type(str(_room_config.get("boss_type", "")))
-	_boss_health_bar.configure(title if not title.is_empty() else "Champion", Color(1.0, 0.22, 0.14, 0.95))
-	_boss_health_bar.set_health(current_health, max_health)
+	if _hud != null:
+		_hud.refresh_boss()
 
 func _play_sfx(method_name: String, args: Array) -> void:
 	for node in get_tree().get_nodes_in_group("sfx_engine"):
@@ -1936,14 +1608,6 @@ func _set_music_context(context: String) -> void:
 	if MusicEngine != null and MusicEngine.has_method("set_context"):
 		MusicEngine.set_context(context)
 
-func _build_room_status_text() -> String:
-	if _room_type == "boss":
-		return "Room %d  |  %s  |  %s" % [_room_depth, CoopFormat.format_room_type(_room_type), CoopFormat.format_boss_type(str(_room_config.get("boss_type", "")))]
-	var time_left := maxf(_room_duration - _room_elapsed, 0.0)
-	if _spawning_done:
-		return "Room %d  |  %s  |  %d remaining" % [_room_depth, CoopFormat.format_room_type(_room_type), _enemy_nodes.size()]
-	return "Room %d  |  %s  |  %ds  |  %d alive" % [_room_depth, CoopFormat.format_room_type(_room_type), int(ceil(time_left)), _enemy_nodes.size()]
-
 func _get_current_rare_chance() -> float:
 	var base_chance := lerpf(0.20, 0.45, clampf(float(_room_depth - 1) / 19.0, 0.0, 1.0))
 	return clampf(base_chance + _room_rare_bonus, 0.0, 0.60)
@@ -1952,197 +1616,18 @@ func _signature_share(depth: int) -> float:
 	return clampf(float(depth - 4) / 16.0, 0.0, 0.5)
 
 func _format_objective_text() -> String:
-	if _side_objective_completed:
-		return "Complete"
-	match _side_objective_id:
-		"hold_zone":
-			return _hold_zone.get_progress_text() if _hold_zone != null and is_instance_valid(_hold_zone) else "Hold Zone"
-		"kill_streak":
-			return "Kill Streak %d/%d" % [_kill_streak_progress, _kill_streak_target]
-		"collector":
-			return "Collector %d/%d" % [_collector_collected, COLLECTOR_TARGET]
-		_:
-			return ""
+	return _hud.format_objective_text() if _hud != null else ""
 
 func _build_side_objective_text() -> String:
-	if _side_objective_id.is_empty():
-		return ""
-	if _side_objective_completed:
-		return "Objective complete: %s Buff" % CoopFormat.format_buff_name(str(_hold_buff_offer.get("type", "")))
-	match _side_objective_id:
-		"hold_zone":
-			return _hold_zone.get_progress_text() if _hold_zone != null and is_instance_valid(_hold_zone) else ""
-		"kill_streak":
-			return "Kill Streak: %d/%d" % [_kill_streak_progress, _kill_streak_target]
-		"collector":
-			return "Collector: %d/%d orbs" % [_collector_collected, COLLECTOR_TARGET]
-		_:
-			return ""
-
-func _refresh_objective_panel() -> void:
-	if _objective_panel == null:
-		return
-	var has_objective := not _side_objective_id.is_empty()
-	_objective_panel.visible = has_objective
-	if not has_objective:
-		return
-	_objective_icon_label.text = _get_objective_icon_text()
-	_objective_title_label.text = _get_objective_title_text()
-	_objective_progress_label.text = _build_side_objective_text()
-	_objective_progress_bar.value = _get_objective_progress_ratio() * 100.0
-
-func _get_objective_icon_text() -> String:
-	match _side_objective_id:
-		"hold_zone":
-			return "H"
-		"kill_streak":
-			return "K"
-		"collector":
-			return "C"
-		_:
-			return "!"
-
-func _get_objective_title_text() -> String:
-	if _side_objective_completed:
-		return "Objective Complete"
-	match _side_objective_id:
-		"hold_zone":
-			return "Hold Zone"
-		"kill_streak":
-			return "Kill Streak"
-		"collector":
-			return "Collect"
-		_:
-			return "Objective"
-
-func _get_objective_progress_ratio() -> float:
-	if _side_objective_completed:
-		return 1.0
-	match _side_objective_id:
-		"hold_zone":
-			return _hold_zone.get_progress_ratio() if _hold_zone != null and is_instance_valid(_hold_zone) and _hold_zone.has_method("get_progress_ratio") else 0.0
-		"kill_streak":
-			return clampf(float(_kill_streak_progress) / maxf(float(_kill_streak_target), 1.0), 0.0, 1.0)
-		"collector":
-			return clampf(float(_collector_collected) / float(COLLECTOR_TARGET), 0.0, 1.0)
-		_:
-			return 0.0
-
-func _update_player_combat_indicators() -> void:
-	for index in range(min(_player_combat_indicators.size(), _player_nodes.size())):
-		var player = _player_nodes[index]
-		var health_state: Dictionary = player.get_health_state()
-		var slot_1_hud_data: Dictionary = player.get_ability_hud_data(0)
-		var slot_2_hud_data: Dictionary = player.get_ability_hud_data(1)
-		_player_combat_indicators[index].update_state(
-			int(health_state.get("current", 0)),
-			int(health_state.get("max", 1)),
-			player.is_downed(),
-			float(slot_1_hud_data.get("cooldown_remaining", 0.0)),
-			float(slot_1_hud_data.get("cooldown_duration", 1.0)),
-			float(slot_2_hud_data.get("cooldown_remaining", 0.0)),
-			float(slot_2_hud_data.get("cooldown_duration", 1.0)),
-			str(slot_1_hud_data.get("name", "")),
-			str(slot_2_hud_data.get("name", ""))
-		)
-		if index < _revive_markers.size():
-			var marker = _revive_markers[index]
-			if marker != null and is_instance_valid(marker):
-				var progress := float(_revive_progress_by_player_id.get(player.player_id, 0.0)) / REVIVE_HOLD_DURATION
-				marker.set_state(player.is_downed(), progress, _player_configs[index].tint)
-
-func _refresh_bottom_hud() -> void:
-	for index in range(min(_bottom_player_hud_cards.size(), _player_nodes.size())):
-		var card: Dictionary = _bottom_player_hud_cards[index]
-		var player = _player_nodes[index]
-		var health_state: Dictionary = player.get_health_state()
-		var slot_1_hud_data: Dictionary = player.get_ability_hud_data(0)
-		var slot_2_hud_data: Dictionary = player.get_ability_hud_data(1)
-		var health_ratio := clampf(float(health_state.get("current", 0)) / maxf(float(health_state.get("max", 1)), 1.0), 0.0, 1.0)
-		var slot_1_ratio := 1.0
-		var slot_2_ratio := 1.0
-		var slot_1_duration := maxf(float(slot_1_hud_data.get("cooldown_duration", 1.0)), 0.01)
-		var slot_2_duration := maxf(float(slot_2_hud_data.get("cooldown_duration", 1.0)), 0.01)
-		slot_1_ratio = 1.0 - clampf(float(slot_1_hud_data.get("cooldown_remaining", 0.0)) / slot_1_duration, 0.0, 1.0)
-		slot_2_ratio = 1.0 - clampf(float(slot_2_hud_data.get("cooldown_remaining", 0.0)) / slot_2_duration, 0.0, 1.0)
-		(card.get("health_bar") as ProgressBar).value = health_ratio * 100.0
-		(card.get("slot_1_label") as Label).text = str(slot_1_hud_data.get("name", "Ability 1"))
-		_update_slot_charge_label(card.get("slot_1_charge_label") as Label, slot_1_hud_data)
-		(card.get("slot_1_bar") as ProgressBar).value = slot_1_ratio * 100.0
-		(card.get("slot_2_label") as Label).text = str(slot_2_hud_data.get("name", "Ability 2"))
-		_update_slot_charge_label(card.get("slot_2_charge_label") as Label, slot_2_hud_data)
-		(card.get("slot_2_bar") as ProgressBar).value = slot_2_ratio * 100.0
-		_refresh_momentum_pips(card, index)
-
-func _refresh_momentum_pips(card: Dictionary, player_index: int) -> void:
-	var pips: Array = card.get("momentum_pips", []) as Array
-	var tier := int(_momentum_tier_by_player[player_index]) if player_index < _momentum_tier_by_player.size() else 0
-	var tint: Color = _player_configs[player_index].tint if player_index < _player_configs.size() else Color.WHITE
-	for index in range(pips.size()):
-		var pip: ColorRect = pips[index] as ColorRect
-		if pip == null:
-			continue
-		pip.color = Color(tint.r, tint.g, tint.b, 0.92) if index < tier else Color(tint.r, tint.g, tint.b, 0.18)
-
-func _update_slot_charge_label(label: Label, slot_hud_data: Dictionary) -> void:
-	if label == null:
-		return
-	var max_charges := int(slot_hud_data.get("charges_max", 1))
-	if max_charges <= 1:
-		label.visible = false
-		label.text = ""
-		return
-	label.visible = true
-	label.text = "%d/%d" % [int(slot_hud_data.get("charges_current", max_charges)), max_charges]
+	return _hud.build_side_objective_text() if _hud != null else ""
 
 func _update_player_combat_indicator_positions() -> void:
-	if _player_combat_indicators.is_empty():
-		return
-	var viewport_size: Vector2 = get_viewport_rect().size
-	var canvas_transform: Transform2D = get_viewport().get_canvas_transform()
-	for index in range(min(_player_combat_indicators.size(), _player_nodes.size())):
-		var indicator = _player_combat_indicators[index]
-		var player = _player_nodes[index]
-		if indicator == null or not is_instance_valid(indicator) or player == null or not is_instance_valid(player):
-			continue
-		var screen_position: Vector2 = (canvas_transform * player.global_position).round()
-		var indicator_size: Vector2 = indicator.custom_minimum_size
-		var top_left := screen_position + Vector2(-indicator_size.x * 0.5, -20.0)
-		top_left.x = clampf(top_left.x, 8.0, viewport_size.x - indicator_size.x - 8.0)
-		top_left.y = clampf(top_left.y, 8.0, viewport_size.y - indicator_size.y - 8.0)
-		indicator.position = top_left.round()
-		if index < _revive_markers.size():
-			var marker = _revive_markers[index]
-			if marker != null and is_instance_valid(marker):
-				var marker_size: Vector2 = marker.custom_minimum_size
-				var marker_position := screen_position + Vector2(-marker_size.x * 0.5, indicator_size.y - 6.0)
-				marker_position.x = clampf(marker_position.x, 8.0, viewport_size.x - marker_size.x - 8.0)
-				marker_position.y = clampf(marker_position.y, 8.0, viewport_size.y - marker_size.y - 8.0)
-				marker.position = marker_position.round()
+	if _hud != null:
+		_hud.update_player_combat_indicator_positions()
 
 func _populate_modifier_hud() -> void:
-	if _modifier_hud == null:
-		return
-	for child in _modifier_hud.get_children():
-		child.queue_free()
-	for mod_id_variant in _active_modifiers:
-		var mod_id := str(mod_id_variant)
-		var chip := PanelContainer.new()
-		chip.custom_minimum_size = Vector2(0.0, 28.0)
-		var style := StyleBoxFlat.new()
-		style.bg_color = CoopFormat.get_modifier_chip_color(mod_id, _modifier_definitions)
-		style.set_border_width_all(1)
-		style.border_color = CoopFormat.get_modifier_chip_color(mod_id, _modifier_definitions).lightened(0.3)
-		style.corner_radius_top_left = 4
-		style.corner_radius_top_right = 4
-		style.corner_radius_bottom_left = 4
-		style.corner_radius_bottom_right = 4
-		style.set_content_margin_all(6)
-		chip.add_theme_stylebox_override("panel", style)
-		var lbl := Label.new()
-		lbl.text = CoopFormat.format_modifier_display_name(mod_id, _modifier_definitions)
-		chip.add_child(lbl)
-		_modifier_hud.add_child(chip)
+	if _hud != null:
+		_hud.populate_modifier_hud()
 
 func _complete_side_objective() -> void:
 	if _side_objective_completed or _temp_buff_system == null or _hold_buff_offer.is_empty():
@@ -2449,6 +1934,57 @@ func get_active_players() -> Array:
 		if player != null and is_instance_valid(player) and player.is_alive():
 			active_players.append(player)
 	return active_players
+
+func get_player_configs() -> Array:
+	return _player_configs
+
+func get_active_boss():
+	return _active_boss
+
+func get_room_config() -> Dictionary:
+	return _room_config.duplicate(true)
+
+func get_room_type() -> String:
+	return _room_type
+
+func get_room_depth() -> int:
+	return _room_depth
+
+func get_room_duration() -> float:
+	return _room_duration
+
+func get_room_elapsed() -> float:
+	return _room_elapsed
+
+func is_spawning_done() -> bool:
+	return _spawning_done
+
+func get_side_objective_view() -> Dictionary:
+	return {
+		"id": _side_objective_id,
+		"completed": _side_objective_completed,
+		"hold_zone": _hold_zone,
+		"hold_buff_offer": _hold_buff_offer.duplicate(true),
+		"kill_streak_progress": _kill_streak_progress,
+		"kill_streak_target": _kill_streak_target,
+		"collector_collected": _collector_collected,
+		"collector_target": COLLECTOR_TARGET,
+	}
+
+func get_revive_progress_for_player_id(player_id: int) -> float:
+	return float(_revive_progress_by_player_id.get(player_id, 0.0))
+
+func get_revive_hold_duration() -> float:
+	return REVIVE_HOLD_DURATION
+
+func get_active_modifiers() -> Array:
+	return _active_modifiers.duplicate()
+
+func get_modifier_definitions() -> Dictionary:
+	return _modifier_definitions
+
+func get_momentum_tier(player_index: int) -> int:
+	return int(_momentum_tier_by_player[player_index]) if player_index >= 0 and player_index < _momentum_tier_by_player.size() else 0
 
 func _get_nearest_player_to(origin: Vector2):
 	return get_nearest_player_to(origin)

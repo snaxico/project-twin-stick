@@ -51,6 +51,10 @@
   entry point, enemy combat-owner facade, and source of player/enemy target accessors.
 - `ArenaVisuals.gd` — CoopManager-owned child node for floor/grid/wall visuals, arena collision bounds,
   exit-zone/camera arena setup, arena color application, and the grid pulse pump.
+- `GameHud.gd` — CoopManager-owned child node for in-room HUD construction and refresh: XP/score/room
+  labels, boss health, side-objective panel, modifier chips, player combat indicators, revive markers, and
+  bottom player cards. CoopManager exposes read-only room/player/objective accessors and keeps wrapper
+  call sites until the remaining decomposition tasks move result/flow code.
 - Room types: `combat` / `elite` / `boss` (no rest/shop). Encounter Builder / Debug Menu use the
   single-room debug path — a fast-iteration entry, not a second source of truth.
 

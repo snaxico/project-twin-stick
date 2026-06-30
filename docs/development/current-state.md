@@ -116,6 +116,9 @@ patch is implemented and playtest-approved.
     combat-owner facade delegators. Player target lookup remains centralized on `CoopManager.gd`.
   - `ArenaVisuals.gd` owns floor polygon setup, grid/wall visuals, collision-bound sizing, exit-zone/camera
     arena setup, arena color application, and the grid pulse tick.
+  - `GameHud.gd` owns in-room HUD construction/refresh, player combat indicators, revive markers, bottom
+    player cards, modifier chips, boss health, and objective panel presentation. `CoopManager.gd` keeps
+    wrapper call sites and exposes read-only room/player/objective accessors for the HUD.
 - `RunFlow.gd` now owns:
   - next-room choice panel
   - room launch
@@ -140,6 +143,8 @@ Last validation run in this state:
   - `Godot_v4.6.2-stable_win64_console.exe --headless --path D:\GameDev\Project_Twin_stick --quit`
 - Bootstrap scene headless smoke boot:
   - `Godot_v4.6.2-stable_win64_console.exe --headless --path D:\GameDev\Project_Twin_stick res://scenes/ui/Bootstrap.tscn --quit`
+- PerfRunner Hive champion profile:
+  - `Godot_v4.6.2-stable_win64_console.exe --headless --path D:\GameDev\Project_Twin_stick --profile=champion:hive --players=2 --build=heavy --quit`
 
 ## Known Risks
 
