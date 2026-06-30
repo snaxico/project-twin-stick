@@ -74,6 +74,9 @@
   effect queues: shockwaves, hazard zones, minion bursts/mixes, support aura, Pulsar EMP, attack trails,
   enemy death explosions, and player shockwave pulses. CoopManager keeps the facade methods used by
   `Enemy.gd`, shared runtime helper lists, and hazard registration.
+- `PauseDebugUi.gd` — CoopManager-owned child node for pause panel wiring/runtime freeze, pause Build
+  overlay rendering, encyclopedia launch, debug overlay construction/actions, and pause input proxy handling.
+  CoopManager keeps runtime lifecycle callbacks and exposes the data/accessors the helper needs.
 - Room types: `combat` / `elite` / `boss` (no rest/shop). Encounter Builder / Debug Menu use the
   single-room debug path — a fast-iteration entry, not a second source of truth.
 

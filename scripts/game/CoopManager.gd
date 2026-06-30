@@ -4,8 +4,6 @@ const EnemySceneData = preload("res://scenes/enemies/Enemy.tscn")
 const ProjectileSceneData = preload("res://scenes/weapons/Projectile.tscn")
 const MutationSystemData = preload("res://scripts/game/MutationSystem.gd")
 const AbilityRegistryData = preload("res://scripts/game/AbilityRegistry.gd")
-const HudPaletteData = preload("res://scripts/game/HudPalette.gd")
-const CoopFormat = preload("res://scripts/game/CoopFormat.gd")
 const EnemyTypes = preload("res://scripts/game/EnemyTypes.gd")
 const ArenaGeometry = preload("res://scripts/game/ArenaGeometry.gd")
 const ProjectileSystemData = preload("res://scripts/game/ProjectileSystem.gd")
@@ -27,10 +25,8 @@ const HealthPickupData = preload("res://scripts/pickups/HealthPickup.gd")
 const HazardZoneData = preload("res://scripts/game/HazardZone.gd")
 const AbilityMineData = preload("res://scripts/game/AbilityMine.gd")
 const ParticleFactoryData = preload("res://scripts/juice/ParticleFactory.gd")
-const IconFactoryData = preload("res://scripts/ui/IconFactory.gd")
 const HitStopManagerData = preload("res://scripts/juice/HitStopManager.gd")
-const PauseInputProxyData = preload("res://scripts/ui/PauseInputProxy.gd")
-const EncyclopediaUIData = preload("res://scripts/ui/EncyclopediaUI.gd")
+const PauseDebugUiData = preload("res://scripts/game/PauseDebugUi.gd")
 
 const MODIFIERS_DATA_PATH := "res://data/modifiers.json"
 
@@ -49,7 +45,6 @@ const HUD_REFRESH_INTERVAL := 0.08
 const BOSS_HIT_FEEDBACK_INTERVAL := 0.22
 const HEALTH_DROP_CHANCE := 0.06
 const ENEMY_SEPARATION_CELL_SIZE := 96.0
-const HUD_SLOT_2_COLOR := HudPaletteData.SLOT_2_COLOR
 const GAMEPLAY_INPUT_SUFFIXES := [
 	"move_left",
 	"move_right",
@@ -64,21 +59,6 @@ const GAMEPLAY_INPUT_SUFFIXES := [
 	"dash",
 	"switch_primary",
 	"switch_secondary",
-]
-const DEBUG_ENEMY_SPAWN_CATALOG := [
-	{"label": "Chaser", "value": "chaser"},
-	{"label": "Charger", "value": "charger"},
-	{"label": "Spitter", "value": "spitter"},
-	{"label": "Splitter", "value": "splitter"},
-	{"label": "Splitter Mini", "value": "splitter_mini"},
-	{"label": "Bomber", "value": "bomber"},
-	{"label": "Champion Charger", "value": "elite_charger"},
-	{"label": "Champion Spitter", "value": "elite_spitter"},
-	{"label": "Champion Support", "value": "elite_support"},
-	{"label": "Champion Warden", "value": "boss_warden"},
-	{"label": "Champion Hydra", "value": "boss_hydra"},
-	{"label": "Champion Hive", "value": "boss_hive"},
-	{"label": "Champion Pulsar", "value": "boss_pulsar"},
 ]
 
 const XP_PER_ENEMY_TYPE := {
@@ -156,6 +136,7 @@ var _side_objectives = null
 var _momentum_tracker = null
 var _mutation_pick_flow = null
 var _combat_effects = null
+var _pause_debug_ui = null
 var _modifier_definitions: Dictionary = {}
 var _minor_modifier_flags := {
 	"accelerating_waves": false,
@@ -176,15 +157,9 @@ var _active_mines: Array = []
 var _next_hud_refresh_at := 0.0
 var _enemy_separation_grid: Dictionary = {}
 var _enemy_separation_grid_frame := -1
-var _game_paused := false
-var _pause_input_proxy = null
 var _projectile_system = null
 var _screen_effect_level := "full"
 var _hit_stop_manager = null
-var _debug_overlay_panel: PanelContainer = null
-var _debug_spawn_option: OptionButton = null
-var _debug_weapon_option: OptionButton = null
-var _debug_god_check: CheckBox = null
 
 func configure_players(configs: Array) -> void:
 	_player_configs = configs.duplicate()
@@ -193,6 +168,19 @@ func configure_room(room_config: Dictionary) -> void:
 	_room_config = room_config.duplicate(true)
 
 func _ready() -> void:
+	_pause_debug_ui = PauseDebugUiData.new()
+	_pause_debug_ui.name = "PauseDebugUi"
+	_pause_debug_ui.setup(
+		self,
+		ui_layer,
+		pause_panel,
+		resume_button,
+		pause_retry_button,
+		pause_main_menu_button,
+		_mutation_system,
+		_ability_registry
+	)
+	add_child(_pause_debug_ui)
 	_ensure_debug_overlay_action()
 	if player_scene == null:
 		player_scene = load("res://scenes/player/Player.tscn")
@@ -262,23 +250,12 @@ func _ready() -> void:
 	_start_room()
 
 func _bind_ui() -> void:
-	resume_button.pressed.connect(_on_resume_pressed)
-	pause_retry_button.pressed.connect(_on_retry_pressed)
-	pause_main_menu_button.pressed.connect(_on_main_menu_pressed)
-	_configure_pause_focus()
-	_pause_input_proxy = PauseInputProxyData.new()
-	pause_panel.add_child(_pause_input_proxy)
-	_pause_input_proxy.pause_pressed.connect(_on_pause_proxy_pressed)
+	if _pause_debug_ui != null:
+		_pause_debug_ui.bind_ui()
 
 func _configure_pause_focus() -> void:
-	var buttons := [resume_button, pause_retry_button, pause_main_menu_button]
-	for index in range(buttons.size()):
-		var button := buttons[index] as Button
-		button.focus_mode = Control.FOCUS_ALL
-		var previous_button := buttons[(index - 1 + buttons.size()) % buttons.size()] as Button
-		var next_button := buttons[(index + 1) % buttons.size()] as Button
-		button.focus_neighbor_top = button.get_path_to(previous_button)
-		button.focus_neighbor_bottom = button.get_path_to(next_button)
+	if _pause_debug_ui != null:
+		_pause_debug_ui.configure_pause_focus()
 
 func _apply_screen_effect_level() -> void:
 	if screen_effects != null and screen_effects.has_method("set_effect_level"):
@@ -315,69 +292,8 @@ func _build_hud() -> void:
 	_hud.build()
 
 func _build_debug_overlay() -> void:
-	if not _is_debug_menu_enabled():
-		return
-	_debug_overlay_panel = PanelContainer.new()
-	_debug_overlay_panel.visible = false
-	_debug_overlay_panel.position = Vector2(28.0, 136.0)
-	_debug_overlay_panel.custom_minimum_size = Vector2(360.0, 0.0)
-	ui_layer.add_child(_debug_overlay_panel)
-	var margin := MarginContainer.new()
-	margin.add_theme_constant_override("margin_left", 12)
-	margin.add_theme_constant_override("margin_top", 12)
-	margin.add_theme_constant_override("margin_right", 12)
-	margin.add_theme_constant_override("margin_bottom", 12)
-	_debug_overlay_panel.add_child(margin)
-	var layout := VBoxContainer.new()
-	layout.add_theme_constant_override("separation", 8)
-	margin.add_child(layout)
-	var title := Label.new()
-	title.text = "Debug Overlay"
-	title.add_theme_font_size_override("font_size", 17)
-	layout.add_child(title)
-	var spawn_row := HBoxContainer.new()
-	spawn_row.add_theme_constant_override("separation", 8)
-	layout.add_child(spawn_row)
-	_debug_spawn_option = OptionButton.new()
-	_debug_spawn_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	for entry in DEBUG_ENEMY_SPAWN_CATALOG:
-		_debug_spawn_option.add_item(str(entry["label"]))
-		_debug_spawn_option.set_item_metadata(_debug_spawn_option.item_count - 1, str(entry["value"]))
-	spawn_row.add_child(_debug_spawn_option)
-	var spawn_button := Button.new()
-	spawn_button.text = "Spawn Selected"
-	spawn_button.pressed.connect(_on_debug_spawn_pressed)
-	spawn_row.add_child(spawn_button)
-	var weapon_row := HBoxContainer.new()
-	weapon_row.add_theme_constant_override("separation", 8)
-	layout.add_child(weapon_row)
-	_debug_weapon_option = OptionButton.new()
-	_debug_weapon_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	for weapon in RunState.get_weapon_catalog():
-		var weapon_dict: Dictionary = weapon as Dictionary
-		var weapon_id := str(weapon_dict.get("id", ""))
-		if weapon_id.is_empty():
-			continue
-		_debug_weapon_option.add_item(str(weapon_dict.get("name", weapon_id.capitalize())))
-		_debug_weapon_option.set_item_metadata(_debug_weapon_option.item_count - 1, weapon_id)
-	weapon_row.add_child(_debug_weapon_option)
-	var set_weapon_button := Button.new()
-	set_weapon_button.text = "Set Weapon"
-	set_weapon_button.pressed.connect(_on_debug_set_weapon_pressed)
-	weapon_row.add_child(set_weapon_button)
-	var level_button := Button.new()
-	level_button.text = "Give P1 Weapon Level"
-	level_button.pressed.connect(_on_debug_give_weapon_level_pressed)
-	layout.add_child(level_button)
-	var clear_button := Button.new()
-	clear_button.text = "Clear Enemies"
-	clear_button.pressed.connect(_on_debug_clear_enemies_pressed)
-	layout.add_child(clear_button)
-	_debug_god_check = CheckBox.new()
-	_debug_god_check.text = "God Mode"
-	_debug_god_check.button_pressed = RunState.debug_profiling
-	_debug_god_check.toggled.connect(_on_debug_god_toggled)
-	layout.add_child(_debug_god_check)
+	if _pause_debug_ui != null:
+		_pause_debug_ui.build_debug_overlay()
 
 func _spawn_players() -> void:
 	for child in players.get_children():
@@ -473,6 +389,9 @@ func _rebuild_player_loadouts() -> void:
 		if _momentum_tracker != null:
 			_momentum_tracker.update_players(_player_nodes)
 			_momentum_tracker.apply_to_player(index)
+
+func rebuild_player_loadouts() -> void:
+	_rebuild_player_loadouts()
 
 func _restore_momentum() -> void:
 	if _momentum_tracker != null:
@@ -703,7 +622,7 @@ func _physics_process(delta: float) -> void:
 	_arena_visuals.tick(delta)
 	if _awaiting_mutation_pick:
 		return
-	if _game_paused or pause_panel.visible or get_tree().paused:
+	if (_pause_debug_ui != null and _pause_debug_ui.is_game_paused()) or pause_panel.visible or get_tree().paused:
 		return
 	_room_elapsed += delta
 	_update_screen_atmosphere()
@@ -1230,6 +1149,9 @@ func _refresh_hud() -> void:
 	if _hud != null:
 		_hud.refresh()
 
+func refresh_hud() -> void:
+	_refresh_hud()
+
 func notify_run_score_changed() -> void:
 	_refresh_hud()
 
@@ -1392,6 +1314,9 @@ func get_active_players() -> Array:
 func get_player_configs() -> Array:
 	return _player_configs
 
+func get_compiled_loadouts() -> Array:
+	return _compiled_loadouts
+
 func get_active_boss():
 	return _wave_director.get_active_boss() if _wave_director != null else null
 
@@ -1454,6 +1379,9 @@ func get_nearest_player_to(origin: Vector2):
 
 func get_arena_rect() -> Rect2:
 	return ARENA_RECT
+
+func get_arena_center() -> Vector2:
+	return ARENA_CENTER
 
 func get_player_target_nodes() -> Array:
 	return _player_nodes
@@ -1540,39 +1468,32 @@ func _lock_player_input(locked: bool) -> void:
 		if player != null and is_instance_valid(player):
 			player.set_input_locked(locked)
 
+func lock_player_input(locked: bool) -> void:
+	_lock_player_input(locked)
+
 func _set_game_paused(paused: bool) -> void:
-	_game_paused = paused
-	pause_panel.visible = paused
-	_lock_player_input(paused)
-	_set_runtime_pause_state(paused)
-	get_tree().paused = paused
-	if paused:
-		_ensure_pause_encyclopedia_button()
-		resume_button.grab_focus()
-		_populate_pause_build_overlay()
+	if _pause_debug_ui != null:
+		_pause_debug_ui.set_game_paused(paused)
 
 func _set_runtime_pause_state(paused: bool) -> void:
-	_set_nodes_physics_paused(projectiles.get_children(), paused)
-	_set_nodes_physics_paused(pickups.get_children(), paused)
-	_set_nodes_physics_paused(effects.get_children(), paused)
-	_set_nodes_physics_paused(_enemy_nodes, paused)
-	_set_nodes_physics_paused(_active_hazards, paused)
-	_set_nodes_physics_paused(_active_mines, paused)
-	_set_nodes_physics_paused(_active_decoys, paused)
-	_set_nodes_physics_paused(_active_turrets, paused)
-	_set_nodes_physics_paused(_active_orbits, paused)
-	for modifier in [_fire_floor_modifier, _ice_zone_modifier, _mine_field_modifier, _shrinking_arena_modifier]:
-		_set_single_node_physics_paused(modifier, paused)
+	if _pause_debug_ui != null:
+		_pause_debug_ui.set_runtime_pause_state(paused)
 
-func _set_nodes_physics_paused(nodes: Array, paused: bool) -> void:
-	for node in nodes:
-		_set_single_node_physics_paused(node, paused)
+func get_runtime_pause_node_groups() -> Array:
+	return [
+		projectiles.get_children(),
+		pickups.get_children(),
+		effects.get_children(),
+		_enemy_nodes,
+		_active_hazards,
+		_active_mines,
+		_active_decoys,
+		_active_turrets,
+		_active_orbits,
+	]
 
-func _set_single_node_physics_paused(node, paused: bool) -> void:
-	if node == null or not is_instance_valid(node):
-		return
-	node.set_process(not paused)
-	node.set_physics_process(not paused)
+func get_runtime_pause_singletons() -> Array:
+	return [_fire_floor_modifier, _ice_zone_modifier, _mine_field_modifier, _shrinking_arena_modifier]
 
 func _sync_player_health_state(player) -> void:
 	if player == null or not is_instance_valid(player):
@@ -1582,272 +1503,23 @@ func _sync_player_health_state(player) -> void:
 		return
 	RunState.player_health_states[player_index] = player.get_health_state()
 
-func _on_retry_pressed() -> void:
+func restart_current_room() -> void:
 	_set_game_paused(false)
 	_start_room()
 
-func _on_resume_pressed() -> void:
-	_set_game_paused(false)
-
-func _on_main_menu_pressed() -> void:
+func request_return_to_menu() -> void:
 	_set_game_paused(false)
 	return_to_menu_requested.emit()
-
-func _ensure_pause_encyclopedia_button() -> void:
-	var pause_layout := pause_panel.get_node_or_null("CenterContainer/PauseLayout")
-	if pause_layout == null or pause_layout.get_node_or_null("EncyclopediaButton") != null:
-		return
-	var button := Button.new()
-	button.name = "EncyclopediaButton"
-	button.text = "Encyclopedia"
-	button.pressed.connect(_open_encyclopedia_overlay)
-	pause_layout.add_child(button)
-	var retry_index := pause_retry_button.get_index() if pause_retry_button != null else pause_layout.get_child_count() - 1
-	pause_layout.move_child(button, retry_index)
-
-func _open_encyclopedia_overlay() -> void:
-	var existing := ui_layer.get_node_or_null("EncyclopediaUI")
-	if existing != null:
-		existing.queue_free()
-	var encyclopedia := EncyclopediaUIData.new()
-	encyclopedia.name = "EncyclopediaUI"
-	ui_layer.add_child(encyclopedia)
 
 func _unhandled_input(event: InputEvent) -> void:
 	if _awaiting_mutation_pick:
 		return
-	if _is_debug_menu_enabled() and event.is_action_pressed("debug_overlay_toggle"):
-		_toggle_debug_overlay()
+	if _pause_debug_ui != null and _pause_debug_ui.handle_unhandled_input(event):
 		get_viewport().set_input_as_handled()
-		return
-	if event.is_action_pressed("pause"):
-		if pause_panel.visible:
-			_on_resume_pressed()
-		else:
-			_set_game_paused(true)
-		get_viewport().set_input_as_handled()
-
-func _on_pause_proxy_pressed() -> void:
-	if _game_paused:
-		_on_resume_pressed()
-
-func _toggle_debug_overlay() -> void:
-	if _debug_overlay_panel == null or not is_instance_valid(_debug_overlay_panel):
-		return
-	_debug_overlay_panel.visible = not _debug_overlay_panel.visible
-
-func _on_debug_spawn_pressed() -> void:
-	if _debug_spawn_option == null:
-		return
-	var enemy_type := str(_debug_spawn_option.get_selected_metadata())
-	var spawn_position := ARENA_CENTER
-	var target: Node2D = _get_nearest_player_to(ARENA_CENTER)
-	if target != null and is_instance_valid(target):
-		spawn_position = target.global_position + Vector2.RIGHT.rotated(randf_range(0.0, TAU)) * 360.0
-	var spawned := _spawn_enemy_instance(enemy_type, spawn_position)
-	if spawned != null and spawned.has_method("apply_champion_scale") and EnemyTypes.is_champion(enemy_type):
-		spawned.apply_champion_scale(_room_depth, _player_nodes.size())
-
-func _on_debug_give_weapon_level_pressed() -> void:
-	RunState.level_up_weapon(0)
-	_rebuild_player_loadouts()
-	_refresh_hud()
-
-func _on_debug_set_weapon_pressed() -> void:
-	if _debug_weapon_option == null:
-		return
-	var weapon_id := str(_debug_weapon_option.get_selected_metadata())
-	if weapon_id.is_empty():
-		return
-	RunState.set_active_weapon(0, weapon_id)
-	_rebuild_player_loadouts()
-	_refresh_hud()
-
-func _on_debug_clear_enemies_pressed() -> void:
-	for enemy in _enemy_nodes.duplicate():
-		if enemy != null and is_instance_valid(enemy) and enemy.has_method("apply_damage"):
-			enemy.apply_damage(999999)
-
-func _on_debug_god_toggled(pressed: bool) -> void:
-	RunState.debug_profiling = pressed
-
-func _is_debug_menu_enabled() -> bool:
-	if OS.is_debug_build():
-		return true
-	for arg in OS.get_cmdline_user_args():
-		if arg == "--debug-menu":
-			return true
-	return false
 
 func _ensure_debug_overlay_action() -> void:
-	if not InputMap.has_action("debug_overlay_toggle"):
-		InputMap.add_action("debug_overlay_toggle")
-	if InputMap.action_get_events("debug_overlay_toggle").is_empty():
-		var key_event := InputEventKey.new()
-		key_event.keycode = KEY_F4
-		key_event.physical_keycode = KEY_F4
-		InputMap.action_add_event("debug_overlay_toggle", key_event)
-
-func _populate_pause_build_overlay() -> void:
-	var pause_layout := pause_panel.get_node_or_null("CenterContainer/PauseLayout")
-	if pause_layout == null:
-		return
-	var existing := pause_layout.get_node_or_null("BuildOverlay")
-	if existing != null:
-		pause_layout.remove_child(existing)
-		existing.queue_free()
-	var overlay := VBoxContainer.new()
-	overlay.name = "BuildOverlay"
-	overlay.add_theme_constant_override("separation", 10)
-	pause_layout.add_child(overlay)
-	var resume := pause_layout.get_node_or_null("ResumeButton")
-	if resume != null:
-		pause_layout.move_child(overlay, resume.get_index())
-	for player_index in range(_player_nodes.size()):
-		var player = _player_nodes[player_index]
-		var header := Label.new()
-		header.text = "P%d Build" % (player_index + 1)
-		header.add_theme_font_size_override("font_size", 15)
-		var player_tint: Color = _player_configs[player_index].tint
-		header.add_theme_color_override("font_color", player_tint.lightened(0.2))
-		overlay.add_child(header)
-		var loadout: Dictionary = _compiled_loadouts[player_index] if player_index < _compiled_loadouts.size() else RunState.get_player_runtime_loadout_for(player_index)
-		var weapon_stats: Dictionary = loadout.get("weapon_stats", {}) as Dictionary
-		var weapon_label := Label.new()
-		weapon_label.text = "%s Lv%d - %d dmg @ %.1f/s" % [
-			str(loadout.get("weapon_name", "Rifle")),
-			int(loadout.get("weapon_level", 1)),
-			int(round(float(weapon_stats.get("damage", 16.0)))),
-			float(weapon_stats.get("fire_rate", 4.0)),
-		]
-		weapon_label.add_theme_font_size_override("font_size", 12)
-		weapon_label.add_theme_color_override("font_color", Color(0.92, 0.94, 1.0, 0.9))
-		overlay.add_child(weapon_label)
-		var ability_cards := HBoxContainer.new()
-		ability_cards.add_theme_constant_override("separation", 8)
-		overlay.add_child(ability_cards)
-		ability_cards.add_child(_create_build_ability_card(player, player_tint, 0))
-		ability_cards.add_child(_create_build_ability_card(player, player_tint, 1))
-		var mutations: Array = _mutation_system.get_active_mutations(player_index)
-		var counts: Dictionary = {}
-		for mutation in mutations:
-			var mutation_dict: Dictionary = mutation as Dictionary
-			var mutation_id := str(mutation_dict.get("id", ""))
-			if mutation_id.is_empty():
-				continue
-			counts[mutation_id] = {
-				"name": str(mutation_dict.get("name", mutation_id)),
-				"count": int(counts.get(mutation_id, {}).get("count", 0)) + 1,
-				"rarity": str(mutation_dict.get("rarity", "common")),
-				"group": str(mutation_dict.get("group", "attribute")),
-				"description": str(mutation_dict.get("description", "")),
-			}
-		if counts.is_empty():
-			var empty_label := Label.new()
-			empty_label.text = "  No upgrades yet"
-			empty_label.add_theme_font_size_override("font_size", 11)
-			empty_label.modulate = Color(0.7, 0.78, 0.88, 0.7)
-			overlay.add_child(empty_label)
-		else:
-			var chip_flow := FlowContainer.new()
-			chip_flow.add_theme_constant_override("h_separation", 6)
-			chip_flow.add_theme_constant_override("v_separation", 4)
-			overlay.add_child(chip_flow)
-			var sorted_mutations := counts.values()
-			sorted_mutations.sort_custom(Callable(self, "_compare_mutation_entries"))
-			for entry_variant in sorted_mutations:
-				chip_flow.add_child(_create_mutation_chip(entry_variant as Dictionary))
-		var stats_line := Label.new()
-		var fire_rate := float(player.get_current_fire_rate()) if player.has_method("get_current_fire_rate") else 0.0
-		stats_line.text = "Move %d  -  HP %d  -  Fire %.1f/s" % [
-			int(round(float(player.move_speed))),
-			int(player.max_health),
-			fire_rate,
-		]
-		stats_line.add_theme_font_size_override("font_size", 11)
-		stats_line.add_theme_color_override("font_color", Color(0.84, 0.92, 1.0, 0.78))
-		overlay.add_child(stats_line)
-
-func _create_build_ability_card(player, player_tint: Color, slot_index: int) -> PanelContainer:
-	var slot_data: Dictionary = player.get_ability_hud_data(slot_index)
-	var ability_id := str(slot_data.get("skill_id", ""))
-	var cooldown := float(slot_data.get("base_cooldown", 0.0))
-	if cooldown <= 0.0:
-		cooldown = float(_ability_registry.get_definition(ability_id).get("cooldown", 0.0))
-	var slot_color := CoopFormat.get_slot_color(player_tint, slot_index, HUD_SLOT_2_COLOR)
-	var card := PanelContainer.new()
-	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(slot_color.r * 0.12, slot_color.g * 0.12, slot_color.b * 0.12, 0.84)
-	style.border_color = Color(slot_color.r, slot_color.g, slot_color.b, 0.9)
-	style.set_border_width_all(1)
-	style.corner_radius_top_left = 7
-	style.corner_radius_top_right = 7
-	style.corner_radius_bottom_left = 7
-	style.corner_radius_bottom_right = 7
-	card.add_theme_stylebox_override("panel", style)
-	var margin := MarginContainer.new()
-	margin.add_theme_constant_override("margin_left", 8)
-	margin.add_theme_constant_override("margin_top", 6)
-	margin.add_theme_constant_override("margin_right", 8)
-	margin.add_theme_constant_override("margin_bottom", 6)
-	card.add_child(margin)
-	var layout := VBoxContainer.new()
-	layout.add_theme_constant_override("separation", 2)
-	margin.add_child(layout)
-	var trigger := Label.new()
-	trigger.text = "LT" if slot_index == 0 else "RT"
-	trigger.add_theme_font_size_override("font_size", 10)
-	trigger.add_theme_color_override("font_color", slot_color.lightened(0.25))
-	layout.add_child(trigger)
-	var name_label := Label.new()
-	name_label.text = str(slot_data.get("name", "Ability"))
-	name_label.add_theme_font_size_override("font_size", 12)
-	name_label.add_theme_color_override("font_color", Color(0.92, 0.96, 1.0, 0.96))
-	layout.add_child(name_label)
-	var cooldown_label := Label.new()
-	cooldown_label.text = "CD %.1fs" % cooldown
-	cooldown_label.add_theme_font_size_override("font_size", 10)
-	cooldown_label.add_theme_color_override("font_color", Color(0.82, 0.88, 0.96, 0.78))
-	layout.add_child(cooldown_label)
-	return card
-
-func _create_mutation_chip(entry: Dictionary) -> PanelContainer:
-	var rarity := str(entry.get("rarity", "common"))
-	var rarity_rank := CoopFormat.rarity_rank(rarity)
-	var rarity_color := Color(1.0, 0.42, 0.92, 1.0) if rarity_rank >= 2 else (Color(1.0, 0.78, 0.32, 1.0) if rarity_rank == 1 else Color(0.48, 0.74, 1.0, 1.0))
-	var group_color := IconFactoryData.get_group_color(str(entry.get("group", "attribute")))
-	var chip := PanelContainer.new()
-	chip.tooltip_text = str(entry.get("description", ""))
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(group_color.r, group_color.g, group_color.b, 0.18 if rarity_rank >= 1 else 0.14)
-	style.border_color = rarity_color if rarity_rank >= 1 else group_color
-	style.set_border_width_all(1)
-	style.corner_radius_top_left = 4
-	style.corner_radius_top_right = 4
-	style.corner_radius_bottom_left = 4
-	style.corner_radius_bottom_right = 4
-	chip.add_theme_stylebox_override("panel", style)
-	var margin := MarginContainer.new()
-	margin.add_theme_constant_override("margin_left", 7)
-	margin.add_theme_constant_override("margin_top", 3)
-	margin.add_theme_constant_override("margin_right", 7)
-	margin.add_theme_constant_override("margin_bottom", 3)
-	chip.add_child(margin)
-	var label := Label.new()
-	var level_text := " Lv%d" % int(entry.get("count", 1)) if int(entry.get("count", 1)) > 1 and rarity_rank <= 0 else ""
-	label.text = "%s%s" % [str(entry.get("name", "")), level_text]
-	label.add_theme_font_size_override("font_size", 11)
-	label.add_theme_color_override("font_color", rarity_color.lightened(0.18))
-	margin.add_child(label)
-	return chip
-
-func _compare_mutation_entries(left: Dictionary, right: Dictionary) -> bool:
-	var left_rarity_rank := CoopFormat.rarity_rank(str(left.get("rarity", "common")))
-	var right_rarity_rank := CoopFormat.rarity_rank(str(right.get("rarity", "common")))
-	if left_rarity_rank != right_rarity_rank:
-		return left_rarity_rank > right_rarity_rank
-	return str(left.get("name", "")).naturalnocasecmp_to(str(right.get("name", ""))) < 0
+	if _pause_debug_ui != null:
+		_pause_debug_ui.ensure_debug_overlay_action()
 
 func _current_time_seconds() -> float:
 	return Time.get_ticks_msec() / 1000.0

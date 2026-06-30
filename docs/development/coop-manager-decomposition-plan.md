@@ -426,6 +426,9 @@ These come from the 2026-06-24 stability audit and are safe to land before the r
   `_toggle_debug_overlay`, `_ensure_debug_overlay_action`, `_open_encyclopedia_overlay`, and debug fields.
   Lowest gameplay risk; lowest priority.
 
+  Status: completed on `v3/structure-rework` as `PauseDebugUi.gd`. `CoopManager.gd` now keeps the runtime
+  lifecycle callbacks and exposes pause/runtime/loadout accessors for the helper.
+
 ## 5. After each phase
 
 Update all three of:

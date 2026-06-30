@@ -134,6 +134,9 @@ patch is implemented and playtest-approved.
     hazard zones, minion bursts/mixes, support aura, Pulsar EMP, enemy attack trails, enemy death explosions,
     and player shockwave pulses. `CoopManager.gd` keeps facade methods, shared runtime helper lists, and
     hazard registration.
+  - `PauseDebugUi.gd` owns pause panel wiring/runtime freeze, the pause Build overlay, encyclopedia launch,
+    debug overlay construction/actions, and pause input proxy handling. `CoopManager.gd` exposes only the
+    runtime node groups, loadout/HUD callbacks, and restart/menu callbacks that the helper needs.
 - `RunFlow.gd` now owns:
   - next-room choice panel
   - room launch
