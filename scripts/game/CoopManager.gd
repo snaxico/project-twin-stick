@@ -12,9 +12,8 @@ const ProjectileSystemData = preload("res://scripts/game/ProjectileSystem.gd")
 const ArenaVisualsData = preload("res://scripts/game/ArenaVisuals.gd")
 const GameHudData = preload("res://scripts/game/GameHud.gd")
 const WaveDirectorData = preload("res://scripts/game/WaveDirector.gd")
+const SideObjectiveControllerData = preload("res://scripts/game/SideObjectiveController.gd")
 const MutationPickUIScene = preload("res://scenes/ui/MutationPickUI.tscn")
-const TempBuffSystemData = preload("res://scripts/buffs/TempBuffSystem.gd")
-const HoldZoneObjectiveData = preload("res://scripts/objectives/HoldZoneObjective.gd")
 const FireFloorModifierData = preload("res://scripts/modifiers/FireFloorModifier.gd")
 const IceZoneModifierData = preload("res://scripts/modifiers/IceZoneModifier.gd")
 const MineFieldModifierData = preload("res://scripts/modifiers/MineFieldModifier.gd")
@@ -22,7 +21,6 @@ const ShrinkingArenaModifierData = preload("res://scripts/modifiers/ShrinkingAre
 const DecoyNodeData = preload("res://scripts/game/DecoyNode.gd")
 const TurretNodeData = preload("res://scripts/game/TurretNode.gd")
 const OrbitNodeData = preload("res://scripts/game/OrbitNode.gd")
-const CollectorOrbData = preload("res://scripts/game/CollectorOrb.gd")
 const HealthPickupData = preload("res://scripts/pickups/HealthPickup.gd")
 const HazardZoneData = preload("res://scripts/game/HazardZone.gd")
 const AbilityMineData = preload("res://scripts/game/AbilityMine.gd")
@@ -47,9 +45,6 @@ const REVIVE_RADIUS := 150.0
 const REVIVE_HOLD_DURATION := 1.2
 const HUD_REFRESH_INTERVAL := 0.08
 const BOSS_HIT_FEEDBACK_INTERVAL := 0.22
-const COLLECTOR_TARGET := 8
-const COLLECTOR_TOTAL_SPAWN := 12
-const COLLECTOR_SPAWN_INTERVAL := 2.5
 const HEALTH_DROP_CHANCE := 0.06
 const MUTATION_REROLL_BASE_COST := 100
 const ENEMY_SEPARATION_CELL_SIZE := 96.0
@@ -163,6 +158,7 @@ var _active_modifiers: Array = []
 var _arena_visuals = null
 var _hud = null
 var _wave_director = null
+var _side_objectives = null
 var _modifier_definitions: Dictionary = {}
 var _minor_modifier_flags := {
 	"accelerating_waves": false,
@@ -171,19 +167,8 @@ var _minor_modifier_flags := {
 	"shielded": false,
 	"explosive_death": false,
 }
-var _hold_zone = null
-var _temp_buff_system = null
-var _hold_buff_offer: Dictionary = {}
-var _side_objective_id := ""
-var _side_objective_completed := false
-var _kill_streak_target := 0
-var _kill_streak_progress := 0
 var _momentum_progress_by_player: Array = []
 var _momentum_tier_by_player: Array = []
-var _collector_collected := 0
-var _collector_spawned := 0
-var _collector_spawn_timer := COLLECTOR_SPAWN_INTERVAL
-var _collector_orbs: Array = []
 var _fire_floor_modifier = null
 var _ice_zone_modifier = null
 var _mine_field_modifier = null
@@ -260,6 +245,10 @@ func _ready() -> void:
 	_wave_director.name = "WaveDirector"
 	_wave_director.setup(self, enemies)
 	add_child(_wave_director)
+	_side_objectives = SideObjectiveControllerData.new()
+	_side_objectives.name = "SideObjectiveController"
+	_side_objectives.setup(self, effects, pickups, ARENA_RECT)
+	add_child(_side_objectives)
 	_hud = GameHudData.new()
 	_hud.name = "GameHud"
 	_hud.setup(self, ui_layer)
@@ -607,16 +596,8 @@ func _start_room() -> void:
 	_champions_killed = 0
 	_room_score_recorded = false
 	_wave_director.start_room(_room_config, _room_enemy_pool, _room_depth)
-	_side_objective_id = str(_room_config.get("side_objective", ""))
-	_side_objective_completed = false
-	_kill_streak_progress = 0
-	_collector_collected = 0
-	_collector_spawned = 0
-	_collector_spawn_timer = COLLECTOR_SPAWN_INTERVAL
 	_arena_visuals.apply_arena_color()
-	if _temp_buff_system != null:
-		_temp_buff_system.clear_all_buffs(_player_nodes)
-	_temp_buff_system = TempBuffSystemData.new()
+	_side_objectives.start_room(_room_config, _player_nodes)
 	for player in _player_nodes:
 		if player == null or not is_instance_valid(player):
 			continue
@@ -627,7 +608,6 @@ func _start_room() -> void:
 		player.set_input_locked(false)
 		player.health_changed.emit(player.current_health, player.max_health)
 		player.global_position = _get_player_spawn_position(int(player.player_index))
-	_setup_side_objective()
 	_apply_active_modifiers()
 	_wave_director.spawn_opening_burst()
 	_refresh_hud()
@@ -644,8 +624,8 @@ func _clear_runtime_nodes() -> void:
 	_active_mines.clear()
 	if _projectile_system != null:
 		_projectile_system.clear_runtime()
-	_collector_orbs.clear()
-	_hold_zone = null
+	if _side_objectives != null:
+		_side_objectives.clear_runtime()
 	_fire_floor_modifier = null
 	_ice_zone_modifier = null
 	_mine_field_modifier = null
@@ -656,7 +636,6 @@ func _clear_runtime_nodes() -> void:
 	_scheduled_pulsar_emps.clear()
 	_enemy_separation_grid.clear()
 	_enemy_separation_grid_frame = -1
-	_hold_buff_offer.clear()
 	_invalidate_runtime_caches()
 
 func _prewarm_combat_vfx() -> void:
@@ -729,22 +708,6 @@ func _add_combat_prewarm_sample(rendered_samples: Array, sample: Node, parent: N
 	parent.add_child(sample)
 	rendered_samples.append(sample)
 
-func _setup_side_objective() -> void:
-	_side_objective_id = str(_room_config.get("side_objective", ""))
-	if _side_objective_id.is_empty():
-		return
-	_hold_buff_offer = _temp_buff_system.roll_random_buff()
-	match _side_objective_id:
-		"hold_zone":
-			_hold_zone = HoldZoneObjectiveData.new()
-			_hold_zone.setup(ARENA_RECT)
-			effects.add_child(_hold_zone)
-			_hold_zone.completed.connect(_complete_side_objective)
-		"kill_streak":
-			_kill_streak_target = 30
-		"collector":
-			_collector_spawn_timer = 0.8
-
 func _apply_active_modifiers() -> void:
 	_active_modifiers = (_room_config.get("modifiers", []) as Array).duplicate()
 	_minor_modifier_flags["accelerating_waves"] = _active_modifiers.has("accelerating_waves")
@@ -804,7 +767,7 @@ func _physics_process(delta: float) -> void:
 	_update_scheduled_enemy_hazards()
 	_update_scheduled_pulsar_emps()
 	_projectile_system.tick(delta)
-	_update_side_objectives(delta)
+	_side_objectives.update(delta, _player_nodes)
 	_update_hazards(delta)
 	_update_revives(delta)
 	_clamp_runtime_nodes()
@@ -815,31 +778,6 @@ func _physics_process(delta: float) -> void:
 		_next_hud_refresh_at = now + HUD_REFRESH_INTERVAL
 		_refresh_hud()
 	_update_player_combat_indicator_positions()
-
-func _update_side_objectives(delta: float) -> void:
-	if _side_objective_completed or _side_objective_id.is_empty():
-		return
-	match _side_objective_id:
-		"hold_zone":
-			if _hold_zone != null and is_instance_valid(_hold_zone):
-				_hold_zone.update_zone(delta, _player_nodes)
-		"collector":
-			_collector_spawn_timer -= delta
-			if _collector_spawned < COLLECTOR_TOTAL_SPAWN and _collector_spawn_timer <= 0.0:
-				_collector_spawn_timer = COLLECTOR_SPAWN_INTERVAL
-				_spawn_collector_orb()
-			var collected_now := 0
-			for orb in _collector_orbs:
-				if orb == null or not is_instance_valid(orb):
-					continue
-				if orb.update_orb(delta, _player_nodes):
-					collected_now += 1
-			_collector_collected += collected_now
-			if collected_now > 0:
-				_play_sfx("play_pickup", [])
-			_cleanup_orbs()
-			if _collector_collected >= COLLECTOR_TARGET:
-				_complete_side_objective()
 
 func _update_hazards(delta: float) -> void:
 	for hazard in _active_hazards:
@@ -1014,12 +952,7 @@ func _collect_player_health_states() -> Array:
 	return states
 
 func _build_clear_summary() -> String:
-	var lines := ["Room cleared."]
-	if not _side_objective_id.is_empty():
-		lines.append("Objective: %s" % _format_objective_text())
-		if _side_objective_completed:
-			lines.append("Buff earned: %s" % CoopFormat.format_buff_name(str(_hold_buff_offer.get("type", ""))))
-	return "\n".join(lines)
+	return _side_objectives.build_clear_summary() if _side_objectives != null else "Room cleared."
 
 func _on_player_fire_requested(origin: Vector2, direction: Vector2, projectile_config: Dictionary) -> void:
 	_projectile_system.handle_player_fire(origin, direction, projectile_config)
@@ -1347,10 +1280,8 @@ func _on_enemy_died(enemy) -> void:
 			_queue_enemy_spawn("splitter_mini", enemy.global_position + Vector2.RIGHT.rotated(angle) * 36.0)
 	if _ice_zone_modifier != null and is_instance_valid(_ice_zone_modifier):
 		_ice_zone_modifier.spawn_patch(enemy.global_position)
-	if _side_objective_id == "kill_streak" and not _side_objective_completed:
-		_kill_streak_progress += 1
-		if _kill_streak_progress >= _kill_streak_target:
-			_complete_side_objective()
+	if _side_objectives != null:
+		_side_objectives.on_enemy_killed()
 
 func _on_enemy_hit_received(_enemy, _damage_amount: int, _lethal: bool) -> void:
 	if _enemy == null or not is_instance_valid(_enemy):
@@ -1389,8 +1320,8 @@ func _on_player_revived(player) -> void:
 func _on_player_damage_taken(player, amount: int, _current_health: int) -> void:
 	if player == null or not is_instance_valid(player):
 		return
-	if _side_objective_id == "kill_streak" and not _side_objective_completed:
-		_kill_streak_progress = 0
+	if _side_objectives != null:
+		_side_objectives.on_player_damaged()
 	_drop_player_momentum(int(player.player_index))
 	var burst := ParticleFactoryData.create_impact_sparks(player.player_config.tint.lightened(0.22), Vector2.UP, 1.1)
 	burst.global_position = player.global_position
@@ -1456,6 +1387,9 @@ func _refresh_boss_hud() -> void:
 	if _hud != null:
 		_hud.refresh_boss()
 
+func play_sfx(method_name: String, args: Array) -> void:
+	_play_sfx(method_name, args)
+
 func _play_sfx(method_name: String, args: Array) -> void:
 	for node in get_tree().get_nodes_in_group("sfx_engine"):
 		if node != null and is_instance_valid(node) and node.has_method(method_name):
@@ -1486,31 +1420,6 @@ func _update_player_combat_indicator_positions() -> void:
 func _populate_modifier_hud() -> void:
 	if _hud != null:
 		_hud.populate_modifier_hud()
-
-func _complete_side_objective() -> void:
-	if _side_objective_completed or _temp_buff_system == null or _hold_buff_offer.is_empty():
-		return
-	_side_objective_completed = true
-	_temp_buff_system.apply_buff(_hold_buff_offer, _player_nodes)
-
-func _spawn_collector_orb() -> void:
-	if _collector_spawned >= COLLECTOR_TOTAL_SPAWN:
-		return
-	var orb := CollectorOrbData.new()
-	orb.global_position = Vector2(
-		randf_range(ARENA_RECT.position.x + 220.0, ARENA_RECT.end.x - 220.0),
-		randf_range(ARENA_RECT.position.y + 220.0, ARENA_RECT.end.y - 220.0)
-	)
-	pickups.add_child(orb)
-	_collector_orbs.append(orb)
-	_collector_spawned += 1
-
-func _cleanup_orbs() -> void:
-	var alive_orbs: Array = []
-	for orb in _collector_orbs:
-		if orb != null and is_instance_valid(orb):
-			alive_orbs.append(orb)
-	_collector_orbs = alive_orbs
 
 func _cleanup_helpers() -> void:
 	_active_hazards = _cleanup_instance_array(_active_hazards)
@@ -1818,16 +1727,7 @@ func is_spawning_done() -> bool:
 	return _wave_director.is_spawning_done() if _wave_director != null else false
 
 func get_side_objective_view() -> Dictionary:
-	return {
-		"id": _side_objective_id,
-		"completed": _side_objective_completed,
-		"hold_zone": _hold_zone,
-		"hold_buff_offer": _hold_buff_offer.duplicate(true),
-		"kill_streak_progress": _kill_streak_progress,
-		"kill_streak_target": _kill_streak_target,
-		"collector_collected": _collector_collected,
-		"collector_target": COLLECTOR_TARGET,
-	}
+	return _side_objectives.get_view() if _side_objectives != null else {}
 
 func get_revive_progress_for_player_id(player_id: int) -> float:
 	return float(_revive_progress_by_player_id.get(player_id, 0.0))
@@ -1974,7 +1874,7 @@ func _set_runtime_pause_state(paused: bool) -> void:
 	_set_nodes_physics_paused(_active_decoys, paused)
 	_set_nodes_physics_paused(_active_turrets, paused)
 	_set_nodes_physics_paused(_active_orbits, paused)
-	for modifier in [_fire_floor_modifier, _ice_zone_modifier, _mine_field_modifier, _shrinking_arena_modifier, _hold_zone]:
+	for modifier in [_fire_floor_modifier, _ice_zone_modifier, _mine_field_modifier, _shrinking_arena_modifier]:
 		_set_single_node_physics_paused(modifier, paused)
 
 func _set_nodes_physics_paused(nodes: Array, paused: bool) -> void:

@@ -59,6 +59,10 @@
   enemy spawns, deferred spawn queues, champion spawn timing, and the active boss pointer. CoopManager
   remains the single owner of `_enemy_nodes`, room clear handling, enemy signal callbacks, and the enemy
   combat-owner facade.
+- `SideObjectiveController.gd` — CoopManager-owned child node for side-objective runtime state:
+  hold-zone, kill-streak, collector orbs, temp-buff reward application, side-objective HUD view data, and
+  clear-summary objective text. CoopManager forwards enemy-killed and player-damaged hooks at the existing
+  callback sites.
 - Room types: `combat` / `elite` / `boss` (no rest/shop). Encounter Builder / Debug Menu use the
   single-room debug path — a fast-iteration entry, not a second source of truth.
 

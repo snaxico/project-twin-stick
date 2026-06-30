@@ -122,6 +122,9 @@ patch is implemented and playtest-approved.
   - `WaveDirector.gd` owns spawn cadence/scaling/progress, deferred enemy spawn queues, opening/burst/stream
     spawns, champion spawn timing, and the active boss pointer. `CoopManager.gd` still owns `_enemy_nodes`,
     enemy death/fire/hit callbacks, room clear handling, and the combat-owner facade.
+  - `SideObjectiveController.gd` owns hold-zone / kill-streak / collector state, temp-buff reward
+    application, collector orb spawning, side-objective HUD view data, and clear-summary side-objective text.
+    `CoopManager.gd` forwards enemy-killed and player-damaged events in the same runtime order.
 - `RunFlow.gd` now owns:
   - next-room choice panel
   - room launch
