@@ -9,6 +9,10 @@
 ## How to work this plan
 - **One vertical slice at a time**, in the order below (dependency-ordered). Each slice must leave the game
   **runnable** and pass the validation gate before moving on. Commit per slice.
+- **One-time worktree setup:** a fresh worktree has no `.godot/` cache (it's gitignored), so `class_name`
+  types won't resolve until you import once:
+  `Godot_v4.6.2-stable_win64_console.exe --headless --path 'D:\GameDev\Project_Twin_stick_v4' --editor --quit`.
+  Do this before the first validation run.
 - **Validation gate (run after every slice):**
   ```powershell
   & 'D:\GameDev\Godot_v4.6.2-stable_win64.exe\Godot_v4.6.2-stable_win64_console.exe' --headless --path 'D:\GameDev\Project_Twin_stick_v4' --quit                 # parse
