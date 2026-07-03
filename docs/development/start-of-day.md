@@ -15,6 +15,9 @@ Read this first to restore project context quickly, then read `current-state.md`
 - `docs/development/current-state.md` is the compact runtime source of truth.
 - `docs/development/structure-rework-plan.md` is the design/source plan for the trim.
 - `docs/design/game-direction.md` is the broader direction source of truth.
+- `docs/design/class-system-redesign.md` is the **next-version design spec** (class-based pivot: 4 classes,
+  kit/mutation/tag systems, art direction, implementation touchpoints). Companion data:
+  `docs/design/class-design.xlsx`. This is the doc to review before building the implementation plan.
 - `docs/development/history/` records what changed, why, and what remains open.
 - If this file and `current-state.md` disagree, treat `current-state.md` as correct and update this file.
 
