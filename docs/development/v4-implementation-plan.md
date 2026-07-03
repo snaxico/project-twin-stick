@@ -145,3 +145,49 @@ add premium entries with costs), the Meta menu UI.
   any directional mechanic by the aim/velocity vector, never visual body rotation.
 - **Bosses:** unchanged (champions in waves).
 - **Keep validated + committed per slice**; the v3 tree remains the playtest baseline for A/B comparison.
+
+---
+
+## Appendix A — Codex context (read this first)
+
+### Sources & rules
+- **Read `docs/design/class-system-redesign.md` (the `.md`), NOT the `.xlsx`.** The xlsx is a binary data grid
+  for humans; the `.md` §6 carries every class kit + mutation in prose. Treat the `.md` as authoritative.
+- **Tuning is placeholder everywhere** — pick sensible first-pass values (damage, cooldowns, radii, heat
+  rate/decay, heal-per-kill, HP) and keep moving; do **not** stall waiting for numbers. Balance is a later pass.
+
+### Design-name → code-id map (REUSE these ids — do not create duplicates)
+**Weapons** (`data/weapons.json`): "Shotgun" = **`scattergun`** · `rifle` · `rocket` · `beam`.
+- **Retired** (remove from pools, don't reuse): `cannon`, `railgun` (its pierce becomes a mutation), `boomerang`.
+- **New to author:** `whirlwind` (kind `melee`), `arc_wand` (kind `chain`), `flamethrower` (kind `cone`).
+
+**Abilities** (`data/abilities.json`, reuse): `dash`, `shockwave`, `overcharge`, `shield`, `turret`,
+`minefield`, `orbit`. `blink` is merged into dash. `decoy` is used by no final class.
+- **New to author:** `afterburn`, `momentum_burst`, `deflect`, `sonic_boom`, `ground_slam`, `quake`,
+  `blood_lance`, `summon`, `reinforce`, `fireball`, `ignite` + ultimates `slipstream`, `blood_frenzy`,
+  `overload_grid`, `firestorm`.
+
+**Mutations** (`data/mutations.json`):
+- Element effects (reuse → tag mutations): **Split = `ricochet`** (`[projectile]`), Fire = `fire_trail`,
+  Frost = `freeze_shot`, Toxic = `poison` (all: any weapon). **Pierce = new mutation** (`[projectile]`).
+- Ability-rares → re-fold as tag mutations: `dash_shockdash`+`blink_twin_charge`→`[mobility]`;
+  `turret_twin`+`orbit_expanding`+`mf_extra_mines`→`[summon]`; `sw_resonance`→`[blast]`;
+  `oc_piercing_overdrive`→`[buff]`; `shield_aegis_burst`→`[defense]`. **Drop** `decoy_volatile`.
+- **Retire** (delete): `rapid_fire`, `velocity`, `high_caliber`, `range`. **Keep:** `move_speed`, `tough`,
+  `quick_reflexes` (exclude on Risk), `wide_pulse`, `duration`.
+- **Signatures = PREMIUM unlocks** (keep, gate via ProfileState): `accelerant`, `ember_spread`, `pyromaniac`,
+  `chain_reaction`, `momentum_surge`, `glass_cannon`, `cryo_shatter`, `virulent`.
+
+### Reuse inventory (extend these, don't rebuild)
+- **Ability slots + input:** `scripts/player/Player.gd` — `_ability_slots` array (size 2), input loop
+  `for slot_index in range(2)`, `_is_ability_pressed` uses actions `p%d_secondary`/`p%d_dash`.
+- **Loadout/inventory:** `scripts/game/RunState.gd` (`_build_default_player_inventories`,
+  `get_player_runtime_loadout_for`, `_load_weapons`, `_resolve_weapon_stats`) + `scripts/game/PlayerInventory.gd`.
+- **Abilities:** `scripts/game/AbilityRegistry.gd`. **Mutations/gating:** `scripts/game/MutationSystem.gd`
+  (`roll_mutation_options`; generalize `requires_ability` → `requires:[tags]`).
+- **Passive to reuse:** `scripts/game/MomentumTracker.gd` (Mobile).
+- **Deployable nodes (add HP + persistence):** `scripts/game/TurretNode.gd`, `OrbitNode.gd`, `DecoyNode.gd`,
+  `scripts/modifiers/MineFieldModifier.gd`.
+- **Weapons/projectiles:** `scripts/game/ProjectileSystem.gd`, `scripts/weapons/Projectile.gd` (add
+  projectile kinds `melee`/`cone`/`chain`).
+- **Meta:** `scripts/meta/ProfileState.gd` (`UNLOCK_TABLE`). **Loadout UI:** `scripts/ui/Bootstrap.gd`.
