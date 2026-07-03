@@ -17,13 +17,21 @@
   $GODOT = 'D:\GameDev\Godot_v4.6.2-stable_win64.exe\Godot_v4.6.2-stable_win64_console.exe'
   & $GODOT --headless --path 'D:\GameDev\Project_Twin_stick_v4' --editor --quit   # one-time import: builds .godot/ + .uid
   ```
-- **Validation gate (run after every slice):**
+- **Validation gate (run after every slice):** `$GODOT` is re-set on line 1 so the block is self-contained in
+  a fresh shell.
   ```powershell
+  $GODOT = 'D:\GameDev\Godot_v4.6.2-stable_win64.exe\Godot_v4.6.2-stable_win64_console.exe'
   & $GODOT --headless --path 'D:\GameDev\Project_Twin_stick_v4' --quit                                                 # parse
   & $GODOT --headless --path 'D:\GameDev\Project_Twin_stick_v4' res://scenes/ui/Bootstrap.tscn --quit                  # smoke boot
   & $GODOT --headless --path 'D:\GameDev\Project_Twin_stick_v4' -- --profile=champion:hive --players=2 --build=heavy   # PerfRunner
   git -C 'D:\GameDev\Project_Twin_stick_v4' diff --check
   ```
+- **Stub-first for forward references (critical for slice order):** `classes.json` pools reference weapons,
+  abilities, and ultimates that aren't authored until Slices 5-6. So the loadout in Slice 1 can validate and
+  run against a resolvable id set, **Slice 1 must first register a placeholder stub for every pool id that
+  doesn't exist yet** — a data entry + a runtime no-op (a weapon that fires a basic projectile; an ability/
+  ultimate that goes on cooldown and does nothing). Content slices then *replace* each stub with real behavior.
+  Loadout/validation must never hit a missing-id reject; it sees a stub instead.
 - **Terminology:** "Upgrade" in player/UI text, "mutation" in code. Weapons auto-fire; abilities are the 4 buttons.
 - **Design principle (do not violate):** the tag system is for **compatibility gating only** — a mutation is
   offered iff `requires ⊆ kit's tags`. No balance/synergy logic in the tag layer.
@@ -93,14 +101,22 @@ the input — hence `PlayerInventory`/`RunState` are in this slice, providing 4 
 - `scripts/game/RunState.gd` — `_build_default_player_inventories` + `get_player_runtime_loadout_for` supply a
   default 4-ability set so all four fire (real per-class selection is Slice 1).
 - `scripts/player/PlayerConfig.gd`; `scripts/ui/WeaponSlotHUD.gd` / ability HUD (show 4 slots).
+- `scripts/ui/Bootstrap.gd` + `scripts/game/CoopManager.gd` — see **LB/RB reclaim** (both hard-code the switch
+  action suffixes, not just `project.godot`).
 - add `data/classes.json` loader (in `RunState` or a new `ClassRegistry.gd`); add `"tags"` fields to
   `data/weapons.json` + `data/abilities.json` (values per spec §4).
-**LB/RB reclaim (must resolve the binding conflict):** LB/RB are currently bound to
-`p%d_switch_primary` / `p%d_switch_secondary` (in-run weapon switch — **obsolete** under the loadout model,
-where you equip one weapon at loadout). **Remove or repurpose those two switch actions** and bind LB/RB to the
-new `p%d_ability_3` / `p%d_ability_4` (+ keyboard). Rename the existing `p%d_secondary` / `p%d_dash` →
-`p%d_ability_1` / `p%d_ability_2` (or keep as aliases). Note p3/p4 only have 2 ability actions today — add
-`ability_3`/`ability_4` for them too.
+**LB/RB reclaim (must resolve the binding conflict — 3 places, not just the input map):** LB/RB are currently
+bound to `p%d_switch_primary` / `p%d_switch_secondary` (in-run weapon switch — **obsolete** under the loadout
+model, where you equip one weapon at loadout). **Remove or repurpose those two switch actions in all three
+places:**
+  1. `project.godot` input map — delete/rebind the `p%d_switch_primary` / `p%d_switch_secondary` events to
+     `p%d_ability_3` / `p%d_ability_4` (+ keyboard).
+  2. `scripts/game/CoopManager.gd` — the action-suffix list (`"switch_primary"`, `"switch_secondary"` ~L60-61)
+     that drives per-player action remapping; replace with the new ability suffixes.
+  3. `scripts/ui/Bootstrap.gd` — the binding-label rows (`"Swap LT"`/`"Swap RT"` → suffix `switch_primary`/
+     `switch_secondary` ~L27-28); relabel/repoint to the new ability actions.
+Rename the existing `p%d_secondary` / `p%d_dash` → `p%d_ability_1` / `p%d_ability_2` (or keep as aliases). Note
+p3/p4 only have 2 ability actions today — add `ability_3`/`ability_4` for them too.
 **Acceptance:** game boots; a player fires **4** mapped ability buttons from the default loadout; **no input
 collides with the old weapon-switch**; classes.json + tags parse without error.
 
@@ -110,10 +126,13 @@ collides with the old weapon-switch**; classes.json + tags parse without error.
 `scripts/game/RunState.gd` (`_build_default_player_inventories`, `get_player_runtime_loadout_for` → class-aware,
 ultimate slot), new `scripts/game/ClassRegistry.gd` (load classes.json, pools), `scripts/ui/Bootstrap.gd`
 (class-select + weapon + 3-ability picker, reuse the card UI style).
-**Tasks:** loadout validates picks against the class pool; ultimate is inserted as a locked 4th slot; wire the
-chosen loadout into `Player.apply_loadout`.
-**Acceptance:** start a run as each class with a chosen weapon + 3 abilities + its ultimate; abilities fire on
-the 4 buttons; 2P with two different classes works.
+**Tasks:** **first register stubs** (per the stub-first rule above) for every not-yet-authored pool id —
+weapons `whirlwind`/`arc_wand`/`flamethrower`, all new abilities + all 4 ultimates — as data + runtime no-ops
+so pools resolve; then: loadout validates picks against the class pool; ultimate is inserted as a locked 4th
+slot; wire the chosen loadout into `Player.apply_loadout`.
+**Acceptance:** start a run as each class with a chosen weapon + 3 abilities + its ultimate (new content is a
+stub until Slices 5-6, but the loadout resolves and runs — no missing-id error); abilities fire on the 4
+buttons; 2P with two different classes works.
 
 ## Slice 2 — Tag system + mutation rework
 **Goal:** mutations gate by `requires ⊆ kit-tags`; retire stat-sticks; old ability-rares re-fold as tag mutations.
@@ -149,7 +168,8 @@ can reuse it); remove lifetime timers where present.
 **Acceptance:** each passive observably functions in a debug room; Radiance visibly keeps deployables alive longer.
 
 ## Slice 5 — New weapons (new attack types)
-**Goal:** Whirlwind, Arc Wand, Flamethrower fire correctly. **Files:** `data/weapons.json` (+ per_level),
+**Goal:** Whirlwind, Arc Wand, Flamethrower fire correctly — **replace their Slice 1 stubs** with real
+behavior (same ids). **Files:** `data/weapons.json` (+ per_level),
 `scripts/game/ProjectileSystem.gd` + `MutationSystem.get_base_projectile_visual` (new `projectile_kind`:
 `melee`/`cone`/`chain`), `RunState._resolve_weapon_stats`.
 - **Whirlwind** (`melee`): auto-swings, hits all enemies in a radius each tick.
@@ -158,8 +178,8 @@ can reuse it); remove lifetime timers where present.
 **Acceptance:** equip each on its class; damage lands as described; PerfRunner stable.
 
 ## Slice 6 — New abilities + ultimates
-**Goal:** author the ~10 new skills + 4 ultimates (`data/abilities.json` + `scripts/game/AbilityRegistry.gd`
-+ runtime nodes as needed). New skills: Afterburn, Momentum Burst, Deflect, Sonic Boom, Ground Slam, Quake,
+**Goal:** author the ~10 new skills + 4 ultimates — **replace their Slice 1 stubs** with real behavior (same
+ids) (`data/abilities.json` + `scripts/game/AbilityRegistry.gd` + runtime nodes as needed). New skills: Afterburn, Momentum Burst, Deflect, Sonic Boom, Ground Slam, Quake,
 Blood Lance, **Summon** (persistent melee constructs w/ pet AI — reuses the Slice 3 HP interface), Reinforce,
 Fireball, Ignite. Ultimates: Slipstream, Blood Frenzy, Overload Grid, Firestorm. Reuse
 Dash/Shockwave/Overcharge/Orbit/Shield/Turret/Minefield.
@@ -206,10 +226,12 @@ add premium entries with costs), the Meta menu UI.
 - Element effects (reuse → tag mutations, all `apply:"weapon"`): **Split = `ricochet`** (`[projectile]`),
   Fire = `fire_trail`, Frost = `freeze_shot`, Toxic = `poison` (any weapon). **Pierce = new mutation**
   (`[projectile]`, `apply:"weapon"`).
-- Ability-rares → re-fold as tag mutations (all `apply:"ability"`): `dash_shockdash`+`blink_twin_charge`→
-  `[mobility]`; `turret_twin`+`orbit_expanding`+`mf_extra_mines`→`[summon]` (`apply:"deployable"`);
-  `sw_resonance`→`[blast]`; `oc_piercing_overdrive`→`[buff]`; `shield_aegis_burst`→`[defense]`.
-  **Drop** `decoy_volatile`.
+- Ability-rares → re-fold as tag mutations. **`apply` splits by target:** the summon group targets deployed
+  units → `apply:"deployable"`; all others act on the equipped ability → `apply:"ability"`.
+  - `apply:"deployable"`: `turret_twin`+`orbit_expanding`+`mf_extra_mines`→`[summon]`.
+  - `apply:"ability"`: `dash_shockdash`+`blink_twin_charge`→`[mobility]`; `sw_resonance`→`[blast]`;
+    `oc_piercing_overdrive`→`[buff]`; `shield_aegis_burst`→`[defense]`.
+  - **Drop** `decoy_volatile`.
 - **Retire** (delete): `rapid_fire`, `velocity`, `high_caliber`, `range`. **Keep:** `move_speed`, `tough`,
   `quick_reflexes` (exclude on Risk), `wide_pulse`, `duration`.
 - **Signatures = PREMIUM unlocks** (keep, gate via ProfileState): `accelerant`, `ember_spread`, `pyromaniac`,
