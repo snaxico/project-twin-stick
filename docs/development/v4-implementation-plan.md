@@ -80,11 +80,17 @@ modifies). They are separate concerns — do not conflate them.
 tag set** = union of tags from equipped weapon + 3 abilities + ultimate + passive + class.
 **Application rule (targeting):** `apply` ∈ `weapon` / `ability` / `passive` / `deployable` names the layer the
 `effect` modifies. Within that layer it applies to the equipped item(s) whose tags include the mutation's
-**non-class** required tags — e.g. `[projectile]` → your weapon; `[blast]` → **all** your equipped blast
-abilities; `[summon]` → all your deployables. **Class tags are pure gates, never targets.** A mutation whose
-`requires` is only a class tag (Combustion `[risk]`) has `apply:"passive"` and modifies the class passive /
-global behavior. `apply` is **required on every mutation** — it is what disambiguates the re-folded
-ability-rares (e.g. Aegis Burst `requires:["defense"] apply:"ability"`).
+**non-class functional** required tags — e.g. `[projectile]` → your weapon; `[blast]` → **all** your equipped
+blast abilities; `[summon]` → all your deployables. **Class tags are pure gates, never targets.**
+**No functional tag ⇒ target the layer's sole/default item.** When `requires` has no functional tag (empty, or
+class-only), `apply` alone picks the target:
+- `requires:[]`, `apply:"weapon"` → your **one equipped weapon** (offered to everyone — every kit has exactly
+  one weapon). **This is how the "any weapon" element effects (Fire/Frost/Toxic) are encoded** — there is
+  deliberately **no generic `weapon` tag** in the vocab; an empty `requires` *is* "any weapon".
+- `requires:["<class>"]`, `apply:"passive"` → the class passive / global behavior (Combustion `[risk]`).
+
+`apply` is **required on every mutation** — it also disambiguates the re-folded ability-rares (e.g. Aegis Burst
+`requires:["defense"] apply:"ability"`).
 
 ---
 
@@ -100,6 +106,10 @@ the input — hence `PlayerInventory`/`RunState` are in this slice, providing 4 
 - `scripts/game/PlayerInventory.gd` — hold 4 ability slots.
 - `scripts/game/RunState.gd` — `_build_default_player_inventories` + `get_player_runtime_loadout_for` supply a
   default 4-ability set so all four fire (real per-class selection is Slice 1).
+- `scripts/game/AbilityRegistry.gd` — `get_default_loadout()` / `normalize_loadout()` currently hard-return a
+  **2-item OFF+DEF** pair; expand to 4 slots (or add a 4-slot path RunState calls). The old 2-slot
+  OFF/DEF picker in `Bootstrap.gd` feeds this too — either extend it to 4 or have RunState bypass it for the
+  temporary default. Whichever you pick, nothing may still assume exactly 2 abilities.
 - `scripts/player/PlayerConfig.gd`; `scripts/ui/WeaponSlotHUD.gd` / ability HUD (show 4 slots).
 - `scripts/ui/Bootstrap.gd` + `scripts/game/CoopManager.gd` — see **LB/RB reclaim** (both hard-code the switch
   action suffixes, not just `project.godot`).
@@ -125,11 +135,17 @@ collides with the old weapon-switch**; classes.json + tags parse without error.
 **Files:** `scripts/game/PlayerInventory.gd` (add `class_id`; `ability_slots` = 3 chosen + `ultimate_id`),
 `scripts/game/RunState.gd` (`_build_default_player_inventories`, `get_player_runtime_loadout_for` → class-aware,
 ultimate slot), new `scripts/game/ClassRegistry.gd` (load classes.json, pools), `scripts/ui/Bootstrap.gd`
-(class-select + weapon + 3-ability picker, reuse the card UI style).
+(class-select + weapon + 3-ability picker, reuse the card UI style), `scripts/meta/ProfileState.gd`
+(unlock-gate — see below).
+**Unlock-gate (must resolve now, not in Slice 7):** `ProfileState.UNLOCK_TABLE` currently score-locks base
+content class pools depend on (`shockwave` 600, `shield` 950, `turret` 1100, `minefield` 1300, `orbit` 1500,
+`beam`, `rocket`, …). Class-select would reject those picks. **In this slice, make every class-pool weapon +
+ability + ultimate `free:true` (or bypass the unlock check for class-pool content).** The *premium-only*
+UNLOCK_TABLE trim (signatures/parasites) stays Slice 7 — only the free-ing happens here.
 **Tasks:** **first register stubs** (per the stub-first rule above) for every not-yet-authored pool id —
 weapons `whirlwind`/`arc_wand`/`flamethrower`, all new abilities + all 4 ultimates — as data + runtime no-ops
-so pools resolve; then: loadout validates picks against the class pool; ultimate is inserted as a locked 4th
-slot; wire the chosen loadout into `Player.apply_loadout`.
+so pools resolve; free the base kits (above); then: loadout validates picks against the class pool; ultimate is
+inserted as a locked 4th slot; wire the chosen loadout into `Player.apply_loadout`.
 **Acceptance:** start a run as each class with a chosen weapon + 3 abilities + its ultimate (new content is a
 stub until Slices 5-6, but the loadout resolves and runs — no missing-id error); abilities fire on the 4
 buttons; 2P with two different classes works.
@@ -187,10 +203,12 @@ Dash/Shockwave/Overcharge/Orbit/Shield/Turret/Minefield.
 **Acceptance:** each new ability + ultimate works on its class in a debug room.
 
 ## Slice 7 — Meta / unlocks
-**Goal:** all classes + base kits + base mutations **free**; premium content (element signatures, per-class
-signatures, parasites) unlockable. **Files:** `scripts/meta/ProfileState.gd` `UNLOCK_TABLE` (classes free;
-add premium entries with costs), the Meta menu UI.
-**Acceptance:** new profile can play all 4 classes immediately; premium mutations gated behind score.
+**Goal:** finish the unlock model. Base kits were already freed in Slice 1; this slice **trims `UNLOCK_TABLE`
+of the retired paid entries** (cannon/railgun/boomerang/blink/decoy + the 4 retired stat-stick mutations) and
+**adds the premium entries** (element signatures, per-class signatures, parasites) with costs, plus the Meta
+menu UI. **Files:** `scripts/meta/ProfileState.gd` `UNLOCK_TABLE`, the Meta menu UI.
+**Acceptance:** new profile can play all 4 classes + full base kits immediately; only premium content is gated
+behind score.
 
 ---
 
@@ -223,9 +241,9 @@ add premium entries with costs), the Meta menu UI.
   `overload_grid`, `firestorm`.
 
 **Mutations** (`data/mutations.json`) — every entry needs `requires` **and** `apply` (see schema above):
-- Element effects (reuse → tag mutations, all `apply:"weapon"`): **Split = `ricochet`** (`[projectile]`),
-  Fire = `fire_trail`, Frost = `freeze_shot`, Toxic = `poison` (any weapon). **Pierce = new mutation**
-  (`[projectile]`, `apply:"weapon"`).
+- Element effects (reuse → tag mutations, all `apply:"weapon"`): Fire = `fire_trail`, Frost = `freeze_shot`,
+  Toxic = `poison` are **"any weapon" → `requires:[]`** (empty = universal; see the no-functional-tag rule).
+  **Split = `ricochet`** and **Pierce = new mutation** need projectiles → **`requires:["projectile"]`**.
 - Ability-rares → re-fold as tag mutations. **`apply` splits by target:** the summon group targets deployed
   units → `apply:"deployable"`; all others act on the equipped ability → `apply:"ability"`.
   - `apply:"deployable"`: `turret_twin`+`orbit_expanding`+`mf_extra_mines`→`[summon]`.
