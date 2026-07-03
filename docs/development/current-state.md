@@ -4,12 +4,11 @@
 
 Godot `4.6.2` same-screen local co-op neon roguelite prototype.
 
-The active branch is the structure rework / "trim" branch. The runtime now keeps the Round 14 weapon,
-manual aim, Beam, Boomerang, Split, Momentum/Flow, XP, mutation, modifier, side-objective, controller,
-and Encounter Builder foundations, but replaces the old structure with one continuable run. The initial
-structure-rework playtest was approved, Phase 4 tuning has been applied, the replayability patch
-Phases 0/A/B are implemented, the QoL/difficulty patch is implemented, and the game-feel / neon identity
-patch is implemented and playtest-approved.
+The active V4 implementation work is in `D:\GameDev\Project_Twin_stick_v4` on branch `v4/class-system`.
+The original `D:\GameDev\Project_Twin_stick` checkout remains the untouched V3 playtest baseline for A/B
+testing. V4 Slice 0 of `docs/development/v4-implementation-plan.md` is implemented and validated: class data
+loads, existing weapons/abilities have tags, the runtime kit stores four abilities, and P1/P2 abilities are
+bound to face buttons.
 
 ## Current Runtime
 
@@ -52,9 +51,13 @@ patch is implemented and playtest-approved.
 - Every player always has:
   - one active weapon, starting with `Rifle`
   - shared weapon level `1-5` preserved when changing weapons
-  - `1 OFF` ability slot on `LT`
-  - `1 DEF` ability slot on `RT`
+  - four ability slots on controller face buttons: `A`, `X`, `Y`, `B`
+  - keyboard defaults for P1/P2 ability slots on number-row `1`, `2`, `3`, `4`
   - mutation inventory
+- V4 removed in-run weapon switching. A run has one active weapon selected before launch.
+- Slice 0 still uses the existing pre-run weapon picker and temporary two-choice ability picker for the first
+  two slots; `RunState` expands the runtime kit to the default four ability loadout until Slice 1 adds class
+  selection and full class loadout UI.
 - Live weapons:
   - `Rifle`
   - `Rocket Launcher`
@@ -144,6 +147,7 @@ patch is implemented and playtest-approved.
 - `Bootstrap.gd` now owns:
   - single Play setup
   - player/controller/loadout setup
+  - Options input binding rows for `Ability 1 A`, `Ability 2 X`, `Ability 3 Y`, and `Ability 4 B`
   - Meta unlock menu backed by `ProfileState`
   - Encounter Builder with `Combat / Champion`
   - champion picker over all seven champions
@@ -158,11 +162,12 @@ Last validation run in this state:
 
 - `git diff --check`
 - Godot headless parse:
-  - `Godot_v4.6.2-stable_win64_console.exe --headless --path D:\GameDev\Project_Twin_stick --quit`
+  - `Godot_v4.6.2-stable_win64_console.exe --headless --path D:\GameDev\Project_Twin_stick_v4 --quit`
 - Bootstrap scene headless smoke boot:
-  - `Godot_v4.6.2-stable_win64_console.exe --headless --path D:\GameDev\Project_Twin_stick res://scenes/ui/Bootstrap.tscn --quit`
+  - `Godot_v4.6.2-stable_win64_console.exe --headless --path D:\GameDev\Project_Twin_stick_v4 res://scenes/ui/Bootstrap.tscn --quit`
 - PerfRunner Hive champion profile:
-  - `Godot_v4.6.2-stable_win64_console.exe --headless --path D:\GameDev\Project_Twin_stick --profile=champion:hive --players=2 --build=heavy --quit`
+  - `Godot_v4.6.2-stable_win64_console.exe --headless --path D:\GameDev\Project_Twin_stick_v4 -- --profile=champion:hive --players=2 --build=heavy`
+  - Result: `avg_fps=144.9`, `min_fps=144.0`, `max_frame_ms=6.944`.
 
 ## Known Risks
 
@@ -180,18 +185,9 @@ Last validation run in this state:
 
 ## Next Step
 
-Playtest the QoL/difficulty patch on `v3/structure-rework`:
+Continue `docs/development/v4-implementation-plan.md` with Slice 1 in the V4 worktree:
 
-- reroll/skip reward flow in 1P and 2P
-- shared score spend pressure and reroll-cost escalation
-- early-room pressure after chaser/charger/spawn tuning
-- HP drop frequency and heal amount
-- encyclopedia visual preview readability
-- Meta unlock flow: earn score, bank once, spend, restart, confirm persistence
-- lean-start feel before unlocks
-- Signature/parasite offer quality and build divergence
-- route-card readability and rare-odds nudge readability
-- continuation pressure after room `10`
-- champion time-to-kill versus attack threat
-- Cannon burst-AOE versus Beam sustained single-target identity
-- modifier readability under deeper pressure
+- add class data model fields to `PlayerInventory`
+- register placeholder stubs for forward-referenced class-pool weapons, abilities, and ultimates
+- build class-select / weapon / three-ability loadout UI for 1-2 players
+- free or bypass unlock checks for class-pool base kit content per the plan

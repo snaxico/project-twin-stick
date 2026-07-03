@@ -1,0 +1,45 @@
+{
+  "classes": [
+    {
+      "id": "mobile",
+      "name": "Stormrunner",
+      "hp": 100,
+      "move_speed": 560,
+      "passive": "momentum",
+      "ultimate": "slipstream",
+      "weapon_pool": ["rifle", "beam"],
+      "ability_pool": ["dash", "shockwave", "afterburn", "momentum_burst", "deflect", "sonic_boom"],
+      "tags": ["mobile"]
+    },
+    {
+      "id": "tank",
+      "hp": 150,
+      "move_speed": 480,
+      "passive": "bloodthirst",
+      "ultimate": "blood_frenzy",
+      "weapon_pool": ["scattergun", "whirlwind"],
+      "ability_pool": ["dash", "ground_slam", "quake", "orbit", "overcharge", "blood_lance"],
+      "tags": ["tank"]
+    },
+    {
+      "id": "controller",
+      "hp": 110,
+      "move_speed": 520,
+      "passive": "radiance",
+      "ultimate": "overload_grid",
+      "weapon_pool": ["beam", "arc_wand"],
+      "ability_pool": ["dash", "turret", "minefield", "orbit", "summon", "reinforce"],
+      "tags": ["controller"]
+    },
+    {
+      "id": "risk",
+      "hp": 90,
+      "move_speed": 560,
+      "passive": "overheat",
+      "ultimate": "firestorm",
+      "weapon_pool": ["flamethrower", "rocket"],
+      "ability_pool": ["dash", "overcharge", "shockwave", "shield", "fireball", "ignite"],
+      "tags": ["risk"]
+    }
+  ]
+}

@@ -4,6 +4,7 @@ extends RefCounted
 const ABILITIES_DATA_PATH := "res://data/abilities.json"
 const DEFAULT_OFF_ABILITY := "overcharge"
 const DEFAULT_DEF_ABILITY := "dash"
+const DEFAULT_LOADOUT := ["overcharge", "dash", "shockwave", "minefield"]
 
 var _definitions: Array = []
 var _definition_map: Dictionary = {}
@@ -45,25 +46,29 @@ func get_ids_by_slot(slot: String) -> Array:
 	return ids
 
 func get_default_loadout() -> Array:
-	return [DEFAULT_OFF_ABILITY, DEFAULT_DEF_ABILITY]
+	return DEFAULT_LOADOUT.duplicate()
 
-func normalize_loadout(ability_ids: Array) -> Array:
-	var off_id := ""
-	var def_id := ""
+func normalize_loadout(ability_ids: Array, desired_count: int = 4) -> Array:
+	var normalized: Array = []
 	for ability_id_variant in ability_ids:
 		var ability_id := str(ability_id_variant)
-		match get_slot(ability_id):
-			"off":
-				if off_id.is_empty():
-					off_id = ability_id
-			"def":
-				if def_id.is_empty():
-					def_id = ability_id
-	if off_id.is_empty():
-		off_id = DEFAULT_OFF_ABILITY
-	if def_id.is_empty():
-		def_id = DEFAULT_DEF_ABILITY
-	return [off_id, def_id]
+		if ability_id.is_empty() or not has(ability_id) or normalized.has(ability_id):
+			continue
+		normalized.append(ability_id)
+	for default_id in DEFAULT_LOADOUT:
+		if normalized.size() >= desired_count:
+			break
+		if has(default_id) and not normalized.has(default_id):
+			normalized.append(default_id)
+	for definition in _definitions:
+		if normalized.size() >= desired_count:
+			break
+		var fallback_id := str((definition as Dictionary).get("id", ""))
+		if not fallback_id.is_empty() and not normalized.has(fallback_id):
+			normalized.append(fallback_id)
+	while normalized.size() < desired_count:
+		normalized.append("")
+	return normalized.slice(0, desired_count)
 
 func _load_definitions() -> void:
 	_definitions.clear()

@@ -9,6 +9,8 @@ const BLOOM_COLOR_MULTIPLIER := 1.45
 const MANUAL_AIM_DEADZONE := 0.35
 const MOUSE_AIM_IDLE_SECONDS := 0.65
 const MAX_MOMENTUM_TIER := 4
+const ABILITY_SLOT_COUNT := 4
+const ABILITY_FACE_BUTTONS := [JOY_BUTTON_A, JOY_BUTTON_X, JOY_BUTTON_Y, JOY_BUTTON_B]
 
 const FLASH_SHADER_CODE := """
 shader_type canvas_item;
@@ -66,7 +68,7 @@ var _weapon_feedback_profile := "rifle"
 var _weapon_impact_weight := 1.0
 var _weapon_stats: Dictionary = {}
 var _ability_slots: Array = []
-var _ability_pressed_last_frame := [false, false]
+var _ability_pressed_last_frame := []
 var _dash_states: Dictionary = {}
 var _active_dash_slot_index := -1
 var _shield_until := 0.0
@@ -187,7 +189,7 @@ func set_input_locked(locked: bool) -> void:
 			(dash_state as DashData).clear_buffer()
 		velocity = Vector2.ZERO
 	_auto_target = null
-	_ability_pressed_last_frame = [false, false]
+	_ability_pressed_last_frame = _build_ability_pressed_state()
 
 func apply_loadout(loadout: Dictionary) -> void:
 	_mutation_ids = (loadout.get("mutations", []) as Array).duplicate()
@@ -209,10 +211,13 @@ func apply_loadout(loadout: Dictionary) -> void:
 	projectile_speed = float(_weapon_stats.get("projectile_speed", projectile_speed))
 	_weapon_range = float(_weapon_stats.get("range", _weapon_range))
 	_weapon_area = float(_weapon_stats.get("area", _weapon_area))
-	_ability_slots = [
-		_build_runtime_ability((loadout.get("ability_slot_1", {}) as Dictionary).duplicate(true), str(loadout.get("ability_slot_1_id", "overcharge"))),
-		_build_runtime_ability((loadout.get("ability_slot_2", {}) as Dictionary).duplicate(true), str(loadout.get("ability_slot_2_id", "dash")))
-	]
+	_ability_slots.clear()
+	for slot_index in range(ABILITY_SLOT_COUNT):
+		var slot_number := slot_index + 1
+		var slot_key := "ability_slot_%d" % slot_number
+		var slot_id_key := "ability_slot_%d_id" % slot_number
+		var fallback_id := str(AbilityRegistry.DEFAULT_LOADOUT[slot_index]) if slot_index < AbilityRegistry.DEFAULT_LOADOUT.size() else ""
+		_ability_slots.append(_build_runtime_ability((loadout.get(slot_key, {}) as Dictionary).duplicate(true), str(loadout.get(slot_id_key, fallback_id))))
 	_dash_states.clear()
 	for slot_index in range(_ability_slots.size()):
 		var slot: Dictionary = _ability_slots[slot_index]
@@ -222,7 +227,7 @@ func apply_loadout(loadout: Dictionary) -> void:
 			dash_state.cooldown_duration = max(0.1, float(slot.get("cooldown", 3.0)))
 			dash_state.dash_speed = float((slot.get("stats", {}) as Dictionary).get("dash_speed", 1180.0))
 			_dash_states[slot_index] = dash_state
-	_ability_pressed_last_frame = [false, false]
+	_ability_pressed_last_frame = _build_ability_pressed_state()
 	_shield_until = 0.0
 	_shield_was_active = false
 	_pending_shield_burst.clear()
@@ -397,7 +402,7 @@ func _physics_process(delta: float) -> void:
 	if _can_attack(now) and fire_direction.length() > 0.0 and now >= _next_weapon_fire_at:
 		_fire_weapon(now, fire_direction.normalized())
 
-	for slot_index in range(2):
+	for slot_index in range(_ability_slots.size()):
 		var slot_pressed := _is_ability_pressed(slot_index)
 		if slot_pressed and not bool(_ability_pressed_last_frame[slot_index]):
 			_try_activate_ability(slot_index, now)
@@ -881,21 +886,24 @@ func _is_ability_pressed(slot_index: int) -> bool:
 			if player_config.uses_keyboard():
 				return _is_keyboard_ability_pressed(slot_index)
 			return false
-		var action := "p%d_secondary" % player_id if slot_index == 0 else "p%d_dash" % player_id
+		var action := "p%d_ability_%d" % [player_id, slot_index + 1]
 		if _has_gamepad_action_events([action]):
 			if _get_gamepad_action_strength(action) >= 0.5:
 				return true
-		if slot_index == 0:
-			if Input.get_joy_axis(gamepad_device_id, JOY_AXIS_TRIGGER_LEFT) >= 0.5 or Input.is_joy_button_pressed(gamepad_device_id, JOY_BUTTON_X):
-				return true
-		elif Input.get_joy_axis(gamepad_device_id, JOY_AXIS_TRIGGER_RIGHT) >= 0.5 or Input.is_joy_button_pressed(gamepad_device_id, JOY_BUTTON_B):
+		if slot_index >= 0 and slot_index < ABILITY_FACE_BUTTONS.size() and Input.is_joy_button_pressed(gamepad_device_id, ABILITY_FACE_BUTTONS[slot_index]):
 			return true
 	if player_config.uses_keyboard():
 		return _is_keyboard_ability_pressed(slot_index)
 	return false
 
 func _is_keyboard_ability_pressed(slot_index: int) -> bool:
-	return _is_keyboard_action_pressed("p%d_secondary" % player_id) if slot_index == 0 else _is_keyboard_action_pressed("p%d_dash" % player_id)
+	return _is_keyboard_action_pressed("p%d_ability_%d" % [player_id, slot_index + 1])
+
+func _build_ability_pressed_state() -> Array:
+	var state: Array = []
+	for _slot_index in range(ABILITY_SLOT_COUNT):
+		state.append(false)
+	return state
 
 func _has_gamepad_action_events(actions: Array) -> bool:
 	for action_variant in actions:

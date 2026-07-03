@@ -4,6 +4,7 @@
       "id": "rifle",
       "name": "Rifle",
       "type": "weapon",
+      "tags": ["projectile"],
       "projectile_kind": "bullet",
       "stats": {
         "projectile_speed": 850.0,
@@ -19,6 +20,7 @@
       "id": "rocket",
       "name": "Rocket Launcher",
       "type": "weapon",
+      "tags": ["projectile"],
       "projectile_kind": "rocket",
       "stats": {
         "fire_rate": 1.6,
@@ -36,6 +38,7 @@
       "id": "scattergun",
       "name": "Shotgun",
       "type": "weapon",
+      "tags": ["projectile"],
       "projectile_kind": "pellet",
       "stats": {
         "damage": 12.0,
@@ -52,6 +55,7 @@
       "id": "cannon",
       "name": "Cannon",
       "type": "weapon",
+      "tags": ["projectile"],
       "projectile_kind": "slug",
       "stats": {
         "fire_rate": 1.45,
@@ -69,6 +73,7 @@
       "id": "railgun",
       "name": "Railgun",
       "type": "weapon",
+      "tags": ["projectile"],
       "projectile_kind": "lance",
       "stats": {
         "fire_rate": 4.0,
@@ -85,6 +90,7 @@
       "id": "beam",
       "name": "Beam",
       "type": "weapon",
+      "tags": ["beam"],
       "projectile_kind": "beam",
       "stats": {
         "range": 750.0,
@@ -101,6 +107,7 @@
       "id": "boomerang",
       "name": "Boomerang",
       "type": "weapon",
+      "tags": ["projectile"],
       "projectile_kind": "boomerang",
       "stats": {
         "fire_rate": 3.0,
@@ -117,6 +124,7 @@
       "id": "shockwave",
       "name": "Shockwave",
       "type": "primary_skill",
+      "tags": ["blast"],
       "stats": {
         "kind": "shockwave",
         "damage": 30.0,

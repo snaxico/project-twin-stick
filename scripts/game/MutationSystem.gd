@@ -324,7 +324,7 @@ func _required_ability_is_equipped(player_index: int, mutation_id: String) -> bo
 	var inventory = RunState.get_player_inventory(player_index)
 	if inventory == null:
 		return false
-	return str(inventory.ability_slot_1) == required_ability or str(inventory.ability_slot_2) == required_ability
+	return inventory.get_ability_ids().has(required_ability)
 
 func _get_rarity(mutation_id: String) -> String:
 	if not _definition_map.has(mutation_id):

@@ -22,10 +22,10 @@ const INPUT_BINDING_ACTIONS := [
 	{"label": "Aim Up", "suffix": "aim_up"},
 	{"label": "Aim Down", "suffix": "aim_down"},
 	{"label": "Fire", "suffix": "fire"},
-	{"label": "OFF Ability LT", "suffix": "secondary"},
-	{"label": "DEF Ability RT", "suffix": "dash"},
-	{"label": "Swap LT", "suffix": "switch_primary"},
-	{"label": "Swap RT", "suffix": "switch_secondary"},
+	{"label": "Ability 1 A", "suffix": "ability_1"},
+	{"label": "Ability 2 X", "suffix": "ability_2"},
+	{"label": "Ability 3 Y", "suffix": "ability_3"},
+	{"label": "Ability 4 B", "suffix": "ability_4"},
 ]
 const MENU_BINDING_ACTIONS := [
 	{"label": "Menu Accept", "action": "ui_accept"},
@@ -320,7 +320,7 @@ func _refresh_menu_state(_unused: Variant = null) -> void:
 		if debug_layout_row.visible:
 			summary_lines.append("Enemy Mix: %s" % debug_layout_option.get_item_text(debug_layout_option.selected))
 		summary_lines.append("Room Modifiers: %d" % _get_selected_room_modifiers().size())
-	summary_lines.append("Pick each player's weapon and LT/RT abilities, then start.")
+	summary_lines.append("Pick each player's weapon and A/X abilities; Y/B use default slots.")
 	status_label.text = "\n".join(summary_lines)
 	start_button.text = "Launch Encounter" if encounter_builder_mode else "Start Run"
 	for row_index in range(_ability_rows.size()):
@@ -937,8 +937,10 @@ func _ensure_default_controller_bindings() -> void:
 		_add_default_controller_motion("p%d_aim_up" % player_id, JOY_AXIS_RIGHT_Y, -1.0)
 		_add_default_controller_motion("p%d_aim_down" % player_id, JOY_AXIS_RIGHT_Y, 1.0)
 		_add_default_controller_button("p%d_fire" % player_id, JOY_BUTTON_RIGHT_SHOULDER)
-		_add_default_controller_motion("p%d_secondary" % player_id, JOY_AXIS_TRIGGER_LEFT, 1.0)
-		_add_default_controller_motion("p%d_dash" % player_id, JOY_AXIS_TRIGGER_RIGHT, 1.0)
+		_add_default_controller_button("p%d_ability_1" % player_id, JOY_BUTTON_A)
+		_add_default_controller_button("p%d_ability_2" % player_id, JOY_BUTTON_X)
+		_add_default_controller_button("p%d_ability_3" % player_id, JOY_BUTTON_Y)
+		_add_default_controller_button("p%d_ability_4" % player_id, JOY_BUTTON_B)
 
 func _ensure_debug_input_binding() -> void:
 	if not InputMap.has_action("debug_overlay_toggle"):
@@ -1364,7 +1366,7 @@ func _build_ability_rows() -> void:
 		header.add_theme_font_size_override("font_size", 13)
 		container.add_child(header)
 		var off_label := Label.new()
-		off_label.text = "LT / OFF"
+		off_label.text = "A / OFF"
 		off_label.add_theme_font_size_override("font_size", 10)
 		off_label.modulate = Color(0.95, 1.0, 0.84, 0.92)
 		container.add_child(off_label)
@@ -1374,7 +1376,7 @@ func _build_ability_rows() -> void:
 		off_grid.add_theme_constant_override("v_separation", 5)
 		container.add_child(off_grid)
 		var def_label := Label.new()
-		def_label.text = "RT / DEF"
+		def_label.text = "X / DEF"
 		def_label.add_theme_font_size_override("font_size", 10)
 		def_label.modulate = Color(0.84, 0.92, 1.0, 0.92)
 		container.add_child(def_label)
@@ -1446,7 +1448,7 @@ func _get_player_ability_pair(player_index: int) -> Array:
 		if ProfileState != null and not ProfileState.is_content_unlocked("ability", ability_id):
 			continue
 		chosen.append(ability_id)
-	return _ability_registry.normalize_loadout(chosen)
+	return _ability_registry.normalize_loadout(chosen, 2)
 
 func _on_ability_card_toggled(pressed: bool, player_index: int, ability_id: String) -> void:
 	if player_index < 0 or player_index >= _ability_rows.size():
@@ -1492,7 +1494,7 @@ func _sync_ability_row_buttons(player_index: int) -> void:
 	var summary: Label = row_data.get("summary", null)
 	if summary != null:
 		if not off_selection.is_empty() and not def_selection.is_empty():
-			summary.text = "LT %s  |  RT %s" % [
+			summary.text = "A %s  |  X %s  |  Y/B defaults" % [
 				_format_name(str(selected_pair[0])),
 				_format_name(str(selected_pair[1])),
 			]
@@ -1504,9 +1506,9 @@ func _sync_ability_row_buttons(player_index: int) -> void:
 func _format_ability_card_text(button: Button, slot_index: int) -> String:
 	var card_text := str(button.get_meta("card_text", button.text))
 	if slot_index == 0:
-		return "LT - %s" % card_text
+		return "A - %s" % card_text
 	if slot_index == 1:
-		return "RT - %s" % card_text
+		return "X - %s" % card_text
 	return card_text
 
 func _get_ability_description(ability_id: String) -> String:

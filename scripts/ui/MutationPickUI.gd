@@ -612,7 +612,7 @@ func _is_player_confirm_pressed(event: InputEvent, player_index: int) -> bool:
 		var joy_button := event as InputEventJoypadButton
 		if joy_button.pressed and joy_button.button_index == JOY_BUTTON_A:
 			return true
-	return _event_matches_action(event, "p%d_secondary" % int(config.player_id)) if config.has_method("uses_keyboard") and config.uses_keyboard() else false
+	return _event_matches_action(event, "p%d_ability_1" % int(config.player_id)) if config.has_method("uses_keyboard") and config.uses_keyboard() else false
 
 func _is_player_cancel_pressed(event: InputEvent, player_index: int) -> bool:
 	var config = _player_configs[player_index]

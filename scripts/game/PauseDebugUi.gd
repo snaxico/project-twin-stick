@@ -8,6 +8,7 @@ const EnemyTypes = preload("res://scripts/game/EnemyTypes.gd")
 const IconFactoryData = preload("res://scripts/ui/IconFactory.gd")
 
 const HUD_SLOT_2_COLOR := HudPaletteData.SLOT_2_COLOR
+const ABILITY_TRIGGER_LABELS := ["A", "X", "Y", "B"]
 const DEBUG_ENEMY_SPAWN_CATALOG := [
 	{"label": "Chaser", "value": "chaser"},
 	{"label": "Charger", "value": "charger"},
@@ -247,8 +248,8 @@ func populate_pause_build_overlay() -> void:
 		var ability_cards := HBoxContainer.new()
 		ability_cards.add_theme_constant_override("separation", 8)
 		overlay.add_child(ability_cards)
-		ability_cards.add_child(_create_build_ability_card(player, player_tint, 0))
-		ability_cards.add_child(_create_build_ability_card(player, player_tint, 1))
+		for slot_index in range(4):
+			ability_cards.add_child(_create_build_ability_card(player, player_tint, slot_index))
 		var mutations: Array = _mutation_system.get_active_mutations(player_index)
 		var counts: Dictionary = {}
 		for mutation in mutations:
@@ -422,7 +423,7 @@ func _create_build_ability_card(player, player_tint: Color, slot_index: int) -> 
 	layout.add_theme_constant_override("separation", 2)
 	margin.add_child(layout)
 	var trigger := Label.new()
-	trigger.text = "LT" if slot_index == 0 else "RT"
+	trigger.text = str(ABILITY_TRIGGER_LABELS[slot_index]) if slot_index >= 0 and slot_index < ABILITY_TRIGGER_LABELS.size() else "A%d" % (slot_index + 1)
 	trigger.add_theme_font_size_override("font_size", 10)
 	trigger.add_theme_color_override("font_color", slot_color.lightened(0.25))
 	layout.add_child(trigger)

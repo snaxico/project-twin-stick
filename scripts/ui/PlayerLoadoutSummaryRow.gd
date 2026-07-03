@@ -9,8 +9,7 @@ var _style: StyleBoxFlat = null
 var _player_label: Label = null
 var _summary_label: Label = null
 var _weapon_icon: TextureRect = null
-var _primary_icon: TextureRect = null
-var _dash_icon: TextureRect = null
+var _ability_icons: Array = []
 var _mutation_row: HBoxContainer = null
 
 func _ready() -> void:
@@ -30,8 +29,12 @@ func update_row(data: Dictionary) -> void:
 		_build()
 	_summary_label.text = str(data.get("summary_text", ""))
 	_weapon_icon.texture = IconFactoryData.get_weapon_icon(str(data.get("weapon_id", "rifle")))
-	_primary_icon.texture = IconFactoryData.get_weapon_icon(str(data.get("primary_skill_id", "shockwave")))
-	_dash_icon.texture = IconFactoryData.get_weapon_icon("dash")
+	var ability_ids: Array = data.get("ability_ids", []) as Array
+	if ability_ids.is_empty():
+		ability_ids = [str(data.get("primary_skill_id", "shockwave")), "dash"]
+	for icon_index in range(_ability_icons.size()):
+		var ability_id := str(ability_ids[icon_index]) if icon_index < ability_ids.size() else ""
+		(_ability_icons[icon_index] as TextureRect).texture = IconFactoryData.get_weapon_icon(ability_id)
 	_rebuild_mutation_chips(data.get("mutations", []) as Array)
 
 func _build() -> void:
@@ -63,10 +66,10 @@ func _build() -> void:
 
 	_weapon_icon = _build_icon(18.0)
 	row.add_child(_weapon_icon)
-	_primary_icon = _build_icon(18.0)
-	row.add_child(_primary_icon)
-	_dash_icon = _build_icon(18.0)
-	row.add_child(_dash_icon)
+	for _icon_index in range(4):
+		var ability_icon := _build_icon(18.0)
+		row.add_child(ability_icon)
+		_ability_icons.append(ability_icon)
 
 	_mutation_row = HBoxContainer.new()
 	_mutation_row.add_theme_constant_override("separation", 3)

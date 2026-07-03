@@ -55,10 +55,10 @@ const GAMEPLAY_INPUT_SUFFIXES := [
 	"aim_up",
 	"aim_down",
 	"fire",
-	"secondary",
-	"dash",
-	"switch_primary",
-	"switch_secondary",
+	"ability_1",
+	"ability_2",
+	"ability_3",
+	"ability_4",
 ]
 
 const XP_PER_ENEMY_TYPE := {
@@ -374,16 +374,17 @@ func _rebuild_player_loadouts() -> void:
 			"weapon_name": str(base_loadout.get("weapon_name", "Rifle")),
 			"weapon_level": int(base_loadout.get("weapon_level", 1)),
 			"weapon_stats": compiled_weapon,
-			"ability_slot_1": _build_runtime_ability(index, (base_loadout.get("ability_slot_1", {}) as Dictionary).duplicate(true)),
-			"ability_slot_2": _build_runtime_ability(index, (base_loadout.get("ability_slot_2", {}) as Dictionary).duplicate(true)),
-			"ability_slot_1_id": str(base_loadout.get("ability_slot_1_id", "overcharge")),
-			"ability_slot_2_id": str(base_loadout.get("ability_slot_2_id", "dash")),
 			"mutations": _mutation_system.get_active_mutations(index),
 			"move_speed": float(base_loadout.get("move_speed", 560.0)),
 			"move_speed_bonus": _mutation_system.get_move_speed_bonus(index),
 			"max_health": int(round(float(base_loadout.get("max_health", 100)) * _mutation_system.get_max_health_multiplier(index))),
 			"heal_disabled": _mutation_system.is_healing_disabled(index),
 		}
+		for slot_index in range(4):
+			var slot_number := slot_index + 1
+			var slot_key := "ability_slot_%d" % slot_number
+			compiled_loadout[slot_key] = _build_runtime_ability(index, (base_loadout.get(slot_key, {}) as Dictionary).duplicate(true))
+			compiled_loadout["ability_slot_%d_id" % slot_number] = str(base_loadout.get("ability_slot_%d_id" % slot_number, ""))
 		_compiled_loadouts.append(compiled_loadout)
 		_player_nodes[index].apply_loadout(compiled_loadout)
 		if _momentum_tracker != null:

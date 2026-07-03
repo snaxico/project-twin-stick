@@ -1,8 +1,9 @@
 # Class-Based Redesign — Design Doc (next version)
 
 > **Status:** Design complete, no implementation started. This is the review-ready spec.
-> **Companion data:** [`class-design.xlsx`](class-design.xlsx) (Kits / Mutations / Reference tabs) is the
-> live data table; this doc is the prose spec. Both are kept in sync.
+> **Companion data:** [`class-design.xlsx`](class-design.xlsx) (Kits / Mutations / Reference tabs) is a
+> human-facing planning grid. The authoritative implementation source is this `.md`; do not use the binary
+> spreadsheet as a Codex implementation input.
 > **Next step:** review this doc, then produce a Codex-ready implementation plan (see §8, §9).
 
 ---
@@ -266,7 +267,8 @@ Each an independently built + validated vertical slice per the solo-dev rules.
 
 ## 10. Source of truth
 
-The full per-class data grid + every mutation lives in [`class-design.xlsx`](class-design.xlsx):
+This `.md` is the authoritative implementation source for kits, mutations, and behavior. The companion
+[`class-design.xlsx`](class-design.xlsx) is a human-facing planning grid only:
 - **Kits** tab — rows = kit slots (passive/stats/ultimate/weapons/skills), columns = the 4 classes.
-- **Mutations** tab — every mutation with scope / target / effect / status.
-- **Reference** tab — base behaviors of all weapons & skills.
+- **Mutations** tab — mutation planning grid.
+- **Reference** tab — base behaviors of weapons & skills.

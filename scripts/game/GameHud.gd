@@ -8,6 +8,7 @@ const CoopFormat = preload("res://scripts/game/CoopFormat.gd")
 
 const HUD_HEALTH_COLOR := Color(0.24, 0.92, 0.34, 1.0)
 const HUD_SLOT_2_COLOR := HudPaletteData.SLOT_2_COLOR
+const HUD_ABILITY_TRIGGERS := ["A", "X", "Y", "B"]
 
 var _coop: Node = null
 var _ui_layer: CanvasLayer = null
@@ -110,9 +111,9 @@ func build() -> void:
 	_bottom_hud.alignment = BoxContainer.ALIGNMENT_CENTER
 	var player_configs := _get_player_configs()
 	var player_count := player_configs.size()
-	var card_width := 260.0 if player_count <= 2 else 200.0
+	var card_width := 380.0 if player_count <= 2 else 280.0
 	var card_separation := 14 if player_count <= 2 else 8
-	var ability_font_size := 10 if player_count <= 2 else 9
+	var ability_font_size := 9 if player_count <= 2 else 8
 	_bottom_hud.add_theme_constant_override("separation", card_separation)
 	_hud_root.add_child(_bottom_hud)
 
@@ -193,64 +194,43 @@ func build() -> void:
 		ability_row.add_theme_constant_override("separation", 8)
 		card_layout.add_child(ability_row)
 
-		var slot_1_box := VBoxContainer.new()
-		slot_1_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		slot_1_box.add_theme_constant_override("separation", 2)
-		ability_row.add_child(slot_1_box)
-		slot_1_box.add_child(_create_hud_trigger_label("LT", slot_1_color))
-		var slot_1_label := Label.new()
-		slot_1_label.add_theme_font_size_override("font_size", ability_font_size)
-		slot_1_label.add_theme_color_override("font_color", slot_1_color)
-		slot_1_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		slot_1_box.add_child(slot_1_label)
-		var slot_1_charge_label := Label.new()
-		slot_1_charge_label.add_theme_font_size_override("font_size", 9)
-		slot_1_charge_label.add_theme_color_override("font_color", slot_1_color.lightened(0.28))
-		slot_1_charge_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		slot_1_charge_label.visible = false
-		slot_1_box.add_child(slot_1_charge_label)
-		var slot_1_bar := ProgressBar.new()
-		slot_1_bar.show_percentage = false
-		slot_1_bar.min_value = 0.0
-		slot_1_bar.max_value = 100.0
-		slot_1_bar.value = 100.0
-		slot_1_bar.custom_minimum_size = Vector2(96.0, 8.0)
-		_apply_progress_bar_tint(slot_1_bar, slot_1_color, 0.82)
-		slot_1_box.add_child(slot_1_bar)
-
-		var slot_2_box := VBoxContainer.new()
-		slot_2_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		slot_2_box.add_theme_constant_override("separation", 2)
-		ability_row.add_child(slot_2_box)
-		slot_2_box.add_child(_create_hud_trigger_label("RT", slot_2_color))
-		var slot_2_label := Label.new()
-		slot_2_label.add_theme_font_size_override("font_size", ability_font_size)
-		slot_2_label.add_theme_color_override("font_color", slot_2_color)
-		slot_2_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		slot_2_box.add_child(slot_2_label)
-		var slot_2_charge_label := Label.new()
-		slot_2_charge_label.add_theme_font_size_override("font_size", 9)
-		slot_2_charge_label.add_theme_color_override("font_color", slot_2_color.lightened(0.28))
-		slot_2_charge_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		slot_2_charge_label.visible = false
-		slot_2_box.add_child(slot_2_charge_label)
-		var slot_2_bar := ProgressBar.new()
-		slot_2_bar.show_percentage = false
-		slot_2_bar.min_value = 0.0
-		slot_2_bar.max_value = 100.0
-		slot_2_bar.value = 100.0
-		slot_2_bar.custom_minimum_size = Vector2(96.0, 8.0)
-		_apply_progress_bar_tint(slot_2_bar, slot_2_color, 0.78)
-		slot_2_box.add_child(slot_2_bar)
+		var ability_slots: Array = []
+		for slot_index in range(4):
+			var slot_color := CoopFormat.get_slot_color(tint, slot_index, HUD_SLOT_2_COLOR)
+			var slot_box := VBoxContainer.new()
+			slot_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			slot_box.add_theme_constant_override("separation", 2)
+			ability_row.add_child(slot_box)
+			slot_box.add_child(_create_hud_trigger_label(str(HUD_ABILITY_TRIGGERS[slot_index]), slot_color))
+			var slot_label := Label.new()
+			slot_label.add_theme_font_size_override("font_size", ability_font_size)
+			slot_label.add_theme_color_override("font_color", slot_color)
+			slot_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			slot_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+			slot_box.add_child(slot_label)
+			var slot_charge_label := Label.new()
+			slot_charge_label.add_theme_font_size_override("font_size", 9)
+			slot_charge_label.add_theme_color_override("font_color", slot_color.lightened(0.28))
+			slot_charge_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			slot_charge_label.visible = false
+			slot_box.add_child(slot_charge_label)
+			var slot_bar := ProgressBar.new()
+			slot_bar.show_percentage = false
+			slot_bar.min_value = 0.0
+			slot_bar.max_value = 100.0
+			slot_bar.value = 100.0
+			slot_bar.custom_minimum_size = Vector2(74.0, 8.0)
+			_apply_progress_bar_tint(slot_bar, slot_color, 0.82)
+			slot_box.add_child(slot_bar)
+			ability_slots.append({
+				"label": slot_label,
+				"charge_label": slot_charge_label,
+				"bar": slot_bar,
+			})
 
 		_bottom_player_hud_cards.append({
 			"health_bar": health_bar,
-			"slot_1_label": slot_1_label,
-			"slot_1_charge_label": slot_1_charge_label,
-			"slot_1_bar": slot_1_bar,
-			"slot_2_label": slot_2_label,
-			"slot_2_charge_label": slot_2_charge_label,
-			"slot_2_bar": slot_2_bar,
+			"ability_slots": ability_slots,
 			"momentum_pips": momentum_pips,
 		})
 
@@ -566,22 +546,17 @@ func _refresh_bottom_hud() -> void:
 		var card: Dictionary = _bottom_player_hud_cards[index]
 		var player = player_nodes[index]
 		var health_state: Dictionary = player.get_health_state()
-		var slot_1_hud_data: Dictionary = player.get_ability_hud_data(0)
-		var slot_2_hud_data: Dictionary = player.get_ability_hud_data(1)
 		var health_ratio := clampf(float(health_state.get("current", 0)) / maxf(float(health_state.get("max", 1)), 1.0), 0.0, 1.0)
-		var slot_1_ratio := 1.0
-		var slot_2_ratio := 1.0
-		var slot_1_duration := maxf(float(slot_1_hud_data.get("cooldown_duration", 1.0)), 0.01)
-		var slot_2_duration := maxf(float(slot_2_hud_data.get("cooldown_duration", 1.0)), 0.01)
-		slot_1_ratio = 1.0 - clampf(float(slot_1_hud_data.get("cooldown_remaining", 0.0)) / slot_1_duration, 0.0, 1.0)
-		slot_2_ratio = 1.0 - clampf(float(slot_2_hud_data.get("cooldown_remaining", 0.0)) / slot_2_duration, 0.0, 1.0)
 		(card.get("health_bar") as ProgressBar).value = health_ratio * 100.0
-		(card.get("slot_1_label") as Label).text = str(slot_1_hud_data.get("name", "Ability 1"))
-		_update_slot_charge_label(card.get("slot_1_charge_label") as Label, slot_1_hud_data)
-		(card.get("slot_1_bar") as ProgressBar).value = slot_1_ratio * 100.0
-		(card.get("slot_2_label") as Label).text = str(slot_2_hud_data.get("name", "Ability 2"))
-		_update_slot_charge_label(card.get("slot_2_charge_label") as Label, slot_2_hud_data)
-		(card.get("slot_2_bar") as ProgressBar).value = slot_2_ratio * 100.0
+		var ability_slots: Array = card.get("ability_slots", []) as Array
+		for slot_index in range(ability_slots.size()):
+			var slot_hud_data: Dictionary = player.get_ability_hud_data(slot_index)
+			var slot_duration := maxf(float(slot_hud_data.get("cooldown_duration", 1.0)), 0.01)
+			var slot_ratio := 1.0 - clampf(float(slot_hud_data.get("cooldown_remaining", 0.0)) / slot_duration, 0.0, 1.0)
+			var slot_nodes: Dictionary = ability_slots[slot_index] as Dictionary
+			(slot_nodes.get("label") as Label).text = str(slot_hud_data.get("name", "Ability %d" % (slot_index + 1)))
+			_update_slot_charge_label(slot_nodes.get("charge_label") as Label, slot_hud_data)
+			(slot_nodes.get("bar") as ProgressBar).value = slot_ratio * 100.0
 		_refresh_momentum_pips(card, index)
 
 

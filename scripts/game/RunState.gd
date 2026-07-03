@@ -4,6 +4,7 @@ signal level_up(new_level: int)
 
 const PlayerInventoryData = preload("res://scripts/game/PlayerInventory.gd")
 const AbilityRegistryData = preload("res://scripts/game/AbilityRegistry.gd")
+const ClassRegistryData = preload("res://scripts/game/ClassRegistry.gd")
 
 const WEAPONS_DATA_PATH := "res://data/weapons.json"
 const MODIFIERS_DATA_PATH := "res://data/modifiers.json"
@@ -44,6 +45,7 @@ var _node_lookup: Dictionary = {}
 var _weapons_by_id: Dictionary = {}
 var _modifiers_by_id: Dictionary = {}
 var _ability_registry = AbilityRegistryData.new()
+var _class_registry = ClassRegistryData.new()
 var _structured_mid_boss_type := "warden"
 var _structured_final_boss_type := "hydra"
 var _structured_total_combat_depth := 1
@@ -54,11 +56,13 @@ func _ready() -> void:
 	_random.randomize()
 	_load_weapons()
 	_load_modifiers()
+	_class_registry.reload()
 
 func start_new_run(configs: Array, debug_options: Dictionary = {}) -> void:
 	_random.randomize()
 	_load_weapons()
 	_load_modifiers()
+	_class_registry.reload()
 	debug_run_setup = _build_default_debug_run_setup()
 	debug_run_setup.merge(debug_options, true)
 	player_configs = configs.duplicate()
@@ -239,7 +243,10 @@ func get_ability(player_index: int, slot_index: int) -> Dictionary:
 	if inventory == null:
 		return {}
 	_normalize_inventory_ability_slots(inventory)
-	var ability_id: String = inventory.ability_slot_1 if slot_index == 0 else inventory.ability_slot_2
+	var ability_ids: Array = inventory.get_ability_ids()
+	if slot_index < 0 or slot_index >= ability_ids.size():
+		return {}
+	var ability_id: String = str(ability_ids[slot_index])
 	return _ability_registry.get_definition(ability_id)
 
 func get_primary_skill(player_index: int) -> Dictionary:
@@ -254,25 +261,25 @@ func get_mutations(player_index: int) -> Array:
 func get_player_runtime_loadout_for(player_index: int) -> Dictionary:
 	var inventory = get_player_inventory(player_index)
 	var weapon: Dictionary = get_weapon(player_index)
-	var ability_slot_1: Dictionary = get_ability(player_index, 0)
-	var ability_slot_2: Dictionary = get_ability(player_index, 1)
 	if weapon.is_empty():
 		weapon = {"id": "rifle", "name": "Rifle", "stats": {}}
 	var weapon_level := get_weapon_level(player_index)
 	var weapon_stats := _resolve_weapon_stats(weapon, weapon_level)
-	return {
+	var ability_ids: Array = inventory.get_ability_ids() if inventory != null else _ability_registry.get_default_loadout()
+	var loadout := {
 		"weapon_id": str(weapon.get("id", "rifle")),
 		"weapon_name": str(weapon.get("name", "Rifle")),
 		"weapon_level": weapon_level,
 		"weapon_stats": weapon_stats,
-		"ability_slot_1_id": str(inventory.ability_slot_1 if inventory != null else "overcharge"),
-		"ability_slot_2_id": str(inventory.ability_slot_2 if inventory != null else "dash"),
-		"ability_slot_1": ability_slot_1.duplicate(true),
-		"ability_slot_2": ability_slot_2.duplicate(true),
 		"mutations": get_mutations(player_index),
 		"move_speed": 560.0,
 		"max_health": 100,
 	}
+	for slot_index in range(4):
+		var ability_id := str(ability_ids[slot_index]) if slot_index < ability_ids.size() else ""
+		loadout["ability_slot_%d_id" % (slot_index + 1)] = ability_id
+		loadout["ability_slot_%d" % (slot_index + 1)] = get_ability(player_index, slot_index).duplicate(true)
+	return loadout
 
 func add_xp(amount: int) -> void:
 	if amount <= 0:
@@ -405,17 +412,15 @@ func _build_default_player_inventories(player_count: int, selected_abilities: Ar
 			chosen = (selected_abilities[index] as Array).duplicate()
 		chosen = _filter_unlocked_abilities(chosen)
 		var normalized := _ability_registry.normalize_loadout(chosen)
-		inventory.ability_slot_1 = str(normalized[0])
-		inventory.ability_slot_2 = str(normalized[1])
+		inventory.set_ability_ids(normalized)
 		inventories.append(inventory)
 	return inventories
 
 func _normalize_inventory_ability_slots(inventory) -> void:
 	if inventory == null:
 		return
-	var normalized := _ability_registry.normalize_loadout(_filter_unlocked_abilities([inventory.ability_slot_1, inventory.ability_slot_2]))
-	inventory.ability_slot_1 = str(normalized[0])
-	inventory.ability_slot_2 = str(normalized[1])
+	var normalized := _ability_registry.normalize_loadout(_filter_unlocked_abilities(inventory.get_ability_ids()))
+	inventory.set_ability_ids(normalized)
 
 func _first_unlocked_weapon_id() -> String:
 	if _weapons_by_id.has("rifle") and (ProfileState == null or ProfileState.is_content_unlocked("weapon", "rifle")):
