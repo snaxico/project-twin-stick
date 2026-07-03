@@ -4,8 +4,13 @@
 
 - **Work in `D:\GameDev\Project_Twin_stick` on `v3/main`** (the mainline / GitHub default). Treat
   this repo as the current game.
-- **No new git worktrees.** Work in the main checkout. (Stale agent worktrees under
-  `.claude/worktrees/` should be removed, not added to.)
+- **No new git worktrees** — *except the one recorded exception below.* Work in the main checkout. (Stale
+  agent worktrees under `.claude/worktrees/` should be removed, not added to.)
+- **Recorded exception — V4 class-system worktree (2026-07-02):** the class-based redesign is built in a
+  dedicated worktree `D:\GameDev\Project_Twin_stick_v4` on branch `v4/class-system`, so the mainline stays a
+  playtestable A/B baseline for testers. This was an explicit, deliberate decision. Implementation of
+  `docs/development/v4-implementation-plan.md` happens **there**; all other work still follows the
+  main-checkout rule above.
 - **Keep everything on `D:`.** `C:` is a small SSD — do not write project or tooling output to `C:`.
 - Git is required. **Commit only after a patch or sub-feature works** and validation passes; never
   commit a broken intermediate state as if it passed. **Don't push unless asked.**

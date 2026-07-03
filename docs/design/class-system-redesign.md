@@ -22,8 +22,9 @@ stays; classes + a deeper kit + a real mutation system are what add the missing 
 
 ## 2. Core structure & global rules
 
-- **Kit = 1 weapon + up to 4 abilities**, mapped to controller **LT / RT / LB / RB** (sticks = move/aim,
-  weapon auto-fires). Grows from today's 2 ability slots (LT/RT).
+- **Kit = 1 weapon + 4 ability slots** (3 chosen abilities + the auto-equipped ultimate), mapped to the four
+  controller **face buttons** (Xbox **A / X / Y / B**, PlayStation **✕ / □ / △ / ○**); sticks = move/aim, the
+  weapon **auto-fires**. Grows from today's 2 ability slots.
 - **Per class:** 2 weapons (equip 1) · 6 skills (equip 3) · 1 **ultimate** (auto-equipped locked slot) ·
   1 passive. Rule: every class has **≥2 weapons, 1 ultimate, ≥6 abilities**.
 - **Dash is the universal mobility hub** — every class can take it; its variants (Blitz charge-through,
@@ -32,11 +33,13 @@ stays; classes + a deeper kit + a real mutation system are what add the missing 
   ultimate is gated by its Heat** instead.
 - **All summons & deployables are persistent and have HP** — they exist until *destroyed*, never on a timer.
   (Turrets, mines, orbs, constructs, summons.)
-- **Weapons stay mechanically as-is** (one active weapon, shared level 1-5, switch within class pool).
+- **One active weapon per run**, chosen at loadout from the class's weapon pool — **no in-run weapon switching
+  in V4** (the face buttons carry abilities, not a weapon swap). The weapon still shares its level 1-5 progression.
 - **Weapon roster (7):** base — rifle *(railgun merged in; pierce is now a mutation)*, shotgun, rocket, beam;
   new — Whirlwind (Tank melee), Arc Wand (Controller chain), Flamethrower (Risk cone). **Retired:** railgun
   (merged into rifle), boomerang (dropped), **cannon** (too similar to rocket). Every weapon has a class home.
-- **Players: flexible 1-4** (design for co-op, don't over-invest in 4-player polish yet).
+- **Players: 1-2 in V4.** All 4 classes are selectable (the roster is 4 classes), but simultaneous play is
+  capped at 2 for V4; wider co-op (3-4P) is deferred to a later pass.
 - **Bosses stay as "champions"** (folded into waves) for now — diagnosis parked (they failed by being
   dropped into swarms; fix later = separate the boss from the swarm + threat via patterns not HP).
 
@@ -113,8 +116,8 @@ Pierce/Split → `[projectile]`. *(Volatile Decoy dropped — decoy isn't in any
 
 ## 5. Meta / loadout / unlocks
 
-- **Loadout (per player, 1-4):** pick **class** → **weapon** (from class pool) → **3 abilities** (from class
-  pool); the **ultimate auto-equips**. Upgrades/mutations are in-run, not loadout. **Same class allowed** for
+- **Loadout (per player, 1-2 in V4):** pick **class** → **weapon** (from class pool) → **3 abilities** (from
+  class pool); the **ultimate auto-equips**. Upgrades/mutations are in-run, not loadout. **Same class allowed** for
   multiple players.
 - **Unlocks (`ProfileState`):** **all 4 classes + their full base kits + base mutations are FREE** from the
   start. Meta = build *depth*, not access. Banked score unlocks **premium build content** (via
@@ -229,7 +232,8 @@ Reflavoring note: names/flavor are working titles; the *mechanics* are the spec.
 
 Key existing files to modify (from codebase review):
 - **Kit expansion 2→4 slots:** `scripts/player/Player.gd` (ability slot array is hardcoded to 2, `_is_ability_pressed`
-  uses `p%d_secondary`/`p%d_dash`), the input map (add LB/RB actions), `scripts/player/PlayerConfig.gd`.
+  uses `p%d_secondary`/`p%d_dash`), the input map (add the 4 **face-button** actions A/X/Y/B; remove the
+  weapon-switch actions — one weapon per run), `scripts/player/PlayerConfig.gd`.
 - **Class data model + loadout:** `scripts/game/RunState.gd` + `scripts/game/PlayerInventory.gd` (add class,
   weapon+3 abilities selection); loadout/class-select UI in `scripts/ui/Bootstrap.gd`.
 - **Abilities:** `scripts/game/AbilityRegistry.gd` + `data/abilities.json` (add the new skills).
@@ -239,8 +243,9 @@ Key existing files to modify (from codebase review):
   fields; tags on weapons/abilities; retire stat-sticks; per-class sets).
 - **Passives:** reuse `scripts/game/MomentumTracker.gd` (Mobile, make exclusive); new systems for
   lifesteal-on-kill + overshield (Tank), Radiance aura (Controller), Heat (Risk).
-- **Deployables persistence + HP:** `TurretNode.gd`, `OrbitNode.gd`, `DecoyNode.gd`, `MineFieldModifier.gd`
-  + new Summon (pet AI). New: Whirlwind/Flamethrower/Arc Wand weapon behaviors.
+- **Deployables persistence + HP:** `TurretNode.gd`, `OrbitNode.gd`, `DecoyNode.gd`, `AbilityMine.gd`
+  (the player Minefield ability — not the `MineFieldModifier.gd` arena hazard) + new Summon (pet AI). New:
+  Whirlwind/Flamethrower/Arc Wand weapon behaviors.
 - **Meta:** `scripts/meta/ProfileState.gd` UNLOCK_TABLE (classes free; premium content only).
 
 Candidate slice order: **kit expansion 2→4 (+input/HUD)** → **class data model + loadout/class-select UI** →

@@ -8,6 +8,9 @@ Read this first to restore project context quickly, then read `current-state.md`
 - Active rework branch: `v3/structure-rework`.
 - `v3/main` is the frozen stable Round 14 baseline until the rework is explicitly merged.
 - Work in `D:\GameDev\Project_Twin_stick`; do not create new worktrees unless explicitly asked.
+- **Recorded exception (2026-07-02):** the V4 class-system redesign is built in the dedicated worktree
+  `D:\GameDev\Project_Twin_stick_v4` (branch `v4/class-system`) — see `docs/process/solo-dev-rules.md`. V4
+  implementation happens there; the main checkout stays the playtest baseline.
 - Do not push unless asked.
 
 ## Source Of Truth

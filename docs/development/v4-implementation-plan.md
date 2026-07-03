@@ -95,14 +95,15 @@ class-only), `apply` alone picks the target:
 ---
 
 ## Slice 0 — Foundations: data schemas + 4-slot kit + input
-**Goal:** the kit holds 4 ability slots (LT/RT/LB/RB), fed by a **temporary default 4-ability loadout** (no
-class-select UI yet — that arrives in Slice 1). Data schemas above exist and load. No new content.
+**Goal:** the kit holds 4 ability slots mapped to the four controller **face buttons** (Xbox A/X/Y/B, PS5
+✕/□/△/○), fed by a **temporary default 4-ability loadout** (no class-select UI yet — that arrives in Slice 1).
+Data schemas above exist and load. No new content. **Scope: 1-2 players (V4).**
 **Vertical-slice note:** to actually *fire* 4 slots end-to-end you must move the loadout storage now, not just
 the input — hence `PlayerInventory`/`RunState` are in this slice, providing 4 abilities to `Player`.
 **Files:**
 - `scripts/player/Player.gd` — `_ability_slots` array → size 4; input loop `for slot_index in range(2)` →
   `range(4)`; `_is_ability_pressed` handles 4 slots; expand `_build_runtime_ability` to 4.
-- `project.godot` input map — see **LB/RB reclaim** below.
+- `project.godot` input map — see **Input** below.
 - `scripts/game/PlayerInventory.gd` — hold 4 ability slots.
 - `scripts/game/RunState.gd` — `_build_default_player_inventories` + `get_player_runtime_loadout_for` supply a
   default 4-ability set so all four fire (real per-class selection is Slice 1).
@@ -111,27 +112,29 @@ the input — hence `PlayerInventory`/`RunState` are in this slice, providing 4 
   OFF/DEF picker in `Bootstrap.gd` feeds this too — either extend it to 4 or have RunState bypass it for the
   temporary default. Whichever you pick, nothing may still assume exactly 2 abilities.
 - `scripts/player/PlayerConfig.gd`; `scripts/ui/WeaponSlotHUD.gd` / ability HUD (show 4 slots).
-- `scripts/ui/Bootstrap.gd` + `scripts/game/CoopManager.gd` — see **LB/RB reclaim** (both hard-code the switch
+- `scripts/ui/Bootstrap.gd` + `scripts/game/CoopManager.gd` — see **Input** (both hard-code the removed switch
   action suffixes, not just `project.godot`).
 - add `data/classes.json` loader (in `RunState` or a new `ClassRegistry.gd`); add `"tags"` fields to
   `data/weapons.json` + `data/abilities.json` (values per spec §4).
-**LB/RB reclaim (must resolve the binding conflict — 3 places, not just the input map):** LB/RB are currently
-bound to `p%d_switch_primary` / `p%d_switch_secondary` (in-run weapon switch — **obsolete** under the loadout
-model, where you equip one weapon at loadout). **Remove or repurpose those two switch actions in all three
-places:**
-  1. `project.godot` input map — delete/rebind the `p%d_switch_primary` / `p%d_switch_secondary` events to
-     `p%d_ability_3` / `p%d_ability_4` (+ keyboard).
-  2. `scripts/game/CoopManager.gd` — the action-suffix list (`"switch_primary"`, `"switch_secondary"` ~L60-61)
-     that drives per-player action remapping; replace with the new ability suffixes.
-  3. `scripts/ui/Bootstrap.gd` — the binding-label rows (`"Swap LT"`/`"Swap RT"` → suffix `switch_primary`/
-     `switch_secondary` ~L27-28); relabel/repoint to the new ability actions.
-Rename the existing `p%d_secondary` / `p%d_dash` → `p%d_ability_1` / `p%d_ability_2` (or keep as aliases). Note
-p3/p4 only have 2 ability actions today — add `ability_3`/`ability_4` for them too.
-**Acceptance:** game boots; a player fires **4** mapped ability buttons from the default loadout; **no input
-collides with the old weapon-switch**; classes.json + tags parse without error.
+**Input — 4 ability face buttons + remove weapon switching (design decision, 2026-07-03):** the four ability
+slots map to the controller **face buttons** (Xbox **A / X / Y / B**, PS5 **✕ / □ / △ / ○**) — *not* the
+bumpers/triggers. **V4 has only one active weapon per run** (chosen at loadout), so **in-run weapon switching
+is removed entirely** (design spec §2 updated to match). Do all three:
+  1. `project.godot` input map — add `p%d_ability_1..4` bound to the four face-button `InputEventJoypadButton`
+     indices (A=0, B=1, X=2, Y=3) + keyboard; **delete** `p%d_switch_primary` / `p%d_switch_secondary`
+     (currently RB=10 / LB=9 + keys Q/E, T/Y). The existing `p%d_secondary` / `p%d_dash` become
+     `p%d_ability_1` / `p%d_ability_2` (rename or alias).
+  2. `scripts/game/CoopManager.gd` — the action-suffix list (`"switch_primary"`, `"switch_secondary"` ~L60-61):
+     **remove** them; add `"ability_3"`, `"ability_4"` (and rename `secondary`/`dash` if you renamed the actions).
+  3. `scripts/ui/Bootstrap.gd` — the binding-label rows (`"Swap LT"`/`"Swap RT"` → `switch_primary`/
+     `switch_secondary` ~L27-28): **remove** the swap rows; add ability-3/ability-4 rows.
+**Scope note (1-2 players):** wire the 4 face buttons for **p1 and p2 only**. p3/p4 are out of V4 scope — leave
+their existing (empty) actions untouched; do not add `ability_3`/`ability_4` for them.
+**Acceptance:** game boots; **p1 and p2** each fire **4** face-button abilities from the default loadout; the
+weapon-switch inputs are gone (one weapon, no swap); classes.json + tags parse without error.
 
 ## Slice 1 — Class data model + loadout / class-select UI
-**Goal:** pick **class → weapon → 3 abilities** before a run (ultimate auto-equipped). 1-4 players, same class allowed.
+**Goal:** pick **class → weapon → 3 abilities** before a run (ultimate auto-equipped). **1-2 players (V4 scope)**, same class allowed.
 **Files:** `scripts/game/PlayerInventory.gd` (add `class_id`; `ability_slots` = 3 chosen + `ultimate_id`),
 `scripts/game/RunState.gd` (`_build_default_player_inventories`, `get_player_runtime_loadout_for` → class-aware,
 ultimate slot), new `scripts/game/ClassRegistry.gd` (load classes.json, pools), `scripts/ui/Bootstrap.gd`
@@ -167,10 +170,12 @@ kit is offered Combustion, others never are; a kit with no `summon` item is neve
 > (Slice 6) both build on the HP/death interface created here. Do the EXISTING nodes now; the new Summon node
 > inherits this same interface when authored in Slice 6.
 **Goal:** all placed persistent units get an **HP pool + damage handling + death** (destroyed, not timed).
-**Files:** `scripts/game/TurretNode.gd`, `OrbitNode.gd`, `DecoyNode.gd`,
-`scripts/modifiers/MineFieldModifier.gd`. Add a shared HP/damage/death interface (small base or mixin so Summon
-can reuse it); remove lifetime timers where present.
-**Acceptance:** turret / orbit / mines take damage and can be destroyed; no more time-expiry despawn.
+**Files:** `scripts/game/TurretNode.gd`, `OrbitNode.gd`, `DecoyNode.gd`, `AbilityMine.gd` (player
+Minefield ability mines). Add a shared HP/damage/death interface (small base or mixin so Summon can reuse it);
+remove lifetime timers where present. Only touch `scripts/modifiers/MineFieldModifier.gd` if the arena hazard
+modifier should also use this interface; it is not the player Minefield ability.
+**Acceptance:** turret / orbit / player ability mines take damage and can be destroyed; no more time-expiry
+despawn.
 
 ## Slice 4 — New passive systems
 **Goal:** the 4 passives work (deployable HP from Slice 3 is available). **Files/notes:**
@@ -199,8 +204,20 @@ ids) (`data/abilities.json` + `scripts/game/AbilityRegistry.gd` + runtime nodes 
 Blood Lance, **Summon** (persistent melee constructs w/ pet AI — reuses the Slice 3 HP interface), Reinforce,
 Fireball, Ignite. Ultimates: Slipstream, Blood Frenzy, Overload Grid, Firestorm. Reuse
 Dash/Shockwave/Overcharge/Orbit/Shield/Turret/Minefield.
-**Sub-order:** do reuse-heavy classes first (Risk, then Tank) to validate the pipeline, then Mobile/Controller.
-**Acceptance:** each new ability + ultimate works on its class in a debug room.
+**Ultimate charge framework (build this FIRST — every ult plugs into it; spec §2):** ultimate charge is a
+**unified combat meter** (damage dealt + kills) for **Mobile/Tank/Controller**; **Risk is the exception — its
+ultimate (Firestorm) is gated by the Overheat Heat meter**, not the combat meter.
+- **Ownership:** new `scripts/game/UltimateCharge.gd` — a per-player `0.0→1.0` meter filled by damage dealt +
+  kills (placeholder rates). Risk does **not** use this meter; its readiness reads the Heat value (Slice 4).
+- **Activation gating:** the ultimate occupies the locked 4th face-button slot; pressing it fires **only when
+  ready** (meter full / Risk: Heat ≥ threshold). On activation it **resets** (combat meter → 0; Risk vents Heat
+  → 0). While not ready, the button is a no-op.
+- **HUD / readiness:** a per-player charging → ready → active indicator (reuse the ability-cooldown HUD pattern).
+**Sub-order:** ultimate-charge framework → then reuse-heavy classes first (Risk, then Tank) to validate the
+pipeline → then Mobile/Controller.
+**Acceptance:** each new ability works on its class; each ultimate **charges from combat (Risk from Heat), shows
+ready on the HUD, fires from its locked slot only when ready, and resets after use** — the ult button does
+nothing while uncharged.
 
 ## Slice 7 — Meta / unlocks
 **Goal:** finish the unlock model. Base kits were already freed in Slice 1; this slice **trims `UNLOCK_TABLE`
@@ -264,7 +281,8 @@ behind score.
   (`roll_mutation_options`; generalize `requires_ability` → `requires:[tags]`).
 - **Passive to reuse:** `scripts/game/MomentumTracker.gd` (Mobile).
 - **Deployable nodes (add HP + persistence):** `scripts/game/TurretNode.gd`, `OrbitNode.gd`, `DecoyNode.gd`,
-  `scripts/modifiers/MineFieldModifier.gd`.
+  `scripts/game/AbilityMine.gd` (the **player Minefield ability** mines — NOT `scripts/modifiers/MineFieldModifier.gd`,
+  which is the separate arena hazard).
 - **Weapons/projectiles:** `scripts/game/ProjectileSystem.gd`, `scripts/weapons/Projectile.gd` (add
   projectile kinds `melee`/`cone`/`chain`).
 - **Meta:** `scripts/meta/ProfileState.gd` (`UNLOCK_TABLE`). **Loadout UI:** `scripts/ui/Bootstrap.gd`.
