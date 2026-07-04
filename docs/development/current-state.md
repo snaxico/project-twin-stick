@@ -6,7 +6,7 @@ Godot `4.6.2` same-screen local co-op neon roguelite prototype.
 
 The active V4 implementation work is in `D:\GameDev\Project_Twin_stick_v4` on branch `v4/class-system`.
 The original `D:\GameDev\Project_Twin_stick` checkout remains the untouched V3 playtest baseline for A/B
-testing. V4 Slices 0-6 of `docs/development/v4-implementation-plan.md` are implemented and validated: class
+testing. V4 Slices 0-7 of `docs/development/v4-implementation-plan.md` are implemented and validated: class
 data loads, existing weapons/abilities have tags, the runtime kit stores four abilities, P1/P2 abilities are
 bound to face buttons, and the pre-run setup now selects class -> class weapon -> three class abilities with
 the class ultimate inserted into slot 4. Mutations now gate through the V4 tag rule: `requires` must be a
@@ -15,6 +15,8 @@ deployables now share a destructible HP interface and no longer self-expire by l
 drive runtime behavior for Mobile, Tank, Controller, and Risk. The three new class weapons now have real
 attack kinds instead of placeholder bullets. The new class abilities and ultimates now have first-pass runtime
 behavior, and Mobile/Tank/Controller ultimates charge from combat while Risk's Firestorm gates from Heat.
+Meta unlocks now gate only premium build-depth mutations; all classes, class-pool weapons, class-pool
+abilities, ultimates, and base mutations are free.
 
 ## Current Runtime
 
@@ -84,7 +86,8 @@ behavior, and Mobile/Tank/Controller ultimates charge from combat while Risk's F
   - `Whirlwind` (`melee`): short-radius swing that hits all nearby enemies.
   - `Arc Wand` (`chain`): lightning hit that jumps between nearby enemies.
   - `Flamethrower` (`cone`): short forward cone with sustained tick damage and burn.
-  - Retired/premium legacy weapons still in data until Slice 7 trim: `Cannon`, `Railgun`, `Boomerang`
+  - Retired legacy weapons (`Cannon`, `Railgun`, `Boomerang`) remain in weapon data for compatibility but are
+    no longer class-pool or paid unlock content.
 - Live ability roster:
   - `Shockwave`
   - `Dash`
@@ -113,8 +116,8 @@ behavior, and Mobile/Tank/Controller ultimates charge from combat while Risk's F
 - The locked fourth ability slot is the ultimate slot. Mobile/Tank/Controller ultimates use `UltimateCharge`
   and fill from credited damage/kills; Firestorm is gated by Risk Heat. Unready ultimate presses are no-ops,
   and activation resets the relevant meter.
-- All class-pool weapons, abilities, and ultimates are free from the start; premium mutation/unlock trimming
-  remains a later V4 slice.
+- All class-pool weapons, abilities, ultimates, and base mutations are free from the start. The paid Meta
+  pool is limited to premium signature/parasite mutations.
 - Mutation offers are filtered by equipped class/passive/weapon/ability/ultimate tags plus selected mutation
   tags. Pierce requires `projectile`, Combustion requires `risk`, and Overgrowth requires a `summon` item.
 - The old in-run weapon-switch reward cards are removed; weapon level-up remains as the weapon reward card.
@@ -245,6 +248,12 @@ Last validation run in this state:
   - result: `ability_slice6_check=passed`
 - Latest PerfRunner result after Slice 6:
   - `avg_fps=145.0`, `min_fps=144.0`, `max_frame_ms=6.944`.
+- Slice 7 unlock acceptance:
+  - retired paid unlock ids are absent from `ProfileState.UNLOCK_TABLE`
+  - paid mutation unlock ids all resolve to mutations in `data/mutations.json`
+  - premium per-class unlocks are marked `signature`
+- Latest PerfRunner result after Slice 7:
+  - `avg_fps=144.9`, `min_fps=144.0`, `max_frame_ms=6.944`.
 
 ## Known Risks
 
@@ -262,7 +271,7 @@ Last validation run in this state:
 
 ## Next Step
 
-Continue `docs/development/v4-implementation-plan.md` with Slice 7 in the V4 worktree:
+`docs/development/v4-implementation-plan.md` Slices 0-7 are implemented in the V4 worktree.
 
-- trim retired unlock table entries
-- keep base kits free and add premium unlock entries for signatures/parasites
+- Run live 1P/2P feel checks across all four classes.
+- Balance first-pass class ability, ultimate, and premium mutation values.

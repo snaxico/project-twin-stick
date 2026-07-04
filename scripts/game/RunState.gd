@@ -274,7 +274,13 @@ func set_active_weapon(player_index: int, weapon_id: String) -> void:
 
 func get_weapon_catalog() -> Array:
 	var catalog: Array = []
-	for weapon_id_variant in _weapons_by_id.keys():
+	var class_pool_weapon_ids := {}
+	for class_definition in _class_registry.get_all():
+		for weapon_id_variant in ((class_definition as Dictionary).get("weapon_pool", []) as Array):
+			class_pool_weapon_ids[str(weapon_id_variant)] = true
+	for weapon_id_variant in class_pool_weapon_ids.keys():
+		if not _weapons_by_id.has(weapon_id_variant):
+			continue
 		var weapon: Dictionary = _weapons_by_id[weapon_id_variant] as Dictionary
 		var weapon_id := str(weapon.get("id", weapon_id_variant))
 		if ProfileState != null and not ProfileState.is_content_unlocked("weapon", weapon_id):

@@ -253,7 +253,7 @@
       "icon": "move_speed",
       "category": "class",
       "group": "momentum",
-      "rarity": "rare",
+      "rarity": "signature",
       "requires": ["mobile"],
       "apply": "passive",
       "params": { "max_momentum_tier_bonus": 1 }
@@ -350,7 +350,7 @@
       "icon": "tough",
       "category": "class",
       "group": "bloodthirst",
-      "rarity": "rare",
+      "rarity": "signature",
       "requires": ["tank"],
       "apply": "passive",
       "params": { "overshield_mult": 1.35 }
@@ -362,7 +362,7 @@
       "icon": "ground_slam",
       "category": "class",
       "group": "ability",
-      "rarity": "rare",
+      "rarity": "signature",
       "requires": ["tank", "blast"],
       "apply": "ability",
       "params": { "execute_below_pct": 0.2, "exclude_champions": true }
@@ -422,7 +422,7 @@
       "icon": "summon",
       "category": "class",
       "group": "radiance",
-      "rarity": "rare",
+      "rarity": "signature",
       "requires": ["controller", "summon"],
       "apply": "deployable",
       "params": { "deployable_cap_bonus": 1 }
@@ -458,7 +458,7 @@
       "icon": "summon",
       "category": "class",
       "group": "ability",
-      "rarity": "rare",
+      "rarity": "signature",
       "requires": ["controller", "summon"],
       "apply": "deployable",
       "params": { "construct_count_bonus": 1 }
@@ -494,7 +494,7 @@
       "icon": "fire_trail",
       "category": "class",
       "group": "overheat",
-      "rarity": "rare",
+      "rarity": "signature",
       "requires": ["risk"],
       "apply": "passive",
       "tags": ["fire"],
@@ -507,7 +507,7 @@
       "icon": "ignite",
       "category": "class",
       "group": "overheat",
-      "rarity": "rare",
+      "rarity": "signature",
       "requires": ["risk"],
       "apply": "passive",
       "tags": ["fire"],

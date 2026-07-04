@@ -608,7 +608,7 @@ func _create_unlock_row(entry: Dictionary) -> PanelContainer:
 	title.add_theme_font_size_override("font_size", 14)
 	text_box.add_child(title)
 	var detail := Label.new()
-	detail.text = "Adds this item to future run pools."
+	detail.text = "Adds this upgrade to future reward pools." if str(entry.get("kind", "")) == "mutation" else "Adds this item to future run pools."
 	detail.add_theme_font_size_override("font_size", 11)
 	detail.modulate = Color(0.78, 0.86, 0.94, 0.86)
 	text_box.add_child(detail)
