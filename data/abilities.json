@@ -139,6 +139,171 @@
         "orb_visual_scale": 1.5,
         "blocks_projectiles": true
       }
+    },
+    {
+      "id": "afterburn",
+      "name": "Afterburn",
+      "description": "Placeholder class ability. Goes on cooldown until the trail behavior is authored.",
+      "tags": ["field"],
+      "slot": "class",
+      "type": "instant",
+      "cooldown": 6.0,
+      "duration": 0.0,
+      "stats": {}
+    },
+    {
+      "id": "momentum_burst",
+      "name": "Momentum Burst",
+      "description": "Placeholder class ability. Goes on cooldown until the burst behavior is authored.",
+      "tags": ["blast"],
+      "slot": "class",
+      "type": "instant",
+      "cooldown": 6.0,
+      "duration": 0.0,
+      "stats": {}
+    },
+    {
+      "id": "deflect",
+      "name": "Deflect",
+      "description": "Placeholder class ability. Goes on cooldown until projectile reflection is authored.",
+      "tags": ["defense"],
+      "slot": "class",
+      "type": "instant",
+      "cooldown": 6.0,
+      "duration": 0.0,
+      "stats": {}
+    },
+    {
+      "id": "sonic_boom",
+      "name": "Sonic Boom",
+      "description": "Placeholder class ability. Goes on cooldown until the line wave is authored.",
+      "tags": ["bolt"],
+      "slot": "class",
+      "type": "instant",
+      "cooldown": 6.0,
+      "duration": 0.0,
+      "stats": {}
+    },
+    {
+      "id": "ground_slam",
+      "name": "Ground Slam",
+      "description": "Placeholder class ability. Goes on cooldown until the slam behavior is authored.",
+      "tags": ["blast"],
+      "slot": "class",
+      "type": "instant",
+      "cooldown": 6.0,
+      "duration": 0.0,
+      "stats": {}
+    },
+    {
+      "id": "quake",
+      "name": "Quake",
+      "description": "Placeholder class ability. Goes on cooldown until the field behavior is authored.",
+      "tags": ["field"],
+      "slot": "class",
+      "type": "instant",
+      "cooldown": 6.0,
+      "duration": 0.0,
+      "stats": {}
+    },
+    {
+      "id": "blood_lance",
+      "name": "Blood Lance",
+      "description": "Placeholder class ability. Goes on cooldown until the piercing line is authored.",
+      "tags": ["bolt"],
+      "slot": "class",
+      "type": "instant",
+      "cooldown": 6.0,
+      "duration": 0.0,
+      "stats": {}
+    },
+    {
+      "id": "summon",
+      "name": "Summon",
+      "description": "Placeholder class ability. Goes on cooldown until persistent constructs are authored.",
+      "tags": ["summon"],
+      "slot": "class",
+      "type": "instant",
+      "cooldown": 6.0,
+      "duration": 0.0,
+      "stats": {}
+    },
+    {
+      "id": "reinforce",
+      "name": "Reinforce",
+      "description": "Placeholder class ability. Goes on cooldown until deployable repair is authored.",
+      "tags": ["buff"],
+      "slot": "class",
+      "type": "instant",
+      "cooldown": 6.0,
+      "duration": 0.0,
+      "stats": {}
+    },
+    {
+      "id": "fireball",
+      "name": "Fireball",
+      "description": "Placeholder class ability. Goes on cooldown until the explosive fireball is authored.",
+      "tags": ["bolt", "blast", "dot"],
+      "slot": "class",
+      "type": "instant",
+      "cooldown": 6.0,
+      "duration": 0.0,
+      "stats": {}
+    },
+    {
+      "id": "ignite",
+      "name": "Ignite",
+      "description": "Placeholder class ability. Goes on cooldown until spreading burn is authored.",
+      "tags": ["dot"],
+      "slot": "class",
+      "type": "instant",
+      "cooldown": 6.0,
+      "duration": 0.0,
+      "stats": {}
+    },
+    {
+      "id": "slipstream",
+      "name": "Slipstream",
+      "description": "Placeholder ultimate. Goes on cooldown until the ultimate framework is authored.",
+      "tags": ["mobility"],
+      "slot": "ultimate",
+      "type": "instant",
+      "cooldown": 14.0,
+      "duration": 0.0,
+      "stats": {}
+    },
+    {
+      "id": "blood_frenzy",
+      "name": "Blood Frenzy",
+      "description": "Placeholder ultimate. Goes on cooldown until the ultimate framework is authored.",
+      "tags": ["tank", "buff"],
+      "slot": "ultimate",
+      "type": "instant",
+      "cooldown": 14.0,
+      "duration": 0.0,
+      "stats": {}
+    },
+    {
+      "id": "overload_grid",
+      "name": "Overload Grid",
+      "description": "Placeholder ultimate. Goes on cooldown until the ultimate framework is authored.",
+      "tags": ["controller", "summon", "buff"],
+      "slot": "ultimate",
+      "type": "instant",
+      "cooldown": 14.0,
+      "duration": 0.0,
+      "stats": {}
+    },
+    {
+      "id": "firestorm",
+      "name": "Firestorm",
+      "description": "Placeholder ultimate. Goes on cooldown until the ultimate framework is authored.",
+      "tags": ["risk", "blast", "dot"],
+      "slot": "ultimate",
+      "type": "instant",
+      "cooldown": 14.0,
+      "duration": 0.0,
+      "stats": {}
     }
   ]
 }

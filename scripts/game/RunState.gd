@@ -74,6 +74,7 @@ func start_new_run(configs: Array, debug_options: Dictionary = {}) -> void:
 	player_health_states.clear()
 	player_inventories = _build_default_player_inventories(
 		player_configs.size(),
+		debug_run_setup.get("player_classes", []) as Array,
 		debug_run_setup.get("player_abilities", []) as Array,
 		debug_run_setup.get("player_weapons", []) as Array
 	)
@@ -186,6 +187,7 @@ func get_weapon(player_index: int) -> Dictionary:
 	var inventory = get_player_inventory(player_index)
 	if inventory == null:
 		return {}
+	_normalize_inventory_loadout(inventory)
 	return (_weapons_by_id.get(inventory.weapon_id, {}) as Dictionary).duplicate(true)
 
 func get_weapon_level(player_index: int) -> int:
@@ -198,7 +200,58 @@ func get_active_weapon_id(player_index: int) -> String:
 	var inventory = get_player_inventory(player_index)
 	if inventory == null:
 		return "rifle"
+	_normalize_inventory_loadout(inventory)
 	return str(inventory.weapon_id)
+
+func get_class_catalog() -> Array:
+	var catalog: Array = []
+	for class_definition in _class_registry.get_all():
+		var class_data: Dictionary = class_definition as Dictionary
+		var class_id := str(class_data.get("id", ""))
+		if class_id.is_empty():
+			continue
+		catalog.append({
+			"id": class_id,
+			"name": str(class_data.get("name", _format_name(class_id))),
+			"hp": int(class_data.get("hp", 100)),
+			"move_speed": int(class_data.get("move_speed", 560)),
+			"passive": str(class_data.get("passive", "")),
+			"ultimate": str(class_data.get("ultimate", "")),
+			"tags": (class_data.get("tags", []) as Array).duplicate(),
+		})
+	return catalog
+
+func get_class_definition(class_id: String) -> Dictionary:
+	return _class_registry.get_definition(_normalize_class_id(class_id))
+
+func get_weapon_catalog_for_class(class_id: String) -> Array:
+	var catalog: Array = []
+	for weapon_id_variant in _class_registry.get_weapon_pool(_normalize_class_id(class_id)):
+		var weapon_id := str(weapon_id_variant)
+		if not _weapons_by_id.has(weapon_id):
+			continue
+		var weapon: Dictionary = _weapons_by_id[weapon_id] as Dictionary
+		catalog.append({
+			"id": weapon_id,
+			"name": str(weapon.get("name", _format_name(weapon_id))),
+			"description": str(weapon.get("description", "")),
+		})
+	return catalog
+
+func get_ability_catalog_for_class(class_id: String) -> Array:
+	var catalog: Array = []
+	for ability_id_variant in _class_registry.get_ability_pool(_normalize_class_id(class_id)):
+		var ability_id := str(ability_id_variant)
+		var ability := _ability_registry.get_definition(ability_id)
+		if ability.is_empty():
+			continue
+		catalog.append({
+			"id": ability_id,
+			"name": str(ability.get("name", _format_name(ability_id))),
+			"description": str(ability.get("description", "")),
+			"tags": (ability.get("tags", []) as Array).duplicate(),
+		})
+	return catalog
 
 func level_up_weapon(player_index: int) -> void:
 	var inventory = get_player_inventory(player_index)
@@ -212,7 +265,7 @@ func set_active_weapon(player_index: int, weapon_id: String) -> void:
 		return
 	if ProfileState != null and not ProfileState.is_content_unlocked("weapon", weapon_id):
 		return
-	if not _weapons_by_id.has(weapon_id):
+	if not _is_weapon_in_class_pool(str(inventory.class_id), weapon_id):
 		return
 	var weapon: Dictionary = _weapons_by_id[weapon_id] as Dictionary
 	if str(weapon.get("type", "weapon")) != "weapon":
@@ -266,14 +319,18 @@ func get_player_runtime_loadout_for(player_index: int) -> Dictionary:
 	var weapon_level := get_weapon_level(player_index)
 	var weapon_stats := _resolve_weapon_stats(weapon, weapon_level)
 	var ability_ids: Array = inventory.get_ability_ids() if inventory != null else _ability_registry.get_default_loadout()
+	var class_definition := _class_registry.get_definition(str(inventory.class_id)) if inventory != null else {}
 	var loadout := {
+		"class_id": str(inventory.class_id if inventory != null else _class_registry.get_first_class_id()),
+		"passive_id": str(inventory.passive_id if inventory != null else ""),
+		"ultimate_id": str(inventory.ultimate_id if inventory != null else ""),
 		"weapon_id": str(weapon.get("id", "rifle")),
 		"weapon_name": str(weapon.get("name", "Rifle")),
 		"weapon_level": weapon_level,
 		"weapon_stats": weapon_stats,
 		"mutations": get_mutations(player_index),
-		"move_speed": 560.0,
-		"max_health": 100,
+		"move_speed": float(class_definition.get("move_speed", 560.0)) if not class_definition.is_empty() else 560.0,
+		"max_health": int(class_definition.get("hp", 100)) if not class_definition.is_empty() else 100,
 	}
 	for slot_index in range(4):
 		var ability_id := str(ability_ids[slot_index]) if slot_index < ability_ids.size() else ""
@@ -397,21 +454,25 @@ func _resolve_weapon_stats(weapon_def: Dictionary, weapon_level: int) -> Diction
 	resolved["projectile_kind"] = str(weapon_def.get("projectile_kind", resolved.get("projectile_kind", "bullet")))
 	return resolved
 
-func _build_default_player_inventories(player_count: int, selected_abilities: Array, selected_weapons: Array = []) -> Array:
+func _build_default_player_inventories(player_count: int, selected_classes: Array, selected_abilities: Array, selected_weapons: Array = []) -> Array:
 	var inventories: Array = []
 	for index in range(player_count):
 		var inventory := PlayerInventoryData.new()
 		inventory.player_index = index
-		inventory.weapon_id = _first_unlocked_weapon_id()
+		var selected_class := str(selected_classes[index]) if index < selected_classes.size() else ""
+		inventory.class_id = _normalize_class_id(selected_class)
+		var class_definition := _class_registry.get_definition(inventory.class_id)
+		inventory.passive_id = str(class_definition.get("passive", ""))
+		inventory.ultimate_id = str(class_definition.get("ultimate", ""))
+		inventory.weapon_id = _first_class_weapon_id(inventory.class_id)
 		if index < selected_weapons.size():
 			var selected_weapon := str(selected_weapons[index])
-			if _weapons_by_id.has(selected_weapon) and (ProfileState == null or ProfileState.is_content_unlocked("weapon", selected_weapon)):
+			if _is_weapon_in_class_pool(inventory.class_id, selected_weapon):
 				inventory.weapon_id = selected_weapon
 		var chosen: Array = []
 		if index < selected_abilities.size() and selected_abilities[index] is Array:
 			chosen = (selected_abilities[index] as Array).duplicate()
-		chosen = _filter_unlocked_abilities(chosen)
-		var normalized := _ability_registry.normalize_loadout(chosen)
+		var normalized := _normalize_class_ability_loadout(inventory.class_id, chosen)
 		inventory.set_ability_ids(normalized)
 		inventories.append(inventory)
 	return inventories
@@ -419,7 +480,18 @@ func _build_default_player_inventories(player_count: int, selected_abilities: Ar
 func _normalize_inventory_ability_slots(inventory) -> void:
 	if inventory == null:
 		return
-	var normalized := _ability_registry.normalize_loadout(_filter_unlocked_abilities(inventory.get_ability_ids()))
+	_normalize_inventory_loadout(inventory)
+
+func _normalize_inventory_loadout(inventory) -> void:
+	if inventory == null:
+		return
+	inventory.class_id = _normalize_class_id(str(inventory.class_id))
+	var class_definition := _class_registry.get_definition(inventory.class_id)
+	inventory.passive_id = str(class_definition.get("passive", ""))
+	inventory.ultimate_id = str(class_definition.get("ultimate", ""))
+	if not _is_weapon_in_class_pool(inventory.class_id, str(inventory.weapon_id)):
+		inventory.weapon_id = _first_class_weapon_id(inventory.class_id)
+	var normalized := _normalize_class_ability_loadout(inventory.class_id, inventory.get_chosen_ability_ids())
 	inventory.set_ability_ids(normalized)
 
 func _first_unlocked_weapon_id() -> String:
@@ -430,6 +502,44 @@ func _first_unlocked_weapon_id() -> String:
 		if ProfileState == null or ProfileState.is_content_unlocked("weapon", weapon_id):
 			return weapon_id
 	return "rifle"
+
+func _normalize_class_id(class_id: String) -> String:
+	if _class_registry.has(class_id):
+		return class_id
+	var first_class_id := _class_registry.get_first_class_id()
+	return first_class_id if not first_class_id.is_empty() else "mobile"
+
+func _first_class_weapon_id(class_id: String) -> String:
+	for weapon_id_variant in _class_registry.get_weapon_pool(_normalize_class_id(class_id)):
+		var weapon_id := str(weapon_id_variant)
+		if _weapons_by_id.has(weapon_id):
+			return weapon_id
+	return _first_unlocked_weapon_id()
+
+func _is_weapon_in_class_pool(class_id: String, weapon_id: String) -> bool:
+	return _class_registry.get_weapon_pool(_normalize_class_id(class_id)).has(weapon_id) and _weapons_by_id.has(weapon_id)
+
+func _normalize_class_ability_loadout(class_id: String, chosen_abilities: Array) -> Array:
+	var normalized_class_id := _normalize_class_id(class_id)
+	var ability_pool := _class_registry.get_ability_pool(normalized_class_id)
+	var chosen: Array = []
+	for ability_id_variant in chosen_abilities:
+		var ability_id := str(ability_id_variant)
+		if ability_pool.has(ability_id) and _ability_registry.has(ability_id) and not chosen.has(ability_id):
+			chosen.append(ability_id)
+		if chosen.size() >= 3:
+			break
+	for ability_id_variant in ability_pool:
+		if chosen.size() >= 3:
+			break
+		var ability_id := str(ability_id_variant)
+		if _ability_registry.has(ability_id) and not chosen.has(ability_id):
+			chosen.append(ability_id)
+	while chosen.size() < 3:
+		chosen.append("")
+	var ultimate_id := _class_registry.get_ultimate_id(normalized_class_id)
+	chosen.append(ultimate_id if _ability_registry.has(ultimate_id) else "")
+	return chosen
 
 func _filter_unlocked_abilities(ability_ids: Array) -> Array:
 	var filtered: Array = []
@@ -799,6 +909,7 @@ func _build_default_debug_run_setup() -> Dictionary:
 		"starting_mutations": [],
 		"starting_level": 0,
 		"starting_xp": 0,
+		"player_classes": [],
 		"player_weapons": [],
 		"player_abilities": [],
 		"step_index": 0,

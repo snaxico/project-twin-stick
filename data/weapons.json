@@ -104,6 +104,57 @@
       }
     },
     {
+      "id": "whirlwind",
+      "name": "Whirlwind",
+      "description": "Class weapon placeholder. Fires a basic projectile until the melee attack is authored.",
+      "type": "weapon",
+      "tags": ["melee"],
+      "projectile_kind": "bullet",
+      "stats": {
+        "projectile_speed": 760.0,
+        "range": 700.0,
+        "area": 8.0
+      },
+      "per_level": {
+        "damage": [12, 16, 20, 24, 28],
+        "fire_rate": [4.0, 4.2, 4.4, 4.6, 4.8]
+      }
+    },
+    {
+      "id": "arc_wand",
+      "name": "Arc Wand",
+      "description": "Class weapon placeholder. Fires a basic projectile until chain lightning is authored.",
+      "type": "weapon",
+      "tags": ["chain"],
+      "projectile_kind": "bullet",
+      "stats": {
+        "projectile_speed": 820.0,
+        "range": 820.0,
+        "area": 5.0
+      },
+      "per_level": {
+        "damage": [10, 14, 18, 22, 26],
+        "fire_rate": [5.0, 5.2, 5.4, 5.6, 5.8]
+      }
+    },
+    {
+      "id": "flamethrower",
+      "name": "Flamethrower",
+      "description": "Class weapon placeholder. Fires a basic projectile until the cone attack is authored.",
+      "type": "weapon",
+      "tags": ["cone", "dot"],
+      "projectile_kind": "bullet",
+      "stats": {
+        "projectile_speed": 620.0,
+        "range": 620.0,
+        "area": 10.0
+      },
+      "per_level": {
+        "damage": [14, 18, 22, 26, 30],
+        "fire_rate": [4.5, 4.7, 4.9, 5.1, 5.3]
+      }
+    },
+    {
       "id": "boomerang",
       "name": "Boomerang",
       "type": "weapon",

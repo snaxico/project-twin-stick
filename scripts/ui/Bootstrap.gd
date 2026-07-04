@@ -106,6 +106,7 @@ var _debug_perf_button: Button = null
 var _home_encyclopedia_button: Button = null
 var _setup_mode: String = "play"
 var _ability_registry = AbilityRegistryData.new()
+var _class_rows: Array = []
 var _weapon_rows: Array = []
 var _ability_rows: Array = []
 var _settings_binding_buttons: Dictionary = {}
@@ -234,6 +235,7 @@ func _populate_menu() -> void:
 	debug_step_spinbox.max_value = 12
 	debug_step_spinbox.step = 1
 	debug_step_spinbox.value = 0
+	_build_class_rows()
 	_build_weapon_rows()
 	_build_ability_rows()
 
@@ -320,9 +322,14 @@ func _refresh_menu_state(_unused: Variant = null) -> void:
 		if debug_layout_row.visible:
 			summary_lines.append("Enemy Mix: %s" % debug_layout_option.get_item_text(debug_layout_option.selected))
 		summary_lines.append("Room Modifiers: %d" % _get_selected_room_modifiers().size())
-	summary_lines.append("Pick each player's weapon and A/X abilities; Y/B use default slots.")
+	summary_lines.append("Pick class, class weapon, and three abilities; the ultimate fills B.")
 	status_label.text = "\n".join(summary_lines)
 	start_button.text = "Launch Encounter" if encounter_builder_mode else "Start Run"
+	for row_index in range(_class_rows.size()):
+		var row_data: Dictionary = _class_rows[row_index]
+		var container: Control = row_data["container"]
+		container.visible = row_index < player_count
+		_sync_class_row_buttons(row_index)
 	for row_index in range(_ability_rows.size()):
 		var row_data: Dictionary = _ability_rows[row_index]
 		var container: Control = row_data["container"]
@@ -376,6 +383,7 @@ func _build_debug_start_options() -> Dictionary:
 		"primary_profile": "rifle",
 		"secondary_profile": "mixed",
 		"enemy_mix": "mixed",
+		"player_classes": _build_player_class_selection(),
 		"player_weapons": _build_player_weapon_selection(),
 		"player_abilities": _build_player_ability_selection(),
 	}
@@ -629,8 +637,10 @@ func _rebuild_loadout_rows() -> void:
 			for child in column.get_children():
 				column.remove_child(child)
 				child.queue_free()
+	_class_rows.clear()
 	_weapon_rows.clear()
 	_ability_rows.clear()
+	_build_class_rows()
 	_build_weapon_rows()
 	_build_ability_rows()
 
@@ -1247,13 +1257,110 @@ func _sync_loadout_columns(player_count: int) -> void:
 	for index in range(_loadout_columns.get_child_count()):
 		(_loadout_columns.get_child(index) as Control).visible = index < player_count
 
+func _build_class_rows() -> void:
+	if not _class_rows.is_empty():
+		return
+	_ensure_loadout_columns()
+	var class_defs := RunState.get_class_catalog()
+	for player_index in range(2):
+		var container := VBoxContainer.new()
+		container.name = "ClassRowsP%d" % (player_index + 1)
+		container.add_theme_constant_override("separation", 5)
+		_get_loadout_column(player_index).add_child(container)
+		var header := Label.new()
+		header.text = "P%d Class" % (player_index + 1)
+		header.add_theme_font_size_override("font_size", 13)
+		container.add_child(header)
+		var grid := GridContainer.new()
+		grid.columns = 2
+		grid.add_theme_constant_override("h_separation", 6)
+		grid.add_theme_constant_override("v_separation", 5)
+		container.add_child(grid)
+		var cards: Dictionary = {}
+		for class_def in class_defs:
+			var class_data: Dictionary = class_def as Dictionary
+			var class_id := str(class_data.get("id", ""))
+			if class_id.is_empty():
+				continue
+			var card := _create_loadout_card(str(class_data.get("name", _format_name(class_id))), str(class_data.get("passive", "")))
+			card.toggled.connect(_on_class_card_toggled.bind(player_index, class_id))
+			grid.add_child(card)
+			_wire_ui_click_sfx(card)
+			cards[class_id] = card
+		var summary := Label.new()
+		summary.add_theme_font_size_override("font_size", 10)
+		summary.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		container.add_child(summary)
+		var default_class := _first_class_id()
+		_class_rows.append({
+			"container": container,
+			"cards": cards,
+			"summary": summary,
+			"selection": default_class,
+		})
+		_sync_class_row_buttons(player_index)
+
+func _build_player_class_selection() -> Array:
+	var selections: Array = []
+	for player_index in range(get_selected_player_count()):
+		selections.append(_get_player_class_selection(player_index))
+	return selections
+
+func _get_player_class_selection(player_index: int) -> String:
+	if player_index < 0 or player_index >= _class_rows.size():
+		return _first_class_id()
+	var row_data: Dictionary = _class_rows[player_index]
+	var selection := str(row_data.get("selection", _first_class_id()))
+	if not (row_data.get("cards", {}) as Dictionary).has(selection):
+		return _first_class_id()
+	return selection
+
+func _first_class_id() -> String:
+	var class_defs := RunState.get_class_catalog()
+	if class_defs.is_empty():
+		return "mobile"
+	return str((class_defs[0] as Dictionary).get("id", "mobile"))
+
+func _on_class_card_toggled(pressed: bool, player_index: int, class_id: String) -> void:
+	if not pressed or player_index < 0 or player_index >= _class_rows.size():
+		return
+	var row_data: Dictionary = _class_rows[player_index]
+	row_data["selection"] = class_id
+	_class_rows[player_index] = row_data
+	_select_defaults_for_class(player_index)
+	_sync_class_row_buttons(player_index)
+	_sync_weapon_row_buttons(player_index)
+	_sync_ability_row_buttons(player_index)
+	_refresh_menu_state()
+
+func _sync_class_row_buttons(player_index: int) -> void:
+	if player_index < 0 or player_index >= _class_rows.size():
+		return
+	var row_data: Dictionary = _class_rows[player_index]
+	var cards: Dictionary = row_data.get("cards", {}) as Dictionary
+	var selection := str(row_data.get("selection", _first_class_id()))
+	for class_id_variant in cards.keys():
+		var class_id := str(class_id_variant)
+		var button: Button = cards[class_id]
+		if button == null:
+			continue
+		button.set_pressed_no_signal(class_id == selection)
+		_style_loadout_card(button, class_id == selection, _player_tints[player_index])
+	var summary: Label = row_data.get("summary", null)
+	if summary != null:
+		var class_def := RunState.get_class_definition(selection)
+		summary.text = "HP %d  |  Speed %d  |  Ult %s" % [
+			int(class_def.get("hp", 100)),
+			int(class_def.get("move_speed", 560)),
+			_format_name(str(class_def.get("ultimate", ""))),
+		]
+		summary.modulate = Color(0.84, 0.92, 1.0, 0.92)
+
 func _build_weapon_rows() -> void:
 	if not _weapon_rows.is_empty():
 		return
 	_ensure_loadout_columns()
 	var weapon_defs := RunState.get_weapon_catalog()
-	if weapon_defs.is_empty():
-		weapon_defs = [{"id": "rifle", "name": "Rifle", "description": "Reliable default weapon."}]
 	for player_index in range(2):
 		var container := VBoxContainer.new()
 		container.name = "WeaponRowsP%d" % (player_index + 1)
@@ -1274,13 +1381,7 @@ func _build_weapon_rows() -> void:
 			var weapon_id := str(weapon.get("id", ""))
 			if weapon_id.is_empty():
 				continue
-			var card := Button.new()
-			card.toggle_mode = true
-			card.custom_minimum_size = Vector2(0.0, 30.0)
-			card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			card.alignment = HORIZONTAL_ALIGNMENT_LEFT
-			card.text = str(weapon.get("name", _format_name(weapon_id)))
-			card.tooltip_text = str(weapon.get("description", ""))
+			var card := _create_loadout_card(str(weapon.get("name", _format_name(weapon_id))), str(weapon.get("description", "")))
 			card.toggled.connect(_on_weapon_card_toggled.bind(player_index, weapon_id))
 			grid.add_child(card)
 			_wire_ui_click_sfx(card)
@@ -1293,7 +1394,7 @@ func _build_weapon_rows() -> void:
 			"container": container,
 			"cards": cards,
 			"summary": summary,
-			"selection": "rifle",
+			"selection": _first_weapon_id_for_class(_get_player_class_selection(player_index)),
 		})
 		_sync_weapon_row_buttons(player_index)
 
@@ -1303,23 +1404,23 @@ func _build_player_weapon_selection() -> Array:
 		selections.append(_get_player_weapon_selection(player_index))
 	return selections
 
-func _get_first_available_weapon_id() -> String:
-	var catalog := RunState.get_weapon_catalog()
-	if catalog.is_empty():
-		return "rifle"
-	return str((catalog[0] as Dictionary).get("id", "rifle"))
-
 func _get_player_weapon_selection(player_index: int) -> String:
 	if player_index < 0 or player_index >= _weapon_rows.size():
-		return _get_first_available_weapon_id()
+		return _first_weapon_id_for_class(_get_player_class_selection(player_index))
 	var row_data: Dictionary = _weapon_rows[player_index]
-	var selection := str(row_data.get("selection", "rifle"))
-	if ProfileState != null and not ProfileState.is_content_unlocked("weapon", selection):
-		return _get_first_available_weapon_id()
+	var selection := str(row_data.get("selection", ""))
+	var allowed_ids := _get_class_weapon_ids(_get_player_class_selection(player_index))
+	if not allowed_ids.has(selection):
+		selection = _first_weapon_id_for_class(_get_player_class_selection(player_index))
+		row_data["selection"] = selection
+		_weapon_rows[player_index] = row_data
 	return selection
 
 func _on_weapon_card_toggled(pressed: bool, player_index: int, weapon_id: String) -> void:
 	if not pressed or player_index < 0 or player_index >= _weapon_rows.size():
+		return
+	if not _get_class_weapon_ids(_get_player_class_selection(player_index)).has(weapon_id):
+		_sync_weapon_row_buttons(player_index)
 		return
 	var row_data: Dictionary = _weapon_rows[player_index]
 	row_data["selection"] = weapon_id
@@ -1332,22 +1433,21 @@ func _sync_weapon_row_buttons(player_index: int) -> void:
 		return
 	var row_data: Dictionary = _weapon_rows[player_index]
 	var cards: Dictionary = row_data.get("cards", {}) as Dictionary
-	var selection := str(row_data.get("selection", "rifle"))
-	if not cards.has(selection):
-		selection = _get_first_available_weapon_id()
-		row_data["selection"] = selection
-		_weapon_rows[player_index] = row_data
+	var selection := _get_player_weapon_selection(player_index)
+	var allowed_ids := _get_class_weapon_ids(_get_player_class_selection(player_index))
 	for weapon_id_variant in cards.keys():
 		var weapon_id := str(weapon_id_variant)
 		var button: Button = cards[weapon_id]
 		if button == null:
 			continue
+		var allowed := allowed_ids.has(weapon_id)
+		button.visible = allowed
+		button.disabled = not allowed
 		button.set_pressed_no_signal(weapon_id == selection)
+		_style_loadout_card(button, weapon_id == selection, _player_tints[player_index])
 	var summary: Label = row_data.get("summary", null)
 	if summary != null:
-		var selected_card: Button = cards.get(selection, null)
-		var weapon_label := str(selected_card.text) if selected_card != null else _format_name(selection)
-		summary.text = "Weapon: %s" % weapon_label
+		summary.text = "Weapon: %s" % _format_name(selection)
 		summary.modulate = Color(0.84, 0.92, 1.0, 0.92)
 
 func _build_ability_rows() -> void:
@@ -1355,7 +1455,6 @@ func _build_ability_rows() -> void:
 		return
 	_ensure_loadout_columns()
 	var ability_defs := _ability_registry.get_all()
-	var default_loadout := _ability_registry.get_default_loadout()
 	for player_index in range(2):
 		var container := VBoxContainer.new()
 		container.name = "AbilityRowsP%d" % (player_index + 1)
@@ -1365,56 +1464,21 @@ func _build_ability_rows() -> void:
 		header.text = "P%d Abilities" % (player_index + 1)
 		header.add_theme_font_size_override("font_size", 13)
 		container.add_child(header)
-		var off_label := Label.new()
-		off_label.text = "A / OFF"
-		off_label.add_theme_font_size_override("font_size", 10)
-		off_label.modulate = Color(0.95, 1.0, 0.84, 0.92)
-		container.add_child(off_label)
-		var off_grid := GridContainer.new()
-		off_grid.columns = 4
-		off_grid.add_theme_constant_override("h_separation", 6)
-		off_grid.add_theme_constant_override("v_separation", 5)
-		container.add_child(off_grid)
-		var def_label := Label.new()
-		def_label.text = "X / DEF"
-		def_label.add_theme_font_size_override("font_size", 10)
-		def_label.modulate = Color(0.84, 0.92, 1.0, 0.92)
-		container.add_child(def_label)
-		var def_grid := GridContainer.new()
-		def_grid.columns = 5
-		def_grid.add_theme_constant_override("h_separation", 6)
-		def_grid.add_theme_constant_override("v_separation", 5)
-		container.add_child(def_grid)
+		var grid := GridContainer.new()
+		grid.columns = 3
+		grid.add_theme_constant_override("h_separation", 6)
+		grid.add_theme_constant_override("v_separation", 5)
+		container.add_child(grid)
 		var cards: Dictionary = {}
 		for ability_def in ability_defs:
 			var ability_definition: Dictionary = ability_def as Dictionary
 			var ability_id := str(ability_definition.get("id", ""))
-			if ability_id.is_empty():
+			if ability_id.is_empty() or str(ability_definition.get("slot", "")) == "ultimate":
 				continue
-			if ProfileState != null and not ProfileState.is_content_unlocked("ability", ability_id):
-				continue
-			var ability_slot := str(ability_definition.get("slot", ""))
-			if ability_slot != "off" and ability_slot != "def":
-				continue
-			var card := Button.new()
-			card.toggle_mode = true
-			card.custom_minimum_size = Vector2(0.0, 30.0)
-			card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			card.alignment = HORIZONTAL_ALIGNMENT_LEFT
-			card.autowrap_mode = TextServer.AUTOWRAP_OFF
-			card.icon = null
-			var ability_name := str(ability_definition.get("name", _format_name(ability_id)))
-			var card_text := ability_name
-			card.text = card_text
-			card.set_meta("ability_name", ability_name)
-			card.set_meta("card_text", card_text)
-			card.set_meta("ability_slot", ability_slot)
-			card.tooltip_text = str(ability_definition.get("description", ""))
+			var card := _create_loadout_card(str(ability_definition.get("name", _format_name(ability_id))), str(ability_definition.get("description", "")))
+			card.set_meta("card_text", str(ability_definition.get("name", _format_name(ability_id))))
 			card.toggled.connect(_on_ability_card_toggled.bind(player_index, ability_id))
-			if ability_slot == "off":
-				off_grid.add_child(card)
-			else:
-				def_grid.add_child(card)
+			grid.add_child(card)
 			_wire_ui_click_sfx(card)
 			cards[ability_id] = card
 		var summary := Label.new()
@@ -1425,8 +1489,7 @@ func _build_ability_rows() -> void:
 			"container": container,
 			"cards": cards,
 			"summary": summary,
-			"off_selection": str(default_loadout[0]),
-			"def_selection": str(default_loadout[1]),
+			"selection": _default_abilities_for_class(_get_player_class_selection(player_index)),
 		})
 		_sync_ability_row_buttons(player_index)
 
@@ -1438,33 +1501,44 @@ func _build_player_ability_selection() -> Array:
 
 func _get_player_ability_pair(player_index: int) -> Array:
 	if player_index < 0 or player_index >= _ability_rows.size():
-		return _ability_registry.get_default_loadout()
+		return _default_abilities_for_class(_get_player_class_selection(player_index))
 	var row_data: Dictionary = _ability_rows[player_index]
-	var chosen := []
-	for ability_id_variant in [row_data.get("off_selection", ""), row_data.get("def_selection", "")]:
+	var allowed_ids := _get_class_ability_ids(_get_player_class_selection(player_index))
+	var selected: Array = []
+	for ability_id_variant in (row_data.get("selection", []) as Array):
 		var ability_id := str(ability_id_variant)
-		if ability_id.is_empty():
-			continue
-		if ProfileState != null and not ProfileState.is_content_unlocked("ability", ability_id):
-			continue
-		chosen.append(ability_id)
-	return _ability_registry.normalize_loadout(chosen, 2)
+		if allowed_ids.has(ability_id) and not selected.has(ability_id):
+			selected.append(ability_id)
+	while selected.size() > 3:
+		selected.pop_back()
+	if selected.size() < 3:
+		for ability_id in allowed_ids:
+			if selected.size() >= 3:
+				break
+			if not selected.has(ability_id):
+				selected.append(ability_id)
+	row_data["selection"] = selected
+	_ability_rows[player_index] = row_data
+	return selected
 
 func _on_ability_card_toggled(pressed: bool, player_index: int, ability_id: String) -> void:
 	if player_index < 0 or player_index >= _ability_rows.size():
 		return
+	if not _get_class_ability_ids(_get_player_class_selection(player_index)).has(ability_id):
+		_sync_ability_row_buttons(player_index)
+		return
 	var row_data: Dictionary = _ability_rows[player_index]
-	var ability_slot := _ability_registry.get_slot(ability_id)
+	var selected: Array = (row_data.get("selection", []) as Array).duplicate()
 	if pressed:
-		if ability_slot == "off":
-			row_data["off_selection"] = ability_id
-		elif ability_slot == "def":
-			row_data["def_selection"] = ability_id
+		if selected.has(ability_id):
+			pass
+		else:
+			while selected.size() >= 3:
+				selected.pop_front()
+			selected.append(ability_id)
 	else:
-		if ability_slot == "off" and str(row_data.get("off_selection", "")) == ability_id:
-			row_data["off_selection"] = ""
-		elif ability_slot == "def" and str(row_data.get("def_selection", "")) == ability_id:
-			row_data["def_selection"] = ""
+		selected.erase(ability_id)
+	row_data["selection"] = selected
 	_ability_rows[player_index] = row_data
 	_sync_ability_row_buttons(player_index)
 	_refresh_menu_state()
@@ -1474,48 +1548,85 @@ func _sync_ability_row_buttons(player_index: int) -> void:
 		return
 	var row_data: Dictionary = _ability_rows[player_index]
 	var cards: Dictionary = row_data.get("cards", {}) as Dictionary
-	var selected_pair := _get_player_ability_pair(player_index)
-	var off_selection := str(row_data.get("off_selection", ""))
-	var def_selection := str(row_data.get("def_selection", ""))
+	var selected := _get_player_ability_pair(player_index)
+	var allowed_ids := _get_class_ability_ids(_get_player_class_selection(player_index))
 	for ability_id_variant in cards.keys():
 		var ability_id := str(ability_id_variant)
 		var button: Button = cards[ability_id]
 		if button == null:
 			continue
-		var slot_index := -1
-		if ability_id == off_selection:
-			slot_index = 0
-		elif ability_id == def_selection:
-			slot_index = 1
+		var allowed := allowed_ids.has(ability_id)
+		var slot_index := selected.find(ability_id)
+		button.visible = allowed
+		button.disabled = not allowed
 		button.set_pressed_no_signal(slot_index >= 0)
 		button.text = _format_ability_card_text(button, slot_index)
-		var player_tint: Color = _player_tints[player_index] if player_index < _player_tints.size() else Color(0.2, 0.9, 1.0, 1.0)
-		_style_ability_card(button, slot_index, player_tint)
+		_style_loadout_card(button, slot_index >= 0, _player_tints[player_index])
 	var summary: Label = row_data.get("summary", null)
 	if summary != null:
-		if not off_selection.is_empty() and not def_selection.is_empty():
-			summary.text = "A %s  |  X %s  |  Y/B defaults" % [
-				_format_name(str(selected_pair[0])),
-				_format_name(str(selected_pair[1])),
+		var class_def := RunState.get_class_definition(_get_player_class_selection(player_index))
+		var ultimate_id := str(class_def.get("ultimate", ""))
+		if selected.size() >= 3:
+			summary.text = "A %s  |  X %s  |  Y %s  |  B %s" % [
+				_format_name(str(selected[0])),
+				_format_name(str(selected[1])),
+				_format_name(str(selected[2])),
+				_format_name(ultimate_id),
 			]
 			summary.modulate = Color(0.84, 0.92, 1.0, 0.92)
 		else:
-			summary.text = "Select one OFF and one DEF."
+			summary.text = "Select three class abilities."
 			summary.modulate = Color(1.0, 0.8, 0.42, 0.96)
+
+func _select_defaults_for_class(player_index: int) -> void:
+	if player_index >= 0 and player_index < _weapon_rows.size():
+		var weapon_row: Dictionary = _weapon_rows[player_index]
+		weapon_row["selection"] = _first_weapon_id_for_class(_get_player_class_selection(player_index))
+		_weapon_rows[player_index] = weapon_row
+	if player_index >= 0 and player_index < _ability_rows.size():
+		var ability_row: Dictionary = _ability_rows[player_index]
+		ability_row["selection"] = _default_abilities_for_class(_get_player_class_selection(player_index))
+		_ability_rows[player_index] = ability_row
+
+func _get_class_weapon_ids(class_id: String) -> Array:
+	var ids: Array = []
+	for weapon in RunState.get_weapon_catalog_for_class(class_id):
+		ids.append(str((weapon as Dictionary).get("id", "")))
+	return ids
+
+func _get_class_ability_ids(class_id: String) -> Array:
+	var ids: Array = []
+	for ability in RunState.get_ability_catalog_for_class(class_id):
+		ids.append(str((ability as Dictionary).get("id", "")))
+	return ids
+
+func _first_weapon_id_for_class(class_id: String) -> String:
+	var ids := _get_class_weapon_ids(class_id)
+	return str(ids[0]) if not ids.is_empty() else "rifle"
+
+func _default_abilities_for_class(class_id: String) -> Array:
+	return _get_class_ability_ids(class_id).slice(0, 3)
+
+func _create_loadout_card(text: String, tooltip: String) -> Button:
+	var card := Button.new()
+	card.toggle_mode = true
+	card.custom_minimum_size = Vector2(0.0, 30.0)
+	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	card.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	card.autowrap_mode = TextServer.AUTOWRAP_OFF
+	card.text = text
+	card.set_meta("card_text", text)
+	card.tooltip_text = tooltip
+	return card
 
 func _format_ability_card_text(button: Button, slot_index: int) -> String:
 	var card_text := str(button.get_meta("card_text", button.text))
-	if slot_index == 0:
-		return "A - %s" % card_text
-	if slot_index == 1:
-		return "X - %s" % card_text
+	var labels := ["A", "X", "Y"]
+	if slot_index >= 0 and slot_index < labels.size():
+		return "%s - %s" % [str(labels[slot_index]), card_text]
 	return card_text
 
-func _get_ability_description(ability_id: String) -> String:
-	var definition := _ability_registry.get_definition(ability_id)
-	return str(definition.get("description", ""))
-
-func _style_ability_card(button: Button, slot_index: int, player_tint: Color) -> void:
+func _style_loadout_card(button: Button, selected: bool, player_tint: Color) -> void:
 	var normal := StyleBoxFlat.new()
 	normal.bg_color = Color(0.07, 0.09, 0.13, 0.96)
 	normal.border_color = Color(0.24, 0.3, 0.4, 0.72)
@@ -1528,18 +1639,14 @@ func _style_ability_card(button: Button, slot_index: int, player_tint: Color) ->
 	var hover := normal.duplicate()
 	hover.border_color = Color(0.42, 0.5, 0.64, 0.9)
 	var pressed := normal.duplicate()
-	if slot_index == 0:
+	if selected:
 		var slot_1_color := player_tint.lightened(0.12)
 		pressed.bg_color = Color(slot_1_color.r * 0.2, slot_1_color.g * 0.2, slot_1_color.b * 0.2, 0.98)
 		pressed.border_color = slot_1_color
-	elif slot_index == 1:
-		var slot_2_color: Color = HudPaletteData.SLOT_2_COLOR
-		pressed.bg_color = Color(slot_2_color.r * 0.2, slot_2_color.g * 0.2, slot_2_color.b * 0.2, 0.98)
-		pressed.border_color = slot_2_color
 	else:
 		pressed.bg_color = normal.bg_color
 		pressed.border_color = normal.border_color
-	pressed.set_border_width_all(2 if slot_index >= 0 else 1)
+	pressed.set_border_width_all(2 if selected else 1)
 	button.add_theme_stylebox_override("normal", normal)
 	button.add_theme_stylebox_override("hover", hover)
 	button.add_theme_stylebox_override("pressed", pressed)
@@ -1548,15 +1655,19 @@ func _style_ability_card(button: Button, slot_index: int, player_tint: Color) ->
 
 func _can_start_run(player_count: int) -> bool:
 	for player_index in range(player_count):
-		var row_data: Dictionary = _ability_rows[player_index]
-		if str(row_data.get("off_selection", "")).is_empty() or str(row_data.get("def_selection", "")).is_empty():
+		var class_id := _get_player_class_selection(player_index)
+		if class_id.is_empty():
 			return false
-		var selected_pair := _get_player_ability_pair(player_index)
-		if selected_pair.size() < 2:
+		if not _get_class_weapon_ids(class_id).has(_get_player_weapon_selection(player_index)):
 			return false
-		if _ability_registry.get_slot(str(selected_pair[0])) != "off":
+		var selected_abilities := _get_player_ability_pair(player_index)
+		if selected_abilities.size() != 3:
 			return false
-		if _ability_registry.get_slot(str(selected_pair[1])) != "def":
+		var class_ability_ids := _get_class_ability_ids(class_id)
+		for ability_id in selected_abilities:
+			if not class_ability_ids.has(str(ability_id)):
+				return false
+		if str(RunState.get_class_definition(class_id).get("ultimate", "")).is_empty():
 			return false
 	return true
 

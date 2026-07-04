@@ -6,9 +6,10 @@ Godot `4.6.2` same-screen local co-op neon roguelite prototype.
 
 The active V4 implementation work is in `D:\GameDev\Project_Twin_stick_v4` on branch `v4/class-system`.
 The original `D:\GameDev\Project_Twin_stick` checkout remains the untouched V3 playtest baseline for A/B
-testing. V4 Slice 0 of `docs/development/v4-implementation-plan.md` is implemented and validated: class data
-loads, existing weapons/abilities have tags, the runtime kit stores four abilities, and P1/P2 abilities are
-bound to face buttons.
+testing. V4 Slices 0-1 of `docs/development/v4-implementation-plan.md` are implemented and validated: class
+data loads, existing weapons/abilities have tags, the runtime kit stores four abilities, P1/P2 abilities are
+bound to face buttons, and the pre-run setup now selects class -> class weapon -> three class abilities with
+the class ultimate inserted into slot 4.
 
 ## Current Runtime
 
@@ -55,9 +56,16 @@ bound to face buttons.
   - keyboard defaults for P1/P2 ability slots on number-row `1`, `2`, `3`, `4`
   - mutation inventory
 - V4 removed in-run weapon switching. A run has one active weapon selected before launch.
-- Slice 0 still uses the existing pre-run weapon picker and temporary two-choice ability picker for the first
-  two slots; `RunState` expands the runtime kit to the default four ability loadout until Slice 1 adds class
-  selection and full class loadout UI.
+- Pre-run setup selects each player's class, one weapon from that class pool, and three abilities from that
+  class pool; the class ultimate auto-equips into the fourth face-button slot.
+- Same-class co-op is allowed.
+- Current class data:
+  - `mobile` / Stormrunner: rifle or beam; Dash, Shockwave, Afterburn, Momentum Burst, Deflect, Sonic Boom; ultimate Slipstream.
+  - `tank`: Shotgun or Whirlwind; Dash, Ground Slam, Quake, Orbit, Overcharge, Blood Lance; ultimate Blood Frenzy.
+  - `controller`: Beam or Arc Wand; Dash, Turret, Minefield, Orbit, Summon, Reinforce; ultimate Overload Grid.
+  - `risk`: Flamethrower or Rocket Launcher; Dash, Overcharge, Shockwave, Shield, Fireball, Ignite; ultimate Firestorm.
+- Forward-referenced Slice 5-6 weapons, abilities, and ultimates exist as stubs so loadouts resolve:
+  Whirlwind, Arc Wand, Flamethrower, the new class abilities, and the four ultimates.
 - Live weapons:
   - `Rifle`
   - `Rocket Launcher`
@@ -66,6 +74,7 @@ bound to face buttons.
   - `Railgun`
   - `Beam`
   - `Boomerang`
+  - Stubbed class weapons: `Whirlwind`, `Arc Wand`, `Flamethrower`
 - Live ability roster:
   - `Shockwave`
   - `Dash`
@@ -76,8 +85,10 @@ bound to face buttons.
   - `Turret`
   - `Minefield`
   - `Orbit`
-- New profiles start lean: `Rifle`, `Shotgun`, `Overcharge`, `Dash`, and base common upgrades are free;
-  the rest enters pre-run and upgrade pools through Meta unlocks.
+- Stubbed class abilities / ultimates are present for loadout resolution and go on cooldown with activation
+  feedback until their content slices replace them.
+- All class-pool weapons, abilities, and ultimates are free from the start; premium mutation/unlock trimming
+  remains a later V4 slice.
 - Aim modes are `auto`, `movement`, and `manual`.
 
 ## Encounter Systems
@@ -146,7 +157,7 @@ bound to face buttons.
   - clear/fail/milestone resolution screens
 - `Bootstrap.gd` now owns:
   - single Play setup
-  - player/controller/loadout setup
+  - player/controller/class/loadout setup
   - Options input binding rows for `Ability 1 A`, `Ability 2 X`, `Ability 3 Y`, and `Ability 4 B`
   - Meta unlock menu backed by `ProfileState`
   - Encounter Builder with `Combat / Champion`
@@ -167,7 +178,7 @@ Last validation run in this state:
   - `Godot_v4.6.2-stable_win64_console.exe --headless --path D:\GameDev\Project_Twin_stick_v4 res://scenes/ui/Bootstrap.tscn --quit`
 - PerfRunner Hive champion profile:
   - `Godot_v4.6.2-stable_win64_console.exe --headless --path D:\GameDev\Project_Twin_stick_v4 -- --profile=champion:hive --players=2 --build=heavy`
-  - Result: `avg_fps=144.9`, `min_fps=144.0`, `max_frame_ms=6.944`.
+  - Result: `avg_fps=144.4`, `min_fps=143.0`, `max_frame_ms=12.436`.
 
 ## Known Risks
 
@@ -185,9 +196,9 @@ Last validation run in this state:
 
 ## Next Step
 
-Continue `docs/development/v4-implementation-plan.md` with Slice 1 in the V4 worktree:
+Continue `docs/development/v4-implementation-plan.md` with Slice 2 in the V4 worktree:
 
-- add class data model fields to `PlayerInventory`
-- register placeholder stubs for forward-referenced class-pool weapons, abilities, and ultimates
-- build class-select / weapon / three-ability loadout UI for 1-2 players
-- free or bypass unlock checks for class-pool base kit content per the plan
+- rework mutation eligibility to use `requires ⊆ kit-tags`
+- convert `data/mutations.json` to the new `requires` + `apply` schema
+- build kit tags from equipped class, passive, weapon, three abilities, and ultimate
+- keep the tag layer as compatibility gating only

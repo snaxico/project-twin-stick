@@ -39,6 +39,11 @@ func get_all() -> Array:
 		results.append((definition as Dictionary).duplicate(true))
 	return results
 
+func get_first_class_id() -> String:
+	if _definitions.is_empty():
+		return ""
+	return str((_definitions[0] as Dictionary).get("id", ""))
+
 func get_definition(class_id: String) -> Dictionary:
 	if not _definition_map.has(class_id):
 		return {}
@@ -46,3 +51,12 @@ func get_definition(class_id: String) -> Dictionary:
 
 func has(class_id: String) -> bool:
 	return _definition_map.has(class_id)
+
+func get_weapon_pool(class_id: String) -> Array:
+	return (get_definition(class_id).get("weapon_pool", []) as Array).duplicate()
+
+func get_ability_pool(class_id: String) -> Array:
+	return (get_definition(class_id).get("ability_pool", []) as Array).duplicate()
+
+func get_ultimate_id(class_id: String) -> String:
+	return str(get_definition(class_id).get("ultimate", ""))
