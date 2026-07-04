@@ -1,10 +1,9 @@
 class_name OrbitNode
-extends Node2D
+extends "res://scripts/game/DeployableNode.gd"
 
 const ParticleFactoryData = preload("res://scripts/juice/ParticleFactory.gd")
 
 var owner_node: Node2D = null
-var lifetime := 5.0
 var orb_count := 3
 var orbit_radius := 84.0
 var damage := 18
@@ -17,9 +16,8 @@ var tint := Color(0.56, 0.92, 1.0, 1.0)
 var _angle := 0.0
 var _hit_cooldowns: Dictionary = {}
 
-func configure(orbit_owner: Node2D, duration: float, stats: Dictionary, color: Color) -> void:
+func configure(orbit_owner: Node2D, stats: Dictionary, color: Color) -> void:
 	owner_node = orbit_owner
-	lifetime = duration
 	orb_count = int(stats.get("orb_count", orb_count)) + int(stats.get("extra_orbs", 0))
 	orbit_radius = float(stats.get("orbit_radius", orbit_radius))
 	damage = int(stats.get("damage", damage))
@@ -29,16 +27,15 @@ func configure(orbit_owner: Node2D, duration: float, stats: Dictionary, color: C
 	orb_visual_scale = maxf(0.1, float(stats.get("orb_visual_scale", orb_visual_scale)))
 	blocks_projectiles = bool(stats.get("blocks_projectiles", blocks_projectiles))
 	tint = color
+	configure_deployable_health(int(stats.get("orbit_health", stats.get("health", 140))), true)
 	set_physics_process(true)
 	queue_redraw()
 
 func _physics_process(delta: float) -> void:
-	if owner_node == null or not is_instance_valid(owner_node):
-		queue_free()
+	if not is_alive():
 		return
-	lifetime -= delta
-	if lifetime <= 0.0:
-		queue_free()
+	if owner_node == null or not is_instance_valid(owner_node):
+		despawn_deployable()
 		return
 	global_position = owner_node.global_position
 	_angle = fmod(_angle + rotation_speed * delta, TAU)
@@ -76,6 +73,7 @@ func _draw() -> void:
 		var local_position: Vector2 = orb_position - global_position
 		draw_circle(local_position, 10.0 * orb_visual_scale, Color(tint.r, tint.g, tint.b, 0.34))
 		draw_arc(local_position, 12.0 * orb_visual_scale, 0.0, TAU, 16, Color(tint.r, tint.g, tint.b, 0.92), 3.0)
+	_draw_deployable_health_bar(34.0, 42.0)
 
 func _current_orbit_radius(now: float) -> float:
 	if expand_interval <= 0.0 or expand_bonus_radius <= 0.0:
@@ -131,3 +129,11 @@ func _spawn_hit_sparks(hit_position: Vector2, direction: Vector2) -> void:
 	var sparks := ParticleFactoryData.create_impact_sparks(tint.lightened(0.18), direction.normalized() if direction.length() > 0.0 else Vector2.UP, 0.72)
 	sparks.global_position = hit_position
 	parent_node.add_child(sparks)
+
+func _on_deployable_destroyed() -> void:
+	var parent_node := get_parent()
+	if parent_node == null:
+		return
+	var ring := ParticleFactoryData.create_explosion_ring(tint, orbit_radius, 2.4)
+	ring.global_position = global_position
+	parent_node.add_child(ring)

@@ -85,6 +85,7 @@
       "duration": 3.0,
       "stats": {
         "invisibility_duration": 1.2,
+        "decoy_health": 120,
         "taunt_radius": 700.0
       }
     },
@@ -101,7 +102,8 @@
         "damage": 18,
         "fire_rate": 4.5,
         "range": 780.0,
-        "projectile_speed": 760.0
+        "projectile_speed": 760.0,
+        "turret_health": 110
       }
     },
     {
@@ -115,7 +117,7 @@
       "duration": 0.0,
       "stats": {
         "mine_count": 4,
-        "mine_lifetime": 14.0,
+        "mine_health": 45,
         "spread_radius": 150.0,
         "radius": 170.0,
         "trigger_radius": 110.0,
@@ -137,7 +139,8 @@
         "damage": 9,
         "rotation_speed": 2.6,
         "orb_visual_scale": 1.5,
-        "blocks_projectiles": true
+        "blocks_projectiles": true,
+        "orbit_health": 140
       }
     },
     {

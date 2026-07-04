@@ -1,9 +1,8 @@
 class_name AbilityMine
-extends Node2D
+extends "res://scripts/game/DeployableNode.gd"
 
 const ParticleFactoryData = preload("res://scripts/juice/ParticleFactory.gd")
 
-var lifetime := 8.0
 var trigger_radius := 52.0
 var explosion_radius := 88.0
 var damage := 42
@@ -11,19 +10,17 @@ var tint := Color(1.0, 0.82, 0.34, 1.0)
 var _detonating := false
 var _detonate_at := 0.0
 
-func configure(duration: float, radius: float, mine_damage: int, color: Color, mine_trigger_radius: float = 52.0) -> void:
-	lifetime = duration
+func configure(radius: float, mine_damage: int, color: Color, mine_trigger_radius: float = 52.0, mine_health: int = 45) -> void:
 	explosion_radius = radius
 	trigger_radius = mine_trigger_radius
 	damage = mine_damage
 	tint = color
+	configure_deployable_health(mine_health, true)
 	set_physics_process(true)
 	queue_redraw()
 
-func _physics_process(delta: float) -> void:
-	lifetime -= delta
-	if lifetime <= 0.0:
-		queue_free()
+func _physics_process(_delta: float) -> void:
+	if not is_alive():
 		return
 	var now := Time.get_ticks_msec() / 1000.0
 	if _detonating and now >= _detonate_at:
@@ -57,7 +54,7 @@ func _explode() -> void:
 		var ring := ParticleFactoryData.create_explosion_ring(tint.lightened(0.1), explosion_radius, 3.5)
 		ring.global_position = global_position
 		parent_node.add_child(ring)
-	queue_free()
+	despawn_deployable()
 
 func _spawn_hit_sparks(hit_position: Vector2, direction: Vector2) -> void:
 	var parent_node := get_parent()
@@ -73,6 +70,7 @@ func _draw() -> void:
 	draw_circle(Vector2.ZERO, 12.0, fill_color)
 	draw_arc(Vector2.ZERO, 16.0, 0.0, TAU, 18, ring_color, 3.0)
 	draw_arc(Vector2.ZERO, trigger_radius, 0.0, TAU, 20, Color(tint.r, tint.g, tint.b, 0.2), 2.0)
+	_draw_deployable_health_bar(21.0, 30.0)
 
 func _get_candidate_enemies(radius: float) -> Array:
 	var tree := get_tree()
@@ -82,3 +80,11 @@ func _get_candidate_enemies(radius: float) -> Array:
 	if combat_owner != null and combat_owner.has_method("get_nearby_enemy_target_nodes"):
 		return combat_owner.get_nearby_enemy_target_nodes(global_position, radius)
 	return tree.get_nodes_in_group("aim_target")
+
+func _on_deployable_destroyed() -> void:
+	var parent_node := get_parent()
+	if parent_node == null:
+		return
+	var ring := ParticleFactoryData.create_explosion_ring(tint, 24.0, 1.6)
+	ring.global_position = global_position
+	parent_node.add_child(ring)

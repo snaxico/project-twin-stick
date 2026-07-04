@@ -6,11 +6,12 @@ Godot `4.6.2` same-screen local co-op neon roguelite prototype.
 
 The active V4 implementation work is in `D:\GameDev\Project_Twin_stick_v4` on branch `v4/class-system`.
 The original `D:\GameDev\Project_Twin_stick` checkout remains the untouched V3 playtest baseline for A/B
-testing. V4 Slices 0-2 of `docs/development/v4-implementation-plan.md` are implemented and validated: class
+testing. V4 Slices 0-3 of `docs/development/v4-implementation-plan.md` are implemented and validated: class
 data loads, existing weapons/abilities have tags, the runtime kit stores four abilities, P1/P2 abilities are
 bound to face buttons, and the pre-run setup now selects class -> class weapon -> three class abilities with
 the class ultimate inserted into slot 4. Mutations now gate through the V4 tag rule: `requires` must be a
-subset of the equipped kit's tags, with `apply` describing the effect target layer.
+subset of the equipped kit's tags, with `apply` describing the effect target layer. Existing player
+deployables now share a destructible HP interface and no longer self-expire by lifetime.
 
 ## Current Runtime
 
@@ -95,6 +96,10 @@ subset of the equipped kit's tags, with `apply` describing the effect target lay
 - Mutation offers are filtered by equipped class/passive/weapon/ability/ultimate tags plus selected mutation
   tags. Pierce requires `projectile`, Combustion requires `risk`, and Overgrowth requires a `summon` item.
 - The old in-run weapon-switch reward cards are removed; weapon level-up remains as the weapon reward card.
+- Existing player deployables (`Turret`, `Orbit`, `Decoy`, and player `Minefield` mines) use the shared
+  `DeployableNode` HP/damage/death contract and participate in the `player_target` group.
+- Player deployables persist until destroyed, triggered, or their owner disappears; their old lifetime
+  countdown despawn paths are removed.
 - Aim modes are `auto`, `movement`, and `manual`.
 
 ## Encounter Systems
@@ -193,6 +198,12 @@ Last validation run in this state:
   - no-summon kit: Overgrowth ineligible
 - Latest PerfRunner result after Slice 2:
   - `avg_fps=144.7`, `min_fps=143.0`, `max_frame_ms=19.251`.
+- Slice 3 deployable health acceptance:
+  - temporary Godot script instantiated Turret, Orbit, Decoy, and AbilityMine
+  - each entered `player_target`, survived partial damage, and died on lethal damage
+  - result: `deployable_health_check=passed`
+- Latest PerfRunner result after Slice 3:
+  - `avg_fps=144.9`, `min_fps=144.0`, `max_frame_ms=6.903`.
 
 ## Known Risks
 
@@ -210,8 +221,8 @@ Last validation run in this state:
 
 ## Next Step
 
-Continue `docs/development/v4-implementation-plan.md` with Slice 3 in the V4 worktree:
+Continue `docs/development/v4-implementation-plan.md` with Slice 4 in the V4 worktree:
 
-- add the shared deployable HP / damage / death interface
-- make Turret, Orbit, Decoy, and player AbilityMine persistent destructible units
-- remove time-expiry despawn from those player deployables
+- implement class passives: Mobile Momentum exclusivity, Tank Bloodthirst/overshield, Controller Radiance,
+  and Risk Overheat
+- wire passive effects into combat hooks and HUD/runtime feedback where needed

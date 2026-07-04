@@ -428,8 +428,6 @@ func _build_runtime_ability(player_index: int, ability_definition: Dictionary) -
 	for stat_key in ["duration", "trail_duration"]:
 		if scales_duration and stats.has(stat_key):
 			stats[stat_key] = float(stats[stat_key]) * duration_mult
-	if ability_id == "minefield" and stats.has("mine_lifetime"):
-		stats["mine_lifetime"] = float(stats["mine_lifetime"]) * duration_mult
 	return {
 		"id": ability_id,
 		"name": str(ability_definition.get("name", "Ability")),
@@ -774,7 +772,7 @@ func _on_player_ability_activated(player, _slot_index: int, ability_id: String, 
 		"turret":
 			var turret := TurretNodeData.new()
 			turret.global_position = origin
-			turret.configure(float(stats.get("duration", 6.0)), stats, tint)
+			turret.configure(stats, tint)
 			turret.fire_requested.connect(_on_player_fire_requested)
 			effects.add_child(turret)
 			_active_turrets.append(turret)
@@ -782,7 +780,7 @@ func _on_player_ability_activated(player, _slot_index: int, ability_id: String, 
 			_spawn_ability_mines(origin, stats)
 		"orbit":
 			var orbit := OrbitNodeData.new()
-			orbit.configure(player, float(stats.get("duration", 5.0)), stats, tint)
+			orbit.configure(player, stats, tint)
 			effects.add_child(orbit)
 			_active_orbits.append(orbit)
 		"overcharge":
@@ -835,13 +833,13 @@ func _spawn_ability_mines(origin: Vector2, stats: Dictionary) -> void:
 	var radius := float(stats.get("radius", 100.0))
 	var trigger_radius := float(stats.get("trigger_radius", 52.0))
 	var damage := int(stats.get("damage", 42))
-	var duration := float(stats.get("mine_lifetime", 8.0))
+	var mine_health := int(stats.get("mine_health", 45))
 	var tint: Color = stats.get("color", Color.WHITE)
 	for mine_index in range(mine_count):
 		var angle := TAU * float(mine_index) / float(max(mine_count, 1))
 		var mine := AbilityMineData.new()
 		mine.global_position = origin + Vector2.RIGHT.rotated(angle) * spread_radius
-		mine.configure(duration, radius, damage, tint, trigger_radius)
+		mine.configure(radius, damage, tint, trigger_radius, mine_health)
 		effects.add_child(mine)
 		_active_mines.append(mine)
 

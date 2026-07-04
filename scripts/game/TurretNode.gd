@@ -1,9 +1,10 @@
 class_name TurretNode
-extends Node2D
+extends "res://scripts/game/DeployableNode.gd"
 
 signal fire_requested(origin, direction, config)
 
-var lifetime := 6.0
+const ParticleFactoryData = preload("res://scripts/juice/ParticleFactory.gd")
+
 var fire_rate := 3.2
 var damage := 12
 var attack_range := 780.0
@@ -12,21 +13,19 @@ var gun_count := 1
 var tint := Color(0.9, 0.95, 1.0, 1.0)
 var _next_fire_at := 0.0
 
-func configure(duration: float, stats: Dictionary, color: Color) -> void:
-	lifetime = duration
+func configure(stats: Dictionary, color: Color) -> void:
 	fire_rate = float(stats.get("fire_rate", fire_rate))
 	damage = int(stats.get("damage", damage))
 	attack_range = float(stats.get("range", attack_range))
 	projectile_speed = float(stats.get("projectile_speed", projectile_speed))
 	gun_count = maxi(1, int(stats.get("gun_count", 1)))
 	tint = color
+	configure_deployable_health(int(stats.get("turret_health", stats.get("health", 110))), true)
 	set_physics_process(true)
 	queue_redraw()
 
-func _physics_process(delta: float) -> void:
-	lifetime -= delta
-	if lifetime <= 0.0:
-		queue_free()
+func _physics_process(_delta: float) -> void:
+	if not is_alive():
 		return
 	var target := _find_target()
 	var now := Time.get_ticks_msec() / 1000.0
@@ -86,3 +85,12 @@ func _draw() -> void:
 		if gun_count > 1:
 			offset = (float(gun_index) - (float(gun_count - 1) * 0.5)) * 8.0
 		draw_line(Vector2(0.0, offset), Vector2.RIGHT * 24.0 + Vector2(0.0, offset), Color(1.0, 1.0, 1.0, 0.9), 4.0)
+	_draw_deployable_health_bar(25.0)
+
+func _on_deployable_destroyed() -> void:
+	var parent_node := get_parent()
+	if parent_node == null:
+		return
+	var ring := ParticleFactoryData.create_explosion_ring(tint, 34.0, 2.1)
+	ring.global_position = global_position
+	parent_node.add_child(ring)
