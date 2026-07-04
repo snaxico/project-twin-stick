@@ -174,6 +174,7 @@ var _charge_until := 0.0
 var _charge_direction := Vector2.RIGHT
 var _charge_chain_remaining := 0
 var _external_velocity := Vector2.ZERO
+var _last_damage_player_index := -1
 var _shield_active := false
 var _slow_multiplier := 1.0
 var _slow_until := 0.0
@@ -519,9 +520,11 @@ func get_type_name() -> String:
 		_:
 			return "chaser"
 
-func apply_damage(amount: int) -> void:
+func apply_damage(amount: int, source_player_index: int = -1) -> void:
 	if not _alive or amount <= 0:
 		return
+	if source_player_index >= 0:
+		_last_damage_player_index = source_player_index
 	_cleanup_champion_deflector_nodes()
 	if is_champion() and _champion_deflector_nodes.size() > 0:
 		_spawn_hit_particles(0.75, true)
@@ -540,6 +543,9 @@ func apply_damage(amount: int) -> void:
 	else:
 		_spawn_hit_particles(1.0)
 		_update_visual_state()
+
+func get_last_damage_player_index() -> int:
+	return _last_damage_player_index
 
 func apply_knockback(direction: Vector2, force: float) -> void:
 	if force <= 0.0:

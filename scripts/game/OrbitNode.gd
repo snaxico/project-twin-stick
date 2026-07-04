@@ -50,7 +50,7 @@ func _physics_process(delta: float) -> void:
 				if float(_hit_cooldowns.get(enemy, 0.0)) > now:
 					break
 				_hit_cooldowns[enemy] = now + 0.22
-				enemy.apply_damage(damage)
+				enemy.apply_damage(damage, _get_owner_player_index())
 				_spawn_hit_sparks(enemy.global_position, enemy.global_position - orb_position)
 				if enemy.has_method("apply_knockback"):
 					enemy.apply_knockback((enemy.global_position - global_position).normalized(), 180.0)
@@ -121,6 +121,11 @@ func _block_enemy_projectiles(orb_positions: Array) -> void:
 
 func _orb_hit_radius() -> float:
 	return 28.0 * orb_visual_scale
+
+func _get_owner_player_index() -> int:
+	if owner_node == null or not is_instance_valid(owner_node):
+		return -1
+	return int(owner_node.get("player_index"))
 
 func _spawn_hit_sparks(hit_position: Vector2, direction: Vector2) -> void:
 	var parent_node := get_parent()

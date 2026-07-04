@@ -159,7 +159,7 @@ func _process_beam_fire(origin: Vector2, direction: Vector2, projectile_config: 
 		var ramp_ratio := clampf(held_time / ramp_seconds, 0.0, 1.0)
 		var dps := float(projectile_config.get("max_damage_per_second", projectile_config.get("damage", 120.0))) * lerpf(start_fraction, 1.0, ramp_ratio)
 		var damage: int = max(1, int(round(dps * tick_interval)))
-		enemy.apply_damage(damage)
+		enemy.apply_damage(damage, int(projectile_config.get("source_player_index", -1)))
 		if float(projectile_config.get("slow_duration", 0.0)) > 0.0:
 			if float(projectile_config.get("slow_step", 0.0)) > 0.0 and enemy.has_method("apply_stacking_slow"):
 				enemy.apply_stacking_slow(float(projectile_config.get("slow_step", 0.0)), float(projectile_config.get("slow_floor", 0.15)), float(projectile_config.get("slow_duration", 0.0)))
@@ -317,7 +317,7 @@ func _on_projectile_split_requested(origin: Vector2, _direction: Vector2, team: 
 	var split_direction := (best_target.global_position - origin).normalized()
 	if split_direction.length() <= 0.0:
 		return
-	_activate_projectile("player", origin, split_direction, projectile_config)
+	call_deferred("_activate_projectile", "player", origin, split_direction, projectile_config.duplicate(true))
 
 
 func _on_projectile_deactivated(projectile) -> void:
@@ -348,7 +348,7 @@ func _on_projectile_impact(origin: Vector2, direction: Vector2, team: String, co
 				if enemy == target:
 					continue
 				if enemy.global_position.distance_squared_to(origin) <= explosion_radius * explosion_radius:
-					enemy.apply_damage(explosion_damage)
+					enemy.apply_damage(explosion_damage, int(combat_context.get("source_player_index", -1)))
 		else:
 			for player in _coop.call("get_player_target_nodes"):
 				if player == null or not is_instance_valid(player) or not player.is_alive():

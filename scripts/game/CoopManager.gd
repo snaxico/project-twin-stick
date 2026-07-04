@@ -370,6 +370,8 @@ func _rebuild_player_loadouts() -> void:
 		var base_loadout: Dictionary = RunState.get_player_runtime_loadout_for(index)
 		var compiled_weapon := _mutation_system.get_compiled_weapon_stats(index, (base_loadout.get("weapon_stats", {}) as Dictionary))
 		var compiled_loadout := {
+			"class_id": str(base_loadout.get("class_id", "")),
+			"passive_id": str(base_loadout.get("passive_id", "")),
 			"weapon_id": str(base_loadout.get("weapon_id", "rifle")),
 			"weapon_name": str(base_loadout.get("weapon_name", "Rifle")),
 			"weapon_level": int(base_loadout.get("weapon_level", 1)),
@@ -417,10 +419,14 @@ func _build_runtime_ability(player_index: int, ability_definition: Dictionary) -
 	var cooldown_mult := 1.0 - _mutation_system.get_ability_cooldown_reduction(player_index)
 	var area_mult := _mutation_system.get_ability_area_multiplier(player_index)
 	var duration_mult := _mutation_system.get_ability_duration_multiplier(player_index)
+	_apply_radiance_ability_stats(player_index, ability_definition, stats)
 	var ability_type := str(ability_definition.get("type", "instant"))
 	var scales_duration := ability_type != "instant" and ability_type != "movement"
 	var base_cooldown := float(ability_definition.get("cooldown", 1.0))
 	var cooldown := maxf(0.2, base_cooldown * maxf(cooldown_mult, 0.1))
+	if _player_has_passive(player_index, "overheat"):
+		base_cooldown = 0.5
+		cooldown = 0.5
 	var duration := maxf(0.0, float(ability_definition.get("duration", 0.0)) * (duration_mult if scales_duration else 1.0))
 	for stat_key in ["radius", "orbit_radius", "distance"]:
 		if stats.has(stat_key):
@@ -437,6 +443,61 @@ func _build_runtime_ability(player_index: int, ability_definition: Dictionary) -
 		"duration": duration,
 		"stats": stats,
 	}
+
+func _player_has_passive(player_index: int, passive_id: String) -> bool:
+	if player_index >= 0 and player_index < _player_nodes.size():
+		var player = _player_nodes[player_index]
+		if player != null and is_instance_valid(player) and player.has_method("has_passive"):
+			return bool(player.has_passive(passive_id))
+	var inventory = RunState.get_player_inventory(player_index)
+	return inventory != null and str(inventory.passive_id) == passive_id
+
+func _apply_radiance_ability_stats(player_index: int, ability_definition: Dictionary, stats: Dictionary) -> void:
+	if not _player_has_passive(player_index, "radiance"):
+		return
+	if not (ability_definition.get("tags", []) as Array).has("summon"):
+		return
+	for key in ["damage"]:
+		if stats.has(key):
+			stats[key] = int(round(float(stats[key]) * 1.2))
+	for key in ["turret_health", "orbit_health", "mine_health", "decoy_health", "health"]:
+		if stats.has(key):
+			stats[key] = int(round(float(stats[key]) * 1.45))
+	if stats.has("fire_rate"):
+		stats["fire_rate"] = float(stats["fire_rate"]) * 1.15
+
+func _update_radiance_auras() -> void:
+	for player in _player_nodes:
+		if player != null and is_instance_valid(player) and player.has_method("clear_zone_modifier"):
+			player.clear_zone_modifier("radiance")
+	for source in _player_nodes:
+		if source == null or not is_instance_valid(source) or not source.has_method("has_passive") or not source.has_passive("radiance"):
+			continue
+		if source.has_method("is_alive") and not source.is_alive():
+			continue
+		for target in _player_nodes:
+			if target == null or not is_instance_valid(target) or not target.has_method("apply_zone_modifier"):
+				continue
+			if target.global_position.distance_squared_to(source.global_position) > 360.0 * 360.0:
+				continue
+			target.apply_zone_modifier("radiance", 1.0, 1.0, 1.15)
+
+func _apply_bloodthirst_on_kill(enemy) -> void:
+	if enemy == null or not is_instance_valid(enemy) or not enemy.has_method("get_last_damage_player_index"):
+		return
+	var player_index := int(enemy.get_last_damage_player_index())
+	if player_index < 0 or player_index >= _player_nodes.size():
+		return
+	var player = _player_nodes[player_index]
+	if player == null or not is_instance_valid(player) or not player.has_method("apply_bloodthirst_heal"):
+		return
+	if not player.has_method("has_passive") or not player.has_passive("bloodthirst"):
+		return
+	var heal_amount := 8
+	if _mutation_system.has_mutation(player_index, "gorge"):
+		heal_amount += 4
+	var overshield_mult := 1.35 if _mutation_system.has_mutation(player_index, "overflow") else 1.0
+	player.apply_bloodthirst_heal(heal_amount, overshield_mult)
 
 func _start_room() -> void:
 	_clear_runtime_nodes()
@@ -631,6 +692,7 @@ func _physics_process(delta: float) -> void:
 	_combat_effects.update_scheduled_pulsar_emps()
 	_projectile_system.tick(delta)
 	_side_objectives.update(delta, _player_nodes)
+	_update_radiance_auras()
 	_update_hazards(delta)
 	_update_revives(delta)
 	_clamp_runtime_nodes()
@@ -1027,6 +1089,7 @@ func _on_enemy_died(enemy) -> void:
 		_wave_director.clear_active_boss_if(enemy)
 	_enemies_killed += 1
 	_gain_shared_momentum()
+	_apply_bloodthirst_on_kill(enemy)
 	var enemy_type_name := str(enemy.get_type_name())
 	if EnemyTypes.is_champion(enemy_type_name):
 		_champions_killed += 1

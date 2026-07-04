@@ -85,7 +85,7 @@ func _run(scenario: String, players: int, build: String) -> void:
 			if inv != null:
 				inv.weapon_id = "scattergun"
 				inv.weapon_level = 5
-				inv.mutations.append_array(["rapid_fire", "rapid_fire", "rapid_fire", "velocity", "fire_trail"])
+				inv.mutations.append_array(["piercing_rounds", "ricochet", "fire_trail"])
 
 	get_tree().change_scene_to_packed(RUN_FLOW_SCENE)
 

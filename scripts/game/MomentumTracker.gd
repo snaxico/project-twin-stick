@@ -27,6 +27,8 @@ func update_players(player_nodes: Array) -> void:
 
 func gain_shared_momentum() -> void:
 	for index in range(_player_nodes.size()):
+		if not _is_momentum_player(index):
+			continue
 		_momentum_progress_by_player[index] = int(_momentum_progress_by_player[index]) + 1
 		_update_momentum_tier(index)
 		_store_momentum(index)
@@ -34,6 +36,8 @@ func gain_shared_momentum() -> void:
 
 func drop_player_momentum(player_index: int) -> void:
 	if player_index < 0 or player_index >= _momentum_tier_by_player.size():
+		return
+	if not _is_momentum_player(player_index):
 		return
 	var new_tier: int = max(0, int(_momentum_tier_by_player[player_index]) - 2)
 	_momentum_tier_by_player[player_index] = new_tier
@@ -47,6 +51,9 @@ func apply_to_player(player_index: int) -> void:
 		return
 	var player = _player_nodes[player_index]
 	if player == null or not is_instance_valid(player) or not player.has_method("set_momentum_tier"):
+		return
+	if not _is_momentum_player(player_index):
+		player.set_momentum_tier(0, 0.0, 0.0)
 		return
 	var tier := int(_momentum_tier_by_player[player_index]) if player_index < _momentum_tier_by_player.size() else 0
 	player.set_momentum_tier(
@@ -69,9 +76,10 @@ func _restore_momentum() -> void:
 	_momentum_tier_by_player.clear()
 	for index in range(_player_nodes.size()):
 		var state := RunState.get_momentum_state(index)
-		_momentum_progress_by_player.append(int(state.get("progress", 0)))
-		_momentum_tier_by_player.append(int(state.get("tier", 0)))
-		_room_max_momentum_tier = maxi(_room_max_momentum_tier, int(state.get("tier", 0)))
+		var active := _is_momentum_player(index)
+		_momentum_progress_by_player.append(int(state.get("progress", 0)) if active else 0)
+		_momentum_tier_by_player.append(int(state.get("tier", 0)) if active else 0)
+		_room_max_momentum_tier = maxi(_room_max_momentum_tier, int(state.get("tier", 0)) if active else 0)
 		apply_to_player(index)
 
 
@@ -107,3 +115,9 @@ func _get_min_progress_for_momentum_tier(tier: int) -> int:
 	if tier <= 0:
 		return 0
 	return int(MOMENTUM_THRESHOLDS[clampi(tier, 1, 4) - 1])
+
+func _is_momentum_player(player_index: int) -> bool:
+	if player_index < 0 or player_index >= _player_nodes.size():
+		return false
+	var player = _player_nodes[player_index]
+	return player != null and is_instance_valid(player) and player.has_method("has_passive") and bool(player.has_passive("momentum"))

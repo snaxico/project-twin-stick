@@ -43,8 +43,6 @@ var ignite_damage_percent: float = 0.0
 var shatter_on_frozen_death := false
 var shatter_radius: float = 0.0
 var shatter_damage_percent: float = 0.0
-var rapid_fire_level: int = 0
-var velocity_level: int = 0
 var projectile_shape: String = "orb"
 var trail_style: String = "default"
 var accent_color: Color = Color.WHITE
@@ -54,6 +52,7 @@ var weapon_id: String = ""
 var projectile_kind: String = "bullet"
 var weapon_tags: Array = []
 var trigger_passives: Array = []
+var source_player_index := -1
 var use_lifetime := true
 var travel_distance: float = 0.0
 var split_remaining: int = 0
@@ -112,8 +111,6 @@ func setup(projectile_team: String, projectile_direction: Vector2, projectile_sp
 	shatter_on_frozen_death = false
 	shatter_radius = 0.0
 	shatter_damage_percent = 0.0
-	rapid_fire_level = 0
-	velocity_level = 0
 	projectile_shape = "orb"
 	trail_style = "default"
 	accent_color = projectile_color.lightened(0.2)
@@ -123,6 +120,7 @@ func setup(projectile_team: String, projectile_direction: Vector2, projectile_sp
 	projectile_kind = "bullet"
 	weapon_tags = []
 	trigger_passives = []
+	source_player_index = -1
 	travel_distance = 0.0
 	split_remaining = 0
 	use_lifetime = projectile_team != "enemy"
@@ -169,8 +167,6 @@ func setup_from_config(projectile_team: String, projectile_direction: Vector2, c
 	shatter_on_frozen_death = bool(config.get("shatter_on_frozen_death", shatter_on_frozen_death))
 	shatter_radius = max(0.0, float(config.get("shatter_radius", shatter_radius)))
 	shatter_damage_percent = max(0.0, float(config.get("shatter_damage_percent", shatter_damage_percent)))
-	rapid_fire_level = max(0, int(config.get("rapid_fire_level", rapid_fire_level)))
-	velocity_level = max(0, int(config.get("velocity_level", velocity_level)))
 	projectile_shape = str(config.get("projectile_shape", projectile_shape))
 	trail_style = str(config.get("trail_style", trail_style))
 	accent_color = _parse_color(config.get("accent_color", accent_color), accent_color)
@@ -184,6 +180,7 @@ func setup_from_config(projectile_team: String, projectile_direction: Vector2, c
 	projectile_kind = str(config.get("projectile_kind", projectile_kind))
 	weapon_tags = (config.get("weapon_tags", []) as Array).duplicate(true)
 	trigger_passives = (config.get("trigger_passives", []) as Array).duplicate(true)
+	source_player_index = int(config.get("source_player_index", source_player_index))
 	travel_distance = maxf(0.0, float(config.get("travel_distance", travel_distance)))
 	if travel_distance > 0.0 and max_distance <= 0.0:
 		max_distance = travel_distance
@@ -411,7 +408,7 @@ func _apply_visual_state() -> void:
 
 func get_render_scale() -> Vector2:
 	var size_scale: float = maxf(collision_half_width / BASE_COLLISION_HALF_WIDTH, 0.25)
-	var streak_scale: float = 1.0 + 0.18 * float(max(rapid_fire_level - 1, 0)) + 0.22 * float(max(velocity_level - 1, 0))
+	var streak_scale := 1.0
 	if team == "enemy":
 		var enemy_orb_scale := 1.36 * (8.0 / 6.0)
 		return Vector2(_base_visual_scale.x * enemy_orb_scale * size_scale * streak_scale, _base_visual_scale.y * enemy_orb_scale * size_scale) * _get_visual_life_scale()
@@ -510,8 +507,7 @@ func _build_combat_context(target: Node) -> Dictionary:
 		"is_tick": false,
 		"source_type": source_type,
 		"trigger_passives": trigger_passives,
-		"rapid_fire_level": rapid_fire_level,
-		"velocity_level": velocity_level,
+		"source_player_index": source_player_index,
 		"explosion_radius": explosion_radius,
 		"explosion_damage": int(round(float(damage) * explosion_damage_percent)),
 		"slow_multiplier": slow_multiplier,

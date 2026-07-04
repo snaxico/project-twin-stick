@@ -11,6 +11,14 @@ const MOUSE_AIM_IDLE_SECONDS := 0.65
 const MAX_MOMENTUM_TIER := 4
 const ABILITY_SLOT_COUNT := 4
 const ABILITY_FACE_BUTTONS := [JOY_BUTTON_A, JOY_BUTTON_X, JOY_BUTTON_Y, JOY_BUTTON_B]
+const BLOODTHIRST_OVERSHIELD_DECAY_PER_SECOND := 5.0
+const BLOODTHIRST_MAX_OVERSHIELD_RATIO := 0.65
+const OVERHEAT_MAX_HEAT := 100.0
+const OVERHEAT_HEAT_PER_CAST := 12.0
+const OVERHEAT_DECAY_PER_SECOND := 14.0
+const OVERHEAT_DECAY_DELAY := 0.75
+const OVERHEAT_DAMAGE_PER_HEAT := 0.006
+const OVERHEAT_VULNERABILITY_PER_HEAT := 0.005
 
 const FLASH_SHADER_CODE := """
 shader_type canvas_item;
@@ -67,6 +75,8 @@ var _weapon_area := 4.0
 var _weapon_feedback_profile := "rifle"
 var _weapon_impact_weight := 1.0
 var _weapon_stats: Dictionary = {}
+var _class_id := ""
+var _passive_id := ""
 var _ability_slots: Array = []
 var _ability_pressed_last_frame := []
 var _dash_states: Dictionary = {}
@@ -92,6 +102,10 @@ var _buff_damage: float = 1.0
 var _momentum_tier := 0
 var _momentum_move_bonus := 0.0
 var _momentum_fire_rate_bonus := 0.0
+var _overshield := 0.0
+var _overheat_heat := 0.0
+var _overheat_damage_bonus := 0.0
+var _last_heat_gain_at := -999.0
 var _base_visual_scale := Vector2.ONE
 var _base_shadow_scale := Vector2.ONE
 var _aim_reticle: Line2D = null
@@ -145,7 +159,13 @@ func get_health_ratio_text() -> String:
 	return "DOWN" if _is_downed else "%d/%d" % [current_health, max_health]
 
 func get_health_state() -> Dictionary:
-	return {"current": current_health, "max": max_health}
+	return {"current": current_health, "max": max_health, "overshield": int(ceil(_overshield)), "heat": int(round(_overheat_heat))}
+
+func has_passive(passive_id: String) -> bool:
+	return _passive_id == passive_id
+
+func has_class(class_id: String) -> bool:
+	return _class_id == class_id
 
 func get_weapon_profile_name() -> String:
 	return _weapon_profile_name
@@ -193,6 +213,8 @@ func set_input_locked(locked: bool) -> void:
 
 func apply_loadout(loadout: Dictionary) -> void:
 	_mutation_ids = (loadout.get("mutations", []) as Array).duplicate()
+	_class_id = str(loadout.get("class_id", ""))
+	_passive_id = str(loadout.get("passive_id", ""))
 	_base_move_speed = float(loadout.get("move_speed", move_speed))
 	_base_max_health = max(1, int(loadout.get("max_health", max_health)))
 	max_health = _base_max_health
@@ -240,6 +262,11 @@ func apply_loadout(loadout: Dictionary) -> void:
 	_modifier_move_speed_sources["upgrade_move_speed"] = 1.0 + float(loadout.get("move_speed_bonus", 0.0))
 	_modifier_attack_speed_sources["upgrade_fire_rate"] = 1.0 + float(_weapon_stats.get("fire_rate_bonus", 0.0))
 	_modifier_damage_sources["upgrade_damage"] = 1.0 + float(_weapon_stats.get("damage_bonus", 0.0))
+	if _passive_id != "bloodthirst":
+		_overshield = 0.0
+	if _passive_id != "overheat":
+		_overheat_heat = 0.0
+		_overheat_damage_bonus = 0.0
 	_recompute_effective_stats()
 	health_changed.emit(current_health, max_health)
 
@@ -302,6 +329,19 @@ func heal(amount: int) -> bool:
 	health_changed.emit(current_health, max_health)
 	return true
 
+func apply_bloodthirst_heal(amount: int, overshield_multiplier: float = 1.0) -> void:
+	if _passive_id != "bloodthirst" or amount <= 0 or _is_downed:
+		return
+	var remaining := amount
+	if current_health < max_health:
+		var healed := mini(max_health - current_health, remaining)
+		current_health += healed
+		remaining -= healed
+	if current_health >= max_health:
+		var overshield_gain := float(amount if remaining <= 0 else remaining) * maxf(overshield_multiplier, 0.0)
+		_overshield = minf(_overshield + overshield_gain, float(max_health) * BLOODTHIRST_MAX_OVERSHIELD_RATIO)
+	health_changed.emit(current_health, max_health)
+
 func apply_damage(amount: int) -> void:
 	if _is_downed or amount <= 0:
 		return
@@ -311,9 +351,17 @@ func apply_damage(amount: int) -> void:
 	if _is_damage_immune(now):
 		return
 	_contact_invuln_until = now + CONTACT_INVULN_DURATION
-	current_health = max(current_health - amount, 0)
+	var incoming_amount := int(ceil(float(amount) * (1.0 + _get_overheat_vulnerability_bonus())))
+	if _overshield > 0.0:
+		var absorbed := minf(_overshield, float(incoming_amount))
+		_overshield -= absorbed
+		incoming_amount -= int(round(absorbed))
+	if incoming_amount <= 0:
+		health_changed.emit(current_health, max_health)
+		return
+	current_health = max(current_health - incoming_amount, 0)
 	health_changed.emit(current_health, max_health)
-	damage_taken.emit(self, amount, current_health)
+	damage_taken.emit(self, incoming_amount, current_health)
 	_play_damage_flash()
 	if current_health <= 0:
 		_enter_downed_state()
@@ -376,6 +424,7 @@ func is_secondary_skill_shield_active() -> bool:
 
 func _physics_process(delta: float) -> void:
 	var now := _current_time_seconds()
+	_update_passive_runtime(delta, now)
 	_update_blink_charges(now)
 	_update_shield_burst(now)
 	_update_buffered_dashes(now)
@@ -589,7 +638,7 @@ func _apply_shockdash_hits(now: float) -> void:
 			if enemy_node.global_position.distance_squared_to(global_position) > overlap_radius * overlap_radius:
 				continue
 			if enemy.has_method("apply_damage"):
-				enemy.apply_damage(passthrough_damage)
+				enemy.apply_damage(passthrough_damage, player_index)
 			hit_targets.append(enemy)
 		_dash_hit_targets[slot_index] = hit_targets
 
@@ -684,11 +733,7 @@ func _can_attack(now: float) -> bool:
 	return not _is_slot_active_by_id("shield", now) and not _is_downed
 
 func _fire_weapon(now: float, fire_direction: Vector2) -> void:
-	var rapid_fire_level := _get_mutation_level("rapid_fire")
-	var velocity_level := _get_mutation_level("velocity")
 	var muzzle_weight := _weapon_impact_weight
-	if rapid_fire_level >= 3:
-		muzzle_weight += 0.28
 	if _is_slot_active_by_id("overcharge", now):
 		muzzle_weight += 0.2
 	_next_weapon_fire_at = now + _get_current_weapon_fire_interval()
@@ -720,9 +765,8 @@ func _fire_weapon(now: float, fire_direction: Vector2) -> void:
 	var max_momentum_pierce := int(projectile_config.get("pierce_at_max_momentum", 0))
 	if max_momentum_pierce > 0 and _momentum_tier >= MAX_MOMENTUM_TIER and str(projectile_config.get("projectile_kind", "bullet")) != "beam":
 		projectile_config["pierce_count"] = int(projectile_config.get("pierce_count", 0)) + max_momentum_pierce
-	projectile_config["rapid_fire_level"] = rapid_fire_level
-	projectile_config["velocity_level"] = velocity_level
 	projectile_config["source_type"] = "weapon"
+	projectile_config["source_player_index"] = player_index
 	fire_requested.emit(global_position + fire_direction * 24.0, fire_direction, projectile_config)
 
 func _get_current_weapon_fire_interval() -> float:
@@ -808,6 +852,8 @@ func _on_dash_started(slot_index: int, now: float) -> void:
 
 func _emit_ability(slot_index: int, direction: Vector2) -> void:
 	var slot := _get_ability_slot(slot_index)
+	if _passive_id == "overheat":
+		_add_overheat(OVERHEAT_HEAT_PER_CAST)
 	var payload: Dictionary = (slot.get("stats", {}) as Dictionary).duplicate(true)
 	payload["ability_id"] = str(slot.get("id", ""))
 	payload["cooldown"] = float(slot.get("cooldown", 0.0))
@@ -816,6 +862,31 @@ func _emit_ability(slot_index: int, direction: Vector2) -> void:
 	payload["slot_index"] = slot_index
 	payload["owner"] = self
 	ability_activated.emit(self, slot_index, str(slot.get("id", "")), global_position, direction.normalized() if direction.length() > 0.0 else Vector2.RIGHT, payload)
+
+func _update_passive_runtime(delta: float, now: float) -> void:
+	if _overshield > 0.0:
+		_overshield = maxf(0.0, _overshield - BLOODTHIRST_OVERSHIELD_DECAY_PER_SECOND * delta)
+	if _passive_id != "overheat":
+		return
+	if _overheat_heat <= 0.0 or now < _last_heat_gain_at + OVERHEAT_DECAY_DELAY:
+		return
+	_set_overheat_heat(maxf(0.0, _overheat_heat - OVERHEAT_DECAY_PER_SECOND * delta))
+
+func _add_overheat(amount: float) -> void:
+	_last_heat_gain_at = _current_time_seconds()
+	_set_overheat_heat(minf(OVERHEAT_MAX_HEAT, _overheat_heat + amount))
+
+func _set_overheat_heat(value: float) -> void:
+	var previous_damage_bonus := _overheat_damage_bonus
+	_overheat_heat = clampf(value, 0.0, OVERHEAT_MAX_HEAT)
+	_overheat_damage_bonus = _overheat_heat * OVERHEAT_DAMAGE_PER_HEAT
+	if not is_equal_approx(previous_damage_bonus, _overheat_damage_bonus):
+		_recompute_effective_stats()
+
+func _get_overheat_vulnerability_bonus() -> float:
+	if _passive_id != "overheat":
+		return 0.0
+	return _overheat_heat * OVERHEAT_VULNERABILITY_PER_HEAT
 
 func _is_slot_ready(slot_index: int, now: float) -> bool:
 	return get_ability_cooldown_remaining(slot_index) <= 0.0 and not _is_slot_active(slot_index, now)
@@ -1084,4 +1155,4 @@ func _additive_modifier(sources: Dictionary, extra_bonus: float = 0.0) -> float:
 func _recompute_effective_stats() -> void:
 	move_speed = _base_move_speed * _additive_modifier(_modifier_move_speed_sources, (_buff_move_speed - 1.0) + _momentum_move_bonus)
 	weapon_fire_interval = _base_weapon_fire_interval / _additive_modifier(_modifier_attack_speed_sources, (_buff_attack_speed - 1.0) + _momentum_fire_rate_bonus)
-	projectile_damage = int(round(float(_base_projectile_damage) * _additive_modifier(_modifier_damage_sources, _buff_damage - 1.0)))
+	projectile_damage = int(round(float(_base_projectile_damage) * _additive_modifier(_modifier_damage_sources, (_buff_damage - 1.0) + _overheat_damage_bonus)))

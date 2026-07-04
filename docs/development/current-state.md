@@ -6,12 +6,13 @@ Godot `4.6.2` same-screen local co-op neon roguelite prototype.
 
 The active V4 implementation work is in `D:\GameDev\Project_Twin_stick_v4` on branch `v4/class-system`.
 The original `D:\GameDev\Project_Twin_stick` checkout remains the untouched V3 playtest baseline for A/B
-testing. V4 Slices 0-3 of `docs/development/v4-implementation-plan.md` are implemented and validated: class
+testing. V4 Slices 0-4 of `docs/development/v4-implementation-plan.md` are implemented and validated: class
 data loads, existing weapons/abilities have tags, the runtime kit stores four abilities, P1/P2 abilities are
 bound to face buttons, and the pre-run setup now selects class -> class weapon -> three class abilities with
 the class ultimate inserted into slot 4. Mutations now gate through the V4 tag rule: `requires` must be a
 subset of the equipped kit's tags, with `apply` describing the effect target layer. Existing player
-deployables now share a destructible HP interface and no longer self-expire by lifetime.
+deployables now share a destructible HP interface and no longer self-expire by lifetime. Class passives now
+drive runtime behavior for Mobile, Tank, Controller, and Risk.
 
 ## Current Runtime
 
@@ -100,6 +101,12 @@ deployables now share a destructible HP interface and no longer self-expire by l
   `DeployableNode` HP/damage/death contract and participate in the `player_target` group.
 - Player deployables persist until destroyed, triggered, or their owner disappears; their old lifetime
   countdown despawn paths are removed.
+- Class passives:
+  - Mobile Momentum is class-exclusive; non-Mobile players stay at Momentum tier `0`.
+  - Tank Bloodthirst heals on kills credited to the Tank and converts full-HP kills into decaying overshield.
+  - Controller Radiance boosts summon/deployable stats and applies a nearby ally/self damage aura.
+  - Risk Overheat fixes ability cooldowns at `0.5s`, builds Heat on every ability cast, decays Heat after a
+    short idle delay, and scales outgoing damage plus incoming damage taken.
 - Aim modes are `auto`, `movement`, and `manual`.
 
 ## Encounter Systems
@@ -204,6 +211,8 @@ Last validation run in this state:
   - result: `deployable_health_check=passed`
 - Latest PerfRunner result after Slice 3:
   - `avg_fps=144.9`, `min_fps=144.0`, `max_frame_ms=6.903`.
+- Latest PerfRunner result after Slice 4:
+  - `avg_fps=144.9`, `min_fps=144.0`, `max_frame_ms=6.903`.
 
 ## Known Risks
 
@@ -221,8 +230,7 @@ Last validation run in this state:
 
 ## Next Step
 
-Continue `docs/development/v4-implementation-plan.md` with Slice 4 in the V4 worktree:
+Continue `docs/development/v4-implementation-plan.md` with Slice 5 in the V4 worktree:
 
-- implement class passives: Mobile Momentum exclusivity, Tank Bloodthirst/overshield, Controller Radiance,
-  and Risk Overheat
-- wire passive effects into combat hooks and HUD/runtime feedback where needed
+- replace Whirlwind, Arc Wand, and Flamethrower stubs with real weapon behaviors
+- add projectile/attack kinds for melee, chain, and cone
