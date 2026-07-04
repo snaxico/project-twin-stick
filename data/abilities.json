@@ -146,167 +146,271 @@
     {
       "id": "afterburn",
       "name": "Afterburn",
-      "description": "Placeholder class ability. Goes on cooldown until the trail behavior is authored.",
+      "description": "Drop a burning field at your position.",
       "tags": ["field"],
       "slot": "class",
-      "type": "instant",
-      "cooldown": 6.0,
-      "duration": 0.0,
-      "stats": {}
+      "type": "sustained",
+      "cooldown": 8.0,
+      "duration": 3.0,
+      "stats": {
+        "trail_radius": 88.0,
+        "damage": 9,
+        "tick_interval": 0.35,
+        "knockback_force": 80.0
+      }
     },
     {
       "id": "momentum_burst",
       "name": "Momentum Burst",
-      "description": "Placeholder class ability. Goes on cooldown until the burst behavior is authored.",
+      "description": "Blast nearby enemies, scaling with Momentum tier.",
       "tags": ["blast"],
       "slot": "class",
       "type": "instant",
-      "cooldown": 6.0,
+      "cooldown": 7.0,
       "duration": 0.0,
-      "stats": {}
+      "stats": {
+        "damage": 24,
+        "momentum_damage_per_tier": 8,
+        "radius": 250.0,
+        "knockback_force": 720.0,
+        "expand_duration": 0.14
+      }
     },
     {
       "id": "deflect",
       "name": "Deflect",
-      "description": "Placeholder class ability. Goes on cooldown until projectile reflection is authored.",
+      "description": "Erase nearby enemy projectiles and pulse damage.",
       "tags": ["defense"],
       "slot": "class",
       "type": "instant",
-      "cooldown": 6.0,
+      "cooldown": 8.0,
       "duration": 0.0,
-      "stats": {}
+      "stats": {
+        "radius": 210.0,
+        "reflect_damage": 14,
+        "damage_per_projectile": 3,
+        "expand_duration": 0.12
+      }
     },
     {
       "id": "sonic_boom",
       "name": "Sonic Boom",
-      "description": "Placeholder class ability. Goes on cooldown until the line wave is authored.",
+      "description": "Fire a fast piercing pressure wave.",
       "tags": ["bolt"],
       "slot": "class",
       "type": "instant",
-      "cooldown": 6.0,
+      "cooldown": 5.0,
       "duration": 0.0,
-      "stats": {}
+      "stats": {
+        "damage": 28,
+        "speed": 1200.0,
+        "range": 760.0,
+        "pierce_count": 5,
+        "collision_half_width": 14.0,
+        "knockback_force": 320.0,
+        "projectile_shape": "diamond",
+        "feedback_profile": "beam"
+      }
     },
     {
       "id": "ground_slam",
       "name": "Ground Slam",
-      "description": "Placeholder class ability. Goes on cooldown until the slam behavior is authored.",
+      "description": "Heavy radial slam with strong knockback.",
       "tags": ["blast"],
       "slot": "class",
       "type": "instant",
       "cooldown": 6.0,
       "duration": 0.0,
-      "stats": {}
+      "stats": {
+        "damage": 38,
+        "radius": 230.0,
+        "knockback_force": 1050.0,
+        "expand_duration": 0.18
+      }
     },
     {
       "id": "quake",
       "name": "Quake",
-      "description": "Placeholder class ability. Goes on cooldown until the field behavior is authored.",
+      "description": "Leave a damaging rupture zone.",
       "tags": ["field"],
       "slot": "class",
-      "type": "instant",
-      "cooldown": 6.0,
-      "duration": 0.0,
-      "stats": {}
+      "type": "sustained",
+      "cooldown": 9.0,
+      "duration": 4.0,
+      "stats": {
+        "radius": 185.0,
+        "damage": 10,
+        "tick_interval": 0.45,
+        "knockback_force": 120.0
+      }
     },
     {
       "id": "blood_lance",
       "name": "Blood Lance",
-      "description": "Placeholder class ability. Goes on cooldown until the piercing line is authored.",
+      "description": "Throw a hard piercing lance.",
       "tags": ["bolt"],
       "slot": "class",
       "type": "instant",
-      "cooldown": 6.0,
+      "cooldown": 5.5,
       "duration": 0.0,
-      "stats": {}
+      "stats": {
+        "damage": 42,
+        "speed": 1180.0,
+        "range": 820.0,
+        "pierce_count": 8,
+        "collision_half_width": 10.0,
+        "knockback_force": 240.0,
+        "projectile_shape": "diamond",
+        "feedback_profile": "rifle"
+      }
     },
     {
       "id": "summon",
       "name": "Summon",
-      "description": "Placeholder class ability. Goes on cooldown until persistent constructs are authored.",
+      "description": "Create persistent melee constructs.",
       "tags": ["summon"],
       "slot": "class",
       "type": "instant",
-      "cooldown": 6.0,
+      "cooldown": 12.0,
       "duration": 0.0,
-      "stats": {}
+      "stats": {
+        "construct_count": 2,
+        "construct_health": 100,
+        "damage": 14,
+        "attack_radius": 58.0,
+        "attack_interval": 0.55,
+        "detection_range": 640.0,
+        "move_speed": 260.0,
+        "spread_radius": 72.0
+      }
     },
     {
       "id": "reinforce",
       "name": "Reinforce",
-      "description": "Placeholder class ability. Goes on cooldown until deployable repair is authored.",
+      "description": "Repair nearby deployables.",
       "tags": ["buff"],
       "slot": "class",
       "type": "instant",
-      "cooldown": 6.0,
+      "cooldown": 9.0,
       "duration": 0.0,
-      "stats": {}
+      "stats": {
+        "repair_amount": 55,
+        "radius": 540.0
+      }
     },
     {
       "id": "fireball",
       "name": "Fireball",
-      "description": "Placeholder class ability. Goes on cooldown until the explosive fireball is authored.",
+      "description": "Launch an explosive fire projectile.",
       "tags": ["bolt", "blast", "dot"],
       "slot": "class",
       "type": "instant",
-      "cooldown": 6.0,
+      "cooldown": 4.0,
       "duration": 0.0,
-      "stats": {}
+      "stats": {
+        "damage": 44,
+        "speed": 640.0,
+        "range": 760.0,
+        "collision_half_width": 12.0,
+        "explosion_radius": 150.0,
+        "explosion_damage_percent": 0.75,
+        "leaves_fire_trail": true,
+        "impact_pool_radius": 100.0,
+        "impact_pool_lifetime": 1.6,
+        "impact_pool_damage_percent": 0.25,
+        "trail_tick_interval": 0.35,
+        "projectile_shape": "orb",
+        "feedback_profile": "rocket"
+      }
     },
     {
       "id": "ignite",
       "name": "Ignite",
-      "description": "Placeholder class ability. Goes on cooldown until spreading burn is authored.",
+      "description": "Ignite nearby enemies and make them burst on death.",
       "tags": ["dot"],
       "slot": "class",
       "type": "instant",
-      "cooldown": 6.0,
+      "cooldown": 5.0,
       "duration": 0.0,
-      "stats": {}
+      "stats": {
+        "radius": 230.0,
+        "damage": 8,
+        "burn_dps": 8.0,
+        "burn_duration": 4.0,
+        "ignite_radius": 135.0,
+        "ignite_damage": 20
+      }
     },
     {
       "id": "slipstream",
       "name": "Slipstream",
-      "description": "Placeholder ultimate. Goes on cooldown until the ultimate framework is authored.",
+      "description": "Vent into a short burst of movement and firing speed.",
       "tags": ["mobility"],
       "slot": "ultimate",
-      "type": "instant",
-      "cooldown": 14.0,
-      "duration": 0.0,
-      "stats": {}
+      "type": "sustained",
+      "cooldown": 0.0,
+      "duration": 5.0,
+      "stats": {
+        "move_speed_multiplier": 1.55,
+        "attack_speed_multiplier": 1.35,
+        "damage_multiplier": 1.12,
+        "radius": 300.0
+      }
     },
     {
       "id": "blood_frenzy",
       "name": "Blood Frenzy",
-      "description": "Placeholder ultimate. Goes on cooldown until the ultimate framework is authored.",
+      "description": "Surge with damage, attack speed, and an immediate heal.",
       "tags": ["tank", "buff"],
       "slot": "ultimate",
-      "type": "instant",
-      "cooldown": 14.0,
-      "duration": 0.0,
-      "stats": {}
+      "type": "sustained",
+      "cooldown": 0.0,
+      "duration": 5.0,
+      "stats": {
+        "move_speed_multiplier": 1.08,
+        "attack_speed_multiplier": 1.35,
+        "damage_multiplier": 1.28,
+        "heal": 35
+      }
     },
     {
       "id": "overload_grid",
       "name": "Overload Grid",
-      "description": "Placeholder ultimate. Goes on cooldown until the ultimate framework is authored.",
+      "description": "Repair the field and deploy overcharged constructs.",
       "tags": ["controller", "summon", "buff"],
       "slot": "ultimate",
       "type": "instant",
-      "cooldown": 14.0,
+      "cooldown": 0.0,
       "duration": 0.0,
-      "stats": {}
+      "stats": {
+        "radius": 720.0,
+        "repair_amount": 90,
+        "construct_count": 3,
+        "construct_health": 160,
+        "damage": 22,
+        "attack_radius": 62.0,
+        "attack_interval": 0.45,
+        "detection_range": 760.0,
+        "move_speed": 300.0
+      }
     },
     {
       "id": "firestorm",
       "name": "Firestorm",
-      "description": "Placeholder ultimate. Goes on cooldown until the ultimate framework is authored.",
+      "description": "Vent Heat into a ring of burning zones.",
       "tags": ["risk", "blast", "dot"],
       "slot": "ultimate",
-      "type": "instant",
-      "cooldown": 14.0,
-      "duration": 0.0,
-      "stats": {}
+      "type": "sustained",
+      "cooldown": 0.0,
+      "duration": 5.0,
+      "stats": {
+        "zone_count": 8,
+        "spread_radius": 260.0,
+        "radius": 150.0,
+        "damage": 18,
+        "tick_interval": 0.32,
+        "knockback_force": 120.0
+      }
     }
   ]
 }

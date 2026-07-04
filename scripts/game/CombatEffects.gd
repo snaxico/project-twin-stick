@@ -101,6 +101,7 @@ func spawn_player_shockwave(origin: Vector2, stats: Dictionary) -> void:
 	var radius := float(stats.get("radius", 250.0))
 	var damage := int(round(float(stats.get("damage", 30.0))))
 	var knockback_force := float(stats.get("knockback_force", 950.0))
+	var source_player_index := int(stats.get("source_player_index", -1))
 	for enemy in _coop.call("get_nearby_enemy_target_nodes", origin, radius):
 		if enemy == null or not is_instance_valid(enemy) or not enemy.is_alive():
 			continue
@@ -108,7 +109,7 @@ func spawn_player_shockwave(origin: Vector2, stats: Dictionary) -> void:
 		var distance: float = offset.length()
 		if distance > radius:
 			continue
-		enemy.apply_damage(damage)
+		enemy.apply_damage(damage, source_player_index)
 		_coop.call("spawn_target_hit_spark", enemy.global_position, offset.normalized() if distance > 0.0 else Vector2.UP, stats.get("color", Color.WHITE), 1.0)
 		if enemy.has_method("apply_knockback"):
 			var radial_direction: Vector2 = offset.normalized() if distance > 0.0 else Vector2.RIGHT

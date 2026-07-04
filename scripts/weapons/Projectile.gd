@@ -376,7 +376,8 @@ func _spawn_impact_fire_pool() -> void:
 		impact_pool_lifetime,
 		trail_tick_interval,
 		team,
-		knockback_force
+		knockback_force,
+		source_player_index
 	)
 	get_parent().add_child(pool)
 

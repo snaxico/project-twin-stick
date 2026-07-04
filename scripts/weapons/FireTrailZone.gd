@@ -7,17 +7,19 @@ var lifetime: float = 1.5
 var tick_interval: float = 0.5
 var team: String = "player"
 var knockback_force: float = 0.0
+var source_player_index := -1
 
 var _expires_at: float = 0.0
 var _next_tick_at: float = 0.0
 
-func configure(zone_radius: float, zone_damage: int, zone_lifetime: float, zone_tick_interval: float, zone_team: String, zone_knockback_force: float = 0.0) -> void:
+func configure(zone_radius: float, zone_damage: int, zone_lifetime: float, zone_tick_interval: float, zone_team: String, zone_knockback_force: float = 0.0, zone_source_player_index: int = -1) -> void:
 	radius = max(zone_radius, 8.0)
 	damage = max(zone_damage, 1)
 	lifetime = max(zone_lifetime, 0.1)
 	tick_interval = max(zone_tick_interval, 0.1)
 	team = zone_team
 	knockback_force = max(zone_knockback_force, 0.0)
+	source_player_index = zone_source_player_index
 	queue_redraw()
 
 func _ready() -> void:
@@ -49,7 +51,10 @@ func _apply_tick_damage() -> void:
 		if knockback_force > 0.0 and target.has_method("apply_knockback"):
 			var knockback_direction := (target_node.global_position - global_position).normalized()
 			target.apply_knockback(knockback_direction, knockback_force)
-		target.apply_damage(damage)
+		if team == "player":
+			target.apply_damage(damage, source_player_index)
+		else:
+			target.apply_damage(damage)
 
 func _get_targets_for_team() -> Array:
 	var combat_owner := _get_combat_owner()

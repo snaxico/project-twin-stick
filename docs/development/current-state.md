@@ -6,14 +6,15 @@ Godot `4.6.2` same-screen local co-op neon roguelite prototype.
 
 The active V4 implementation work is in `D:\GameDev\Project_Twin_stick_v4` on branch `v4/class-system`.
 The original `D:\GameDev\Project_Twin_stick` checkout remains the untouched V3 playtest baseline for A/B
-testing. V4 Slices 0-5 of `docs/development/v4-implementation-plan.md` are implemented and validated: class
+testing. V4 Slices 0-6 of `docs/development/v4-implementation-plan.md` are implemented and validated: class
 data loads, existing weapons/abilities have tags, the runtime kit stores four abilities, P1/P2 abilities are
 bound to face buttons, and the pre-run setup now selects class -> class weapon -> three class abilities with
 the class ultimate inserted into slot 4. Mutations now gate through the V4 tag rule: `requires` must be a
 subset of the equipped kit's tags, with `apply` describing the effect target layer. Existing player
 deployables now share a destructible HP interface and no longer self-expire by lifetime. Class passives now
 drive runtime behavior for Mobile, Tank, Controller, and Risk. The three new class weapons now have real
-attack kinds instead of placeholder bullets.
+attack kinds instead of placeholder bullets. The new class abilities and ultimates now have first-pass runtime
+behavior, and Mobile/Tank/Controller ultimates charge from combat while Risk's Firestorm gates from Heat.
 
 ## Current Runtime
 
@@ -70,8 +71,8 @@ attack kinds instead of placeholder bullets.
   - `tank`: Shotgun or Whirlwind; Dash, Ground Slam, Quake, Orbit, Overcharge, Blood Lance; ultimate Blood Frenzy.
   - `controller`: Beam or Arc Wand; Dash, Turret, Minefield, Orbit, Summon, Reinforce; ultimate Overload Grid.
   - `risk`: Flamethrower or Rocket Launcher; Dash, Overcharge, Shockwave, Shield, Fireball, Ignite; ultimate Firestorm.
-- Forward-referenced Slice 5-6 weapons, abilities, and ultimates exist as stubs so loadouts resolve:
-  Whirlwind, Arc Wand, Flamethrower, the new class abilities, and the four ultimates.
+- Forward-referenced Slice 5-6 weapons, abilities, and ultimates have been replaced with first-pass runtime
+  behavior.
 - Live weapons:
   - `Rifle`
   - `Rocket Launcher`
@@ -94,8 +95,24 @@ attack kinds instead of placeholder bullets.
   - `Turret`
   - `Minefield`
   - `Orbit`
-- Stubbed class abilities / ultimates are present for loadout resolution and go on cooldown with activation
-  feedback until their content slices replace them.
+  - `Afterburn`: player-owned burning field
+  - `Momentum Burst`: radial blast that scales with Momentum tier
+  - `Deflect`: destroys nearby enemy projectiles and pulses damage
+  - `Sonic Boom`: fast piercing line projectile
+  - `Ground Slam`: heavy radial blast
+  - `Quake`: persistent damaging rupture field
+  - `Blood Lance`: hard piercing line projectile
+  - `Summon`: persistent melee constructs using the deployable HP contract
+  - `Reinforce`: repairs nearby player deployables
+  - `Fireball`: explosive fire projectile with fire pool
+  - `Ignite`: applies burn and ignite-on-death bursts
+  - `Slipstream`: Mobile ultimate speed/attack/damage burst plus projectile clear
+  - `Blood Frenzy`: Tank ultimate damage/attack burst plus immediate Bloodthirst heal
+  - `Overload Grid`: Controller ultimate deployable repair plus overcharged constructs
+  - `Firestorm`: Risk Heat-gated ultimate that vents into burning zones
+- The locked fourth ability slot is the ultimate slot. Mobile/Tank/Controller ultimates use `UltimateCharge`
+  and fill from credited damage/kills; Firestorm is gated by Risk Heat. Unready ultimate presses are no-ops,
+  and activation resets the relevant meter.
 - All class-pool weapons, abilities, and ultimates are free from the start; premium mutation/unlock trimming
   remains a later V4 slice.
 - Mutation offers are filtered by equipped class/passive/weapon/ability/ultimate tags plus selected mutation
@@ -222,6 +239,12 @@ Last validation run in this state:
   - result: `weapon_kind_check=passed`
 - Latest PerfRunner result after Slice 5:
   - `avg_fps=144.9`, `min_fps=144.0`, `max_frame_ms=6.944`.
+- Slice 6 ability/ultimate acceptance:
+  - temporary Godot script verified all new ability/ultimate ids have non-placeholder stats/descriptions
+  - `UltimateCharge` fills from damage and resets the player-facing meter
+  - result: `ability_slice6_check=passed`
+- Latest PerfRunner result after Slice 6:
+  - `avg_fps=145.0`, `min_fps=144.0`, `max_frame_ms=6.944`.
 
 ## Known Risks
 
@@ -239,7 +262,7 @@ Last validation run in this state:
 
 ## Next Step
 
-Continue `docs/development/v4-implementation-plan.md` with Slice 6 in the V4 worktree:
+Continue `docs/development/v4-implementation-plan.md` with Slice 7 in the V4 worktree:
 
-- implement the new class abilities and ultimates
-- add the ultimate charge framework and HUD readiness feedback
+- trim retired unlock table entries
+- keep base kits free and add premium unlock entries for signatures/parasites

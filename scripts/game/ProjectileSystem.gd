@@ -385,7 +385,9 @@ func _update_beam_fire_pool(state: Dictionary, hit_position: Vector2, projectile
 		max(1, int(round(float(projectile_config.get("max_damage_per_second", projectile_config.get("damage", 1.0))) * damage_percent))),
 		lifetime,
 		maxf(float(projectile_config.get("trail_tick_interval", 0.5)), 0.1),
-		"player"
+		"player",
+		0.0,
+		int(projectile_config.get("source_player_index", -1))
 	)
 	state["next_fire_pool_at"] = now + maxf(float(projectile_config.get("beam_fire_pool_cooldown", 0.5)), 0.1)
 

@@ -19,6 +19,7 @@ const OVERHEAT_DECAY_PER_SECOND := 14.0
 const OVERHEAT_DECAY_DELAY := 0.75
 const OVERHEAT_DAMAGE_PER_HEAT := 0.006
 const OVERHEAT_VULNERABILITY_PER_HEAT := 0.005
+const OVERHEAT_ULTIMATE_HEAT_THRESHOLD := 70.0
 
 const FLASH_SHADER_CODE := """
 shader_type canvas_item;
@@ -106,6 +107,7 @@ var _overshield := 0.0
 var _overheat_heat := 0.0
 var _overheat_damage_bonus := 0.0
 var _last_heat_gain_at := -999.0
+var _ultimate_charge := 0.0
 var _base_visual_scale := Vector2.ONE
 var _base_shadow_scale := Vector2.ONE
 var _aim_reticle: Line2D = null
@@ -159,13 +161,19 @@ func get_health_ratio_text() -> String:
 	return "DOWN" if _is_downed else "%d/%d" % [current_health, max_health]
 
 func get_health_state() -> Dictionary:
-	return {"current": current_health, "max": max_health, "overshield": int(ceil(_overshield)), "heat": int(round(_overheat_heat))}
+	return {"current": current_health, "max": max_health, "overshield": int(ceil(_overshield)), "heat": int(round(_overheat_heat)), "ultimate": _ultimate_charge}
 
 func has_passive(passive_id: String) -> bool:
 	return _passive_id == passive_id
 
 func has_class(class_id: String) -> bool:
 	return _class_id == class_id
+
+func set_ultimate_charge(value: float) -> void:
+	_ultimate_charge = clampf(value, 0.0, 1.0)
+
+func get_ultimate_charge() -> float:
+	return _ultimate_charge
 
 func get_weapon_profile_name() -> String:
 	return _weapon_profile_name
@@ -189,11 +197,14 @@ func get_secondary_skill_hud_data() -> Dictionary:
 func get_ability_hud_data(slot_index: int) -> Dictionary:
 	var slot := _get_ability_slot(slot_index)
 	_update_blink_charges(_current_time_seconds())
+	var cooldown_duration := float(slot.get("cooldown", 1.0))
+	if _is_ultimate_slot(slot_index, slot):
+		cooldown_duration = 1.0
 	return {
 		"skill_id": str(slot.get("id", "")),
 		"name": str(slot.get("name", "Ability")),
 		"cooldown_remaining": get_ability_cooldown_remaining(slot_index),
-		"cooldown_duration": float(slot.get("cooldown", 1.0)),
+		"cooldown_duration": cooldown_duration,
 		"base_cooldown": float(slot.get("base_cooldown", slot.get("cooldown", 1.0))),
 		"charges_current": int(slot.get("charges_current", 1)),
 		"charges_max": int(slot.get("charges_max", 1)),
@@ -389,6 +400,8 @@ func get_ability_cooldown_remaining(slot_index: int) -> float:
 	var slot := _get_ability_slot(slot_index)
 	var ability_id := str(slot.get("id", ""))
 	var now := _current_time_seconds()
+	if _is_ultimate_slot(slot_index, slot):
+		return 0.0 if _is_ultimate_ready(slot_index, slot) else 1.0 - _get_ultimate_ready_ratio(slot)
 	if ability_id == "dash" and _dash_states.has(slot_index):
 		return (_dash_states[slot_index] as DashData).get_cooldown_remaining(now)
 	if ability_id == "blink":
@@ -495,6 +508,7 @@ func _build_runtime_ability(definition: Dictionary, fallback_id: String) -> Dict
 		"id": ability_id,
 		"name": str(definition.get("name", ability_id.capitalize())),
 		"type": str(definition.get("type", "instant")),
+		"slot": str(definition.get("slot", "")),
 		"cooldown": float(definition.get("cooldown", 1.0)),
 		"duration": float(definition.get("duration", 0.0)),
 		"cooldown_until": 0.0,
@@ -790,6 +804,8 @@ func _try_activate_ability(slot_index: int, now: float) -> void:
 	var direction := _move_facing if _move_facing.length() > 0.0 else Vector2.RIGHT
 	if _get_move_input().length() <= 0.0 and _aim_facing.length() > 0.0:
 		direction = _aim_facing
+	if _is_ultimate_slot(slot_index, slot) and not _is_ultimate_ready(slot_index, slot):
+		return
 	match ability_id:
 		"dash":
 			var dash_state := _dash_states.get(slot_index, null) as DashData
@@ -852,16 +868,24 @@ func _on_dash_started(slot_index: int, now: float) -> void:
 
 func _emit_ability(slot_index: int, direction: Vector2) -> void:
 	var slot := _get_ability_slot(slot_index)
-	if _passive_id == "overheat":
+	var ability_id := str(slot.get("id", ""))
+	var is_ultimate := _is_ultimate_slot(slot_index, slot)
+	if _passive_id == "overheat" and not (is_ultimate and ability_id == "firestorm"):
 		_add_overheat(OVERHEAT_HEAT_PER_CAST)
 	var payload: Dictionary = (slot.get("stats", {}) as Dictionary).duplicate(true)
-	payload["ability_id"] = str(slot.get("id", ""))
+	payload["ability_id"] = ability_id
 	payload["cooldown"] = float(slot.get("cooldown", 0.0))
 	payload["duration"] = float(slot.get("duration", 0.0))
 	payload["color"] = player_config.tint
 	payload["slot_index"] = slot_index
 	payload["owner"] = self
-	ability_activated.emit(self, slot_index, str(slot.get("id", "")), global_position, direction.normalized() if direction.length() > 0.0 else Vector2.RIGHT, payload)
+	payload["source_player_index"] = player_index
+	if is_ultimate:
+		if _passive_id == "overheat" and ability_id == "firestorm":
+			_set_overheat_heat(0.0)
+		else:
+			_ultimate_charge = 0.0
+	ability_activated.emit(self, slot_index, ability_id, global_position, direction.normalized() if direction.length() > 0.0 else Vector2.RIGHT, payload)
 
 func _update_passive_runtime(delta: float, now: float) -> void:
 	if _overshield > 0.0:
@@ -889,7 +913,27 @@ func _get_overheat_vulnerability_bonus() -> float:
 	return _overheat_heat * OVERHEAT_VULNERABILITY_PER_HEAT
 
 func _is_slot_ready(slot_index: int, now: float) -> bool:
+	var slot := _get_ability_slot(slot_index)
+	if _is_ultimate_slot(slot_index, slot):
+		return _is_ultimate_ready(slot_index, slot)
 	return get_ability_cooldown_remaining(slot_index) <= 0.0 and not _is_slot_active(slot_index, now)
+
+func _is_ultimate_slot(slot_index: int, slot: Dictionary) -> bool:
+	if str(slot.get("slot", "")) == "ultimate":
+		return true
+	return slot_index == ABILITY_SLOT_COUNT - 1 and str(slot.get("id", "")) in ["slipstream", "blood_frenzy", "overload_grid", "firestorm"]
+
+func _is_ultimate_ready(slot_index: int, slot: Dictionary) -> bool:
+	if not _is_ultimate_slot(slot_index, slot):
+		return false
+	if _passive_id == "overheat" and str(slot.get("id", "")) == "firestorm":
+		return _overheat_heat >= OVERHEAT_ULTIMATE_HEAT_THRESHOLD
+	return _ultimate_charge >= 1.0
+
+func _get_ultimate_ready_ratio(slot: Dictionary) -> float:
+	if _passive_id == "overheat" and str(slot.get("id", "")) == "firestorm":
+		return clampf(_overheat_heat / OVERHEAT_ULTIMATE_HEAT_THRESHOLD, 0.0, 1.0)
+	return clampf(_ultimate_charge, 0.0, 1.0)
 
 func _set_slot_cooldown(slot_index: int, now: float) -> void:
 	var slot := _get_ability_slot(slot_index)
