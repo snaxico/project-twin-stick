@@ -3,6 +3,27 @@ extends RefCounted
 
 const MUTATIONS_DATA_PATH := "res://data/mutations.json"
 const PER_TAG_RATE := 0.12
+const CLASS_TAGS := ["mobile", "tank", "controller", "risk"]
+const FUNCTIONAL_TAGS := [
+	"projectile",
+	"beam",
+	"melee",
+	"chain",
+	"cone",
+	"dot",
+	"mobility",
+	"blast",
+	"buff",
+	"defense",
+	"summon",
+	"field",
+	"bolt",
+	"fire",
+	"frost",
+	"toxic",
+	"split",
+	"pierce",
+]
 
 var _definitions: Array = []
 var _definition_map: Dictionary = {}
@@ -39,9 +60,6 @@ func _load_definitions() -> void:
 func apply_mutation(player_index: int, mutation_id: String) -> void:
 	if mutation_id == "__weapon_levelup":
 		RunState.level_up_weapon(player_index)
-		return
-	if mutation_id.begins_with("__weapon_change__"):
-		RunState.set_active_weapon(player_index, mutation_id.trim_prefix("__weapon_change__"))
 		return
 	if not _definition_map.has(mutation_id):
 		return
@@ -101,23 +119,12 @@ func get_compiled_weapon_stats(player_index: int, base_stats: Dictionary) -> Dic
 	var tag_power := _compute_tag_power(player_index)
 	if str(compiled.get("projectile_kind", "bullet")) == "beam":
 		return _get_compiled_beam_stats(player_index, compiled, tag_power)
-	var rapid_fire_count := get_mutation_level(player_index, "rapid_fire")
-	compiled["rapid_fire_level"] = rapid_fire_count
-	if rapid_fire_count > 0:
-		compiled["fire_rate_bonus"] = float(rapid_fire_count) * float(_get_param("rapid_fire", "fire_rate_bonus_per_level", 0.30))
-	var velocity_count := get_mutation_level(player_index, "velocity")
-	compiled["velocity_level"] = velocity_count
-	if velocity_count > 0:
-		compiled["projectile_speed"] = _apply_additive_percent(float(compiled.get("projectile_speed", 850.0)), [float(velocity_count) * float(_get_param("velocity", "speed_bonus_per_level", 0.333))])
-	var high_caliber_count := get_mutation_level(player_index, "high_caliber")
-	if high_caliber_count > 0:
-		compiled["damage_bonus"] = float(high_caliber_count) * float(_get_param("high_caliber", "damage_bonus_per_level", 0.20))
-	var range_count := get_mutation_level(player_index, "range")
-	if range_count > 0:
-		compiled["range"] = _apply_additive_percent(float(compiled.get("range", 950.0)), [float(range_count) * float(_get_param("range", "range_bonus_per_level", 0.20))])
 	if has_mutation(player_index, "ricochet"):
 		compiled["split_count"] = int(_get_param("ricochet", "split_count", 1))
 		_apply_projectile_visual_fields(compiled, "ricochet")
+	if has_mutation(player_index, "piercing_rounds"):
+		compiled["pierce"] = int(compiled.get("pierce", 0)) + int(_get_param("piercing_rounds", "pierce", 3))
+		_apply_projectile_visual_fields(compiled, "piercing_rounds")
 	if has_mutation(player_index, "fire_trail"):
 		compiled["leaves_fire_trail"] = true
 		compiled["trail_lifetime"] = float(_get_param("fire_trail", "trail_lifetime", 1.5))
@@ -142,24 +149,6 @@ func get_compiled_weapon_stats(player_index: int, base_stats: Dictionary) -> Dic
 	return compiled
 
 func _get_compiled_beam_stats(player_index: int, compiled: Dictionary, tag_power: Dictionary) -> Dictionary:
-	var rapid_fire_count := get_mutation_level(player_index, "rapid_fire")
-	compiled["rapid_fire_level"] = rapid_fire_count
-	var dps_bonuses := []
-	var ramp_bonuses := []
-	var high_caliber_count := get_mutation_level(player_index, "high_caliber")
-	if high_caliber_count > 0:
-		dps_bonuses.append(float(high_caliber_count) * float(_get_param("high_caliber", "damage_bonus_per_level", 0.20)))
-	if rapid_fire_count > 0:
-		var rapid_fire_bonus := float(rapid_fire_count) * float(_get_param("rapid_fire", "fire_rate_bonus_per_level", 0.30))
-		dps_bonuses.append(rapid_fire_bonus)
-		ramp_bonuses.append(rapid_fire_bonus)
-	if not dps_bonuses.is_empty():
-		compiled["max_damage_per_second"] = _apply_additive_percent(float(compiled.get("max_damage_per_second", 120.0)), dps_bonuses)
-	if not ramp_bonuses.is_empty():
-		compiled["ramp_seconds"] = maxf(0.1, float(compiled.get("ramp_seconds", 1.5)) / (1.0 + _sum_percent_bonuses(ramp_bonuses)))
-	var range_count := get_mutation_level(player_index, "range")
-	if range_count > 0:
-		compiled["range"] = _apply_additive_percent(float(compiled.get("range", 750.0)), [float(range_count) * float(_get_param("range", "range_bonus_per_level", 0.20))])
 	if has_mutation(player_index, "fire_trail"):
 		compiled["leaves_fire_trail"] = true
 		compiled["trail_tick_interval"] = float(_get_param("fire_trail", "tick_interval", 0.5))
@@ -183,14 +172,20 @@ func _get_compiled_beam_stats(player_index: int, compiled: Dictionary, tag_power
 
 func get_ability_rare_effects(player_index: int, ability_id: String) -> Dictionary:
 	var effects: Dictionary = {}
+	var ability_definition := _get_equipped_ability_definition(player_index, ability_id)
+	if ability_definition.is_empty():
+		return effects
+	var ability_tags: Dictionary = {}
+	_add_tags(ability_tags, ability_definition.get("tags", []) as Array)
 	for mutation_id_variant in RunState.get_mutations(player_index):
 		var mutation_id := str(mutation_id_variant)
 		if not _definition_map.has(mutation_id):
 			continue
 		var mutation: Dictionary = _definition_map[mutation_id] as Dictionary
-		if str(mutation.get("category", "")) != "ability":
+		var apply_scope := str(mutation.get("apply", ""))
+		if apply_scope != "ability" and apply_scope != "deployable":
 			continue
-		if str(mutation.get("requires_ability", "")) != ability_id:
+		if not _mutation_targets_item(mutation, ability_tags):
 			continue
 		var params: Dictionary = (mutation.get("params", {}) as Dictionary).duplicate(true)
 		for key in params.keys():
@@ -309,22 +304,22 @@ func _is_stackable(mutation_id: String) -> bool:
 func _can_still_pick(player_index: int, mutation_id: String) -> bool:
 	if not _is_mutation_unlocked(mutation_id):
 		return false
-	if not _required_ability_is_equipped(player_index, mutation_id):
+	if mutation_id == "quick_reflexes" and _kit_tag_set(player_index).has("risk"):
+		return false
+	if not _mutation_requirements_met(player_index, mutation_id):
 		return false
 	if _is_stackable(mutation_id):
 		return get_mutation_level(player_index, mutation_id) < _get_max_level(mutation_id)
 	return not has_mutation(player_index, mutation_id)
 
-func _required_ability_is_equipped(player_index: int, mutation_id: String) -> bool:
+func _mutation_requirements_met(player_index: int, mutation_id: String) -> bool:
 	if not _definition_map.has(mutation_id):
 		return false
-	var required_ability := str((_definition_map[mutation_id] as Dictionary).get("requires_ability", ""))
-	if required_ability.is_empty():
-		return true
-	var inventory = RunState.get_player_inventory(player_index)
-	if inventory == null:
-		return false
-	return inventory.get_ability_ids().has(required_ability)
+	var tag_set := _kit_tag_set(player_index)
+	for tag_variant in ((_definition_map[mutation_id] as Dictionary).get("requires", []) as Array):
+		if not tag_set.has(str(tag_variant)):
+			return false
+	return true
 
 func _get_rarity(mutation_id: String) -> String:
 	if not _definition_map.has(mutation_id):
@@ -337,7 +332,71 @@ func _get_max_level(mutation_id: String) -> int:
 	return max(int((_definition_map[mutation_id] as Dictionary).get("max_level", 1)), 1)
 
 func _is_mutation_unlocked(mutation_id: String) -> bool:
-	return ProfileState == null or ProfileState.is_content_unlocked("mutation", mutation_id)
+	if ProfileState == null:
+		return true
+	var unlock_id := "mutation:%s" % mutation_id
+	if ProfileState.get_unlock_entry(unlock_id).is_empty():
+		return true
+	return ProfileState.is_content_unlocked("mutation", mutation_id)
+
+func _kit_tag_set(player_index: int) -> Dictionary:
+	var tags: Dictionary = {}
+	var inventory = RunState.get_player_inventory(player_index)
+	if inventory == null:
+		return tags
+	var class_id := str(inventory.class_id)
+	if not class_id.is_empty():
+		tags[class_id] = true
+	var class_definition := RunState.get_class_definition(class_id)
+	_add_tags(tags, class_definition.get("tags", []) as Array)
+	var passive_id := str(inventory.passive_id)
+	if not passive_id.is_empty():
+		tags[passive_id] = true
+	var weapon := RunState.get_weapon(player_index)
+	_add_tags(tags, weapon.get("tags", []) as Array)
+	var ability_ids: Array = inventory.get_ability_ids()
+	for slot_index in range(ability_ids.size()):
+		var ability := RunState.get_ability(player_index, slot_index)
+		_add_tags(tags, ability.get("tags", []) as Array)
+	for mutation_id_variant in RunState.get_mutations(player_index):
+		var mutation_id := str(mutation_id_variant)
+		if not _definition_map.has(mutation_id):
+			continue
+		_add_tags(tags, (_definition_map[mutation_id] as Dictionary).get("tags", []) as Array)
+	return tags
+
+func _add_tags(tag_set: Dictionary, raw_tags: Array) -> void:
+	for tag_variant in raw_tags:
+		var tag := str(tag_variant)
+		if tag.is_empty():
+			continue
+		tag_set[tag] = true
+
+func _get_equipped_ability_definition(player_index: int, ability_id: String) -> Dictionary:
+	var inventory = RunState.get_player_inventory(player_index)
+	if inventory == null:
+		return {}
+	var ability_ids: Array = inventory.get_ability_ids()
+	for slot_index in range(ability_ids.size()):
+		if str(ability_ids[slot_index]) != ability_id:
+			continue
+		return RunState.get_ability(player_index, slot_index)
+	return {}
+
+func _mutation_targets_item(mutation: Dictionary, item_tags: Dictionary) -> bool:
+	var functional_requirements: Array = []
+	for tag_variant in (mutation.get("requires", []) as Array):
+		var tag := str(tag_variant)
+		if CLASS_TAGS.has(tag):
+			continue
+		if FUNCTIONAL_TAGS.has(tag):
+			functional_requirements.append(tag)
+	if functional_requirements.is_empty():
+		return true
+	for tag_variant in functional_requirements:
+		if not item_tags.has(str(tag_variant)):
+			return false
+	return true
 
 func _get_param(mutation_id: String, param_name: String, default_value: Variant) -> Variant:
 	if not _definition_map.has(mutation_id):
@@ -440,13 +499,15 @@ func _map_weapon_stats_to_projectile_keys(compiled: Dictionary) -> void:
 		compiled["explosion_damage_percent"] = float(compiled.get("blast_damage_percent", 0.0))
 	var projectile_kind := str(compiled.get("projectile_kind", "bullet"))
 	var visual := get_base_projectile_visual(projectile_kind)
-	compiled["projectile_shape"] = str(visual.get("projectile_shape", "small_orb"))
-	compiled["trail_style"] = str(visual.get("trail_style", "thin"))
-	compiled["impact_sfx"] = str(visual.get("impact_sfx", "hit"))
+	if not compiled.has("projectile_shape"):
+		compiled["projectile_shape"] = str(visual.get("projectile_shape", "small_orb"))
+	if not compiled.has("trail_style"):
+		compiled["trail_style"] = str(visual.get("trail_style", "thin"))
+	if not compiled.has("impact_sfx"):
+		compiled["impact_sfx"] = str(visual.get("impact_sfx", "hit"))
 
 func _build_weapon_cards(player_index: int) -> Dictionary:
 	var common: Array = []
-	var rare: Array = []
 	var weapon_level := RunState.get_weapon_level(player_index)
 	var active_weapon_id := RunState.get_active_weapon_id(player_index)
 	var active_weapon_name := _get_weapon_name(active_weapon_id)
@@ -454,26 +515,13 @@ func _build_weapon_cards(player_index: int) -> Dictionary:
 		common.append({
 			"id": "__weapon_levelup",
 			"name": "Level Up Weapon",
-			"description": "Raise %s to Lv%d. Weapon level carries when switching." % [active_weapon_name, weapon_level + 1],
+			"description": "Raise %s to Lv%d." % [active_weapon_name, weapon_level + 1],
 			"icon": active_weapon_id,
 			"category": "weapon",
 			"group": "weapon",
 			"rarity": "common",
 		})
-	for weapon in RunState.get_weapon_catalog():
-		var weapon_id := str((weapon as Dictionary).get("id", ""))
-		if weapon_id.is_empty() or weapon_id == active_weapon_id:
-			continue
-		rare.append({
-			"id": "__weapon_change__%s" % weapon_id,
-			"name": "Switch: %s" % str((weapon as Dictionary).get("name", weapon_id)),
-			"description": "Switch to %s at Lv%d." % [str((weapon as Dictionary).get("name", weapon_id)), weapon_level],
-			"icon": weapon_id,
-			"category": "weapon",
-			"group": "weapon",
-			"rarity": "rare",
-		})
-	return {"common": common, "rare": rare}
+	return {"common": common, "rare": []}
 
 func _get_weapon_name(weapon_id: String) -> String:
 	for weapon in RunState.get_weapon_catalog():

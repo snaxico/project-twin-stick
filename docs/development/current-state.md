@@ -6,10 +6,11 @@ Godot `4.6.2` same-screen local co-op neon roguelite prototype.
 
 The active V4 implementation work is in `D:\GameDev\Project_Twin_stick_v4` on branch `v4/class-system`.
 The original `D:\GameDev\Project_Twin_stick` checkout remains the untouched V3 playtest baseline for A/B
-testing. V4 Slices 0-1 of `docs/development/v4-implementation-plan.md` are implemented and validated: class
+testing. V4 Slices 0-2 of `docs/development/v4-implementation-plan.md` are implemented and validated: class
 data loads, existing weapons/abilities have tags, the runtime kit stores four abilities, P1/P2 abilities are
 bound to face buttons, and the pre-run setup now selects class -> class weapon -> three class abilities with
-the class ultimate inserted into slot 4.
+the class ultimate inserted into slot 4. Mutations now gate through the V4 tag rule: `requires` must be a
+subset of the equipped kit's tags, with `apply` describing the effect target layer.
 
 ## Current Runtime
 
@@ -45,6 +46,8 @@ the class ultimate inserted into slot 4.
 - Upgrade rolls support common / rare / Signature rarity. Signature upgrades include tag amplifiers,
   transformers, and parasites.
 - Tags currently seed Fire, Frost, Toxic, Split, Momentum, and Pierce build axes.
+- Retired stat-stick weapon mutations (`rapid_fire`, `velocity`, `high_caliber`, `range`) are removed from
+  mutation data and no longer compile into weapon stats.
 
 ## Loadout / Combat
 
@@ -89,6 +92,9 @@ the class ultimate inserted into slot 4.
   feedback until their content slices replace them.
 - All class-pool weapons, abilities, and ultimates are free from the start; premium mutation/unlock trimming
   remains a later V4 slice.
+- Mutation offers are filtered by equipped class/passive/weapon/ability/ultimate tags plus selected mutation
+  tags. Pierce requires `projectile`, Combustion requires `risk`, and Overgrowth requires a `summon` item.
+- The old in-run weapon-switch reward cards are removed; weapon level-up remains as the weapon reward card.
 - Aim modes are `auto`, `movement`, and `manual`.
 
 ## Encounter Systems
@@ -179,6 +185,14 @@ Last validation run in this state:
 - PerfRunner Hive champion profile:
   - `Godot_v4.6.2-stable_win64_console.exe --headless --path D:\GameDev\Project_Twin_stick_v4 -- --profile=champion:hive --players=2 --build=heavy`
   - Result: `avg_fps=144.4`, `min_fps=143.0`, `max_frame_ms=12.436`.
+- Slice 2 data-level tag acceptance:
+  - projectile kit: Pierce eligible
+  - cone/melee kits: Pierce ineligible
+  - Risk kit: Combustion eligible
+  - non-Risk kit: Combustion ineligible
+  - no-summon kit: Overgrowth ineligible
+- Latest PerfRunner result after Slice 2:
+  - `avg_fps=144.7`, `min_fps=143.0`, `max_frame_ms=19.251`.
 
 ## Known Risks
 
@@ -196,9 +210,8 @@ Last validation run in this state:
 
 ## Next Step
 
-Continue `docs/development/v4-implementation-plan.md` with Slice 2 in the V4 worktree:
+Continue `docs/development/v4-implementation-plan.md` with Slice 3 in the V4 worktree:
 
-- rework mutation eligibility to use `requires ⊆ kit-tags`
-- convert `data/mutations.json` to the new `requires` + `apply` schema
-- build kit tags from equipped class, passive, weapon, three abilities, and ultimate
-- keep the tag layer as compatibility gating only
+- add the shared deployable HP / damage / death interface
+- make Turret, Orbit, Decoy, and player AbilityMine persistent destructible units
+- remove time-expiry despawn from those player deployables
