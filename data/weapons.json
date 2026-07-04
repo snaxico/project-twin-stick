@@ -106,52 +106,58 @@
     {
       "id": "whirlwind",
       "name": "Whirlwind",
-      "description": "Class weapon placeholder. Fires a basic projectile until the melee attack is authored.",
+      "description": "Auto-swings in a short radius, hitting all adjacent enemies.",
       "type": "weapon",
       "tags": ["melee"],
-      "projectile_kind": "bullet",
+      "projectile_kind": "melee",
       "stats": {
-        "projectile_speed": 760.0,
-        "range": 700.0,
-        "area": 8.0
+        "range": 150.0,
+        "area": 150.0,
+        "knockback_force": 220.0,
+        "fire_rate": 2.2
       },
       "per_level": {
-        "damage": [12, 16, 20, 24, 28],
-        "fire_rate": [4.0, 4.2, 4.4, 4.6, 4.8]
+        "damage": [22, 28, 34, 40, 48],
+        "range": [145.0, 155.0, 165.0, 175.0, 185.0]
       }
     },
     {
       "id": "arc_wand",
       "name": "Arc Wand",
-      "description": "Class weapon placeholder. Fires a basic projectile until chain lightning is authored.",
+      "description": "Fires lightning that jumps between nearby enemies.",
       "type": "weapon",
       "tags": ["chain"],
-      "projectile_kind": "bullet",
+      "projectile_kind": "chain",
       "stats": {
-        "projectile_speed": 820.0,
-        "range": 820.0,
+        "range": 760.0,
+        "chain_range": 260.0,
+        "chain_falloff": 0.82,
+        "fire_rate": 3.4,
         "area": 5.0
       },
       "per_level": {
-        "damage": [10, 14, 18, 22, 26],
-        "fire_rate": [5.0, 5.2, 5.4, 5.6, 5.8]
+        "damage": [18, 22, 27, 32, 38],
+        "chain_count": [3, 4, 4, 5, 6]
       }
     },
     {
       "id": "flamethrower",
       "name": "Flamethrower",
-      "description": "Class weapon placeholder. Fires a basic projectile until the cone attack is authored.",
+      "description": "Sustains a short fire cone that damages enemies in front of you.",
       "type": "weapon",
       "tags": ["cone", "dot"],
-      "projectile_kind": "bullet",
+      "projectile_kind": "cone",
       "stats": {
-        "projectile_speed": 620.0,
-        "range": 620.0,
-        "area": 10.0
+        "range": 340.0,
+        "cone_angle_degrees": 54.0,
+        "fire_rate": 8.0,
+        "area": 32.0,
+        "burn_dps": 4.0,
+        "burn_duration": 1.2
       },
       "per_level": {
-        "damage": [14, 18, 22, 26, 30],
-        "fire_rate": [4.5, 4.7, 4.9, 5.1, 5.3]
+        "damage": [7, 8, 10, 11, 13],
+        "range": [310.0, 330.0, 350.0, 370.0, 390.0]
       }
     },
     {

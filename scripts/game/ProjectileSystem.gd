@@ -49,9 +49,19 @@ func tick(delta: float) -> void:
 
 
 func handle_player_fire(origin: Vector2, direction: Vector2, projectile_config: Dictionary) -> void:
-	if str(projectile_config.get("projectile_kind", "bullet")) == "beam":
-		_process_beam_fire(origin, direction, projectile_config)
-		return
+	match str(projectile_config.get("projectile_kind", "bullet")):
+		"beam":
+			_process_beam_fire(origin, direction, projectile_config)
+			return
+		"melee":
+			_process_melee_fire(origin, direction, projectile_config)
+			return
+		"cone":
+			_process_cone_fire(origin, direction, projectile_config)
+			return
+		"chain":
+			_process_chain_fire(origin, direction, projectile_config)
+			return
 	cleanup_active_projectiles()
 	if _active_projectiles.size() >= MAX_ACTIVE_PROJECTILES:
 		return
@@ -63,6 +73,105 @@ func handle_player_fire(origin: Vector2, direction: Vector2, projectile_config: 
 		if _active_projectiles.size() >= MAX_ACTIVE_PROJECTILES:
 			return
 		_activate_projectile("player", origin, projectile_direction, projectile_config)
+
+func _process_melee_fire(origin: Vector2, direction: Vector2, projectile_config: Dictionary) -> void:
+	var radius := float(projectile_config.get("range", projectile_config.get("area", 150.0)))
+	var damage := int(projectile_config.get("damage", 20))
+	var source_player_index := int(projectile_config.get("source_player_index", -1))
+	var knockback_force := float(projectile_config.get("knockback_force", 180.0))
+	var color: Color = projectile_config.get("color", Color.WHITE)
+	var radius_sq := radius * radius
+	for enemy in _coop.call("get_nearby_enemy_target_nodes", origin, radius):
+		if enemy == null or not is_instance_valid(enemy) or not enemy.has_method("is_alive") or not enemy.is_alive():
+			continue
+		if enemy.global_position.distance_squared_to(origin) > radius_sq:
+			continue
+		enemy.apply_damage(damage, source_player_index)
+		if enemy.has_method("apply_knockback"):
+			var offset: Vector2 = enemy.global_position - origin
+			enemy.apply_knockback(offset.normalized() if offset.length() > 0.0 else direction.normalized(), knockback_force)
+	_spawn_weapon_arc(origin, direction, radius, color)
+
+func _process_cone_fire(origin: Vector2, direction: Vector2, projectile_config: Dictionary) -> void:
+	if direction.length() <= 0.0:
+		return
+	var cone_direction := direction.normalized()
+	var range := float(projectile_config.get("range", 340.0))
+	var half_angle := deg_to_rad(float(projectile_config.get("cone_angle_degrees", 54.0)) * 0.5)
+	var damage := int(projectile_config.get("damage", 8))
+	var source_player_index := int(projectile_config.get("source_player_index", -1))
+	var color: Color = projectile_config.get("color", Color.WHITE)
+	var search_center := origin + cone_direction * range * 0.5
+	for enemy in _coop.call("get_nearby_enemy_target_nodes", search_center, range):
+		if enemy == null or not is_instance_valid(enemy) or not enemy.has_method("is_alive") or not enemy.is_alive():
+			continue
+		var offset: Vector2 = enemy.global_position - origin
+		var distance := offset.length()
+		if distance <= 0.0 or distance > range:
+			continue
+		if absf(cone_direction.angle_to(offset.normalized())) > half_angle:
+			continue
+		enemy.apply_damage(damage, source_player_index)
+		if float(projectile_config.get("burn_duration", 0.0)) > 0.0 and enemy.has_method("apply_poison"):
+			enemy.apply_poison(float(projectile_config.get("burn_dps", 0.0)), float(projectile_config.get("burn_duration", 0.0)))
+	_spawn_weapon_cone(origin, cone_direction, range, half_angle, color)
+
+func _process_chain_fire(origin: Vector2, direction: Vector2, projectile_config: Dictionary) -> void:
+	if direction.length() <= 0.0:
+		return
+	var source_player_index := int(projectile_config.get("source_player_index", -1))
+	var chain_count := maxi(1, int(projectile_config.get("chain_count", 3)))
+	var chain_range := float(projectile_config.get("chain_range", 260.0))
+	var falloff := clampf(float(projectile_config.get("chain_falloff", 0.82)), 0.1, 1.0)
+	var color: Color = projectile_config.get("color", Color.WHITE)
+	var hit_targets: Array = []
+	var points: Array = [origin]
+	var target := _find_chain_start_target(origin, direction.normalized(), float(projectile_config.get("range", 760.0)))
+	var current_origin := origin
+	var current_damage := float(projectile_config.get("damage", 18))
+	while target != null and hit_targets.size() < chain_count:
+		hit_targets.append(target)
+		points.append(target.global_position)
+		target.apply_damage(maxi(1, int(round(current_damage))), source_player_index)
+		current_damage *= falloff
+		current_origin = target.global_position
+		target = _find_next_chain_target(current_origin, chain_range, hit_targets)
+	_spawn_chain_visual(points, color)
+
+func _find_chain_start_target(origin: Vector2, direction: Vector2, range: float) -> Node2D:
+	var best_target: Node2D = null
+	var best_score := INF
+	for enemy in _coop.call("get_nearby_enemy_target_nodes", origin + direction * range * 0.5, range):
+		if enemy == null or not is_instance_valid(enemy) or not enemy.has_method("is_alive") or not enemy.is_alive() or not (enemy is Node2D):
+			continue
+		var offset: Vector2 = (enemy as Node2D).global_position - origin
+		var projected := offset.dot(direction)
+		if projected < 0.0 or projected > range:
+			continue
+		var lateral_distance := (offset - direction * projected).length()
+		var score := lateral_distance * 2.0 + projected * 0.05
+		if score < best_score:
+			best_score = score
+			best_target = enemy as Node2D
+	return best_target
+
+func _find_next_chain_target(origin: Vector2, range: float, excluded_targets: Array) -> Node2D:
+	var best_target: Node2D = null
+	var best_distance_sq := INF
+	var range_sq := range * range
+	for enemy in _coop.call("get_nearby_enemy_target_nodes", origin, range):
+		if enemy == null or not is_instance_valid(enemy) or excluded_targets.has(enemy):
+			continue
+		if enemy.has_method("is_alive") and not enemy.is_alive():
+			continue
+		if not (enemy is Node2D):
+			continue
+		var distance_sq := (enemy as Node2D).global_position.distance_squared_to(origin)
+		if distance_sq > range_sq or distance_sq >= best_distance_sq:
+			continue
+		best_distance_sq = distance_sq
+		best_target = enemy as Node2D
+	return best_target
 
 
 func handle_enemy_fire(origin: Vector2, direction: Vector2, speed: float, damage: int, team: String, projectile_scale: float) -> void:
@@ -205,6 +314,51 @@ func _update_beam_visual(state: Dictionary, origin: Vector2, direction: Vector2,
 	line.visible = true
 	state["last_update_at"] = _current_time_seconds()
 
+func _spawn_weapon_arc(origin: Vector2, direction: Vector2, radius: float, color: Color) -> void:
+	if should_suppress_combat_vfx():
+		return
+	var ring := ParticleFactoryData.create_impact_ring(color.lightened(0.18), radius, 2.2)
+	ring.global_position = origin
+	ring.rotation = direction.angle() if direction.length() > 0.0 else 0.0
+	_effects_container.add_child(ring)
+
+func _spawn_weapon_cone(origin: Vector2, direction: Vector2, range: float, half_angle: float, color: Color) -> void:
+	if should_suppress_combat_vfx():
+		return
+	var line := Line2D.new()
+	line.width = 18.0
+	line.default_color = Color(color.r, color.g * 0.72, color.b * 0.35, 0.42)
+	line.antialiased = true
+	line.z_index = 5
+	line.global_position = Vector2.ZERO
+	line.points = PackedVector2Array([
+		origin,
+		origin + direction.rotated(-half_angle) * range,
+		origin + direction * range * 0.82,
+		origin + direction.rotated(half_angle) * range,
+	])
+	_effects_container.add_child(line)
+	var tween := line.create_tween()
+	tween.tween_property(line, "modulate:a", 0.0, 0.08)
+	tween.tween_callback(line.queue_free)
+
+func _spawn_chain_visual(points: Array, color: Color) -> void:
+	if points.size() < 2 or should_suppress_combat_vfx():
+		return
+	var line := Line2D.new()
+	line.width = 5.0
+	line.default_color = Color(color.r * 0.65, minf(color.g * 1.25, 1.0), 1.0, 0.84)
+	line.antialiased = true
+	line.z_index = 6
+	line.global_position = Vector2.ZERO
+	var packed_points := PackedVector2Array()
+	for point_variant in points:
+		packed_points.append(point_variant as Vector2)
+	line.points = packed_points
+	_effects_container.add_child(line)
+	var tween := line.create_tween()
+	tween.tween_property(line, "modulate:a", 0.0, 0.12)
+	tween.tween_callback(line.queue_free)
 
 func _update_beam_fire_pool(state: Dictionary, hit_position: Vector2, projectile_config: Dictionary) -> void:
 	if not bool(projectile_config.get("leaves_fire_trail", false)):

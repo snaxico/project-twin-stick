@@ -6,13 +6,14 @@ Godot `4.6.2` same-screen local co-op neon roguelite prototype.
 
 The active V4 implementation work is in `D:\GameDev\Project_Twin_stick_v4` on branch `v4/class-system`.
 The original `D:\GameDev\Project_Twin_stick` checkout remains the untouched V3 playtest baseline for A/B
-testing. V4 Slices 0-4 of `docs/development/v4-implementation-plan.md` are implemented and validated: class
+testing. V4 Slices 0-5 of `docs/development/v4-implementation-plan.md` are implemented and validated: class
 data loads, existing weapons/abilities have tags, the runtime kit stores four abilities, P1/P2 abilities are
 bound to face buttons, and the pre-run setup now selects class -> class weapon -> three class abilities with
 the class ultimate inserted into slot 4. Mutations now gate through the V4 tag rule: `requires` must be a
 subset of the equipped kit's tags, with `apply` describing the effect target layer. Existing player
 deployables now share a destructible HP interface and no longer self-expire by lifetime. Class passives now
-drive runtime behavior for Mobile, Tank, Controller, and Risk.
+drive runtime behavior for Mobile, Tank, Controller, and Risk. The three new class weapons now have real
+attack kinds instead of placeholder bullets.
 
 ## Current Runtime
 
@@ -79,7 +80,10 @@ drive runtime behavior for Mobile, Tank, Controller, and Risk.
   - `Railgun`
   - `Beam`
   - `Boomerang`
-  - Stubbed class weapons: `Whirlwind`, `Arc Wand`, `Flamethrower`
+  - `Whirlwind` (`melee`): short-radius swing that hits all nearby enemies.
+  - `Arc Wand` (`chain`): lightning hit that jumps between nearby enemies.
+  - `Flamethrower` (`cone`): short forward cone with sustained tick damage and burn.
+  - Retired/premium legacy weapons still in data until Slice 7 trim: `Cannon`, `Railgun`, `Boomerang`
 - Live ability roster:
   - `Shockwave`
   - `Dash`
@@ -213,6 +217,11 @@ Last validation run in this state:
   - `avg_fps=144.9`, `min_fps=144.0`, `max_frame_ms=6.903`.
 - Latest PerfRunner result after Slice 4:
   - `avg_fps=144.9`, `min_fps=144.0`, `max_frame_ms=6.903`.
+- Slice 5 weapon-kind acceptance:
+  - temporary Godot script verified `melee`, `cone`, and `chain` paths damage expected fake enemies
+  - result: `weapon_kind_check=passed`
+- Latest PerfRunner result after Slice 5:
+  - `avg_fps=144.9`, `min_fps=144.0`, `max_frame_ms=6.944`.
 
 ## Known Risks
 
@@ -230,7 +239,7 @@ Last validation run in this state:
 
 ## Next Step
 
-Continue `docs/development/v4-implementation-plan.md` with Slice 5 in the V4 worktree:
+Continue `docs/development/v4-implementation-plan.md` with Slice 6 in the V4 worktree:
 
-- replace Whirlwind, Arc Wand, and Flamethrower stubs with real weapon behaviors
-- add projectile/attack kinds for melee, chain, and cone
+- implement the new class abilities and ultimates
+- add the ultimate charge framework and HUD readiness feedback

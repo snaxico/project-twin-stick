@@ -111,6 +111,12 @@ static func get_base_projectile_visual(projectile_kind: String) -> Dictionary:
 			return {"projectile_shape": "ember_orb", "trail_style": "embers", "impact_sfx": "boom"}
 		"beam":
 			return {"projectile_shape": "lance", "trail_style": "beam", "impact_sfx": "beam"}
+		"melee":
+			return {"projectile_shape": "arc", "trail_style": "sweep", "impact_sfx": "slash"}
+		"chain":
+			return {"projectile_shape": "lance", "trail_style": "lightning", "impact_sfx": "zap"}
+		"cone":
+			return {"projectile_shape": "ember_orb", "trail_style": "flame", "impact_sfx": "burn"}
 		_:
 			return {"projectile_shape": "small_orb", "trail_style": "thin", "impact_sfx": "hit"}
 
