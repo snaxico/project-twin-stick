@@ -6,8 +6,7 @@ Read this first to restore project context quickly, then read `current-state.md`
 ## Working Branch
 
 - Canonical active branch: `v4/class-system`.
-- Continue work from the V4 checkout. The local active checkout is being promoted to
-  `D:\GameDev\Project_Twin_stick`; the legacy V3 checkout is archived/reference-only.
+- Continue work from `D:\GameDev\Project_Twin_stick`; this local checkout is now `v4/class-system`.
 - `v3/main`, `v3/structure-rework`, and older `v2/*` branches are historical baselines. Do not merge them into
   V4 wholesale; cherry-pick only reviewed changes that still fit the class-system direction.
 - Do not push unless asked.

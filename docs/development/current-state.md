@@ -4,9 +4,9 @@
 
 Godot `4.6.2` same-screen local co-op neon roguelite prototype.
 
-The canonical development line is `v4/class-system`. Continue new work from the V4 checkout, currently
-`D:\GameDev\Project_Twin_stick_v4`; the old `D:\GameDev\Project_Twin_stick` checkout is now an archived V3
-reference only, not the active project state. V4 Slices 0-7 of `docs/development/v4-implementation-plan.md` are implemented and validated: class
+The canonical development line is `v4/class-system`. Continue new work from
+`D:\GameDev\Project_Twin_stick`; older `v2/*` and `v3/*` branches are archived references only, not the active
+project state. V4 Slices 0-7 of `docs/development/v4-implementation-plan.md` are implemented and validated: class
 data loads, existing weapons/abilities have tags, the runtime kit stores four abilities, P1/P2 abilities are
 bound to face buttons, and the pre-run setup now selects class -> class weapon -> three class abilities with
 the class ultimate inserted into slot 4. Mutations now gate through the V4 tag rule: `requires` must be a
@@ -208,11 +208,11 @@ Last validation run in this state:
 
 - `git diff --check`
 - Godot headless parse:
-  - `Godot_v4.6.2-stable_win64_console.exe --headless --path D:\GameDev\Project_Twin_stick_v4 --quit`
+  - `Godot_v4.6.2-stable_win64_console.exe --headless --path D:\GameDev\Project_Twin_stick --quit`
 - Bootstrap scene headless smoke boot:
-  - `Godot_v4.6.2-stable_win64_console.exe --headless --path D:\GameDev\Project_Twin_stick_v4 res://scenes/ui/Bootstrap.tscn --quit`
+  - `Godot_v4.6.2-stable_win64_console.exe --headless --path D:\GameDev\Project_Twin_stick res://scenes/ui/Bootstrap.tscn --quit`
 - PerfRunner Hive champion profile:
-  - `Godot_v4.6.2-stable_win64_console.exe --headless --path D:\GameDev\Project_Twin_stick_v4 -- --profile=champion:hive --players=2 --build=heavy`
+  - `Godot_v4.6.2-stable_win64_console.exe --headless --path D:\GameDev\Project_Twin_stick -- --profile=champion:hive --players=2 --build=heavy`
   - Result: `avg_fps=144.4`, `min_fps=143.0`, `max_frame_ms=12.436`.
 - Slice 2 data-level tag acceptance:
   - projectile kit: Pierce eligible
@@ -251,14 +251,14 @@ Last validation run in this state:
   - JSON parse for `data/weapons.json`, `data/abilities.json`, and `data/mutations.json`
   - `git diff --check`
   - Godot headless parse:
-    `Godot_v4.6.2-stable_win64_console.exe --headless --path D:\GameDev\Project_Twin_stick_v4 --quit`
+    `Godot_v4.6.2-stable_win64_console.exe --headless --path D:\GameDev\Project_Twin_stick --quit`
   - Bootstrap smoke boot:
-    `Godot_v4.6.2-stable_win64_console.exe --headless --path D:\GameDev\Project_Twin_stick_v4 res://scenes/ui/Bootstrap.tscn --quit`
+    `Godot_v4.6.2-stable_win64_console.exe --headless --path D:\GameDev\Project_Twin_stick res://scenes/ui/Bootstrap.tscn --quit`
   - PerfRunner Hive champion profile:
-    `Godot_v4.6.2-stable_win64_console.exe --headless --path D:\GameDev\Project_Twin_stick_v4 -- --profile=champion:hive --players=2 --build=heavy`
+    `Godot_v4.6.2-stable_win64_console.exe --headless --path D:\GameDev\Project_Twin_stick -- --profile=champion:hive --players=2 --build=heavy`
     - Result: `avg_fps=145.0`, `min_fps=144.0`, `max_frame_ms=6.944`.
 - Post-review PerfRunner rerun for the V4 polish density/VFX check:
-  - `Godot_v4.6.2-stable_win64_console.exe --headless --path D:\GameDev\Project_Twin_stick_v4 -- --profile=champion:hive --players=2 --build=heavy`
+  - `Godot_v4.6.2-stable_win64_console.exe --headless --path D:\GameDev\Project_Twin_stick -- --profile=champion:hive --players=2 --build=heavy`
   - Result: `avg_fps=144.9`, `min_fps=144.0`, `max_frame_ms=6.944`.
 - Clustered contact-swarm performance check after bounding enemy separation:
   - Temporary dev scene spawned `25/50/100/150/200` chasers in a tight contact-range cluster around a dummy

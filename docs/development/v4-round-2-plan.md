@@ -1,11 +1,11 @@
 # V4 Round 2 — Playtest Fixes & Rebalance (plan)
 
-> Follows the polish round (`038dcc1`). From playtest feedback on that build. Branch `v4/class-system`, worktree
-> `Project_Twin_stick_v4`. Validation gate (per slice):
+> Follows the polish round (`038dcc1`). From playtest feedback on that build. Branch `v4/class-system`, active
+> checkout `D:\GameDev\Project_Twin_stick`. Validation gate (per slice):
 > ```powershell
 > $GODOT = 'D:\GameDev\Godot_v4.6.2-stable_win64.exe\Godot_v4.6.2-stable_win64_console.exe'
-> & $GODOT --headless --path 'D:\GameDev\Project_Twin_stick_v4' --quit                                                 # parse
-> & $GODOT --headless --path 'D:\GameDev\Project_Twin_stick_v4' -- --profile=champion:hive --players=2 --build=heavy   # perf
+> & $GODOT --headless --path 'D:\GameDev\Project_Twin_stick' --quit                                                 # parse
+> & $GODOT --headless --path 'D:\GameDev\Project_Twin_stick' -- --profile=champion:hive --players=2 --build=heavy   # perf
 > ```
 > **Decisions (2026-07-06):** rooms = **hybrid curated templates + variation**; element mutations = **gate by
 > delivery + dedupe element**; balance thrust = **rein in the player, harden threats** (coordinated pass).
