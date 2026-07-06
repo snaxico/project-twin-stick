@@ -86,7 +86,7 @@
       "id": "piercing_rounds",
       "name": "Pierce",
       "description": "Projectiles pierce through additional enemies.",
-      "icon": "railgun",
+      "icon": "rifle",
       "category": "weapon",
       "group": "effect",
       "rarity": "rare",
@@ -286,7 +286,7 @@
       "id": "peak_pierce",
       "name": "Peak Pierce",
       "description": "At max Momentum, weapon shots pierce enemies.",
-      "icon": "railgun",
+      "icon": "rifle",
       "category": "class",
       "group": "momentum",
       "rarity": "rare",
@@ -341,7 +341,7 @@
       "rarity": "rare",
       "requires": ["tank"],
       "apply": "passive",
-      "params": { "heal_per_kill_bonus": 4 }
+      "params": { "heal_per_kill_bonus": 3 }
     },
     {
       "id": "overflow",

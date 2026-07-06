@@ -24,8 +24,10 @@ const ENEMY_ENTRIES := [
 ]
 
 const SYSTEM_ENTRIES := [
-	{"id": "score", "name": "Score", "description": "Score is the meta-currency you spend in the Meta menu to unlock weapons, abilities, and upgrades. Each room awards: +100 for clearing it, +1 per enemy killed, +250 per champion killed, and +50 per momentum tier you reached. A failed room still awards its kills, champions, and momentum, but not the +100 clear bonus. Your run's total banks once, when the run ends: on death or when you pick 'End Run'. Continuing past the milestone does not bank early, and banked score carries across all runs."},
-	{"id": "momentum", "name": "Momentum / Flow", "description": "Momentum rewards relentless killing. Every enemy death advances all players one step; crossing 10 / 25 / 45 / 70 steps raises your tier from 1 to 4. Each tier adds move speed (up to +50%) and fire rate (up to +75%), stacking additively with no cap. Taking a damaging hit drops you 2 tiers, so staying untouched keeps you fast. Momentum persists across rooms within a run and only resets at the start of a new run. The pips by your health bar show your current tier."},
+	{"id": "score", "name": "Score", "description": "Score is the meta-currency spent in the Meta menu to add premium upgrade depth to future runs. Classes, class weapons, class abilities, ultimates, and base upgrades are available from the start."},
+	{"id": "ultimate_charge", "name": "Ultimate Charge", "description": "Mobile, Tank, and Controller charge ultimates by dealing damage and scoring kills. Risk uses Heat instead: casting abilities builds Heat, and Firestorm vents it."},
+	{"id": "tags", "name": "Upgrade Tags", "description": "Upgrade offers use the kit tag rule: an upgrade can appear only when its required tags are all present on your class, passive, weapon, equipped abilities, ultimate, or already chosen upgrades."},
+	{"id": "passives", "name": "Passives", "description": "Momentum rewards clean movement, Bloodthirst converts kills into sustain, Radiance empowers deployables and nearby allies, and Overheat trades Heat-driven damage for extra incoming damage."},
 ]
 
 var _tabs: HBoxContainer = null
@@ -52,6 +54,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func _load_entries() -> void:
 	_entries_by_category = {
+		"Classes": _load_class_entries(),
 		"Weapons": _load_array_entries(WEAPONS_DATA_PATH, "weapons"),
 		"Abilities": _load_array_entries(ABILITIES_DATA_PATH, "abilities"),
 		"Mutations": _load_array_entries(MUTATIONS_DATA_PATH, "mutations"),
@@ -74,6 +77,17 @@ func _load_array_entries(path: String, key: String) -> Array:
 	for entry in source:
 		if entry is Dictionary:
 			entries.append((entry as Dictionary).duplicate(true))
+	return entries
+
+func _load_class_entries() -> Array:
+	var entries: Array = []
+	for class_variant in RunState.get_class_catalog():
+		var class_data: Dictionary = (class_variant as Dictionary).duplicate(true)
+		var class_id := str(class_data.get("id", ""))
+		var passive_id := str(class_data.get("passive", ""))
+		class_data["description"] = _build_class_description(class_data)
+		class_data["tags"] = [class_id, passive_id]
+		entries.append(class_data)
 	return entries
 
 func _build() -> void:
@@ -215,6 +229,8 @@ func _refresh_detail() -> void:
 
 func _get_preview_texture(entry: Dictionary) -> Texture2D:
 	match _active_category:
+		"Classes":
+			return IconFactoryData.get_passive_icon(str(entry.get("passive", "")))
 		"Weapons":
 			return IconFactoryData.get_projectile_preview_icon(str(entry.get("projectile_kind", "bullet")))
 		"Abilities":
@@ -232,6 +248,10 @@ func _get_preview_texture(entry: Dictionary) -> Texture2D:
 
 func _build_meta_line(entry: Dictionary) -> String:
 	var parts: Array = [_active_category]
+	if _active_category == "Classes":
+		parts.append("HP %d" % int(entry.get("hp", 100)))
+		parts.append("Speed %d" % int(entry.get("move_speed", 560)))
+		parts.append("Ultimate: %s" % _format_inline_name(str(entry.get("ultimate", ""))))
 	for key in ["slot", "type", "group", "rarity", "category"]:
 		if entry.has(key):
 			parts.append(str(entry[key]).capitalize())
@@ -252,6 +272,29 @@ func _format_seconds(value: float) -> String:
 		return "%ds" % int(roundf(value))
 	return "%.1fs" % value
 
+func _build_class_description(class_data: Dictionary) -> String:
+	var lines: Array = []
+	var passive_id := str(class_data.get("passive", ""))
+	lines.append(_passive_description(passive_id))
+	lines.append("")
+	lines.append("Weapons: %s" % _format_id_list(class_data.get("weapon_pool", []) as Array))
+	lines.append("Abilities: %s" % _format_id_list(class_data.get("ability_pool", []) as Array))
+	lines.append("Ultimate: %s" % _format_inline_name(str(class_data.get("ultimate", ""))))
+	return "\n".join(lines)
+
+func _passive_description(passive_id: String) -> String:
+	match passive_id:
+		"momentum":
+			return "Passive: Momentum builds while you keep moving and avoid damage, increasing speed and attack tempo."
+		"bloodthirst":
+			return "Passive: Bloodthirst heals on credited kills and turns excess healing into decaying overshield."
+		"radiance":
+			return "Passive: Radiance empowers player deployables and grants a nearby damage aura."
+		"overheat":
+			return "Passive: Overheat makes ability cooldowns very short; casting builds Heat, increasing outgoing and incoming damage."
+		_:
+			return "Passive: %s" % _format_inline_name(passive_id)
+
 func _build_body_text(entry: Dictionary) -> String:
 	var lines: Array = [str(entry.get("description", "No description available."))]
 	if entry.has("stats") and entry["stats"] is Dictionary:
@@ -267,3 +310,16 @@ func _format_dictionary(title: String, values: Dictionary) -> String:
 	for key in values.keys():
 		lines.append("%s: %s" % [str(key).replace("_", " ").capitalize(), str(values[key])])
 	return "\n".join(lines)
+
+func _format_id_list(ids: Array) -> String:
+	var names: Array = []
+	for id_variant in ids:
+		names.append(_format_inline_name(str(id_variant)))
+	return ", ".join(names)
+
+func _format_inline_name(raw_id: String) -> String:
+	var parts: Array = []
+	for part in raw_id.split("_"):
+		if not part.is_empty():
+			parts.append(part.capitalize())
+	return " ".join(parts)

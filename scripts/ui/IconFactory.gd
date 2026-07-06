@@ -162,7 +162,7 @@ static func _build_weapon_icon(weapon_id: String) -> Texture2D:
 	image.fill(Color(0.0, 0.0, 0.0, 0.0))
 	if weapon_id.contains("mine"):
 		_draw_secondary_icon(image, weapon_id)
-	elif weapon_id.contains("shockwave") or weapon_id == "dash" or weapon_id == "blink" or weapon_id == "shield" or weapon_id == "decoy" or weapon_id == "orbit":
+	elif weapon_id.contains("shockwave") or weapon_id == "dash" or weapon_id == "shield" or weapon_id == "orbit":
 		_draw_secondary_icon(image, weapon_id)
 	else:
 		_draw_primary_icon(image, weapon_id)
@@ -304,8 +304,6 @@ static func _projectile_preview_color(projectile_kind: String) -> Color:
 			return Color(1.0, 0.58, 0.24, 1.0)
 		"beam":
 			return Color(0.3, 0.95, 1.0, 1.0)
-		"boomerang":
-			return Color(0.86, 0.72, 0.28, 1.0)
 		"lance":
 			return Color(0.78, 0.95, 1.0, 1.0)
 		"pellet":
@@ -339,8 +337,6 @@ static func _draw_primary_icon(image: Image, weapon_id: String) -> void:
 			base_color = Color(0.3, 0.85, 0.95, 1.0)
 		"beam":
 			base_color = Color(0.26, 0.95, 0.95, 1.0)
-		"boomerang":
-			base_color = Color(0.86, 0.72, 0.28, 1.0)
 		"arc_caster":
 			base_color = Color(0.4, 0.5, 1.0, 1.0)
 	_draw_rounded_rect(image, Rect2(10.0, 16.0, 44.0, 32.0), 8.0, base_color)
@@ -360,9 +356,6 @@ static func _draw_primary_icon(image: Image, weapon_id: String) -> void:
 			_draw_line_thick(image, Vector2(14.0, 32.0), Vector2(50.0, 32.0), 5.0, Color(0.94, 1.0, 1.0, 0.94))
 			_draw_line_thick(image, Vector2(18.0, 24.0), Vector2(46.0, 24.0), 2.0, Color(0.94, 1.0, 1.0, 0.75))
 			_draw_line_thick(image, Vector2(18.0, 40.0), Vector2(46.0, 40.0), 2.0, Color(0.94, 1.0, 1.0, 0.75))
-		"boomerang":
-			_draw_line_thick(image, Vector2(20.0, 42.0), Vector2(34.0, 20.0), 5.0, Color(0.08, 0.1, 0.14, 0.9))
-			_draw_line_thick(image, Vector2(34.0, 20.0), Vector2(48.0, 42.0), 5.0, Color(0.08, 0.1, 0.14, 0.9))
 		"arc_caster":
 			var zigzag_points: Array = [
 				Vector2(18.0, 38.0),
@@ -381,12 +374,8 @@ static func _draw_secondary_icon(image: Image, weapon_id: String) -> void:
 	match weapon_id:
 		"dash":
 			base_color = Color(1.0, 0.48, 0.82, 1.0)
-		"blink":
-			base_color = Color(0.62, 0.84, 1.0, 1.0)
 		"shield":
 			base_color = Color(0.4, 0.96, 0.9, 1.0)
-		"decoy":
-			base_color = Color(0.82, 0.82, 1.0, 1.0)
 		"orbit":
 			base_color = Color(0.54, 0.88, 1.0, 1.0)
 		"shockwave":
@@ -404,15 +393,9 @@ static func _draw_secondary_icon(image: Image, weapon_id: String) -> void:
 			_draw_line_thick(image, Vector2(18.0, 40.0), Vector2(30.0, 26.0), 4.0, Color(0.08, 0.1, 0.14, 0.92))
 			_draw_line_thick(image, Vector2(30.0, 26.0), Vector2(44.0, 20.0), 4.0, Color(0.08, 0.1, 0.14, 0.92))
 			_draw_line_thick(image, Vector2(30.0, 26.0), Vector2(38.0, 42.0), 4.0, Color(0.08, 0.1, 0.14, 0.88))
-		"blink":
-			_draw_line_thick(image, Vector2(18.0, 42.0), Vector2(32.0, 18.0), 4.0, Color(0.08, 0.1, 0.14, 0.92))
-			_draw_line_thick(image, Vector2(32.0, 18.0), Vector2(46.0, 42.0), 3.0, Color(0.08, 0.1, 0.14, 0.82))
 		"shield":
 			_draw_ring(image, Vector2(32.0, 34.0), 18.0, 3.0, Color(0.08, 0.1, 0.14, 0.92))
 			_draw_triangle(image, Vector2(24.0, 26.0), Vector2(40.0, 26.0), Vector2(32.0, 42.0), Color(0.08, 0.1, 0.14, 0.9))
-		"decoy":
-			_draw_line_thick(image, Vector2(24.0, 20.0), Vector2(24.0, 46.0), 3.0, Color(0.08, 0.1, 0.14, 0.9))
-			_draw_line_thick(image, Vector2(40.0, 20.0), Vector2(40.0, 46.0), 3.0, Color(0.08, 0.1, 0.14, 0.54))
 		"orbit":
 			_draw_ring(image, Vector2(32.0, 34.0), 14.0, 2.0, Color(0.08, 0.1, 0.14, 0.9))
 			_draw_filled_circle(image, Vector2(32.0, 18.0), 4.0, Color(0.08, 0.1, 0.14, 0.9))

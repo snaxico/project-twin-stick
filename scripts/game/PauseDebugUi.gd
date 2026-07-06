@@ -8,7 +8,7 @@ const EnemyTypes = preload("res://scripts/game/EnemyTypes.gd")
 const IconFactoryData = preload("res://scripts/ui/IconFactory.gd")
 
 const HUD_SLOT_2_COLOR := HudPaletteData.SLOT_2_COLOR
-const ABILITY_TRIGGER_LABELS := ["A", "X", "Y", "B"]
+const ABILITY_TRIGGER_LABELS := ["A", "X", "B", "Y"]
 const DEBUG_ENEMY_SPAWN_CATALOG := [
 	{"label": "Chaser", "value": "chaser"},
 	{"label": "Charger", "value": "charger"},

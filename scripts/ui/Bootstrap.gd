@@ -4,6 +4,7 @@ const PlayerConfigData = preload("res://scripts/player/PlayerConfig.gd")
 const AbilityRegistryData = preload("res://scripts/game/AbilityRegistry.gd")
 const HudPaletteData = preload("res://scripts/game/HudPalette.gd")
 const IconFactoryData = preload("res://scripts/ui/IconFactory.gd")
+const ClassVisualsData = preload("res://scripts/game/ClassVisuals.gd")
 const AudioBusConfigData = preload("res://scripts/juice/AudioBusConfig.gd")
 const EncyclopediaUIData = preload("res://scripts/ui/EncyclopediaUI.gd")
 const RUN_FLOW_SCENE = preload("res://scenes/ui/RunFlow.tscn")
@@ -24,9 +25,11 @@ const INPUT_BINDING_ACTIONS := [
 	{"label": "Fire", "suffix": "fire"},
 	{"label": "Ability 1 A", "suffix": "ability_1"},
 	{"label": "Ability 2 X", "suffix": "ability_2"},
-	{"label": "Ability 3 Y", "suffix": "ability_3"},
-	{"label": "Ability 4 B", "suffix": "ability_4"},
+	{"label": "Ability 3 B", "suffix": "ability_3"},
+	{"label": "Ability 4 Y", "suffix": "ability_4"},
 ]
+const LOADOUT_ABILITY_LABELS := ["A", "X", "B"]
+const LOADOUT_ULTIMATE_LABEL := "Y"
 const MENU_BINDING_ACTIONS := [
 	{"label": "Menu Accept", "action": "ui_accept"},
 	{"label": "Menu Back", "action": "ui_cancel"},
@@ -322,7 +325,7 @@ func _refresh_menu_state(_unused: Variant = null) -> void:
 		if debug_layout_row.visible:
 			summary_lines.append("Enemy Mix: %s" % debug_layout_option.get_item_text(debug_layout_option.selected))
 		summary_lines.append("Room Modifiers: %d" % _get_selected_room_modifiers().size())
-	summary_lines.append("Pick class, class weapon, and three abilities; the ultimate fills B.")
+	summary_lines.append("Pick class, class weapon, and three abilities; the ultimate fills Y.")
 	status_label.text = "\n".join(summary_lines)
 	start_button.text = "Launch Encounter" if encounter_builder_mode else "Start Run"
 	for row_index in range(_class_rows.size()):
@@ -949,8 +952,8 @@ func _ensure_default_controller_bindings() -> void:
 		_add_default_controller_button("p%d_fire" % player_id, JOY_BUTTON_RIGHT_SHOULDER)
 		_add_default_controller_button("p%d_ability_1" % player_id, JOY_BUTTON_A)
 		_add_default_controller_button("p%d_ability_2" % player_id, JOY_BUTTON_X)
-		_add_default_controller_button("p%d_ability_3" % player_id, JOY_BUTTON_Y)
-		_add_default_controller_button("p%d_ability_4" % player_id, JOY_BUTTON_B)
+		_add_default_controller_button("p%d_ability_3" % player_id, JOY_BUTTON_B)
+		_add_default_controller_button("p%d_ability_4" % player_id, JOY_BUTTON_Y)
 
 func _ensure_debug_input_binding() -> void:
 	if not InputMap.has_action("debug_overlay_toggle"):
@@ -1345,7 +1348,7 @@ func _sync_class_row_buttons(player_index: int) -> void:
 		if button == null:
 			continue
 		button.set_pressed_no_signal(class_id == selection)
-		_style_loadout_card(button, class_id == selection, _player_tints[player_index])
+		_style_loadout_card(button, class_id == selection, _class_accent(class_id))
 	var summary: Label = row_data.get("summary", null)
 	if summary != null:
 		var class_def := RunState.get_class_definition(selection)
@@ -1444,7 +1447,7 @@ func _sync_weapon_row_buttons(player_index: int) -> void:
 		button.visible = allowed
 		button.disabled = not allowed
 		button.set_pressed_no_signal(weapon_id == selection)
-		_style_loadout_card(button, weapon_id == selection, _player_tints[player_index])
+		_style_loadout_card(button, weapon_id == selection, _class_accent(_get_player_class_selection(player_index)))
 	var summary: Label = row_data.get("summary", null)
 	if summary != null:
 		summary.text = "Weapon: %s" % _format_name(selection)
@@ -1464,6 +1467,27 @@ func _build_ability_rows() -> void:
 		header.text = "P%d Abilities" % (player_index + 1)
 		header.add_theme_font_size_override("font_size", 13)
 		container.add_child(header)
+		var slot_row := HBoxContainer.new()
+		slot_row.add_theme_constant_override("separation", 6)
+		container.add_child(slot_row)
+		var slot_cards: Array = []
+		for slot_index in range(3):
+			var slot_card := _create_loadout_card("%s\n---" % LOADOUT_ABILITY_LABELS[slot_index], "Select this slot, then choose an ability below.")
+			slot_card.custom_minimum_size = Vector2(0.0, 44.0)
+			slot_card.alignment = HORIZONTAL_ALIGNMENT_CENTER
+			slot_card.pressed.connect(_on_ability_slot_pressed.bind(player_index, slot_index))
+			slot_row.add_child(slot_card)
+			_wire_ui_click_sfx(slot_card)
+			slot_cards.append(slot_card)
+		var ultimate_card := _create_loadout_card("%s\nUltimate" % LOADOUT_ULTIMATE_LABEL, "Locked class ultimate.")
+		ultimate_card.custom_minimum_size = Vector2(0.0, 44.0)
+		ultimate_card.alignment = HORIZONTAL_ALIGNMENT_CENTER
+		ultimate_card.disabled = true
+		slot_row.add_child(ultimate_card)
+		var pool_header := Label.new()
+		pool_header.text = "Ability Pool"
+		pool_header.add_theme_font_size_override("font_size", 11)
+		container.add_child(pool_header)
 		var grid := GridContainer.new()
 		grid.columns = 3
 		grid.add_theme_constant_override("h_separation", 6)
@@ -1488,8 +1512,11 @@ func _build_ability_rows() -> void:
 		_ability_rows.append({
 			"container": container,
 			"cards": cards,
+			"slot_cards": slot_cards,
+			"ultimate_card": ultimate_card,
 			"summary": summary,
 			"selection": _default_abilities_for_class(_get_player_class_selection(player_index)),
+			"selected_slot": 0,
 		})
 		_sync_ability_row_buttons(player_index)
 
@@ -1521,23 +1548,33 @@ func _get_player_ability_pair(player_index: int) -> Array:
 	_ability_rows[player_index] = row_data
 	return selected
 
+
+func _on_ability_slot_pressed(player_index: int, slot_index: int) -> void:
+	if player_index < 0 or player_index >= _ability_rows.size() or slot_index < 0 or slot_index >= 3:
+		return
+	var row_data: Dictionary = _ability_rows[player_index]
+	row_data["selected_slot"] = slot_index
+	_ability_rows[player_index] = row_data
+	_sync_ability_row_buttons(player_index)
+
 func _on_ability_card_toggled(pressed: bool, player_index: int, ability_id: String) -> void:
 	if player_index < 0 or player_index >= _ability_rows.size():
+		return
+	if not pressed:
+		_sync_ability_row_buttons(player_index)
 		return
 	if not _get_class_ability_ids(_get_player_class_selection(player_index)).has(ability_id):
 		_sync_ability_row_buttons(player_index)
 		return
 	var row_data: Dictionary = _ability_rows[player_index]
 	var selected: Array = (row_data.get("selection", []) as Array).duplicate()
-	if pressed:
-		if selected.has(ability_id):
-			pass
-		else:
-			while selected.size() >= 3:
-				selected.pop_front()
-			selected.append(ability_id)
-	else:
-		selected.erase(ability_id)
+	while selected.size() < 3:
+		selected.append("")
+	var selected_slot := clampi(int(row_data.get("selected_slot", 0)), 0, 2)
+	var existing_slot := selected.find(ability_id)
+	if existing_slot >= 0 and existing_slot != selected_slot:
+		selected[existing_slot] = selected[selected_slot]
+	selected[selected_slot] = ability_id
 	row_data["selection"] = selected
 	_ability_rows[player_index] = row_data
 	_sync_ability_row_buttons(player_index)
@@ -1550,6 +1587,22 @@ func _sync_ability_row_buttons(player_index: int) -> void:
 	var cards: Dictionary = row_data.get("cards", {}) as Dictionary
 	var selected := _get_player_ability_pair(player_index)
 	var allowed_ids := _get_class_ability_ids(_get_player_class_selection(player_index))
+	var selected_slot := clampi(int(row_data.get("selected_slot", 0)), 0, 2)
+	var slot_cards: Array = row_data.get("slot_cards", []) as Array
+	var accent := _class_accent(_get_player_class_selection(player_index))
+	for slot_index in range(slot_cards.size()):
+		var slot_button: Button = slot_cards[slot_index]
+		if slot_button == null:
+			continue
+		var ability_id := str(selected[slot_index]) if slot_index < selected.size() else ""
+		slot_button.text = "%s\n%s" % [LOADOUT_ABILITY_LABELS[slot_index], _format_name(ability_id)]
+		slot_button.set_pressed_no_signal(slot_index == selected_slot)
+		_style_loadout_card(slot_button, slot_index == selected_slot, accent)
+	var ultimate_card: Button = row_data.get("ultimate_card", null)
+	if ultimate_card != null:
+		var class_def := RunState.get_class_definition(_get_player_class_selection(player_index))
+		ultimate_card.text = "%s\n%s" % [LOADOUT_ULTIMATE_LABEL, _format_name(str(class_def.get("ultimate", "")))]
+		_style_loadout_card(ultimate_card, true, accent)
 	for ability_id_variant in cards.keys():
 		var ability_id := str(ability_id_variant)
 		var button: Button = cards[ability_id]
@@ -1561,13 +1614,13 @@ func _sync_ability_row_buttons(player_index: int) -> void:
 		button.disabled = not allowed
 		button.set_pressed_no_signal(slot_index >= 0)
 		button.text = _format_ability_card_text(button, slot_index)
-		_style_loadout_card(button, slot_index >= 0, _player_tints[player_index])
+		_style_loadout_card(button, slot_index >= 0, accent)
 	var summary: Label = row_data.get("summary", null)
 	if summary != null:
 		var class_def := RunState.get_class_definition(_get_player_class_selection(player_index))
 		var ultimate_id := str(class_def.get("ultimate", ""))
 		if selected.size() >= 3:
-			summary.text = "A %s  |  X %s  |  Y %s  |  B %s" % [
+			summary.text = "A %s  |  X %s  |  B %s  |  Y %s" % [
 				_format_name(str(selected[0])),
 				_format_name(str(selected[1])),
 				_format_name(str(selected[2])),
@@ -1621,7 +1674,7 @@ func _create_loadout_card(text: String, tooltip: String) -> Button:
 
 func _format_ability_card_text(button: Button, slot_index: int) -> String:
 	var card_text := str(button.get_meta("card_text", button.text))
-	var labels := ["A", "X", "Y"]
+	var labels := LOADOUT_ABILITY_LABELS
 	if slot_index >= 0 and slot_index < labels.size():
 		return "%s - %s" % [str(labels[slot_index]), card_text]
 	return card_text
@@ -1652,6 +1705,9 @@ func _style_loadout_card(button: Button, selected: bool, player_tint: Color) -> 
 	button.add_theme_stylebox_override("pressed", pressed)
 	button.add_theme_stylebox_override("hover_pressed", pressed)
 	button.add_theme_stylebox_override("focus", pressed)
+
+func _class_accent(class_id: String) -> Color:
+	return ClassVisualsData.get_accent_color(class_id)
 
 func _can_start_run(player_count: int) -> bool:
 	for player_index in range(player_count):

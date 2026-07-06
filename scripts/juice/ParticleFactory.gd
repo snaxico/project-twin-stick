@@ -246,6 +246,89 @@ static func create_projectile_trail(color: Color, style: String = "default") -> 
 	particles.emitting = true
 	return particles
 
+static func create_neon_crescent(color: Color, radius: float, direction: Vector2, arc_degrees: float = 115.0) -> Node2D:
+	var node := Node2D.new()
+	node.rotation = direction.angle() if direction.length() > 0.0 else 0.0
+	var outer := Line2D.new()
+	outer.width = 10.0
+	outer.antialiased = true
+	outer.default_color = _bloom_color(Color(color.r, color.g, color.b, 0.82))
+	outer.points = _build_arc_points(radius, deg_to_rad(-arc_degrees * 0.5), deg_to_rad(arc_degrees * 0.5), 18)
+	node.add_child(outer)
+	var inner := Line2D.new()
+	inner.width = 3.0
+	inner.antialiased = true
+	inner.default_color = _bloom_color(Color(1.0, 1.0, 1.0, 0.72))
+	inner.points = outer.points
+	node.add_child(inner)
+	var tween := node.create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(node, "rotation", node.rotation + 0.42, 0.16)
+	tween.tween_property(node, "modulate:a", 0.0, 0.16)
+	tween.set_parallel(false)
+	tween.tween_callback(node.queue_free)
+	return node
+
+static func create_flame_cone(color: Color, length: float, half_angle: float, direction: Vector2) -> Node2D:
+	var node := Node2D.new()
+	node.rotation = direction.angle() if direction.length() > 0.0 else 0.0
+	var flame := Polygon2D.new()
+	flame.color = _bloom_color(Color(color.r, color.g * 0.72, color.b * 0.35, 0.34))
+	flame.polygon = PackedVector2Array([
+		Vector2.ZERO,
+		Vector2.RIGHT.rotated(-half_angle) * length,
+		Vector2(length * 0.82, 0.0),
+		Vector2.RIGHT.rotated(half_angle) * length,
+	])
+	node.add_child(flame)
+	var edge := Line2D.new()
+	edge.width = 4.0
+	edge.antialiased = true
+	edge.default_color = _bloom_color(Color(1.0, 0.72, 0.22, 0.62))
+	edge.points = PackedVector2Array([Vector2.RIGHT.rotated(-half_angle) * length, Vector2(length * 0.86, 0.0), Vector2.RIGHT.rotated(half_angle) * length])
+	node.add_child(edge)
+	var tween := node.create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(node, "scale", Vector2(1.06, 0.92), 0.06)
+	tween.tween_property(node, "modulate:a", 0.0, 0.12)
+	tween.set_parallel(false)
+	tween.tween_callback(node.queue_free)
+	return node
+
+static func create_lightning_path(points: PackedVector2Array, color: Color, width: float = 5.0) -> Node2D:
+	var node := Node2D.new()
+	var line := Line2D.new()
+	line.width = width
+	line.antialiased = true
+	line.default_color = _bloom_color(Color(color.r * 0.68, minf(color.g * 1.25, 1.0), 1.0, 0.9))
+	line.points = points
+	node.add_child(line)
+	var core := Line2D.new()
+	core.width = maxf(1.4, width * 0.34)
+	core.antialiased = true
+	core.default_color = _bloom_color(Color(0.92, 1.0, 1.0, 0.86))
+	core.points = points
+	node.add_child(core)
+	for point in points:
+		var ring := _create_ring_effect(color.lightened(0.18), 5.0, 16.0, 0.12, 2.0)
+		ring.global_position = point
+		node.add_child(ring)
+	var tween := node.create_tween()
+	tween.tween_property(node, "modulate:a", 0.0, 0.13)
+	tween.tween_callback(node.queue_free)
+	return node
+
+static func create_zone_pulse(color: Color, radius: float, weight: float = 1.0) -> Node2D:
+	var node := Node2D.new()
+	var ring := create_explosion_ring(color, radius, 3.0 + weight)
+	node.add_child(ring)
+	var burst := create_explosion_burst(color, 0.55 + weight * 0.25)
+	node.add_child(burst)
+	var cleanup := node.create_tween()
+	cleanup.tween_interval(0.42)
+	cleanup.tween_callback(node.queue_free)
+	return node
+
 static func _create_ring_effect(color: Color, start_radius: float, end_radius: float, duration: float, thickness: float) -> Node2D:
 	var node := Node2D.new()
 	var ring := Line2D.new()
@@ -286,6 +369,13 @@ static func _build_circle_points(radius: float, point_count: int) -> PackedVecto
 	for index in range(point_count):
 		var angle := TAU * float(index) / float(point_count)
 		points.append(Vector2.RIGHT.rotated(angle) * radius)
+	return PackedVector2Array(points)
+
+static func _build_arc_points(radius: float, start_angle: float, end_angle: float, point_count: int) -> PackedVector2Array:
+	var points: Array = []
+	for index in range(maxi(point_count, 2)):
+		var ratio := float(index) / float(maxi(point_count - 1, 1))
+		points.append(Vector2.RIGHT.rotated(lerpf(start_angle, end_angle, ratio)) * radius)
 	return PackedVector2Array(points)
 
 static func _get_particle_texture() -> Texture2D:

@@ -4,13 +4,14 @@ const PlayerConfigData = preload("res://scripts/player/PlayerConfig.gd")
 const AutoTargetData = preload("res://scripts/player/AutoTarget.gd")
 const DashData = preload("res://scripts/player/Dash.gd")
 const ParticleFactoryData = preload("res://scripts/juice/ParticleFactory.gd")
+const ClassVisualsData = preload("res://scripts/game/ClassVisuals.gd")
 const CONTACT_INVULN_DURATION := 0.35
 const BLOOM_COLOR_MULTIPLIER := 1.45
 const MANUAL_AIM_DEADZONE := 0.35
 const MOUSE_AIM_IDLE_SECONDS := 0.65
 const MAX_MOMENTUM_TIER := 4
 const ABILITY_SLOT_COUNT := 4
-const ABILITY_FACE_BUTTONS := [JOY_BUTTON_A, JOY_BUTTON_X, JOY_BUTTON_Y, JOY_BUTTON_B]
+const ABILITY_FACE_BUTTONS := [JOY_BUTTON_A, JOY_BUTTON_X, JOY_BUTTON_B, JOY_BUTTON_Y]
 const BLOODTHIRST_OVERSHIELD_DECAY_PER_SECOND := 5.0
 const BLOODTHIRST_MAX_OVERSHIELD_RATIO := 0.65
 const OVERHEAT_MAX_HEAT := 100.0
@@ -18,7 +19,7 @@ const OVERHEAT_HEAT_PER_CAST := 12.0
 const OVERHEAT_DECAY_PER_SECOND := 14.0
 const OVERHEAT_DECAY_DELAY := 0.75
 const OVERHEAT_DAMAGE_PER_HEAT := 0.006
-const OVERHEAT_VULNERABILITY_PER_HEAT := 0.005
+const OVERHEAT_VULNERABILITY_PER_HEAT := 0.0025
 const OVERHEAT_ULTIMATE_HEAT_THRESHOLD := 70.0
 
 const FLASH_SHADER_CODE := """
@@ -128,6 +129,7 @@ var _contact_invuln_until: float = 0.0
 var _dash_hit_targets: Dictionary = {}
 
 func _ready() -> void:
+	add_to_group("player")
 	add_to_group("player_target")
 	current_health = max_health
 	if visual != null:
@@ -161,7 +163,15 @@ func get_health_ratio_text() -> String:
 	return "DOWN" if _is_downed else "%d/%d" % [current_health, max_health]
 
 func get_health_state() -> Dictionary:
-	return {"current": current_health, "max": max_health, "overshield": int(ceil(_overshield)), "heat": int(round(_overheat_heat)), "ultimate": _ultimate_charge}
+	return {
+		"current": current_health,
+		"max": max_health,
+		"overshield": int(ceil(_overshield)),
+		"heat": int(round(_overheat_heat)),
+		"ultimate": _ultimate_charge,
+		"class_id": _class_id,
+		"passive_id": _passive_id,
+	}
 
 func has_passive(passive_id: String) -> bool:
 	return _passive_id == passive_id
@@ -196,8 +206,8 @@ func get_secondary_skill_hud_data() -> Dictionary:
 
 func get_ability_hud_data(slot_index: int) -> Dictionary:
 	var slot := _get_ability_slot(slot_index)
-	_update_blink_charges(_current_time_seconds())
 	var cooldown_duration := float(slot.get("cooldown", 1.0))
+	var is_ultimate := _is_ultimate_slot(slot_index, slot)
 	if _is_ultimate_slot(slot_index, slot):
 		cooldown_duration = 1.0
 	return {
@@ -208,6 +218,9 @@ func get_ability_hud_data(slot_index: int) -> Dictionary:
 		"base_cooldown": float(slot.get("base_cooldown", slot.get("cooldown", 1.0))),
 		"charges_current": int(slot.get("charges_current", 1)),
 		"charges_max": int(slot.get("charges_max", 1)),
+		"is_ultimate": is_ultimate,
+		"is_ready": _is_slot_ready(slot_index, _current_time_seconds()),
+		"ready_ratio": _get_ultimate_ready_ratio(slot) if is_ultimate else 1.0 - clampf(get_ability_cooldown_remaining(slot_index) / maxf(cooldown_duration, 0.01), 0.0, 1.0),
 	}
 
 func get_mutation_ids() -> Array:
@@ -396,7 +409,6 @@ func get_secondary_skill_cooldown_remaining() -> float:
 	return get_ability_cooldown_remaining(1)
 
 func get_ability_cooldown_remaining(slot_index: int) -> float:
-	_update_blink_charges(_current_time_seconds())
 	var slot := _get_ability_slot(slot_index)
 	var ability_id := str(slot.get("id", ""))
 	var now := _current_time_seconds()
@@ -404,13 +416,6 @@ func get_ability_cooldown_remaining(slot_index: int) -> float:
 		return 0.0 if _is_ultimate_ready(slot_index, slot) else 1.0 - _get_ultimate_ready_ratio(slot)
 	if ability_id == "dash" and _dash_states.has(slot_index):
 		return (_dash_states[slot_index] as DashData).get_cooldown_remaining(now)
-	if ability_id == "blink":
-		var lockout_remaining: float = maxf(float(slot.get("cooldown_until", 0.0)) - now, 0.0)
-		if lockout_remaining > 0.0:
-			return lockout_remaining
-		if int(slot.get("charges_current", 1)) > 0:
-			return 0.0
-		return max(float(slot.get("next_recharge_at", 0.0)) - now, 0.0)
 	return max(float(slot.get("cooldown_until", 0.0)) - now, 0.0)
 
 func apply_ability_lockout(seconds: float) -> void:
@@ -422,12 +427,13 @@ func apply_ability_lockout(seconds: float) -> void:
 		if ability_id == "dash" and _dash_states.has(slot_index):
 			(_dash_states[slot_index] as DashData).extend_cooldown(delay, now)
 			continue
-		if ability_id == "blink":
-			slot["cooldown_until"] = max(float(slot.get("cooldown_until", 0.0)), now) + delay
-			_set_ability_slot(slot_index, slot)
-			continue
 		slot["cooldown_until"] = max(float(slot.get("cooldown_until", 0.0)), now) + delay
 		_set_ability_slot(slot_index, slot)
+
+func recharge_dash_slots() -> void:
+	var now := _current_time_seconds()
+	for dash_state in _dash_states.values():
+		(dash_state as DashData).recharge(now)
 
 func is_secondary_skill_active() -> bool:
 	return _is_slot_active(1, _current_time_seconds())
@@ -438,7 +444,6 @@ func is_secondary_skill_shield_active() -> bool:
 func _physics_process(delta: float) -> void:
 	var now := _current_time_seconds()
 	_update_passive_runtime(delta, now)
-	_update_blink_charges(now)
 	_update_shield_burst(now)
 	_update_buffered_dashes(now)
 	if _input_locked or _is_downed:
@@ -516,11 +521,6 @@ func _build_runtime_ability(definition: Dictionary, fallback_id: String) -> Dict
 		"base_cooldown": float(definition.get("base_cooldown", definition.get("cooldown", 1.0))),
 		"stats": stats,
 	}
-	if ability_id == "blink":
-		var max_charges: int = 1 + maxi(0, int(stats.get("extra_charges", 0)))
-		slot["charges_current"] = max_charges
-		slot["charges_max"] = max_charges
-		slot["next_recharge_at"] = 0.0
 	return slot
 
 func _get_overcharge_fire_rate_multiplier(now: float) -> float:
@@ -547,46 +547,6 @@ func _set_ability_slot(slot_index: int, slot: Dictionary) -> void:
 	if slot_index < 0 or slot_index >= _ability_slots.size():
 		return
 	_ability_slots[slot_index] = slot
-
-func _update_blink_charges(now: float) -> void:
-	for slot_index in range(_ability_slots.size()):
-		var slot := _get_ability_slot(slot_index)
-		if str(slot.get("id", "")) != "blink":
-			continue
-		var max_charges: int = maxi(1, int(slot.get("charges_max", 1)))
-		var current_charges := clampi(int(slot.get("charges_current", max_charges)), 0, max_charges)
-		var recharge_at := float(slot.get("next_recharge_at", 0.0))
-		var changed := false
-		while current_charges < max_charges and recharge_at > 0.0 and now >= recharge_at:
-			current_charges += 1
-			changed = true
-			if current_charges < max_charges:
-				recharge_at += float(slot.get("cooldown", 1.0))
-			else:
-				recharge_at = 0.0
-		if changed:
-			slot["charges_current"] = current_charges
-			slot["next_recharge_at"] = recharge_at
-			_set_ability_slot(slot_index, slot)
-
-func _is_blink_ready(slot_index: int, now: float) -> bool:
-	_update_blink_charges(now)
-	var slot := _get_ability_slot(slot_index)
-	if str(slot.get("id", "")) != "blink":
-		return false
-	if now < float(slot.get("cooldown_until", 0.0)):
-		return false
-	return int(slot.get("charges_current", 0)) > 0
-
-func _consume_blink_charge(slot_index: int, now: float) -> void:
-	var slot := _get_ability_slot(slot_index)
-	var max_charges: int = maxi(1, int(slot.get("charges_max", 1)))
-	var current_charges := clampi(int(slot.get("charges_current", max_charges)), 0, max_charges)
-	current_charges = max(current_charges - 1, 0)
-	slot["charges_current"] = current_charges
-	if current_charges < max_charges and float(slot.get("next_recharge_at", 0.0)) <= 0.0:
-		slot["next_recharge_at"] = now + float(slot.get("cooldown", 1.0))
-	_set_ability_slot(slot_index, slot)
 
 func _update_shield_burst(now: float) -> void:
 	if _shield_was_active and now >= _shield_until:
@@ -813,34 +773,12 @@ func _try_activate_ability(slot_index: int, now: float) -> void:
 				return
 			if dash_state.try_trigger(_move_facing, now):
 				_on_dash_started(slot_index, now)
-		"blink":
-			if not _is_blink_ready(slot_index, now):
-				return
-			var stats: Dictionary = slot.get("stats", {}) as Dictionary
-			var blink_direction := _get_move_input()
-			if blink_direction.length() <= 0.0:
-				blink_direction = _move_facing
-			if blink_direction.length() <= 0.0:
-				blink_direction = Vector2.RIGHT
-			var blink_distance := float(stats.get("distance", 240.0))
-			global_position += blink_direction.normalized() * blink_distance
-			_contact_invuln_until = maxf(_contact_invuln_until, now + float(stats.get("arrival_iframes", 0.2)))
-			_consume_blink_charge(slot_index, now)
-			_emit_ability(slot_index, blink_direction)
 		"shield":
 			if not _is_slot_ready(slot_index, now):
 				return
 			_shield_until = max(_shield_until, now + float(slot.get("duration", 3.0)))
 			_shield_was_active = true
 			_pending_shield_burst.clear()
-			_set_slot_active(slot_index, now)
-			_set_slot_cooldown(slot_index, now)
-			_emit_ability(slot_index, direction)
-		"decoy":
-			if not _is_slot_ready(slot_index, now):
-				return
-			var invis_duration := float((slot.get("stats", {}) as Dictionary).get("invisibility_duration", 1.2))
-			_invisible_until = max(_invisible_until, now + invis_duration)
 			_set_slot_active(slot_index, now)
 			_set_slot_cooldown(slot_index, now)
 			_emit_ability(slot_index, direction)
@@ -1083,20 +1021,25 @@ func _apply_visual_state(now: float, delta: float = 0.0) -> void:
 	var overcharge_active := _is_slot_active_by_id("overcharge", now)
 	var tough_level := _get_mutation_level("tough")
 	var mutation_glow := clampf(float(_mutation_ids.size()) / 18.0, 0.0, 0.5)
-	var bonus_glow := float(max(tough_level - 1, 0)) * 0.1 + (0.18 if overcharge_active else 0.0) + float(_momentum_tier) * 0.08
+	var bonus_glow := float(max(tough_level - 1, 0)) * 0.1 + (0.18 if overcharge_active else 0.0)
 	var dash_scale := 1.14 if dash_active else 1.0
 	var squash_x := 1.0 + _turn_squash * 0.18
 	var squash_y := 1.0 - _turn_squash * 0.12
-	if visual.polygon != _chevron_polygon:
-		visual.polygon = _chevron_polygon
-	visual.color = _bloom_color(player_config.tint.lightened(mutation_glow + bonus_glow)) if not _is_downed else player_config.tint.darkened(0.55)
+	var body_polygon := ClassVisualsData.get_silhouette_points(_class_id)
+	if body_polygon.is_empty():
+		body_polygon = _chevron_polygon
+	if visual.polygon != body_polygon:
+		visual.polygon = body_polygon
+	var class_accent := ClassVisualsData.get_accent_color(_class_id)
+	var body_color := class_accent.lerp(player_config.tint, 0.36).lightened(mutation_glow + bonus_glow)
+	visual.color = _bloom_color(body_color) if not _is_downed else player_config.tint.darkened(0.55)
 	visual.modulate.a = 0.45 if now < _invisible_until else 1.0
 	visual.scale = Vector2(_base_visual_scale.x * dash_scale * squash_x, _base_visual_scale.y * dash_scale * squash_y)
-	if outline != null and outline.polygon != _chevron_polygon:
-		outline.polygon = _chevron_polygon
+	if outline != null and outline.polygon != body_polygon:
+		outline.polygon = body_polygon
 	if outline != null:
 		outline.scale = visual.scale * 1.28
-		outline.color = _bloom_color(player_config.tint.lightened(0.2 + mutation_glow * 0.4 + bonus_glow * 0.5)) if shield_active or overcharge_active else Color(0.04, 0.06, 0.08, 0.92)
+		outline.color = _bloom_color(class_accent.lerp(player_config.tint, 0.22).lightened(0.2 + mutation_glow * 0.4 + bonus_glow * 0.5)) if shield_active or overcharge_active else Color(0.04, 0.06, 0.08, 0.92)
 		outline.modulate.a = 0.65 if now < _invisible_until else 1.0
 	if shadow != null:
 		shadow.scale = _base_shadow_scale * (1.08 if tough_level >= 2 else 1.0)
@@ -1112,10 +1055,19 @@ func _emit_movement_feedback(now: float, move_input: Vector2) -> void:
 	if _is_downed or move_input.length() < 0.45:
 		return
 	var move_speed_level := _get_mutation_level("move_speed")
-	if move_speed_level < 2 or now < _next_speed_line_at or get_parent() == null:
+	if now < _next_speed_line_at or get_parent() == null:
 		return
-	_next_speed_line_at = now + 0.12
-	var trail := ParticleFactoryData.create_dash_trail(player_config.tint.lightened(0.18), 0.55 + float(move_speed_level - 1) * 0.2)
+	_next_speed_line_at = now + 0.18
+	var class_accent := ClassVisualsData.get_accent_color(_class_id).lerp(player_config.tint, 0.28)
+	var trail_weight := 0.48 + float(max(move_speed_level - 1, 0)) * 0.18
+	match ClassVisualsData.get_trail_style(_class_id):
+		"weight":
+			trail_weight += 0.26
+		"arcane":
+			trail_weight += 0.12
+		"ember":
+			trail_weight += 0.2
+	var trail := ParticleFactoryData.create_dash_trail(class_accent.lightened(0.18), trail_weight)
 	trail.global_position = global_position - _move_facing * 14.0
 	get_parent().add_child(trail)
 

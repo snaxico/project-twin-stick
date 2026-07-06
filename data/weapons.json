@@ -12,8 +12,8 @@
         "area": 4.0
       },
       "per_level": {
-        "damage": [10, 13, 17, 21, 25],
-        "fire_rate": [6.5, 6.8, 7.1, 7.4, 7.7]
+        "damage": [10, 12, 14, 16, 19],
+        "fire_rate": [6.5, 6.6, 6.8, 7.0, 7.2]
       }
     },
     {
@@ -30,7 +30,7 @@
         "blast_damage_percent": 0.9
       },
       "per_level": {
-        "damage": [40, 55, 70, 85, 100],
+        "damage": [40, 46, 54, 62, 72],
         "blast_radius": [120, 135, 150, 165, 180]
       }
     },
@@ -41,49 +41,14 @@
       "tags": ["projectile"],
       "projectile_kind": "pellet",
       "stats": {
-        "damage": 12.0,
         "fire_rate": 2.2,
         "projectile_speed": 800.0,
         "range": 550.0
       },
       "per_level": {
-        "pellet_count": [4, 5, 6, 7, 8],
-        "spread_degrees": [12, 11, 10, 9, 8]
-      }
-    },
-    {
-      "id": "cannon",
-      "name": "Cannon",
-      "type": "weapon",
-      "tags": ["projectile"],
-      "projectile_kind": "slug",
-      "stats": {
-        "fire_rate": 1.45,
-        "projectile_speed": 700.0,
-        "range": 900.0,
-        "area": 8.0,
-        "blast_damage_percent": 0.58
-      },
-      "per_level": {
-        "damage": [50, 68, 86, 104, 122],
-        "blast_radius": [105, 115, 125, 135, 145]
-      }
-    },
-    {
-      "id": "railgun",
-      "name": "Railgun",
-      "type": "weapon",
-      "tags": ["projectile"],
-      "projectile_kind": "lance",
-      "stats": {
-        "fire_rate": 4.0,
-        "projectile_speed": 1400.0,
-        "range": 950.0,
-        "area": 3.0,
-        "infinite_pierce": true
-      },
-      "per_level": {
-        "damage": [16, 22, 28, 34, 40]
+        "damage": [12, 13, 14, 16, 18],
+        "pellet_count": [5, 6, 7, 8, 9],
+        "spread_degrees": [11, 10, 9, 8, 7]
       }
     },
     {
@@ -100,7 +65,7 @@
         "ramp_start_fraction": 0.25
       },
       "per_level": {
-        "max_damage_per_second": [110, 130, 150, 170, 185]
+        "max_damage_per_second": [100, 115, 130, 148, 168]
       }
     },
     {
@@ -117,7 +82,7 @@
         "fire_rate": 2.2
       },
       "per_level": {
-        "damage": [22, 28, 34, 40, 48],
+        "damage": [20, 23, 27, 31, 36],
         "range": [145.0, 155.0, 165.0, 175.0, 185.0]
       }
     },
@@ -136,8 +101,8 @@
         "area": 5.0
       },
       "per_level": {
-        "damage": [18, 22, 27, 32, 38],
-        "chain_count": [3, 4, 4, 5, 6]
+        "damage": [18, 21, 24, 28, 33],
+        "chain_count": [3, 3, 4, 4, 5]
       }
     },
     {
@@ -156,39 +121,8 @@
         "burn_duration": 1.2
       },
       "per_level": {
-        "damage": [7, 8, 10, 11, 13],
+        "damage": [7, 8, 9, 11, 13],
         "range": [310.0, 330.0, 350.0, 370.0, 390.0]
-      }
-    },
-    {
-      "id": "boomerang",
-      "name": "Boomerang",
-      "type": "weapon",
-      "tags": ["projectile"],
-      "projectile_kind": "boomerang",
-      "stats": {
-        "fire_rate": 3.0,
-        "travel_distance": 480.0,
-        "projectile_speed": 700.0,
-        "range": 960.0,
-        "area": 6.0
-      },
-      "per_level": {
-        "damage": [16, 20, 24, 29, 34]
-      }
-    },
-    {
-      "id": "shockwave",
-      "name": "Shockwave",
-      "type": "primary_skill",
-      "tags": ["blast"],
-      "stats": {
-        "kind": "shockwave",
-        "damage": 30.0,
-        "cooldown": 5.0,
-        "radius": 250.0,
-        "knockback_force": 950.0,
-        "expand_duration": 0.15
       }
     }
   ]

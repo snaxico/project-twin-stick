@@ -12,8 +12,6 @@ func configure_deployable_health(health_amount: int, targetable: bool = true) ->
 	_deployable_alive = true
 	_deployable_targetable = targetable
 	add_to_group("player_deployable")
-	if targetable:
-		add_to_group("player_target")
 	queue_redraw()
 
 func is_alive() -> bool:
@@ -59,8 +57,6 @@ func despawn_deployable() -> void:
 func _remove_deployable_groups() -> void:
 	if is_in_group("player_deployable"):
 		remove_from_group("player_deployable")
-	if is_in_group("player_target"):
-		remove_from_group("player_target")
 
 func _on_deployable_destroyed() -> void:
 	pass

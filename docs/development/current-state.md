@@ -61,7 +61,7 @@ abilities, ultimates, and base mutations are free.
 - Every player always has:
   - one active weapon, starting with `Rifle`
   - shared weapon level `1-5` preserved when changing weapons
-  - four ability slots on controller face buttons: `A`, `X`, `Y`, `B`
+  - four ability slots on controller face buttons: `A`, `X`, `B`, `Y`
   - keyboard defaults for P1/P2 ability slots on number-row `1`, `2`, `3`, `4`
   - mutation inventory
 - V4 removed in-run weapon switching. A run has one active weapon selected before launch.
@@ -79,22 +79,15 @@ abilities, ultimates, and base mutations are free.
   - `Rifle`
   - `Rocket Launcher`
   - `Shotgun`
-  - `Cannon`
-  - `Railgun`
   - `Beam`
-  - `Boomerang`
   - `Whirlwind` (`melee`): short-radius swing that hits all nearby enemies.
   - `Arc Wand` (`chain`): lightning hit that jumps between nearby enemies.
   - `Flamethrower` (`cone`): short forward cone with sustained tick damage and burn.
-  - Retired legacy weapons (`Cannon`, `Railgun`, `Boomerang`) remain in weapon data for compatibility but are
-    no longer class-pool or paid unlock content.
 - Live ability roster:
   - `Shockwave`
   - `Dash`
   - `Overcharge`
-  - `Blink`
   - `Shield`
-  - `Decoy`
   - `Turret`
   - `Minefield`
   - `Orbit`
@@ -121,8 +114,8 @@ abilities, ultimates, and base mutations are free.
 - Mutation offers are filtered by equipped class/passive/weapon/ability/ultimate tags plus selected mutation
   tags. Pierce requires `projectile`, Combustion requires `risk`, and Overgrowth requires a `summon` item.
 - The old in-run weapon-switch reward cards are removed; weapon level-up remains as the weapon reward card.
-- Existing player deployables (`Turret`, `Orbit`, `Decoy`, and player `Minefield` mines) use the shared
-  `DeployableNode` HP/damage/death contract and participate in the `player_target` group.
+- Existing player deployables (`Turret`, `Orbit`, `Summon`, and player `Minefield` mines) use the shared
+  `DeployableNode` HP/damage/death contract and participate in `player_deployable`, not enemy aggro targeting.
 - Player deployables persist until destroyed, triggered, or their owner disappears; their old lifetime
   countdown despawn paths are removed.
 - Class passives:
@@ -200,12 +193,12 @@ abilities, ultimates, and base mutations are free.
 - `Bootstrap.gd` now owns:
   - single Play setup
   - player/controller/class/loadout setup
-  - Options input binding rows for `Ability 1 A`, `Ability 2 X`, `Ability 3 Y`, and `Ability 4 B`
+  - Options input binding rows for `Ability 1 A`, `Ability 2 X`, `Ability 3 B`, and `Ability 4 Y`
   - Meta unlock menu backed by `ProfileState`
   - Encounter Builder with `Combat / Champion`
   - champion picker over all seven champions
-- Encyclopedia entries label all heavy enemies as champions and show visual previews for enemies, weapons,
-  abilities/mutations, and modifiers.
+- Encyclopedia entries label all heavy enemies as champions and show classes, class pools, weapons,
+  abilities/ultimates, upgrades, modifiers, and system rules from live catalogs where possible.
 - PerfRunner uses `champion:<id>` profiles for champion-in-wave profiling.
 - `scripts/ui/MapNodeButton.gd` is deleted.
 
@@ -229,9 +222,9 @@ Last validation run in this state:
   - no-summon kit: Overgrowth ineligible
 - Latest PerfRunner result after Slice 2:
   - `avg_fps=144.7`, `min_fps=143.0`, `max_frame_ms=19.251`.
-- Slice 3 deployable health acceptance:
-  - temporary Godot script instantiated Turret, Orbit, Decoy, and AbilityMine
-  - each entered `player_target`, survived partial damage, and died on lethal damage
+- Original Slice 3 deployable health acceptance:
+  - temporary Godot script instantiated the then-current deployable set and verified partial/lethal damage
+  - polish later split deployable contact damage from enemy aggro targeting
   - result: `deployable_health_check=passed`
 - Latest PerfRunner result after Slice 3:
   - `avg_fps=144.9`, `min_fps=144.0`, `max_frame_ms=6.903`.
@@ -254,6 +247,33 @@ Last validation run in this state:
   - premium per-class unlocks are marked `signature`
 - Latest PerfRunner result after Slice 7:
   - `avg_fps=144.9`, `min_fps=144.0`, `max_frame_ms=6.944`.
+- V4 polish implementation validation:
+  - JSON parse for `data/weapons.json`, `data/abilities.json`, and `data/mutations.json`
+  - `git diff --check`
+  - Godot headless parse:
+    `Godot_v4.6.2-stable_win64_console.exe --headless --path D:\GameDev\Project_Twin_stick_v4 --quit`
+  - Bootstrap smoke boot:
+    `Godot_v4.6.2-stable_win64_console.exe --headless --path D:\GameDev\Project_Twin_stick_v4 res://scenes/ui/Bootstrap.tscn --quit`
+  - PerfRunner Hive champion profile:
+    `Godot_v4.6.2-stable_win64_console.exe --headless --path D:\GameDev\Project_Twin_stick_v4 -- --profile=champion:hive --players=2 --build=heavy`
+    - Result: `avg_fps=145.0`, `min_fps=144.0`, `max_frame_ms=6.944`.
+
+## V4 Polish Stat Table
+
+- Enemy HP changed: chaser `30 -> 24`, charger `52 -> 36`, spitter `15 -> 14`, splitter `25 -> 22`,
+  splitter_mini `8 -> 7`, bomber `30 -> 20`, elite_charger `500 -> 460`, elite_spitter `380 -> 360`,
+  elite_support `440 -> 400`; boss HP unchanged.
+- Enemy contact/projectile damage changed: chaser contact `12 -> 6`, charger contact `20 -> 10`, spitter
+  projectile/contact `12/6 -> 4/4`, splitter contact `8 -> 5`, splitter_mini contact `6 -> 4`,
+  elite_charger contact `28 -> 18`, elite_spitter projectile/contact `20/12 -> 8/8`,
+  elite_support contact `10 -> 7`, boss contact `35 -> 28`.
+- Weapon curves flattened to the V4 polish targets for rifle, beam, shotgun, rocket, Whirlwind, Arc Wand, and
+  Flamethrower.
+- Ability tuning changed: Shockwave `22 -> 28`, Momentum Burst `24 -> 28`, Orbit `9 -> 14`, Turret `18 -> 16`,
+  Afterburn `9 -> 10`, Quake `10 -> 12`.
+- Passive/ultimate tuning changed: Risk max-Heat vulnerability `+50% -> +25%`, Bloodthirst heal-per-kill
+  `8 -> 5`, Gorge bonus `4 -> 3`, combat ultimate charge reduced for higher-density rooms, Slipstream damage
+  `1.12 -> 1.3` plus enemy/projectile slow and dash recharge.
 
 ## Known Risks
 
@@ -264,7 +284,7 @@ Last validation run in this state:
 - Phase 4 tuning is first-pass and should get one more live `1P` / `2P` feel check, especially rooms `10+`.
 - Champion readability inside dense waves still needs live validation after the cooldown/damage tuning.
 - The two next-room cards depend on existing enemy/modifier differentiation; keep watching whether choices feel meaningful.
-- Cannon was moved toward burst-AOE and Beam was softened as the sustained champion-killer; confirm both roles read correctly.
+- New V4 polish tuning is still first-pass and needs live 1P/2P feel checks across all four classes.
 - Deep runs may exhaust upgrade variety; parked until real run depths are known.
 - Objective-panel icons still use simple letter fallback glyphs (`H` / `K` / `C`).
 - Pulsar EMP / hazard readability and Hive deflector readability need live feel validation in dense rooms.
@@ -274,4 +294,5 @@ Last validation run in this state:
 `docs/development/v4-implementation-plan.md` Slices 0-7 are implemented in the V4 worktree.
 
 - Run live 1P/2P feel checks across all four classes.
-- Balance first-pass class ability, ultimate, and premium mutation values.
+- Live-check the V4 polish round across all four classes, especially contact damage, loadout assignment,
+  ultimate cadence, and dense-room readability.

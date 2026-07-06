@@ -317,48 +317,38 @@ func _update_beam_visual(state: Dictionary, origin: Vector2, direction: Vector2,
 func _spawn_weapon_arc(origin: Vector2, direction: Vector2, radius: float, color: Color) -> void:
 	if should_suppress_combat_vfx():
 		return
-	var ring := ParticleFactoryData.create_impact_ring(color.lightened(0.18), radius, 2.2)
-	ring.global_position = origin
-	ring.rotation = direction.angle() if direction.length() > 0.0 else 0.0
-	_effects_container.add_child(ring)
+	var crescent := ParticleFactoryData.create_neon_crescent(color.lightened(0.18), radius, direction, 128.0)
+	crescent.global_position = origin
+	_effects_container.add_child(crescent)
+	var trail := ParticleFactoryData.create_attack_trail(color.lightened(0.18), direction, 1.25)
+	trail.global_position = origin - direction.normalized() * 18.0 if direction.length() > 0.0 else origin
+	_effects_container.add_child(trail)
 
 func _spawn_weapon_cone(origin: Vector2, direction: Vector2, range: float, half_angle: float, color: Color) -> void:
 	if should_suppress_combat_vfx():
 		return
-	var line := Line2D.new()
-	line.width = 18.0
-	line.default_color = Color(color.r, color.g * 0.72, color.b * 0.35, 0.42)
-	line.antialiased = true
-	line.z_index = 5
-	line.global_position = Vector2.ZERO
-	line.points = PackedVector2Array([
-		origin,
-		origin + direction.rotated(-half_angle) * range,
-		origin + direction * range * 0.82,
-		origin + direction.rotated(half_angle) * range,
-	])
-	_effects_container.add_child(line)
-	var tween := line.create_tween()
-	tween.tween_property(line, "modulate:a", 0.0, 0.08)
-	tween.tween_callback(line.queue_free)
+	var cone := ParticleFactoryData.create_flame_cone(color, range, half_angle, direction)
+	cone.global_position = origin
+	_effects_container.add_child(cone)
 
 func _spawn_chain_visual(points: Array, color: Color) -> void:
 	if points.size() < 2 or should_suppress_combat_vfx():
 		return
-	var line := Line2D.new()
-	line.width = 5.0
-	line.default_color = Color(color.r * 0.65, minf(color.g * 1.25, 1.0), 1.0, 0.84)
-	line.antialiased = true
-	line.z_index = 6
-	line.global_position = Vector2.ZERO
 	var packed_points := PackedVector2Array()
-	for point_variant in points:
-		packed_points.append(point_variant as Vector2)
-	line.points = packed_points
-	_effects_container.add_child(line)
-	var tween := line.create_tween()
-	tween.tween_property(line, "modulate:a", 0.0, 0.12)
-	tween.tween_callback(line.queue_free)
+	for point_index in range(points.size()):
+		var point := points[point_index] as Vector2
+		if point_index == 0:
+			packed_points.append(point)
+			continue
+		var previous := points[point_index - 1] as Vector2
+		var offset := point - previous
+		var normal := offset.orthogonal().normalized() if offset.length() > 0.0 else Vector2.UP
+		packed_points.append(previous.lerp(point, 0.45) + normal * 10.0)
+		packed_points.append(previous.lerp(point, 0.7) - normal * 7.0)
+		packed_points.append(point)
+	var lightning := ParticleFactoryData.create_lightning_path(packed_points, color, 5.0)
+	lightning.global_position = Vector2.ZERO
+	_effects_container.add_child(lightning)
 
 func _update_beam_fire_pool(state: Dictionary, hit_position: Vector2, projectile_config: Dictionary) -> void:
 	if not bool(projectile_config.get("leaves_fire_trail", false)):

@@ -5,10 +5,11 @@ const ReviveProgressMarkerData = preload("res://scripts/ui/ReviveProgressMarker.
 const HealthBarHUDData = preload("res://scripts/juice/HealthBarHUD.gd")
 const HudPaletteData = preload("res://scripts/game/HudPalette.gd")
 const CoopFormat = preload("res://scripts/game/CoopFormat.gd")
+const ClassVisualsData = preload("res://scripts/game/ClassVisuals.gd")
 
 const HUD_HEALTH_COLOR := Color(0.24, 0.92, 0.34, 1.0)
 const HUD_SLOT_2_COLOR := HudPaletteData.SLOT_2_COLOR
-const HUD_ABILITY_TRIGGERS := ["A", "X", "Y", "B"]
+const HUD_ABILITY_TRIGGERS := ["A", "X", "B", "Y"]
 
 var _coop: Node = null
 var _ui_layer: CanvasLayer = null
@@ -169,6 +170,12 @@ func build() -> void:
 		header.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		top_row.add_child(header)
 
+		var passive_label := Label.new()
+		passive_label.add_theme_font_size_override("font_size", 10)
+		passive_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		passive_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		card_layout.add_child(passive_label)
+
 		var health_bar := ProgressBar.new()
 		health_bar.show_percentage = false
 		health_bar.min_value = 0.0
@@ -229,6 +236,8 @@ func build() -> void:
 			})
 
 		_bottom_player_hud_cards.append({
+			"header": header,
+			"passive_label": passive_label,
 			"health_bar": health_bar,
 			"ability_slots": ability_slots,
 			"momentum_pips": momentum_pips,
@@ -546,6 +555,7 @@ func _refresh_bottom_hud() -> void:
 		var card: Dictionary = _bottom_player_hud_cards[index]
 		var player = player_nodes[index]
 		var health_state: Dictionary = player.get_health_state()
+		_refresh_class_state_text(card, health_state, index)
 		var health_ratio := clampf(float(health_state.get("current", 0)) / maxf(float(health_state.get("max", 1)), 1.0), 0.0, 1.0)
 		(card.get("health_bar") as ProgressBar).value = health_ratio * 100.0
 		var ability_slots: Array = card.get("ability_slots", []) as Array
@@ -553,6 +563,8 @@ func _refresh_bottom_hud() -> void:
 			var slot_hud_data: Dictionary = player.get_ability_hud_data(slot_index)
 			var slot_duration := maxf(float(slot_hud_data.get("cooldown_duration", 1.0)), 0.01)
 			var slot_ratio := 1.0 - clampf(float(slot_hud_data.get("cooldown_remaining", 0.0)) / slot_duration, 0.0, 1.0)
+			if bool(slot_hud_data.get("is_ultimate", false)):
+				slot_ratio = clampf(float(slot_hud_data.get("ready_ratio", 0.0)), 0.0, 1.0)
 			var slot_nodes: Dictionary = ability_slots[slot_index] as Dictionary
 			(slot_nodes.get("label") as Label).text = str(slot_hud_data.get("name", "Ability %d" % (slot_index + 1)))
 			_update_slot_charge_label(slot_nodes.get("charge_label") as Label, slot_hud_data)
@@ -572,8 +584,40 @@ func _refresh_momentum_pips(card: Dictionary, player_index: int) -> void:
 		pip.color = Color(tint.r, tint.g, tint.b, 0.92) if index < tier else Color(tint.r, tint.g, tint.b, 0.18)
 
 
+func _refresh_class_state_text(card: Dictionary, health_state: Dictionary, player_index: int) -> void:
+	var class_id := str(health_state.get("class_id", ""))
+	var passive_id := str(health_state.get("passive_id", ""))
+	var class_def := RunState.get_class_definition(class_id)
+	var display_class_name := str(class_def.get("name", _format_inline_name(class_id)))
+	var passive_name := _format_inline_name(passive_id)
+	var accent := ClassVisualsData.get_accent_color(class_id)
+	var header: Label = card.get("header", null)
+	if header != null:
+		header.text = "P%d  %s" % [player_index + 1, display_class_name]
+		header.add_theme_color_override("font_color", accent.lightened(0.15))
+	var passive_label: Label = card.get("passive_label", null)
+	if passive_label == null:
+		return
+	var details := ""
+	if passive_id == "overheat":
+		details = "Heat %d" % int(health_state.get("heat", 0))
+	elif passive_id == "bloodthirst":
+		details = "Overshield %d" % int(health_state.get("overshield", 0))
+	elif passive_id == "momentum":
+		details = "Momentum"
+	elif passive_id == "radiance":
+		details = "Radiance"
+	var detail_text := "  |  %s" % details if not details.is_empty() else ""
+	passive_label.text = "%s%s" % [passive_name, detail_text]
+	passive_label.add_theme_color_override("font_color", accent.lightened(0.28))
+
+
 func _update_slot_charge_label(label: Label, slot_hud_data: Dictionary) -> void:
 	if label == null:
+		return
+	if bool(slot_hud_data.get("is_ultimate", false)):
+		label.visible = true
+		label.text = "READY" if bool(slot_hud_data.get("is_ready", false)) else "%d%%" % int(round(float(slot_hud_data.get("ready_ratio", 0.0)) * 100.0))
 		return
 	var max_charges := int(slot_hud_data.get("charges_max", 1))
 	if max_charges <= 1:
@@ -590,3 +634,11 @@ func _get_player_configs() -> Array:
 
 func _get_player_nodes() -> Array:
 	return _coop.call("get_player_target_nodes") as Array
+
+
+func _format_inline_name(raw_id: String) -> String:
+	var parts: Array = []
+	for part in raw_id.split("_"):
+		if not part.is_empty():
+			parts.append(part.capitalize())
+	return " ".join(parts)

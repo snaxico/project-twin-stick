@@ -10,7 +10,7 @@
       "cooldown": 5.0,
       "duration": 0.0,
       "stats": {
-        "damage": 22.0,
+        "damage": 28.0,
         "radius": 250.0,
         "knockback_force": 950.0,
         "expand_duration": 0.15
@@ -46,22 +46,6 @@
       }
     },
     {
-      "id": "blink",
-      "name": "Blink",
-      "description": "Instant short-range teleport in your movement direction.",
-      "tags": ["mobility"],
-      "slot": "def",
-      "type": "movement",
-      "cooldown": 4.0,
-      "duration": 0.0,
-      "stats": {
-        "distance": 340.0,
-        "arrival_iframes": 0.2,
-        "detonation_radius": 120.0,
-        "detonation_damage": 22
-      }
-    },
-    {
       "id": "shield",
       "name": "Shield",
       "description": "Blocks all damage for a short duration but prevents attacking.",
@@ -75,21 +59,6 @@
       }
     },
     {
-      "id": "decoy",
-      "name": "Decoy",
-      "description": "Drop a copy that distracts enemies while you briefly vanish.",
-      "tags": ["summon"],
-      "slot": "def",
-      "type": "sustained",
-      "cooldown": 10.0,
-      "duration": 3.0,
-      "stats": {
-        "invisibility_duration": 1.2,
-        "decoy_health": 120,
-        "taunt_radius": 700.0
-      }
-    },
-    {
       "id": "turret",
       "name": "Turret",
       "description": "Place an auto-firing turret that tracks nearby enemies.",
@@ -99,7 +68,7 @@
       "cooldown": 12.0,
       "duration": 9.0,
       "stats": {
-        "damage": 18,
+        "damage": 16,
         "fire_rate": 4.5,
         "range": 780.0,
         "projectile_speed": 760.0,
@@ -136,7 +105,7 @@
       "stats": {
         "orb_count": 3,
         "orbit_radius": 150.0,
-        "damage": 9,
+        "damage": 14,
         "rotation_speed": 2.6,
         "orb_visual_scale": 1.5,
         "blocks_projectiles": true,
@@ -154,7 +123,7 @@
       "duration": 3.0,
       "stats": {
         "trail_radius": 88.0,
-        "damage": 9,
+        "damage": 10,
         "tick_interval": 0.35,
         "knockback_force": 80.0
       }
@@ -169,7 +138,7 @@
       "cooldown": 7.0,
       "duration": 0.0,
       "stats": {
-        "damage": 24,
+        "damage": 28,
         "momentum_damage_per_tier": 8,
         "radius": 250.0,
         "knockback_force": 720.0,
@@ -239,7 +208,7 @@
       "duration": 4.0,
       "stats": {
         "radius": 185.0,
-        "damage": 10,
+        "damage": 12,
         "tick_interval": 0.45,
         "knockback_force": 120.0
       }
@@ -353,8 +322,11 @@
       "stats": {
         "move_speed_multiplier": 1.55,
         "attack_speed_multiplier": 1.35,
-        "damage_multiplier": 1.12,
-        "radius": 300.0
+        "damage_multiplier": 1.3,
+        "radius": 300.0,
+        "world_slow_multiplier": 0.55,
+        "world_slow_duration": 5.0,
+        "dash_recharge": true
       }
     },
     {

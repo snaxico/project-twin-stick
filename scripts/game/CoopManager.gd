@@ -19,7 +19,6 @@ const FireFloorModifierData = preload("res://scripts/modifiers/FireFloorModifier
 const IceZoneModifierData = preload("res://scripts/modifiers/IceZoneModifier.gd")
 const MineFieldModifierData = preload("res://scripts/modifiers/MineFieldModifier.gd")
 const ShrinkingArenaModifierData = preload("res://scripts/modifiers/ShrinkingArenaModifier.gd")
-const DecoyNodeData = preload("res://scripts/game/DecoyNode.gd")
 const TurretNodeData = preload("res://scripts/game/TurretNode.gd")
 const OrbitNodeData = preload("res://scripts/game/OrbitNode.gd")
 const SummonNodeData = preload("res://scripts/game/SummonNode.gd")
@@ -153,7 +152,6 @@ var _fire_floor_modifier = null
 var _ice_zone_modifier = null
 var _mine_field_modifier = null
 var _shrinking_arena_modifier = null
-var _active_decoys: Array = []
 var _active_turrets: Array = []
 var _active_orbits: Array = []
 var _active_summons: Array = []
@@ -473,7 +471,7 @@ func _apply_radiance_ability_stats(player_index: int, ability_definition: Dictio
 	for key in ["damage"]:
 		if stats.has(key):
 			stats[key] = int(round(float(stats[key]) * 1.2))
-	for key in ["turret_health", "orbit_health", "mine_health", "decoy_health", "health"]:
+	for key in ["turret_health", "orbit_health", "mine_health", "health"]:
 		if stats.has(key):
 			stats[key] = int(round(float(stats[key]) * 1.45))
 	if stats.has("fire_rate"):
@@ -506,9 +504,9 @@ func _apply_bloodthirst_on_kill(enemy) -> void:
 		return
 	if not player.has_method("has_passive") or not player.has_passive("bloodthirst"):
 		return
-	var heal_amount := 8
+	var heal_amount := 5
 	if _mutation_system.has_mutation(player_index, "gorge"):
-		heal_amount += 4
+		heal_amount += 3
 	var overshield_mult := 1.35 if _mutation_system.has_mutation(player_index, "overflow") else 1.0
 	player.apply_bloodthirst_heal(heal_amount, overshield_mult)
 
@@ -556,7 +554,6 @@ func _clear_runtime_nodes() -> void:
 		for child in node.get_children():
 			child.queue_free()
 	_enemy_nodes.clear()
-	_active_decoys.clear()
 	_active_turrets.clear()
 	_active_orbits.clear()
 	_active_summons.clear()
@@ -834,17 +831,8 @@ func _on_player_ability_activated(player, slot_index: int, ability_id: String, o
 			_combat_effects.schedule_player_shockwave_resonance(origin, stats)
 		"dash":
 			_spawn_dash_effect(origin, direction, tint)
-		"blink":
-			_spawn_blink_effect(origin, tint)
-			_spawn_blink_detonation(origin, stats)
 		"shield":
 			_spawn_shield_effect(origin, float(stats.get("radius", 78.0)), tint)
-		"decoy":
-			var decoy := DecoyNodeData.new()
-			decoy.global_position = origin
-			decoy.configure(float(stats.get("duration", 5.0)), tint, int(stats.get("decoy_health", 120)), stats)
-			players.add_child(decoy)
-			_active_decoys.append(decoy)
 		"turret":
 			var turret := TurretNodeData.new()
 			turret.global_position = origin
@@ -861,6 +849,7 @@ func _on_player_ability_activated(player, slot_index: int, ability_id: String, o
 			_active_orbits.append(orbit)
 		"afterburn":
 			_spawn_player_fire_zone(origin, stats)
+			_spawn_zone_cast_pulse(origin, float(stats.get("trail_radius", stats.get("radius", 120.0))), tint, 0.75)
 		"momentum_burst":
 			var burst_stats := stats.duplicate(true)
 			var momentum_tier := 0
@@ -876,6 +865,7 @@ func _on_player_ability_activated(player, slot_index: int, ability_id: String, o
 			_combat_effects.spawn_player_shockwave(origin, stats)
 		"quake":
 			_spawn_player_fire_zone(origin, stats)
+			_spawn_zone_cast_pulse(origin, float(stats.get("radius", 150.0)), tint, 1.1)
 		"blood_lance":
 			_fire_ability_projectile(player, origin, direction, stats)
 		"summon":
@@ -888,14 +878,21 @@ func _on_player_ability_activated(player, slot_index: int, ability_id: String, o
 			_ignite_nearby_enemies(origin, stats, tint)
 		"slipstream":
 			_apply_timed_player_modifier(player, "slipstream", stats)
+			_apply_slipstream_world_slow(stats)
+			if player != null and is_instance_valid(player) and player.has_method("recharge_dash_slots"):
+				player.recharge_dash_slots()
+			_spawn_slipstream_aura(origin, tint, float(stats.get("duration", 5.0)))
 			_deflect_enemy_projectiles(origin, stats)
 		"blood_frenzy":
 			_apply_timed_player_modifier(player, "blood_frenzy", stats)
+			_spawn_zone_cast_pulse(origin, 180.0, Color(1.0, 0.12, 0.16, 0.92), 1.25)
 			if player != null and is_instance_valid(player) and player.has_method("apply_bloodthirst_heal"):
 				player.apply_bloodthirst_heal(int(stats.get("heal", 35)), 1.0)
 		"overload_grid":
+			_spawn_zone_cast_pulse(origin, 260.0, tint.lightened(0.16), 1.25)
 			_activate_overload_grid(player, origin, stats, tint)
 		"firestorm":
+			_spawn_zone_cast_pulse(origin, float(stats.get("spread_radius", 260.0)), tint, 1.25)
 			_activate_firestorm(origin, stats)
 		"overcharge":
 			var burst := ParticleFactoryData.create_explosion_burst(tint, 1.15)
@@ -915,28 +912,6 @@ func _spawn_dash_effect(origin: Vector2, direction: Vector2, color: Color) -> vo
 	burst.global_position = origin
 	effects.add_child(burst)
 	_play_sfx("play_dash", [1.0])
-
-func _spawn_blink_effect(origin: Vector2, color: Color) -> void:
-	var burst := ParticleFactoryData.create_explosion_burst(color, 0.75)
-	burst.global_position = origin
-	effects.add_child(burst)
-
-func _spawn_blink_detonation(origin: Vector2, stats: Dictionary) -> void:
-	var radius := float(stats.get("detonation_radius", 0.0))
-	var damage := int(stats.get("detonation_damage", 0))
-	if radius <= 0.0 or damage <= 0:
-		return
-	var color: Color = stats.get("color", Color.WHITE)
-	for enemy in get_nearby_enemy_target_nodes(origin, radius):
-		if enemy == null or not is_instance_valid(enemy) or not enemy.has_method("is_alive") or not enemy.is_alive():
-			continue
-		if enemy.global_position.distance_squared_to(origin) > radius * radius:
-			continue
-		enemy.apply_damage(damage)
-		if enemy.has_method("apply_knockback"):
-			var offset: Vector2 = enemy.global_position - origin
-			enemy.apply_knockback(offset.normalized() if offset.length() > 0.0 else Vector2.RIGHT, 420.0)
-	_spawn_shockwave_visual(origin, radius, color, 0.12)
 
 func _spawn_shield_effect(origin: Vector2, radius: float, color: Color) -> void:
 	var ring := ParticleFactoryData.create_explosion_ring(color, radius, 3.0)
@@ -1025,6 +1000,10 @@ func _spawn_summons(player, origin: Vector2, stats: Dictionary, tint: Color) -> 
 		summon.configure(player, stats, tint)
 		effects.add_child(summon)
 		_active_summons.append(summon)
+		if not _should_suppress_combat_vfx():
+			var flash := ParticleFactoryData.create_explosion_burst(tint.lightened(0.18), 0.72)
+			flash.global_position = summon.global_position
+			effects.add_child(flash)
 
 func _reinforce_deployables(origin: Vector2, stats: Dictionary, tint: Color) -> void:
 	var repair_amount := int(stats.get("repair_amount", 55))
@@ -1036,6 +1015,10 @@ func _reinforce_deployables(origin: Vector2, stats: Dictionary, tint: Color) -> 
 			continue
 		if deployable.has_method("heal_deployable"):
 			deployable.heal_deployable(repair_amount)
+			if not _should_suppress_combat_vfx():
+				var glint := ParticleFactoryData.create_impact_ring(tint.lightened(0.2), 26.0, 2.2)
+				glint.global_position = (deployable as Node2D).global_position
+				effects.add_child(glint)
 	_spawn_shockwave_visual(origin, radius, tint, 0.18)
 
 func _ignite_nearby_enemies(origin: Vector2, stats: Dictionary, tint: Color) -> void:
@@ -1053,6 +1036,15 @@ func _ignite_nearby_enemies(origin: Vector2, stats: Dictionary, tint: Color) -> 
 			enemy.apply_poison(float(stats.get("burn_dps", 8.0)), float(stats.get("burn_duration", 4.0)))
 		if enemy.has_method("apply_ignite_on_death"):
 			enemy.apply_ignite_on_death(float(stats.get("ignite_radius", 130.0)), int(stats.get("ignite_damage", 20)))
+		if not _should_suppress_combat_vfx():
+			var embers := ParticleFactoryData.create_projectile_trail(tint.lightened(0.16), "embers")
+			embers.global_position = enemy.global_position
+			effects.add_child(embers)
+			var timer := get_tree().create_timer(0.22)
+			timer.timeout.connect(func():
+				if embers != null and is_instance_valid(embers):
+					embers.queue_free()
+			)
 	_spawn_shockwave_visual(origin, radius, tint, 0.12)
 
 func _apply_timed_player_modifier(player, source: String, stats: Dictionary) -> void:
@@ -1071,6 +1063,18 @@ func _apply_timed_player_modifier(player, source: String, stats: Dictionary) -> 
 			player.clear_zone_modifier(source)
 	)
 
+func _apply_slipstream_world_slow(stats: Dictionary) -> void:
+	var multiplier := clampf(float(stats.get("world_slow_multiplier", 0.55)), 0.1, 1.0)
+	var duration := maxf(float(stats.get("world_slow_duration", stats.get("duration", 5.0))), 0.1)
+	for enemy in _enemy_nodes:
+		if enemy != null and is_instance_valid(enemy) and enemy.has_method("apply_slow"):
+			enemy.apply_slow(multiplier, duration)
+	for projectile in projectiles.get_children():
+		if projectile == null or not is_instance_valid(projectile):
+			continue
+		if "team" in projectile and str(projectile.team) == "enemy" and "speed" in projectile:
+			projectile.speed = float(projectile.speed) * multiplier
+
 func _activate_overload_grid(player, origin: Vector2, stats: Dictionary, tint: Color) -> void:
 	_reinforce_deployables(origin, stats, tint)
 	var summon_stats := stats.duplicate(true)
@@ -1088,8 +1092,40 @@ func _activate_firestorm(origin: Vector2, stats: Dictionary) -> void:
 		zone_stats["radius"] = float(stats.get("radius", 150.0))
 		zone_stats["duration"] = float(stats.get("duration", 5.0))
 		zone_stats["damage"] = int(stats.get("damage", 18))
+		if not _should_suppress_combat_vfx():
+			var telegraph := ParticleFactoryData.create_impact_ring(stats.get("color", Color(1.0, 0.35, 0.1, 1.0)), float(zone_stats.get("radius", 150.0)), 2.5)
+			telegraph.global_position = origin + Vector2.RIGHT.rotated(angle) * spread_radius
+			effects.add_child(telegraph)
 		_spawn_player_fire_zone(origin + Vector2.RIGHT.rotated(angle) * spread_radius, zone_stats)
 	_spawn_screen_flash(Color(1.0, 0.32, 0.08, 0.18), 0.22)
+
+func _spawn_zone_cast_pulse(origin: Vector2, radius: float, color: Color, weight: float = 1.0) -> void:
+	if _should_suppress_combat_vfx():
+		return
+	var pulse := ParticleFactoryData.create_zone_pulse(color, radius, weight)
+	pulse.global_position = origin
+	effects.add_child(pulse)
+
+func _spawn_slipstream_aura(origin: Vector2, color: Color, duration: float) -> void:
+	if _should_suppress_combat_vfx():
+		return
+	var aura := Node2D.new()
+	aura.global_position = origin
+	for index in range(5):
+		var streak := Line2D.new()
+		streak.width = 3.0
+		streak.antialiased = true
+		streak.default_color = Color(color.r, color.g, minf(color.b + 0.35, 1.0), 0.55)
+		var direction := Vector2.RIGHT.rotated(TAU * float(index) / 5.0)
+		streak.points = PackedVector2Array([direction * 24.0, direction * 112.0])
+		aura.add_child(streak)
+	effects.add_child(aura)
+	var tween := aura.create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(aura, "rotation", TAU, minf(duration, 0.7))
+	tween.tween_property(aura, "modulate:a", 0.0, minf(duration, 0.7))
+	tween.set_parallel(false)
+	tween.tween_callback(aura.queue_free)
 
 func _on_player_shield_burst_requested(origin: Vector2, radius: float, damage: int, color: Color) -> void:
 	if radius <= 0.0 or damage <= 0:
@@ -1453,7 +1489,6 @@ func _populate_modifier_hud() -> void:
 
 func _cleanup_helpers() -> void:
 	_active_hazards = _cleanup_instance_array(_active_hazards)
-	_active_decoys = _cleanup_instance_array(_active_decoys)
 	_active_turrets = _cleanup_instance_array(_active_turrets)
 	_active_orbits = _cleanup_instance_array(_active_orbits)
 	_active_summons = _cleanup_instance_array(_active_summons)
@@ -1740,7 +1775,6 @@ func get_runtime_pause_node_groups() -> Array:
 		_enemy_nodes,
 		_active_hazards,
 		_active_mines,
-		_active_decoys,
 		_active_turrets,
 		_active_orbits,
 		_active_summons,

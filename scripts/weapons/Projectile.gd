@@ -54,7 +54,6 @@ var weapon_tags: Array = []
 var trigger_passives: Array = []
 var source_player_index := -1
 var use_lifetime := true
-var travel_distance: float = 0.0
 var split_remaining: int = 0
 var _shooter_node: Node = null
 
@@ -67,9 +66,6 @@ var _spawn_position := Vector2.ZERO
 var _base_collision_radius := 0.0
 var _base_visual_scale := Vector2.ONE
 var _hit_targets: Array = []
-var _boomerang_out_hit_targets: Array = []
-var _boomerang_return_hit_targets: Array = []
-var _boomerang_returning := false
 var _projectile_config: Dictionary = {}
 var _pooled := false
 var _active := true
@@ -121,13 +117,9 @@ func setup(projectile_team: String, projectile_direction: Vector2, projectile_sp
 	weapon_tags = []
 	trigger_passives = []
 	source_player_index = -1
-	travel_distance = 0.0
 	split_remaining = 0
 	use_lifetime = projectile_team != "enemy"
 	_hit_targets.clear()
-	_boomerang_out_hit_targets.clear()
-	_boomerang_return_hit_targets.clear()
-	_boomerang_returning = false
 	_projectile_config.clear()
 	_impact_pool_spawned = false
 
@@ -181,9 +173,6 @@ func setup_from_config(projectile_team: String, projectile_direction: Vector2, c
 	weapon_tags = (config.get("weapon_tags", []) as Array).duplicate(true)
 	trigger_passives = (config.get("trigger_passives", []) as Array).duplicate(true)
 	source_player_index = int(config.get("source_player_index", source_player_index))
-	travel_distance = maxf(0.0, float(config.get("travel_distance", travel_distance)))
-	if travel_distance > 0.0 and max_distance <= 0.0:
-		max_distance = travel_distance
 	split_remaining = max(0, int(config.get("split_count", split_remaining)))
 	use_lifetime = bool(config.get("use_lifetime", use_lifetime))
 	_projectile_config = config.duplicate(true)
@@ -252,9 +241,6 @@ func _ensure_unique_collision_shape() -> void:
 func _physics_process(delta: float) -> void:
 	if not _active:
 		return
-	if projectile_kind == "boomerang":
-		_update_boomerang_motion(delta)
-		return
 	rotation = direction.angle()
 	global_position += direction * speed * delta
 	if max_distance > 0.0 and global_position.distance_squared_to(_spawn_position) >= max_distance * max_distance:
@@ -302,8 +288,6 @@ func _attempt_hit_target(target: Node) -> void:
 	_mark_target_hit_on_current_leg(target)
 	impact_requested.emit(global_position, -direction, team, _get_impact_color(), impact_sfx, impact_weight, target, _build_combat_context(target))
 	_request_split(target)
-	if projectile_kind == "boomerang":
-		return
 	if infinite_pierce:
 		return
 	if pierce_remaining > 0:
@@ -312,44 +296,14 @@ func _attempt_hit_target(target: Node) -> void:
 	_spawn_impact_fire_pool()
 	_finish_projectile()
 
-func _update_boomerang_motion(delta: float) -> void:
-	if _boomerang_returning:
-		if _shooter_node != null and is_instance_valid(_shooter_node) and _shooter_node is Node2D:
-			var to_owner: Vector2 = (_shooter_node as Node2D).global_position - global_position
-			if to_owner.length() <= 32.0:
-				_finish_projectile()
-				return
-			direction = to_owner.normalized()
-		else:
-			_finish_projectile()
-			return
-	else:
-		if max_distance > 0.0 and global_position.distance_squared_to(_spawn_position) >= max_distance * max_distance:
-			_boomerang_returning = true
-			_hit_targets.clear()
-			return
-	rotation = direction.angle()
-	global_position += direction * speed * delta
-	if use_lifetime and _current_time_seconds() >= _expires_at:
-		_finish_projectile()
-
 func _can_hit_target_on_current_leg(target: Node) -> bool:
-	if projectile_kind != "boomerang":
-		return not _hit_targets.has(target)
-	var leg_hits := _boomerang_return_hit_targets if _boomerang_returning else _boomerang_out_hit_targets
-	return not leg_hits.has(target)
+	return not _hit_targets.has(target)
 
 func _mark_target_hit_on_current_leg(target: Node) -> void:
-	if projectile_kind != "boomerang":
-		_hit_targets.append(target)
-		return
-	if _boomerang_returning:
-		_boomerang_return_hit_targets.append(target)
-	else:
-		_boomerang_out_hit_targets.append(target)
+	_hit_targets.append(target)
 
 func _request_split(target: Node) -> void:
-	if team != "player" or split_remaining <= 0 or projectile_kind == "boomerang":
+	if team != "player" or split_remaining <= 0:
 		return
 	split_remaining -= 1
 	var split_config := _projectile_config.duplicate(true)

@@ -277,57 +277,57 @@ func _configure_type(type_name: String) -> void:
 	match type_name:
 		"chaser":
 			enemy_type = EnemyType.CHASER
-			max_health = 30.0
+			max_health = 24.0
 			move_speed = 175.0
 			fire_interval = 99.0
 			projectile_damage = 0
 			projectile_speed = 0.0
-			contact_damage = 12
+			contact_damage = 6
 			_feedback_color = Color(0.96, 0.24, 0.26, 1.0)
 			_feedback_weight = 0.9
 		"charger":
 			enemy_type = EnemyType.CHARGER
-			max_health = 52.0
+			max_health = 36.0
 			move_speed = 208.0
 			fire_interval = 99.0
 			projectile_damage = 0
 			projectile_speed = 0.0
-			contact_damage = 20
+			contact_damage = 10
 			_feedback_color = Color(1.0, 0.48, 0.18, 1.0)
 			_feedback_weight = 1.1
 		"spitter":
 			enemy_type = EnemyType.SPITTER
-			max_health = 15.0
+			max_health = 14.0
 			move_speed = 350.0
 			fire_interval = 1.35
-			projectile_damage = 12
+			projectile_damage = 4
 			projectile_speed = 380.0
-			contact_damage = 6
+			contact_damage = 4
 			_feedback_color = Color(0.4, 0.9, 1.0, 1.0)
 			_feedback_weight = 1.0
 		"splitter":
 			enemy_type = EnemyType.SPLITTER
-			max_health = 25.0
+			max_health = 22.0
 			move_speed = 125.0
 			fire_interval = 99.0
 			projectile_damage = 0
 			projectile_speed = 0.0
-			contact_damage = 8
+			contact_damage = 5
 			_feedback_color = Color(0.3, 0.9, 0.4, 1.0)
 			_feedback_weight = 1.0
 		"splitter_mini":
 			enemy_type = EnemyType.SPLITTER_MINI
-			max_health = 8.0
+			max_health = 7.0
 			move_speed = 250.0
 			fire_interval = 99.0
 			projectile_damage = 0
 			projectile_speed = 0.0
-			contact_damage = 6
+			contact_damage = 4
 			_feedback_color = Color(1.0, 0.7, 0.95, 1.0)
 			_feedback_weight = 0.65
 		"bomber":
 			enemy_type = EnemyType.BOMBER
-			max_health = 30.0
+			max_health = 20.0
 			move_speed = 100.0
 			fire_interval = 99.0
 			projectile_damage = 0
@@ -337,32 +337,32 @@ func _configure_type(type_name: String) -> void:
 			_feedback_weight = 1.15
 		"elite_charger":
 			enemy_type = EnemyType.ELITE_CHARGER
-			max_health = 500.0
+			max_health = 460.0
 			move_speed = 250.0
 			fire_interval = 99.0
 			projectile_damage = 0
 			projectile_speed = 0.0
-			contact_damage = 28
+			contact_damage = 18
 			_feedback_color = Color(1.0, 0.54, 0.18, 1.0)
 			_feedback_weight = 1.75
 		"elite_spitter":
 			enemy_type = EnemyType.ELITE_SPITTER
-			max_health = 380.0
+			max_health = 360.0
 			move_speed = 320.0
 			fire_interval = 0.8
-			projectile_damage = 20
+			projectile_damage = 8
 			projectile_speed = 470.0
-			contact_damage = 12
+			contact_damage = 8
 			_feedback_color = Color(0.46, 0.98, 1.0, 1.0)
 			_feedback_weight = 1.6
 		"elite_support":
 			enemy_type = EnemyType.ELITE_SUPPORT
-			max_health = 440.0
+			max_health = 400.0
 			move_speed = 220.0
 			fire_interval = 99.0
 			projectile_damage = 0
 			projectile_speed = 0.0
-			contact_damage = 10
+			contact_damage = 7
 			_feedback_color = Color(0.72, 0.98, 0.48, 1.0)
 			_feedback_weight = 1.55
 		"boss_warden":
@@ -372,7 +372,7 @@ func _configure_type(type_name: String) -> void:
 			fire_interval = 99.0
 			projectile_damage = 16
 			projectile_speed = 0.0
-			contact_damage = 35
+			contact_damage = 28
 			_feedback_color = Color(1.0, 0.32, 0.26, 1.0)
 			_feedback_weight = 2.2
 		"boss_hydra":
@@ -382,7 +382,7 @@ func _configure_type(type_name: String) -> void:
 			fire_interval = 1.2
 			projectile_damage = 16
 			projectile_speed = 460.0
-			contact_damage = 35
+			contact_damage = 28
 			_feedback_color = Color(0.44, 0.78, 1.0, 1.0)
 			_feedback_weight = 2.0
 		"boss_hive":
@@ -392,7 +392,7 @@ func _configure_type(type_name: String) -> void:
 			fire_interval = 99.0
 			projectile_damage = 16
 			projectile_speed = 0.0
-			contact_damage = 35
+			contact_damage = 28
 			_feedback_color = Color(0.8, 0.36, 0.9, 1.0)
 			_feedback_weight = 2.0
 		"boss_pulsar":
@@ -402,7 +402,7 @@ func _configure_type(type_name: String) -> void:
 			fire_interval = 0.9
 			projectile_damage = 16
 			projectile_speed = 440.0
-			contact_damage = 35
+			contact_damage = 28
 			_feedback_color = Color(0.88, 0.96, 1.0, 1.0)
 			_feedback_weight = 2.0
 		_:
@@ -683,12 +683,9 @@ func _find_target() -> Node2D:
 	var tree := get_tree()
 	if tree == null:
 		return null
-	var taunt_target := _find_taunting_decoy(tree)
-	if taunt_target != null:
-		return taunt_target
 	var best_target: Node2D = null
 	var best_distance := INF
-	for candidate in tree.get_nodes_in_group("player_target"):
+	for candidate in tree.get_nodes_in_group("player"):
 		if not is_instance_valid(candidate) or not (candidate is Node2D):
 			continue
 		if candidate.has_method("is_targetable") and not candidate.is_targetable():
@@ -699,24 +696,6 @@ func _find_target() -> Node2D:
 		if distance < best_distance:
 			best_distance = distance
 			best_target = candidate as Node2D
-	return best_target
-
-func _find_taunting_decoy(tree: SceneTree) -> Node2D:
-	var best_target: Node2D = null
-	var best_distance := INF
-	for candidate in tree.get_nodes_in_group("decoy_taunt"):
-		if not is_instance_valid(candidate) or not (candidate is Node2D):
-			continue
-		if candidate.has_method("is_taunting") and not candidate.is_taunting():
-			continue
-		if candidate.has_method("is_alive") and not candidate.is_alive():
-			continue
-		var target_node := candidate as Node2D
-		var taunt_radius := float(candidate.get_taunt_radius()) if candidate.has_method("get_taunt_radius") else 700.0
-		var distance := global_position.distance_to(target_node.global_position)
-		if distance <= taunt_radius and distance < best_distance:
-			best_distance = distance
-			best_target = target_node
 	return best_target
 
 func _refresh_target_if_due() -> void:
@@ -743,28 +722,34 @@ func _attempt_contact_damage(now: float) -> void:
 	var any_hit := false
 	var contact_range := _get_contact_range()
 	var range_squared := contact_range * contact_range
-	for candidate in tree.get_nodes_in_group("player_target"):
-		if not is_instance_valid(candidate) or not (candidate is Node2D):
-			continue
-		if candidate.has_method("is_alive") and not candidate.is_alive():
-			continue
-		var target_node := candidate as Node2D
-		if global_position.distance_squared_to(target_node.global_position) > range_squared:
-			continue
-		if not candidate.has_method("apply_damage"):
-			continue
-		var can_apply_hit_feedback := true
-		if candidate.has_method("can_receive_damage"):
-			can_apply_hit_feedback = bool(candidate.can_receive_damage())
-		candidate.apply_damage(contact_damage)
-		if can_apply_hit_feedback and candidate.has_method("apply_knockback"):
-			var knockback_direction := (target_node.global_position - global_position).normalized()
-			if knockback_direction.length() <= 0.0:
-				knockback_direction = Vector2.RIGHT
-			candidate.apply_knockback(knockback_direction, _get_contact_knockback_force())
-		any_hit = true
+	var candidates: Array = []
+	candidates.append_array(tree.get_nodes_in_group("player"))
+	candidates.append_array(tree.get_nodes_in_group("player_deployable"))
+	for candidate in candidates:
+		any_hit = _attempt_contact_damage_against(candidate, range_squared) or any_hit
 	if any_hit:
 		_next_contact_at = now + (0.65 if is_champion() else 0.45)
+
+func _attempt_contact_damage_against(candidate, range_squared: float) -> bool:
+	if not is_instance_valid(candidate) or not (candidate is Node2D):
+		return false
+	if candidate.has_method("is_alive") and not candidate.is_alive():
+		return false
+	var target_node := candidate as Node2D
+	if global_position.distance_squared_to(target_node.global_position) > range_squared:
+		return false
+	if not candidate.has_method("apply_damage"):
+		return false
+	var can_apply_hit_feedback := true
+	if candidate.has_method("can_receive_damage"):
+		can_apply_hit_feedback = bool(candidate.can_receive_damage())
+	candidate.apply_damage(contact_damage)
+	if can_apply_hit_feedback and candidate.has_method("apply_knockback"):
+		var knockback_direction := (target_node.global_position - global_position).normalized()
+		if knockback_direction.length() <= 0.0:
+			knockback_direction = Vector2.RIGHT
+		candidate.apply_knockback(knockback_direction, _get_contact_knockback_force())
+	return true
 
 func _get_contact_range() -> float:
 	if collision_shape == null or not (collision_shape.shape is CircleShape2D):
