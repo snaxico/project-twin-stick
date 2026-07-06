@@ -4,9 +4,9 @@ Same-screen local co-op neon auto-attack roguelite prototype built in Godot 4.6.
 
 ## Current Direction
 
-A **neon auto-attack co-op survivor roguelite**. Your weapon auto-fires at the nearest enemy;
-skill expression comes from movement, positioning, ability timing (OFF/DEF), **Upgrade** choices at
-level-ups, and route choice. Reference mix: Vampire Survivors, Brotato, Geometry Wars.
+A **neon auto-attack co-op survivor roguelite** built around four class kits: Mobile, Tank, Controller, and
+Risk. Your weapon auto-fires at nearby enemies; skill expression comes from movement, positioning, ability
+timing, ultimate cadence, class passives, reward choices, and room routing.
 
 ## Stack
 
@@ -14,53 +14,58 @@ level-ups, and route choice. Reference mix: Vampire Survivors, Brotato, Geometry
 
 ## Run Loop
 
-1. Open in Godot 4.6.2 and run the main scene. Front menu: `Play` or `Encounter Builder`.
-2. Setup: 1–2 players, per-player control source, Structured or Endless.
-3. Auto-fire handles the basic combat; you focus on movement + your two abilities.
-4. Kills feed one **shared XP bar**; level-ups bank room-end **Reward screens** (pick one Upgrade).
-5. Health resets each room. Push toward the boss. (No gold/shop economy — that was removed in V3.)
+1. Open in Godot 4.6.2 and run the main scene. Front menu: `Play`, `Meta`, `Settings`, or debug
+   `Encounter Builder`.
+2. Setup: 1-2 players, per-player control source, class, class weapon, and three class abilities.
+3. Each class ultimate is inserted into slot 4 automatically.
+4. Auto-fire handles the weapon; you focus on movement, ability timing, class passive management, and room
+   rewards.
+5. Kills feed one shared XP bar; level-ups bank room-end reward picks.
 
-## Weapons (round-9 system)
+## Classes And Weapons
 
-5 peer weapons — **Rifle, Rocket Launcher, Scattergun, Cannon, Railgun**. One active at a time;
-a single shared **weapon level (1–5)** preserved when switching. Chosen at the Reward screen via
-**Level Up Weapon** (common) and **Change Weapon** (rare) cards.
+- **Mobile / Stormrunner:** Rifle or Beam; momentum-focused mobility and Slipstream ultimate.
+- **Tank:** Shotgun or Whirlwind; overshield, close-range sustain, and Blood Frenzy ultimate.
+- **Controller:** Beam or Arc Wand; summons, constructs, space control, and Overload Grid ultimate.
+- **Risk:** Flamethrower or Rocket Launcher; Heat pressure, fire tools, and Firestorm ultimate.
 
 ## Abilities & Upgrades
 
-- **Abilities:** `1 OFF` (LT) + `1 DEF` (RT) from 9 — Shockwave, Dash, Overcharge, Blink, Shield,
-  Decoy, Turret, Minefield, Orbit. Each has a rare **Signature** upgrade.
-- **Upgrade categories:** Weapon · Effect (burn/frost/venom/bounce) · Attribute (damage/fire-rate/
-  HP/…) · Ability.
+- Every player has four ability slots on controller face buttons `A`, `X`, `B`, `Y`; `Y` is the class ultimate.
+- Keyboard ability defaults use number-row `1`, `2`, `3`, `4`.
+- Upgrades use common, rare, and Signature tiers with V4 tag-gated offer rules.
 
 ## Run Structure
 
-- **Structured:** 2-act branching route (combat + optional elites + mid-boss + final boss).
-- **Endless:** sequential rooms, boss every 5, score = rooms cleared.
+- One continuable room sequence.
+- Normal steps offer two next-room cards.
+- Champion steps force one champion room.
+- Room `10` is the current milestone champion room; clearing it banks a win and offers `Continue` or `End Run`.
 
 ## Enemies & Bosses
 
 - Enemies: Chaser, Charger, Spitter, Splitter, Splitter Mini, Bomber.
-- Elites: Elite Charger, Elite Spitter, Elite Support.
-- Bosses: Warden, Hydra, Hive, Pulsar.
+- Champions: Warden, Hydra, Hive, Pulsar.
 
 ## Co-Op
 
-- 1–2 players, same-screen, dynamic zoom camera, no split-screen. P2 is keyboard-only for now.
+- 1-2 players, same-screen, dynamic zoom camera, no split-screen.
 
 ## Branch
 
-- `v3/main` — active branch and GitHub default.
+- `v4/class-system` is the canonical active branch.
+- Older `v2/*` and `v3/*` branches are historical baselines. Do not merge them into V4 wholesale; only port
+  reviewed changes that still fit the class-system direction.
 
 ## What's Deferred
 
-- A dedicated performance round (~200-entity ceiling: MultiMesh + caps) · split-screen · real audio
-  assets · meta progression · `3-4` players · large art pass.
+- Split-screen · real audio assets · `3-4` players · large art pass.
+- Current follow-up plan: V4 round 2 performance, bug fixes, balance, class clarity, room variety, and drops.
 
 ## Documentation
 
 - Design direction: `docs/design/game-direction.md`
 - Current runtime state: `docs/development/current-state.md` · session refresher: `docs/development/start-of-day.md`
 - Process / rules / architecture: `docs/process/`
-- Active patch plan: `docs/development/playtest-round-10-plan.md`
+- Active patch plan: `docs/development/v4-round-2-plan.md`
 - Shipped round plans + superseded docs: `docs/archive/`

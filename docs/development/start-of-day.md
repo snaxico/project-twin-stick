@@ -5,22 +5,23 @@ Read this first to restore project context quickly, then read `current-state.md`
 
 ## Working Branch
 
-- Active rework branch: `v3/structure-rework`.
-- `v3/main` is the frozen stable Round 14 baseline until the rework is explicitly merged.
-- Work in `D:\GameDev\Project_Twin_stick`; do not create new worktrees unless explicitly asked.
-- **Recorded exception (2026-07-02):** the V4 class-system redesign is built in the dedicated worktree
-  `D:\GameDev\Project_Twin_stick_v4` (branch `v4/class-system`) — see `docs/process/solo-dev-rules.md`. V4
-  implementation happens there; the main checkout stays the playtest baseline.
+- Canonical active branch: `v4/class-system`.
+- Continue work from the V4 checkout. The local active checkout is being promoted to
+  `D:\GameDev\Project_Twin_stick`; the legacy V3 checkout is archived/reference-only.
+- `v3/main`, `v3/structure-rework`, and older `v2/*` branches are historical baselines. Do not merge them into
+  V4 wholesale; cherry-pick only reviewed changes that still fit the class-system direction.
 - Do not push unless asked.
 
 ## Source Of Truth
 
 - `docs/development/current-state.md` is the compact runtime source of truth.
-- `docs/development/structure-rework-plan.md` is the design/source plan for the trim.
+- `docs/development/v4-implementation-plan.md` and `docs/development/v4-polish-round-plan.md` are the shipped
+  V4 implementation sources.
+- `docs/development/v4-round-2-plan.md` is the active follow-up plan.
+- `docs/development/structure-rework-plan.md` is archived V3 context, not the current implementation target.
 - `docs/design/game-direction.md` is the broader direction source of truth.
-- `docs/design/class-system-redesign.md` is the **next-version design spec** (class-based pivot: 4 classes,
-  kit/mutation/tag systems, art direction, implementation touchpoints). Companion data:
-  `docs/design/class-design.xlsx`. This is the doc to review before building the implementation plan.
+- `docs/design/class-system-redesign.md` is the V4 design spec (4 classes, kit/mutation/tag systems, art
+  direction, implementation touchpoints). Companion data: `docs/design/class-design.xlsx`.
 - `docs/development/history/` records what changed, why, and what remains open.
 - If this file and `current-state.md` disagree, treat `current-state.md` as correct and update this file.
 
@@ -28,30 +29,9 @@ Read this first to restore project context quickly, then read `current-state.md`
 
 - Godot `4.6.2` same-screen local co-op twin-stick roguelite prototype.
 - Target player count is `1-2`.
-- The structure rework / "trim" is implemented through Phase 4 first-pass tuning.
-- The initial structure-rework playtest was approved.
-- Replayability patch Phases 0/A/B are implemented: route-choice cards, Signature/tag/parasite upgrades,
-  banked score currency, persistent unlocks, and lean-start pool filtering.
-- QoL/difficulty patch is implemented: reward reroll/skip, early pressure tuning, reduced HP drops, higher
-  kill-streak target, and encyclopedia visual previews.
-- Game-feel / neon identity patch is implemented: dark pulsing runtime arena grid/walls, player-proximity
-  grid highlights, major-hazard room tinting, enemy silhouette/motion polish, projectile pulse/spin, broader
-  procedural SFX coverage, reactive music contexts, and room-start / room-clear flourish. Manual playtest is
-  approved.
-- Current next validation is a focused feel pass on the QoL/difficulty patch plus replayability/Phase 4 /
-  tuning:
-  - reroll/skip reward flow in `1P` and `2P`
-  - shared score spend pressure and reroll-cost escalation
-  - early-room pressure, HP drop frequency, and kill-streak target
-  - encyclopedia visual preview readability
-  - Meta unlock flow and persistence
-  - lean-start feel before unlocks
-  - Signature/parasite offer quality and build divergence
-  - route-card readability and rare-odds nudge readability
-  - continuation pressure after room `10`
-  - champion time-to-kill versus attack threat
-  - Cannon burst-AOE versus Beam sustained single-target identity
-  - modifier readability under deeper pressure
+- V4 class-system implementation and polish round are implemented.
+- The active next validation is `docs/development/v4-round-2-plan.md`: performance follow-ups, bug fixes,
+  balance rebalance, class clarity, room variation, and progression/drop retuning.
 
 ## Live Runtime Summary
 
@@ -74,7 +54,7 @@ Read this first to restore project context quickly, then read `current-state.md`
 - Champion rooms grant one additional forced-rare reward pick after XP picks resolve.
 - Reward picks support shared-score rerolls and free skips.
 - Rare odds scale continuously by depth and can receive a small room-choice nudge.
-- Upgrades now include a Signature tier with tag synergies and parasite tradeoffs.
+- Upgrades now include common, rare, and Signature tiers with class/tag synergies.
 - `ProfileState` stores banked score and permanent unlocks. The Meta menu spends score to add weapons,
   abilities, rares, and Signatures into future pools.
 - Continuation pressure now keeps rising past the milestone through:

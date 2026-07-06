@@ -1040,10 +1040,12 @@ func _ignite_nearby_enemies(origin: Vector2, stats: Dictionary, tint: Color) -> 
 			var embers := ParticleFactoryData.create_projectile_trail(tint.lightened(0.16), "embers")
 			embers.global_position = enemy.global_position
 			effects.add_child(embers)
+			var ember_id: int = int(embers.get_instance_id())
 			var timer := get_tree().create_timer(0.22)
 			timer.timeout.connect(func():
-				if embers != null and is_instance_valid(embers):
-					embers.queue_free()
+				var ember_node := instance_from_id(ember_id) as Node
+				if ember_node != null:
+					ember_node.queue_free()
 			)
 	_spawn_shockwave_visual(origin, radius, tint, 0.12)
 
@@ -1057,10 +1059,12 @@ func _apply_timed_player_modifier(player, source: String, stats: Dictionary) -> 
 		float(stats.get("damage_multiplier", 1.0))
 	)
 	var duration := maxf(0.1, float(stats.get("duration", 4.0)))
+	var player_id: int = int(player.get_instance_id())
 	var timer := get_tree().create_timer(duration)
 	timer.timeout.connect(func():
-		if player != null and is_instance_valid(player) and player.has_method("clear_zone_modifier"):
-			player.clear_zone_modifier(source)
+		var player_node := instance_from_id(player_id)
+		if player_node != null and player_node.has_method("clear_zone_modifier"):
+			player_node.clear_zone_modifier(source)
 	)
 
 func _apply_slipstream_world_slow(stats: Dictionary) -> void:
@@ -1306,7 +1310,6 @@ func add_screen_trauma(amount: float) -> void:
 
 func _on_enemy_died(enemy) -> void:
 	_enemy_nodes.erase(enemy)
-	var was_active_boss: bool = enemy == get_active_boss()
 	if _wave_director != null:
 		_wave_director.clear_active_boss_if(enemy)
 	_enemies_killed += 1

@@ -4,9 +4,9 @@
 
 Godot `4.6.2` same-screen local co-op neon roguelite prototype.
 
-The active V4 implementation work is in `D:\GameDev\Project_Twin_stick_v4` on branch `v4/class-system`.
-The original `D:\GameDev\Project_Twin_stick` checkout remains the untouched V3 playtest baseline for A/B
-testing. V4 Slices 0-7 of `docs/development/v4-implementation-plan.md` are implemented and validated: class
+The canonical development line is `v4/class-system`. Continue new work from the V4 checkout, currently
+`D:\GameDev\Project_Twin_stick_v4`; the old `D:\GameDev\Project_Twin_stick` checkout is now an archived V3
+reference only, not the active project state. V4 Slices 0-7 of `docs/development/v4-implementation-plan.md` are implemented and validated: class
 data loads, existing weapons/abilities have tags, the runtime kit stores four abilities, P1/P2 abilities are
 bound to face buttons, and the pre-run setup now selects class -> class weapon -> three class abilities with
 the class ultimate inserted into slot 4. Mutations now gate through the V4 tag rule: `requires` must be a

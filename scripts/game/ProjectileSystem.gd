@@ -96,25 +96,25 @@ func _process_cone_fire(origin: Vector2, direction: Vector2, projectile_config: 
 	if direction.length() <= 0.0:
 		return
 	var cone_direction := direction.normalized()
-	var range := float(projectile_config.get("range", 340.0))
+	var cone_range := float(projectile_config.get("range", 340.0))
 	var half_angle := deg_to_rad(float(projectile_config.get("cone_angle_degrees", 54.0)) * 0.5)
 	var damage := int(projectile_config.get("damage", 8))
 	var source_player_index := int(projectile_config.get("source_player_index", -1))
 	var color: Color = projectile_config.get("color", Color.WHITE)
-	var search_center := origin + cone_direction * range * 0.5
-	for enemy in _coop.call("get_nearby_enemy_target_nodes", search_center, range):
+	var search_center := origin + cone_direction * cone_range * 0.5
+	for enemy in _coop.call("get_nearby_enemy_target_nodes", search_center, cone_range):
 		if enemy == null or not is_instance_valid(enemy) or not enemy.has_method("is_alive") or not enemy.is_alive():
 			continue
 		var offset: Vector2 = enemy.global_position - origin
 		var distance := offset.length()
-		if distance <= 0.0 or distance > range:
+		if distance <= 0.0 or distance > cone_range:
 			continue
 		if absf(cone_direction.angle_to(offset.normalized())) > half_angle:
 			continue
 		enemy.apply_damage(damage, source_player_index)
 		if float(projectile_config.get("burn_duration", 0.0)) > 0.0 and enemy.has_method("apply_poison"):
 			enemy.apply_poison(float(projectile_config.get("burn_dps", 0.0)), float(projectile_config.get("burn_duration", 0.0)))
-	_spawn_weapon_cone(origin, cone_direction, range, half_angle, color)
+	_spawn_weapon_cone(origin, cone_direction, cone_range, half_angle, color)
 
 func _process_chain_fire(origin: Vector2, direction: Vector2, projectile_config: Dictionary) -> void:
 	if direction.length() <= 0.0:
@@ -138,15 +138,15 @@ func _process_chain_fire(origin: Vector2, direction: Vector2, projectile_config:
 		target = _find_next_chain_target(current_origin, chain_range, hit_targets)
 	_spawn_chain_visual(points, color)
 
-func _find_chain_start_target(origin: Vector2, direction: Vector2, range: float) -> Node2D:
+func _find_chain_start_target(origin: Vector2, direction: Vector2, search_range: float) -> Node2D:
 	var best_target: Node2D = null
 	var best_score := INF
-	for enemy in _coop.call("get_nearby_enemy_target_nodes", origin + direction * range * 0.5, range):
+	for enemy in _coop.call("get_nearby_enemy_target_nodes", origin + direction * search_range * 0.5, search_range):
 		if enemy == null or not is_instance_valid(enemy) or not enemy.has_method("is_alive") or not enemy.is_alive() or not (enemy is Node2D):
 			continue
 		var offset: Vector2 = (enemy as Node2D).global_position - origin
 		var projected := offset.dot(direction)
-		if projected < 0.0 or projected > range:
+		if projected < 0.0 or projected > search_range:
 			continue
 		var lateral_distance := (offset - direction * projected).length()
 		var score := lateral_distance * 2.0 + projected * 0.05
@@ -155,11 +155,11 @@ func _find_chain_start_target(origin: Vector2, direction: Vector2, range: float)
 			best_target = enemy as Node2D
 	return best_target
 
-func _find_next_chain_target(origin: Vector2, range: float, excluded_targets: Array) -> Node2D:
+func _find_next_chain_target(origin: Vector2, search_range: float, excluded_targets: Array) -> Node2D:
 	var best_target: Node2D = null
 	var best_distance_sq := INF
-	var range_sq := range * range
-	for enemy in _coop.call("get_nearby_enemy_target_nodes", origin, range):
+	var range_sq := search_range * search_range
+	for enemy in _coop.call("get_nearby_enemy_target_nodes", origin, search_range):
 		if enemy == null or not is_instance_valid(enemy) or excluded_targets.has(enemy):
 			continue
 		if enemy.has_method("is_alive") and not enemy.is_alive():
@@ -324,10 +324,10 @@ func _spawn_weapon_arc(origin: Vector2, direction: Vector2, radius: float, color
 	trail.global_position = origin - direction.normalized() * 18.0 if direction.length() > 0.0 else origin
 	_effects_container.add_child(trail)
 
-func _spawn_weapon_cone(origin: Vector2, direction: Vector2, range: float, half_angle: float, color: Color) -> void:
+func _spawn_weapon_cone(origin: Vector2, direction: Vector2, cone_range: float, half_angle: float, color: Color) -> void:
 	if should_suppress_combat_vfx():
 		return
-	var cone := ParticleFactoryData.create_flame_cone(color, range, half_angle, direction)
+	var cone := ParticleFactoryData.create_flame_cone(color, cone_range, half_angle, direction)
 	cone.global_position = origin
 	_effects_container.add_child(cone)
 

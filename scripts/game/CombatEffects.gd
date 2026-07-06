@@ -246,10 +246,11 @@ func apply_enemy_support_aura(origin: Vector2, radius: float, speed_mult: float,
 		if enemy.has_method("is_champion") and bool(enemy.is_champion()):
 			continue
 		enemy.apply_aura(speed_mult, attack_mult)
-		var aura_target = enemy
+		var aura_target_id: int = int(enemy.get_instance_id())
 		var timer := get_tree().create_timer(maxf(duration, 0.1))
 		timer.timeout.connect(func() -> void:
-			if aura_target != null and is_instance_valid(aura_target) and aura_target.has_method("clear_aura"):
+			var aura_target = instance_from_id(aura_target_id)
+			if aura_target != null and aura_target.has_method("clear_aura"):
 				aura_target.clear_aura()
 		)
 
