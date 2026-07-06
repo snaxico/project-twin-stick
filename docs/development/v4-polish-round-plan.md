@@ -47,27 +47,26 @@ Summons form a wall that keeps enemies outside the *player's* contact range — 
   `Enemy._attempt_contact_damage`: log `_target`, `contact_range`, and whether the player candidate is reached)
   — **do not assume**; find the real cause and note it before fixing.
 
-**Step 2 — fix (design intent: summons body-block by *position*, not by stealing aggro; deployables stay
-destructible).** Separate the two concerns that currently share `player_target`:
-- **Aggro / movement target** (`_find_target`) should prefer **players** (+ taunting decoys). Deployables must
-  **not** divert enemy pathing — enemies keep pressing toward the player.
-- **Contact-damageable set** (`_attempt_contact_damage`) should include **players AND deployables**, so summons/
-  turrets still take contact damage and get destroyed (the `player_deployable` group already exists,
-  [DeployableNode.gd:14](../../scripts/game/DeployableNode.gd)).
-- **Body-blocking** should come from **physical collision** (enemies bump into a summon's body and route around
-  it) — verify deployables have a collision body on the enemy's collision layer; if not, add one so they block
-  movement without owning aggro.
-- Concrete approach: give `_find_target` a player-only source (players + `decoy_taunt`), and give
-  `_attempt_contact_damage` a source of players + `player_deployable`. Remove deployables from `player_target`
-  **only if** `player_target` is still what `_find_target` reads; otherwise introduce a `player`-only group.
-  Confirm nothing else relies on deployables being in `player_target`.
+**Step 2 — fix (decision 2026-07-04: aggro-targeting fix only, NO physical blocking).** The two concerns that
+currently share `player_target` get split; **deployables do not obstruct enemy movement** (they're `Node2D`, not
+physics bodies, and orbit orbs can't sensibly wall) — enemies simply stop aggroing them. Summons still get
+attacked/destroyed as contact-damage targets; they no longer physically hold the line.
+- **Aggro / movement target** (`_find_target`) → a **players-only** source (put players in a dedicated `player`
+  group, or filter to players). Enemies path to players, **never** to a deployable. *(The old `decoy_taunt`
+  taunt source is gone — decoy + its taunt path are removed in Slice 5, so `_find_target` is players-only.)*
+- **Contact-damageable set** (`_attempt_contact_damage`) → **players + `player_deployable`** (the group already
+  exists, [DeployableNode.gd:14](../../scripts/game/DeployableNode.gd)), so turrets/summons/mines still take
+  contact damage and get destroyed.
+- **Remove deployables from whatever group `_find_target` reads** (they were pulled into `player_target` by
+  `DeployableNode.configure_deployable_health`) so they stop diverting aggro. Confirm nothing else relies on a
+  deployable being an aggro target. **No collision / physics-body work.**
 
-**Files:** `scripts/enemies/Enemy.gd` (`_find_target`, `_attempt_contact_damage`, any other `player_target`
-reads), `scripts/game/DeployableNode.gd` (group membership + collision), possibly `scripts/player/Player.gd`
-(group membership) and `scripts/game/CoopManager.gd` (`get_player_target_nodes`).
+**Files:** `scripts/enemies/Enemy.gd` (`_find_target`, `_attempt_contact_damage`, other `player_target` reads),
+`scripts/game/DeployableNode.gd` (group membership — aggro vs contact-damage groups), `scripts/player/Player.gd`
+(ensure players are in the aggro group), `scripts/game/CoopManager.gd` (`get_player_target_nodes`).
 **Acceptance:** in a swarm, an enemy adjacent to the player deals contact damage on its ~0.45s cadence **for
-every class**, with and without deployables out; summons/orbit still physically block and still take damage and
-die; targeting still prefers the player over deployables. Add a note to `current-state.md` describing the fix.
+every class**, with and without deployables out; enemies always path to players (a deployable never diverts enemy
+movement); deployables still take contact damage and can be destroyed. Add a note to `current-state.md`.
 
 ---
 
@@ -93,8 +92,8 @@ in `Bootstrap.gd`.
   `Player.get_health_state()` (`ultimate`, `heat`).
 - **Passive state:** Risk Heat bar (+dmg/+vuln), Tank overshield (health-bar overlay; `overshield` exists),
   Mobile Momentum pips (exist), Controller Radiance indicator (optional).
-- **Class readout:** class name + passive on the card, using the class color (Slice 4 — placeholder color if
-  Slice 4 hasn't landed yet).
+- **Class readout:** class name + passive on the card, using the **per-class color from `ClassVisuals.gd`**
+  (created in this slice — see ④).
 - **Files:** `GameHud.gd`, `PlayerInventoryHUD.gd`, `WeaponSlotHUD.gd` (ready/charge variant), `Player.gd`
   (`get_health_state` / per-slot heat/charge fields). Reuse the card UI style [[feedback-card-ui-style]].
 
@@ -109,16 +108,23 @@ FIFO `pop_front`, ~L1536) — you can't see or choose what you replace. Replace 
   **gamepad + mouse** (d-pad/stick navigate + A to assign; mouse click-slot-then-ability, with optional
   drag-onto-slot for mouse).
 - **Also show:** the class's **ultimate + passive** (full kit visible before starting), and style the class/
-  ability cards with the **per-class color + silhouette** (Slice 4) so classes read distinctly here too.
+  ability cards with the **per-class color from `ClassVisuals.gd`** (④) so classes read distinctly here too
+  (Slice 4 adds the in-arena silhouettes from the same table).
 - Touchpoints: `_build_ability_rows`, `_on_ability_card_toggled`, `_sync_ability_row_buttons`,
   `_get_player_ability_pair`, `_format_ability_card_text`, `_style_loadout_card` (rename the legacy "pair"/2-slot
   naming while here).
 
+### ④ Class-visual data foundation (`ClassVisuals.gd`) — shared with Slice 4 (decision 2026-07-04)
+Create a small const table `class_id → { accent_color, silhouette_points, trail_style }` — the single source of
+truth for class identity. **This slice defines it and consumes the COLORS** (HUD + loadout styling above).
+**Slice 4 consumes the same table's silhouette points + trail styles** for the in-arena body. One source, no
+placeholder color, no double-pass over the styling.
+
 **Acceptance:** in-game HUD shows 4 correctly-labelled slots with **Y = a distinct ultimate readiness meter**
 (Risk = Heat), Tank overshield + class/passive labelled, at 1P and 2P without overflow; the loadout screen lets
 you assign each of the 3 ability slots explicitly (you always see which one changes — no silent replace) and
-shows the locked **Y-ultimate + passive + class color/silhouette**; the **A/X/B abilities + Y ultimate** mapping
-is consistent across input map, in-game HUD, and loadout.
+shows the locked **Y-ultimate + passive + per-class color** (from `ClassVisuals.gd`, created here); the **A/X/B
+abilities + Y ultimate** mapping is consistent across input map, in-game HUD, and loadout.
 
 ---
 
@@ -150,8 +156,9 @@ impact flash (Ground Slam heavier + small shake); Deflect = reflect-pulse flashi
 materialize-flash + construct idle glow; Reinforce = repair pulse + heal-glint on deployables; Ignite = embers on
 marked enemies.
 
-**Ultimates** (bold but contained): **Slipstream** = player speed-streak aura + enemies tint/desaturate to show
-the world-slow (contained radius) + dash-recharge flash; **Blood Frenzy** = red drain-aura ring + life-tendrils
+**Ultimates** (bold but contained): **Slipstream** = player speed-streak aura here; **the world-slow tint + the
+dash-recharge flash ship *with* that behavior in Slice 7 (5b), since the world-slow/dash-recharge are authored
+there — Slice 3 only does the self-buff aura.** **Blood Frenzy** = red drain-aura ring + life-tendrils
 from nearby enemies + heal-glint; **Overload Grid** = grid-pulse burst + constructs materialize with overcharge
 glow; **Firestorm** = brief telegraph rings → contained fire-pillar impacts in the ring around the player.
 
@@ -189,9 +196,10 @@ distinguishable at a glance. Stay abstract-geometric (no sprites).
   gameplay-area VFX, since it's a spatial buff effect, not body state.)
 
 **Files:** `scripts/player/Player.gd` (`_apply_visual_state`, the polygon/`_chevron_polygon` setup, body/outline/
-shadow — pick the polygon + color by class), a new **`ClassVisuals.gd`** const table mapping `class_id →
-{silhouette points, accent color, trail style}`, and `GameHud.gd` / `Bootstrap.gd` consume that class color for
-the HUD + loadout styling (Slice 2).
+shadow — pick the polygon + color by class). **Consume `ClassVisuals.gd`** (the `class_id → {silhouette_points,
+accent_color, trail_style}` table **created in Slice 2 ④**) — this slice reads its silhouette points + trail
+styles for the in-arena body; Slice 2 already used its colors for HUD/loadout. Same single source, no
+duplicate table.
 **Acceptance:** the 4 classes are instantly distinguishable in-arena by silhouette + color + trail; two players
 on the same class stay tint-distinct; the class color matches the HUD + loadout (Slice 2); the body carries **no**
 dynamic passive-state VFX (that's HUD-only).
@@ -218,17 +226,18 @@ already clean (verified — the retired entries are gone).
   `apply:"ability"`), not pointing at blink; keep it.
 - **decoy** — `scripts/game/DecoyNode.gd` (whole node), `CoopManager.gd:842` spawn case + `_active_decoys`,
   `Player.gd:839` case, IconFactory decoy cases, the `decoy_health` key in Radiance's stat loop
-  (`CoopManager:476`). **Check** whether `_find_taunting_decoy` / the `decoy_taunt` group in `Enemy.gd` is used
-  by anything else — if not, remove that dead taunt path too.
+  (`CoopManager:476`). **Also remove the taunt path — it is decoy-only (verified):** `_find_taunting_decoy` +
+  the `decoy_taunt` group lookup in `Enemy.gd` (~L686-717) and `is_taunting`/`get_taunt_radius`/`taunt_radius`/
+  the `decoy_taunt` group in `DecoyNode.gd`. No other mechanic produces a taunt, so it all goes.
 - **boomerang** — `scripts/weapons/Projectile.gd` return-arc behavior (~L255, 305, 337, 343, 352),
   `MutationSystem.gd:108` visual case, IconFactory boomerang cases.
 - **cannon / railgun** — no code beyond data, except the two `railgun` `icon` refs in `data/mutations.json`
   (L89, 289): retarget those icons to a current weapon/effect.
 
-**Acceptance:** game boots + parses clean; no class pool, encyclopedia, icon lookup, or mutation references a
-removed id; a grep for `cannon` / `railgun` / `boomerang` / `"blink"` / `"decoy"` returns only intentional
-leftovers (`glass_cannon`, a kept-and-verified `decoy_taunt`, `blink_twin_charge` re-folded to dash); no dead
-code paths for removed content remain.
+**Acceptance:** game boots + parses clean; no class pool, encyclopedia, icon lookup, mutation, or enemy-targeting
+code references a removed id; a grep for `cannon` / `railgun` / `boomerang` / `"blink"` / `"decoy"` / `taunt`
+returns only intentional leftovers (`glass_cannon`, `blink_twin_charge` re-folded to dash); the taunt path is
+gone; no dead code paths for removed content remain.
 
 ---
 
@@ -280,9 +289,9 @@ this model keeps it that way and instead ramps `WaveDirector` spawn counts + eli
   56→104 per-target (AOE cone + burn). The 3 new AOE weapons are **~half** rifle/scattergun single-target —
   acceptable vs crowds (suits the many-enemies direction) but weak 1-v-1; confirm their AOE reliably hits
   multiple trash so they pull their weight.
-- **Trash TTK vs the fast target:** rifle L1 (65 DPS) kills a 30-HP chaser in **~3 shots (~0.46s)** — short of
-  the 1–2-hit target. Fix by **cutting trash HP** (chaser ~30→~15–18, base ~21→~12) rather than inflating
-  weapon damage.
+- **Trash TTK:** rifle L1 (65 DPS) kills a 30-HP chaser in ~3 shots (~0.46s). Fix by **cutting trash HP** (not
+  inflating weapons) — **see the LOCKED values in Step B item 1** (chaser 30→**24**, ~3 hits at L1 → ~1–2 by L5,
+  per the "survive a bit at L1" decision). *(Supersedes an earlier draft note that said chaser →15–18.)*
 - **⚠ Ultimate power is uneven.** Slipstream (Mobile) is only **+12% damage** / +35% atk / +55% move, while
   Blood Frenzy is **+28% dmg / +35% atk / +35 heal** and Firestorm / Overload Grid are big AOE / summon bursts.
   Mobile's ultimate won't feel like a payoff — raise Slipstream (higher damage mult and/or an offensive
@@ -366,7 +375,8 @@ this model keeps it that way and instead ramps `WaveDirector` spawn counts + eli
      ×1.55 / attack ×1.35, **raise damage ×1.12 → ~1.3**, **add a world-slow** on all enemies + their
      projectiles (~50–60% for the 5s duration, **co-op-friendly — allies unaffected**), and **instant dash
      recharge** during the ult. The current build ships only the self-buff + a one-time deflect; the slow +
-     dash-recharge are the missing pieces.
+     dash-recharge are the missing pieces. **Author the matching world-slow tint + dash-recharge VFX here too**
+     (Slice 3 only did the self-buff aura).
    - **Blood Frenzy (Tank)** — keep flat **+35 heal** + buff (attack ×1.35, damage ×1.28); tune to the swing bar.
    - **Overload Grid (Controller)** — keep (repair + overcharged constructs); tune to the swing bar.
    - **Firestorm (Risk)** — keep the ring of burning zones; tune tick damage so it meaningfully clears trash over
@@ -418,5 +428,6 @@ clear-time spread); PerfRunner stays stable at the higher enemy counts; the stat
 - Validate + commit per slice; the `D:/GameDev/Project_Twin_stick` tree stays the untouched v3 playtest baseline.
 - Suggested order is dependency-first: **bug → UI (HUD + loadout + Y-remap) → VFX → identity → cleanup →
   encyclopedia → balance** (cleanup before encyclopedia + balance so neither documents/tunes retired content;
-  balance last, so it retunes working, readable systems). Note: Slice 2's class-color/silhouette styling pairs
-  with Slice 4 (identity) — use a placeholder color if 2 lands first, or reorder 2↔4.
+  balance last, so it retunes working, readable systems). Note: Slice 2 creates the shared `ClassVisuals.gd`
+  table (colors + silhouettes) and uses its colors; Slice 4 reuses the same table for the in-arena bodies — so 2
+  and 4 share one source with no ordering dependency or placeholder.
