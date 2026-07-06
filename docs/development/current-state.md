@@ -257,6 +257,9 @@ Last validation run in this state:
   - PerfRunner Hive champion profile:
     `Godot_v4.6.2-stable_win64_console.exe --headless --path D:\GameDev\Project_Twin_stick_v4 -- --profile=champion:hive --players=2 --build=heavy`
     - Result: `avg_fps=145.0`, `min_fps=144.0`, `max_frame_ms=6.944`.
+- Post-review PerfRunner rerun for the V4 polish density/VFX check:
+  - `Godot_v4.6.2-stable_win64_console.exe --headless --path D:\GameDev\Project_Twin_stick_v4 -- --profile=champion:hive --players=2 --build=heavy`
+  - Result: `avg_fps=144.9`, `min_fps=144.0`, `max_frame_ms=6.944`.
 
 ## V4 Polish Stat Table
 
