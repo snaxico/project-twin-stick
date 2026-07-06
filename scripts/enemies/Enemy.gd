@@ -6,6 +6,8 @@ const PULSAR_TELEPORT_MIN_DISTANCE := 400.0
 const PULSAR_REACTIVE_TELEPORT_DISTANCE := 250.0
 const SEPARATION_RADIUS := 64.0
 const SEPARATION_STRENGTH := 120.0
+const SEPARATION_UPDATE_INTERVAL := 4
+const MAX_SEPARATION_NEIGHBORS := 8
 const HIVE_DEFLECTOR_VULNERABLE_WINDOW := 6.0
 const BLOOM_COLOR_MULTIPLIER := 1.45
 const READABILITY_VISUAL_SCALE := 1.2
@@ -218,6 +220,7 @@ var _next_champion_deflector_at := 0.0
 var _champion_attack_cooldown_mult := 1.0
 var _target_refresh_frame_offset := 0
 var _target_refresh_interval := 4
+var _separation_push := Vector2.ZERO
 
 func _ready() -> void:
 	_random.randomize()
@@ -635,15 +638,21 @@ func _physics_process(delta: float) -> void:
 
 func _apply_separation() -> Vector2:
 	if is_champion() or _combat_owner == null:
+		_separation_push = Vector2.ZERO
 		return Vector2.ZERO
+	var frame := Engine.get_physics_frames()
+	if frame % SEPARATION_UPDATE_INTERVAL != _target_refresh_frame_offset % SEPARATION_UPDATE_INTERVAL:
+		return _separation_push
 	var enemy_nodes: Array = []
 	if _combat_owner.has_method("get_nearby_enemy_target_nodes"):
 		enemy_nodes = _combat_owner.get_nearby_enemy_target_nodes(global_position, SEPARATION_RADIUS)
 	elif _combat_owner.has_method("get_enemy_target_nodes"):
 		enemy_nodes = _combat_owner.get_enemy_target_nodes()
 	if enemy_nodes.size() < 3:
+		_separation_push = Vector2.ZERO
 		return Vector2.ZERO
 	var push := Vector2.ZERO
+	var checked_neighbors := 0
 	for neighbor in enemy_nodes:
 		if neighbor == self or neighbor == null or not is_instance_valid(neighbor) or not (neighbor is Node2D):
 			continue
@@ -651,15 +660,21 @@ func _apply_separation() -> Vector2:
 			continue
 		if neighbor.has_method("is_alive") and not neighbor.is_alive():
 			continue
+		checked_neighbors += 1
 		var offset := global_position - (neighbor as Node2D).global_position
 		var distance := offset.length()
 		if distance <= 0.0 or distance >= SEPARATION_RADIUS:
+			if checked_neighbors >= MAX_SEPARATION_NEIGHBORS:
+				break
 			continue
 		push += offset.normalized() * (1.0 - distance / SEPARATION_RADIUS) * SEPARATION_STRENGTH
+		if checked_neighbors >= MAX_SEPARATION_NEIGHBORS:
+			break
 	var max_push := _get_effective_move_speed() * 0.8
 	if push.length() > max_push:
 		push = push.normalized() * max_push
-	return push
+	_separation_push = push
+	return _separation_push
 
 func _update_status_effects(now: float) -> void:
 	if now >= _slow_until:

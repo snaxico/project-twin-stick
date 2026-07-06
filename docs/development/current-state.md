@@ -260,6 +260,13 @@ Last validation run in this state:
 - Post-review PerfRunner rerun for the V4 polish density/VFX check:
   - `Godot_v4.6.2-stable_win64_console.exe --headless --path D:\GameDev\Project_Twin_stick_v4 -- --profile=champion:hive --players=2 --build=heavy`
   - Result: `avg_fps=144.9`, `min_fps=144.0`, `max_frame_ms=6.944`.
+- Clustered contact-swarm performance check after bounding enemy separation:
+  - Temporary dev scene spawned `25/50/100/150/200` chasers in a tight contact-range cluster around a dummy
+    player.
+  - Before fix, the same check collapsed at 100+ enemies (`100` enemies `avg_fps=3.5`, `150` enemies
+    `avg_fps=1.5`, `200` enemies `avg_fps=1.0`).
+  - After fix, clustered results were: `100` enemies `avg_fps=144.6`, `150` enemies `avg_fps=144.1`,
+    `200` enemies `avg_fps=119.3`; normal heavy PerfRunner remained stable.
 
 ## V4 Polish Stat Table
 
@@ -281,6 +288,8 @@ Last validation run in this state:
 ## Known Risks
 
 - QoL/difficulty patch tuning is first-pass and needs a live `1P` / `2P` feel check.
+- A fully overlapped 200-enemy contact cluster is now playable in the synthetic check, but still shows a low
+  instantaneous FPS monitor reading; watch dense real rooms for residual physics overlap cost.
 - Reroll cost, skip frequency, and shared-score spend pressure need live validation.
 - The new lean start may feel too thin; tune free unlocks and costs if early runs feel starved.
 - Signature values, tag scaling, and parasite downsides are first-pass numbers.
