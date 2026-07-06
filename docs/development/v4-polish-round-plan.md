@@ -52,8 +52,10 @@ currently share `player_target` get split; **deployables do not obstruct enemy m
 physics bodies, and orbit orbs can't sensibly wall) — enemies simply stop aggroing them. Summons still get
 attacked/destroyed as contact-damage targets; they no longer physically hold the line.
 - **Aggro / movement target** (`_find_target`) → a **players-only** source (put players in a dedicated `player`
-  group, or filter to players). Enemies path to players, **never** to a deployable. *(The old `decoy_taunt`
-  taunt source is gone — decoy + its taunt path are removed in Slice 5, so `_find_target` is players-only.)*
+  group, or filter to players). Enemies path to players, **never** to a deployable. *(Going players-only also
+  **drops `_find_target`'s `_find_taunting_decoy` short-circuit** — safe here since decoy is in no class pool and
+  never spawns. Slice 1 just bypasses the taunt lookup; the taunt path + DecoyNode are **fully removed in Slice
+  5**.)*
 - **Contact-damageable set** (`_attempt_contact_damage`) → **players + `player_deployable`** (the group already
   exists, [DeployableNode.gd:14](../../scripts/game/DeployableNode.gd)), so turrets/summons/mines still take
   contact damage and get destroyed.
