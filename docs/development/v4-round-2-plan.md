@@ -47,10 +47,13 @@ oldest when exceeded. Cheapen construct per-frame work if profiling points at it
 - **Ultimates constantly available** (`UltimateCharge.gd`) — density made kills cheap. Cut rates to **~1/room**:
   `KILL_CHARGE 0.05 → 0.02`, `DAMAGE_CHARGE_RATE 0.0018 → 0.0012`, `CHAMPION_KILL_CHARGE 0.30 → 0.20`. (Tune to
   ~40–50 basic kills = full.)
-- **Enemy projectiles despawn by distance** (`Projectile.gd`) — enemy projectiles already skip lifetime but die
-  at `max_distance` (L246). **Enemy projectiles should persist until they hit a wall / player / summon**, not a
-  range. Ignore `max_distance` for `team == "enemy"`; **ensure an arena-bounds despawn** (so off-screen shots
-  don't accumulate — required for perf). Verify wall + player + deployable collision all despawn.
+- **Enemy projectiles despawn early** (`ProjectileSystem.handle_enemy_fire` + `spawn_enemy_homing_orbs` +
+  `Projectile.gd`) — enemy shots currently **lifetime-expire**: both paths pass `"use_lifetime": true`, which
+  **overrides** the `team != "enemy"` default (`Projectile.gd` reads it via `config.get`), **and** they despawn
+  at `max_distance`. **Change: `team == "enemy"` projectiles (normal AND homing) ignore BOTH lifetime and
+  `max_distance`** — persist until they hit a **wall / player / summon**. **Add an arena-bounds despawn** as the
+  backstop (off-screen shots don't accumulate — required for perf; pairs with the Slice 1 homing cap). Verify
+  wall + player + deployable collision all despawn.
 - **Momentum HUD on every class** (`GameHud.gd`) — momentum pips are built ungated for all cards. **Make the
   bottom-card indicator class-specific:** Mobile = Momentum pips; Risk = **Heat bar**; Tank = **Overshield bar**;
   Controller = **Radiance indicator** (aura active / deployable count). Drop the momentum pips for non-Mobile.
@@ -165,7 +168,8 @@ random cross-theme stacks, verified via the reworked dedupe helpers); the 6 arch
 *(Biggest slice — new data + map-gen + choice UI; do last.)*
 
 **Physical structure — DEFERRED (decision 2026-07-06).** Round 2 rooms are **open arenas**; archetype variety
-comes from enemy mix + themed modifiers + **arena size** only — **no internal obstacles / cover / chokepoints**.
+comes from enemy mix + themed modifiers + **density** (arena *size* is not a lever — only the `shrinking_arena`
+modifier affects it) — **no internal obstacles / cover / chokepoints**.
 Reason: enemies today have `collision_layer/mask = 0` and **no pathfinding** (straight-line move-to-target + the
 soft separation push), so any wall/obstacle that should block enemies first needs **enemy collision + avoidance
 (steering or a nav mesh)** — a real AI feature, its own project. Prereq captured for a future "room geometry"
