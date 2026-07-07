@@ -15,14 +15,10 @@
 
 ## Slice 1 — Performance (the lag reports)
 
-**① `_apply_separation()` O(n²) blowup** (`scripts/enemies/Enemy.gd`) — packed clusters make every enemy check
-every neighbor. **Fix (spec'd):**
-- Consts: `MAX_SEPARATION_NEIGHBORS := 14`, `SEPARATION_UPDATE_INTERVAL := 3`.
-- **Per-enemy frame stagger** at top of `_apply_separation`:
-  `if Engine.get_physics_frames() % SEPARATION_UPDATE_INTERVAL != _target_refresh_frame_offset % SEPARATION_UPDATE_INTERVAL: return Vector2.ZERO`.
-- **Neighbor cap** in the loop: `var checked := 0`; `if checked >= MAX_SEPARATION_NEIGHBORS: break`; increment
-  `checked` **only after** the basic validity/type/self check passes (invalid entries don't consume the cap).
-  *(This edit was started before the pivot — re-apply cleanly; the file had a parallel change, re-read first.)*
+**① `_apply_separation()` O(n²) blowup** (`scripts/enemies/Enemy.gd`) — **✅ DONE** (shipped `3202b81` "bound
+enemy separation in clustered swarms"). Clustered check went from **100 enemies @ 3.5 fps → 144 fps** (150 @
+144, 200 @ 119). *Residual (current-state Known Risks): a fully-overlapped 200-enemy cluster still shows a low
+instantaneous monitor reading — watch dense real rooms for residual physics-overlap cost.*
 
 **② Projectiles** (`ProjectileSystem.gd` / `Projectile.gd`) — many spitters + shots still lag. Confirm enemy
 projectiles are **pooled** and honor `MAX_ACTIVE_PROJECTILES`; the projectile-persistence change (Slice 2) must
@@ -140,11 +136,21 @@ enemy-bias + density); `CoopManager.configure_room` (extend `room_config` with a
 consecutive identical); every room carries ≤2 on-theme modifiers (no random cross-theme stacks); the 6
 archetypes each play distinctly. *(Biggest slice — new data + map-gen + choice UI; do last.)*
 
+**Physical structure — DEFERRED (decision 2026-07-06).** Round 2 rooms are **open arenas**; archetype variety
+comes from enemy mix + themed modifiers + **arena size** only — **no internal obstacles / cover / chokepoints**.
+Reason: enemies today have `collision_layer/mask = 0` and **no pathfinding** (straight-line move-to-target + the
+soft separation push), so any wall/obstacle that should block enemies first needs **enemy collision + avoidance
+(steering or a nav mesh)** — a real AI feature, its own project. Prereq captured for a future "room geometry"
+feature: give enemies avoidance (extend the separation pass to repel from an `obstacle` group, or add nav);
+player + projectiles already collide with `StaticBody2D`, so obstacles slot into that side cheaply once enemies
+can route around them.
+
 ---
 
 ## Notes
-- Parallel Codex may be editing this tree — **re-read before each edit** (the separation change already hit one
-  collision). See [[feedback-parallel-codex]].
+- **Canonical tree = `D:\GameDev\Project_Twin_stick` on `v4/class-system`** (the `_v4` worktree was promoted +
+  removed, `8e5c30b`; local == origin). Parallel Codex may be editing — **re-read before each edit.** See
+  [[feedback-parallel-codex]], [[feedback-worktree-branch]].
 - Order: **Perf → Bugs → Balance → Rooms** (perf + bugs unblock a clean balance playtest; rooms is the biggest
   new work, last).
 - Keep art abstract-geometric; validate + commit per slice.
