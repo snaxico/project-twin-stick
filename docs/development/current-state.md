@@ -285,6 +285,35 @@ Last validation run in this state:
   `8 -> 5`, Gorge bonus `4 -> 3`, combat ultimate charge reduced for higher-density rooms, Slipstream damage
   `1.12 -> 1.3` plus enemy/projectile slow and dash recharge.
 
+## V4 Round 2 + Flow-Field Pathfinding (2026-07-07)
+
+- **Round 2 rebalance (`844d3a3`) — reins in player power, hardens threats:** Arc Wand nerfed (dmg/chain/
+  falloff/fire-rate); Summons dmg `14->10`, interval `0.55->0.70`, hard cap `MAX_ACTIVE_SUMMONS=5`; boss HP ~2x
+  (1600/2000/1800/1900); Tank overshield cap `0.65->0.25` + decay `5->9` + Bloodthirst heal-per-kill `5->2`,
+  Blood Frenzy heal `35->25`; ability base cooldowns +~25% + quick_reflexes trimmed; Overheat decay `14->6` /
+  delay `0.75->1.5` (stickier); ult charge `KILL 0.05->0.02` (~1/room); HP-pickup drop chance `0.06->0.03`
+  (heal 8 unchanged); homing-projectile cap `MAX_ACTIVE_HOMING=40`.
+- **Enemy projectiles now persist** until they hit a wall/player/summon (ignore lifetime + max_distance for
+  `team==enemy`), with an arena-bounds despawn backstop.
+- **Element mutations gate by delivery + dedupe** (`c9b9953`): fire_trail/freeze_shot/poison require
+  `projectile` (no longer offered on flamethrower/beam/whirlwind/arc_wand) + same-element dedupe.
+- **Per-class HUD indicator:** momentum pips only for Mobile; Heat/Overshield/Radiance for the others.
+- **Rooms = hybrid curated archetypes** (`data/room_archetypes.json`): 6 archetypes (standard/swarm/elite_ambush/
+  ranged_gauntlet/hazard_field/pressure_cooker), player picks **2** combat choices per normal step (champion
+  steps stay 1), <=2 on-theme modifiers, archetype-aware dedupe, `density_profile` drives spawn scaling. Replaces
+  the random per-room modifier roll. Ranged Gauntlet `depth_gate: 6`.
+- **Early-difficulty / perf ease (`da160bb`):** opening burst `6->4`, continuous `5->3`, early spawn interval
+  `0.58->0.90s`, early density mult `1.15->1.0` (all ramp back up by mid-run); spitter `fire_interval 1.35->1.8`.
+  Fewer early enemies + projectiles for the weak-start phase, and lower concurrent entity count.
+- **Flow-field pathfinding (`f2f4ea5`) — IMPLEMENTED but NOT live in play + PERF-BLOCKED:** `FlowField.gd`
+  (grid, per-player fields gated on cell-change, sample+nearest-reachable fallback, connectivity validation),
+  enemy movement/aim split (locomotion=flow, aim/charge/retreat=raw) across all types, obstacles on layer 1 in a
+  cleared `arena_obstacles` container with spawn-safety + connectivity checks. **⚠ No room authors obstacles yet,
+  so the flow field is OFF during normal play** (enemies use raw dir). **⚠ KNOWN PERF BLOCKER:** with obstacles
+  on, `flowfield_stress` drops to **16 fps at 200 enemies** (vs 142 baseline) — the per-enemy `sample()` path is
+  the cost (nearest-reachable flood-fill + 84px inflation). **Must optimize (precompute nearest-reachable at
+  build; reduce inflation) before authoring obstacles into rooms.** Plan: `docs/development/v4-arena-pathfinding-plan.md`.
+
 ## Known Risks
 
 - QoL/difficulty patch tuning is first-pass and needs a live `1P` / `2P` feel check.
@@ -303,8 +332,12 @@ Last validation run in this state:
 
 ## Next Step
 
-`docs/development/v4-implementation-plan.md` Slices 0-7 are implemented in the V4 worktree.
+V4 implementation + polish round + Round 2 rebalance are all implemented on `v4/class-system` (canonical, in the
+main checkout). Open items:
 
-- Run live 1P/2P feel checks across all four classes.
-- Live-check the V4 polish round across all four classes, especially contact damage, loadout assignment,
-  ultimate cadence, and dense-room readability.
+- **Playtest Round 2** across all four classes — confirm the eased early game feels fair (starting values are
+  conservative; easy to nudge), and that density/projectiles are comfortable.
+- **Flow-field perf optimization** is required before authoring obstacles into rooms (16 fps at 200 with
+  obstacles — see the Round 2 section above + `v4-arena-pathfinding-plan.md`). Until then the flow field stays
+  inert (no obstacles in any room).
+- Live-check contact damage, loadout assignment, ultimate cadence, and dense-room readability.
