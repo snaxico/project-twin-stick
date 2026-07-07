@@ -172,10 +172,10 @@ comes from enemy mix + themed modifiers + **density** (arena *size* is not a lev
 modifier affects it) — **no internal obstacles / cover / chokepoints**.
 Reason: enemies today have `collision_layer/mask = 0` and **no pathfinding** (straight-line move-to-target + the
 soft separation push), so any wall/obstacle that should block enemies first needs **enemy collision + avoidance
-(steering or a nav mesh)** — a real AI feature, its own project. Prereq captured for a future "room geometry"
-feature: give enemies avoidance (extend the separation pass to repel from an `obstacle` group, or add nav);
-player + projectiles already collide with `StaticBody2D`, so obstacles slot into that side cheaply once enemies
-can route around them.
+(steering or a nav mesh)** — a real AI feature, its own project. **→ Now designed as its own plan:
+[`v4-arena-pathfinding-plan.md`](v4-arena-pathfinding-plan.md)** (flow-field pathfinding, soft/ghost-mode
+collision, all enemies, minimal-first). Player + projectiles already collide with `StaticBody2D`, so obstacles
+slot into that side cheaply once enemies route around them via the flow field.
 
 ---
 
