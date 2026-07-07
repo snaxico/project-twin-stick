@@ -577,6 +577,8 @@ func _build_single_room_map() -> Array:
 	node["modifiers"] = (debug_run_setup.get("modifiers", []) as Array).duplicate()
 	node["next_node_ids"] = []
 	node["enemy_pool"] = _enemy_pool_from_debug_mix(str(debug_run_setup.get("enemy_mix", "mixed")), room_depth)
+	if debug_run_setup.has("obstacles"):
+		node["obstacles"] = (debug_run_setup.get("obstacles", []) as Array).duplicate(true)
 	if room_type == "boss":
 		node["boss_type"] = str(debug_run_setup.get("boss_type", "warden"))
 		node["side_objective"] = ""
@@ -635,6 +637,9 @@ func _build_run_node(room_number: int, room_type: String, slot: String, archetyp
 		node["short_desc"] = str(archetype.get("short_desc", ""))
 		node["reward_hint"] = str(archetype.get("reward_hint", ""))
 		node["density_profile"] = str(archetype.get("density_profile", "normal"))
+		var obstacles: Array = (archetype.get("obstacles", []) as Array).duplicate(true)
+		if not obstacles.is_empty():
+			node["obstacles"] = obstacles
 	_refresh_route_metadata(node)
 	return node
 

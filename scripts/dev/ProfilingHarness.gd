@@ -10,6 +10,7 @@ const EnemyScene := preload("res://scenes/enemies/Enemy.tscn")
 const ProjectileScene := preload("res://scenes/weapons/Projectile.tscn")
 const ProjectileRendererData := preload("res://scripts/weapons/ProjectileRenderer.gd")
 const MineFieldModifierScene := preload("res://scripts/modifiers/MineFieldModifier.gd")
+const FlowFieldData := preload("res://scripts/game/FlowField.gd")
 
 const ARENA_SIZE := Vector2(4800.0, 2700.0)
 const ARENA_CENTER := Vector2(2400.0, 1350.0)
@@ -20,13 +21,23 @@ const ENEMY_TYPES := ["chaser", "charger", "spitter", "splitter", "bomber"]
 const STEPS := [50, 100, 150, 200]
 const SAMPLE_SECONDS := 5.0
 const WARMUP_SECONDS := 2.5
+const FLOW_TARGET_UPDATE_INTERVAL := 0.12
 # Include the sweep ("Scanline", formerly Mine Field) modifier. Set false for a
 # clean entity-only baseline.
 const INCLUDE_MINEFIELD := false
+const FLOWFIELD_OBSTACLES := [
+	Rect2(Vector2(1380.0, 760.0), Vector2(120.0, 430.0)),
+	Rect2(Vector2(1500.0, 1070.0), Vector2(440.0, 120.0)),
+	Rect2(Vector2(2900.0, 1480.0), Vector2(520.0, 120.0)),
+	Rect2(Vector2(3340.0, 760.0), Vector2(120.0, 400.0)),
+]
 
 var _enemies_container: Node2D
 var _projectiles_container: Node2D
+var _obstacles_container: Node2D
 var _projectile_renderer = null
+var _flow_field = null
+var _flowfield_profile := false
 var _targets: Array = []
 var _enemies: Array = []
 
@@ -39,9 +50,11 @@ var _draw_sum := 0.0
 var _node_sum := 0.0
 var _frames := 0
 var _target_phase := 0.0
+var _flow_target_update_elapsed := 0.0
 
 func _ready() -> void:
 	randomize()
+	_flowfield_profile = _is_flowfield_profile()
 	# Uncap framerate so FPS reveals the true ceiling (vsync would pin it to ~60 and hide it).
 	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
 	Engine.max_fps = 0
@@ -56,25 +69,87 @@ func _ready() -> void:
 	add_child(_enemies_container)
 	_projectiles_container = Node2D.new()
 	add_child(_projectiles_container)
+	_obstacles_container = Node2D.new()
+	add_child(_obstacles_container)
 	_projectile_renderer = ProjectileRendererData.new()
 	_projectile_renderer.set_projectile_container(_projectiles_container)
 	_projectiles_container.add_child(_projectile_renderer)
+	if _flowfield_profile:
+		_flow_field = FlowFieldData.new()
+		_flow_field.setup(ARENA_RECT)
+		_spawn_flowfield_obstacles()
 	for i in range(2):
 		var t := ProfTarget.new()
+		t.player_index = i
 		t.global_position = ARENA_CENTER + Vector2(randf_range(-500.0, 500.0), randf_range(-300.0, 300.0))
 		t.add_to_group("player_target")
+		t.add_to_group("player")
 		add_child(t)
 		_targets.append(t)
 	if INCLUDE_MINEFIELD:
 		var mf := MineFieldModifierScene.new()
 		add_child(mf)
 		mf.setup(ARENA_RECT, _targets)
-	print("=== PROFILING HARNESS START (vsync off, minefield=%s) ===" % str(INCLUDE_MINEFIELD))
+	_update_flowfield_targets()
+	print("=== PROFILING HARNESS START (vsync off, minefield=%s, flowfield=%s) ===" % [str(INCLUDE_MINEFIELD), str(_flowfield_profile)])
 	print("step,enemy_budget,live_enemies,live_proj,avg_fps,process_ms,physics_ms,draw_calls,nodes")
+
+func _is_flowfield_profile() -> bool:
+	for arg in OS.get_cmdline_user_args():
+		if arg == "--flowfield-obstacles" or arg == "--profile=flowfield_stress":
+			return true
+	return false
+
+func _spawn_flowfield_obstacles() -> void:
+	for obstacle_variant in FLOWFIELD_OBSTACLES:
+		var obstacle_rect: Rect2 = obstacle_variant as Rect2
+		var body := StaticBody2D.new()
+		body.name = "ProfileArenaObstacle"
+		body.collision_layer = 1
+		body.collision_mask = 1
+		body.global_position = obstacle_rect.position + obstacle_rect.size * 0.5
+		var shape := CollisionShape2D.new()
+		var rectangle := RectangleShape2D.new()
+		rectangle.size = obstacle_rect.size
+		shape.shape = rectangle
+		body.add_child(shape)
+		var visual := Polygon2D.new()
+		var half_size: Vector2 = obstacle_rect.size * 0.5
+		visual.polygon = PackedVector2Array([
+			Vector2(-half_size.x, -half_size.y),
+			Vector2(half_size.x, -half_size.y),
+			Vector2(half_size.x, half_size.y),
+			Vector2(-half_size.x, half_size.y),
+		])
+		visual.color = Color(0.18, 0.2, 0.24, 0.9)
+		body.add_child(visual)
+		_obstacles_container.add_child(body)
+	_flow_field.build(FLOWFIELD_OBSTACLES)
+
+func _update_flowfield_targets() -> void:
+	if _flow_field == null or not _flow_field.has_obstacles():
+		return
+	var positions: Array = []
+	for target in _targets:
+		positions.append((target as Node2D).global_position if target != null and is_instance_valid(target) else null)
+	_flow_field.update_targets(positions)
 
 # Combat-owner API some enemy behaviors call (the rest are has_method-guarded -> skipped).
 func get_player_target_nodes() -> Array:
 	return _targets
+
+func get_player_index_for_node(node) -> int:
+	if node != null and is_instance_valid(node) and "player_index" in node:
+		return int(node.player_index)
+	return _targets.find(node)
+
+func get_flow_direction_to_player(world_position: Vector2, target_player_index: int, fallback_dir: Vector2) -> Vector2:
+	if _flow_field == null:
+		return fallback_dir.normalized() if fallback_dir.length_squared() > 0.0001 else Vector2.ZERO
+	return _flow_field.sample(world_position, target_player_index, fallback_dir)
+
+func has_flow_obstacles() -> bool:
+	return _flow_field != null and _flow_field.has_obstacles()
 
 func _process(delta: float) -> void:
 	_phase_elapsed += delta
@@ -84,6 +159,10 @@ func _process(delta: float) -> void:
 		var t: Node2D = _targets[i]
 		if is_instance_valid(t):
 			t.global_position = ARENA_CENTER + Vector2.RIGHT.rotated(_target_phase * 0.6 + float(i) * PI) * 700.0
+	_flow_target_update_elapsed += delta
+	if _flow_target_update_elapsed >= FLOW_TARGET_UPDATE_INTERVAL:
+		_flow_target_update_elapsed = 0.0
+		_update_flowfield_targets()
 
 	if _step_index < 0:
 		# Warmup: spawn the first step's entities, let things settle before sampling.
@@ -139,7 +218,10 @@ func _apply_budget(budget: int) -> void:
 func _spawn_enemy() -> void:
 	var e := EnemyScene.instantiate()
 	_enemies_container.add_child(e)
-	e.global_position = ARENA_CENTER + Vector2(randf_range(-2100.0, 2100.0), randf_range(-1150.0, 1150.0))
+	var spawn_position := ARENA_CENTER + Vector2(randf_range(-2100.0, 2100.0), randf_range(-1150.0, 1150.0))
+	if _flow_field != null and _flow_field.has_obstacles():
+		spawn_position = _flow_field.nearest_passable_position(spawn_position)
+	e.global_position = spawn_position
 	e.setup(ENEMY_TYPES[randi() % ENEMY_TYPES.size()], self)
 	e.fire_requested.connect(func(_a, _b, _c, _d, _e, _f, _g): pass)
 	e.enemy_died.connect(func(_n): pass)
@@ -178,6 +260,7 @@ func _count_live(container: Node) -> int:
 	return n
 
 class ProfTarget extends Node2D:
+	var player_index := 0
 	func is_alive() -> bool: return true
 	func is_targetable() -> bool: return true
 	func get_team() -> String: return "player"

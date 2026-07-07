@@ -156,10 +156,13 @@ func _spawn_collector_orb() -> void:
 	if _collector_spawned >= COLLECTOR_TOTAL_SPAWN:
 		return
 	var orb := CollectorOrbData.new()
-	orb.global_position = Vector2(
+	var spawn_position := Vector2(
 		randf_range(_arena_rect.position.x + 220.0, _arena_rect.end.x - 220.0),
 		randf_range(_arena_rect.position.y + 220.0, _arena_rect.end.y - 220.0)
 	)
+	if _coop != null and _coop.has_method("get_safe_pickup_position"):
+		spawn_position = _coop.call("get_safe_pickup_position", spawn_position)
+	orb.global_position = spawn_position
 	_pickups_parent.add_child(orb)
 	_collector_orbs.append(orb)
 	_collector_spawned += 1

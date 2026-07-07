@@ -44,9 +44,10 @@ standard swarm-vs-target solution.
   lowest-distance passable 8-neighbor). One field per player.
   - **Recompute cadence:** rebuild a player's field **only when that player enters a new cell** (track last
     cell/player). BFS over ~756 cells is microseconds; gating avoids per-frame cost.
-- **`sample(world_pos, target_player_index, fallback_dir: Vector2) -> Vector2`** — bilinear-interpolate the 4
-  nearest cell arrows (skip blocked neighbors). **Returns `fallback_dir`** when there's no field / outside grid /
-  invalid target. *(The function can't derive raw dir itself — the caller passes `raw_target_dir`.)*
+- **`sample(world_pos, target_player_index, fallback_dir: Vector2) -> Vector2`** — returns the current passable
+  cell's arrow (nearest-cell sample; cheaper than bilinear under 200-enemy stress). **Returns `fallback_dir`** when
+  there's no field / outside grid / invalid target. *(The function can't derive raw dir itself — the caller passes
+  `raw_target_dir`.)*
 - **`has_obstacles() -> bool`** — rooms with none skip flow entirely (enemies just use `raw_target_dir` — zero
   cost, identical to today).
 
@@ -96,9 +97,10 @@ standard swarm-vs-target solution.
   (`ArenaGeometry.enemy_spawn_position_for_edge`), or **side-objective / pickup placement zones** — otherwise an
   actor can be trapped inside a wall on spawn. Alternatively, relocate the affected spawn to the nearest passable
   cell. Author test layouts to keep clear of the arena edges + center spawn.
-- **⚠ Connectivity — inflation can seal a corridor / partition the grid.** After `FlowField.build`, **verify the
-  integration field reaches all enemy-spawn-lane cells** (every spawn edge can path to the player region). Require
-  a **minimum corridor width ≥ 2× the inflation** so a gap isn't fully closed, **reject/adjust** a layout that
+- **⚠ Connectivity — inflation can seal a corridor / partition the grid.** After `FlowField.build`, **validate the
+  passable grid connects player-playable cells and enemy-spawn-lane cells**. After each `update_targets`, verify the
+  target field reaches all enemy-spawn-lane cells (every spawn edge can path to the player region). Require a
+  **minimum corridor width ≥ 2× the inflation** so a gap isn't fully closed, **reject/adjust** a layout that
   partitions the arena, and in `sample` add a **nearest-reachable fallback** (if an enemy's cell has no path, route
   toward the nearest cell that does, else `raw_target_dir`) so a stranded enemy is never frozen.
 - **Test/profiling layout:** a debug room config with a handful of blocks including **at least one concave case**

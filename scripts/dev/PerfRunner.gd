@@ -6,6 +6,7 @@ extends Node
 ##
 ## Scenarios (the `--profile=` value):
 ##   entity_ramp        -> the isolated 50..200 ramp harness (scenes/dev/ProfilingHarness.tscn)
+##   flowfield_stress   -> the isolated ramp harness with obstacle blocks + FlowField sampling
 ##   champion:<id>      -> a REAL champion-in-wave room via the debug single-room path
 ##   room:<room_type>   -> a REAL single room (combat|boss) using real CoopManager spawning
 ##
@@ -39,7 +40,7 @@ func _read_arg(prefix: String, fallback: String) -> String:
 func _run(scenario: String, players: int, build: String) -> void:
 	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
 	Engine.max_fps = 0
-	if scenario == "entity_ramp":
+	if scenario == "entity_ramp" or scenario == "flowfield_stress":
 		get_tree().change_scene_to_file("res://scenes/dev/ProfilingHarness.tscn")
 		return
 

@@ -29,6 +29,7 @@ const AbilityMineData = preload("res://scripts/game/AbilityMine.gd")
 const ParticleFactoryData = preload("res://scripts/juice/ParticleFactory.gd")
 const HitStopManagerData = preload("res://scripts/juice/HitStopManager.gd")
 const PauseDebugUiData = preload("res://scripts/game/PauseDebugUi.gd")
+const FlowFieldData = preload("res://scripts/game/FlowField.gd")
 
 const MODIFIERS_DATA_PATH := "res://data/modifiers.json"
 
@@ -48,6 +49,11 @@ const BOSS_HIT_FEEDBACK_INTERVAL := 0.22
 const HEALTH_DROP_CHANCE := 0.03
 const MAX_ACTIVE_SUMMONS := 5
 const ENEMY_SEPARATION_CELL_SIZE := 96.0
+const FLOW_FIELD_CELL_SIZE := 100.0
+const FLOW_TARGET_UPDATE_INTERVAL := 0.12
+const OBSTACLE_EDGE_EXCLUSION := ARENA_MARGIN + 168.0
+const OBSTACLE_PLAYER_EXCLUSION_RADIUS := 150.0
+const OBSTACLE_CENTER_EXCLUSION_HALF_SIZE := Vector2(420.0, 320.0)
 const GAMEPLAY_INPUT_SUFFIXES := [
 	"move_left",
 	"move_right",
@@ -164,6 +170,12 @@ var _enemy_separation_grid_frame := -1
 var _projectile_system = null
 var _screen_effect_level := "full"
 var _hit_stop_manager = null
+var arena_obstacles: Node2D = null
+var _flow_field = null
+var _active_obstacle_rects: Array = []
+var _flow_spawn_lane_points: Array = []
+var _flow_reachability_warned := false
+var _flow_target_update_elapsed := 0.0
 
 func configure_players(configs: Array) -> void:
 	_player_configs = configs.duplicate()
@@ -247,6 +259,9 @@ func _ready() -> void:
 	_combat_effects.name = "CombatEffects"
 	_combat_effects.setup(self, effects, projectiles)
 	add_child(_combat_effects)
+	_ensure_arena_obstacle_container()
+	_flow_field = FlowFieldData.new()
+	_flow_field.setup(ARENA_RECT, FLOW_FIELD_CELL_SIZE)
 	_hud = GameHudData.new()
 	_hud.name = "GameHud"
 	_hud.setup(self, ui_layer)
@@ -533,6 +548,7 @@ func _start_room() -> void:
 	_enemies_killed = 0
 	_champions_killed = 0
 	_room_score_recorded = false
+	_setup_room_obstacles()
 	_wave_director.start_room(_room_config, _room_enemy_pool, _room_depth)
 	_arena_visuals.apply_arena_color()
 	_side_objectives.start_room(_room_config, _player_nodes)
@@ -546,12 +562,14 @@ func _start_room() -> void:
 		player.set_input_locked(false)
 		player.health_changed.emit(player.current_health, player.max_health)
 		player.global_position = _get_player_spawn_position(int(player.player_index))
+	_update_flow_field_targets()
 	_apply_active_modifiers()
 	_wave_director.spawn_opening_burst()
 	_refresh_hud()
 
 func _clear_runtime_nodes() -> void:
-	for node in [projectiles, enemies, pickups, effects]:
+	_ensure_arena_obstacle_container()
+	for node in [projectiles, enemies, pickups, effects, arena_obstacles]:
 		for child in node.get_children():
 			child.queue_free()
 	_enemy_nodes.clear()
@@ -572,7 +590,160 @@ func _clear_runtime_nodes() -> void:
 		_combat_effects.clear_runtime()
 	_enemy_separation_grid.clear()
 	_enemy_separation_grid_frame = -1
+	_active_obstacle_rects.clear()
+	_flow_spawn_lane_points.clear()
+	_flow_reachability_warned = false
+	_flow_target_update_elapsed = 0.0
+	if _flow_field != null:
+		_flow_field.build([])
 	_invalidate_runtime_caches()
+
+func _ensure_arena_obstacle_container() -> void:
+	if arena_obstacles != null and is_instance_valid(arena_obstacles):
+		return
+	arena_obstacles = Node2D.new()
+	arena_obstacles.name = "ArenaObstacles"
+	add_child(arena_obstacles)
+
+func _setup_room_obstacles() -> void:
+	_ensure_arena_obstacle_container()
+	for child in arena_obstacles.get_children():
+		child.queue_free()
+	_active_obstacle_rects.clear()
+	_flow_spawn_lane_points = _build_flow_spawn_lane_points()
+	_flow_reachability_warned = false
+	_flow_target_update_elapsed = 0.0
+	if _flow_field == null:
+		_flow_field = FlowFieldData.new()
+		_flow_field.setup(ARENA_RECT, FLOW_FIELD_CELL_SIZE)
+	var raw_obstacles: Array = (_room_config.get("obstacles", []) as Array).duplicate(true)
+	if raw_obstacles.is_empty():
+		_flow_field.build([])
+		return
+	var accepted_rects: Array = []
+	for obstacle_variant in raw_obstacles:
+		var obstacle_rect := _parse_obstacle_rect(obstacle_variant)
+		if obstacle_rect.size.x <= 0.0 or obstacle_rect.size.y <= 0.0:
+			push_warning("CoopManager: rejected invalid arena obstacle %s" % str(obstacle_variant))
+			continue
+		if not _is_obstacle_rect_spawn_safe(obstacle_rect):
+			push_warning("CoopManager: rejected unsafe arena obstacle %s" % str(obstacle_variant))
+			continue
+		accepted_rects.append(obstacle_rect)
+	_flow_field.build(accepted_rects)
+	if not accepted_rects.is_empty() and not _flow_field.validate_connectivity(_build_flow_connectivity_points()):
+		push_warning("CoopManager: rejected arena obstacle layout because it partitions spawn lanes from play space")
+		accepted_rects.clear()
+		_flow_field.build([])
+	_active_obstacle_rects = accepted_rects
+	for obstacle_rect in _active_obstacle_rects:
+		_spawn_arena_obstacle(obstacle_rect)
+
+func _parse_obstacle_rect(obstacle_variant) -> Rect2:
+	if obstacle_variant is Rect2:
+		return _clamp_obstacle_rect(obstacle_variant as Rect2)
+	if not (obstacle_variant is Dictionary):
+		return Rect2()
+	var obstacle := obstacle_variant as Dictionary
+	var rect := Rect2(
+		Vector2(float(obstacle.get("x", 0.0)), float(obstacle.get("y", 0.0))),
+		Vector2(float(obstacle.get("w", 0.0)), float(obstacle.get("h", 0.0)))
+	)
+	return _clamp_obstacle_rect(rect)
+
+func _clamp_obstacle_rect(rect: Rect2) -> Rect2:
+	var clipped := rect.abs().intersection(ARENA_RECT)
+	return clipped if clipped.size.x > 0.0 and clipped.size.y > 0.0 else Rect2()
+
+func _is_obstacle_rect_spawn_safe(obstacle_rect: Rect2) -> bool:
+	var inflated := obstacle_rect.grow(_get_flow_obstacle_inflation())
+	for exclusion_rect in _build_obstacle_exclusion_rects():
+		if inflated.intersects(exclusion_rect):
+			return false
+	return true
+
+func _build_obstacle_exclusion_rects() -> Array:
+	var exclusions: Array = [
+		Rect2(Vector2.ZERO, Vector2(ARENA_SIZE.x, OBSTACLE_EDGE_EXCLUSION)),
+		Rect2(Vector2(0.0, ARENA_SIZE.y - OBSTACLE_EDGE_EXCLUSION), Vector2(ARENA_SIZE.x, OBSTACLE_EDGE_EXCLUSION)),
+		Rect2(Vector2.ZERO, Vector2(OBSTACLE_EDGE_EXCLUSION, ARENA_SIZE.y)),
+		Rect2(Vector2(ARENA_SIZE.x - OBSTACLE_EDGE_EXCLUSION, 0.0), Vector2(OBSTACLE_EDGE_EXCLUSION, ARENA_SIZE.y)),
+		Rect2(ARENA_CENTER - OBSTACLE_CENTER_EXCLUSION_HALF_SIZE, OBSTACLE_CENTER_EXCLUSION_HALF_SIZE * 2.0),
+	]
+	for player_index in range(maxi(_player_configs.size(), 1)):
+		var spawn_position := _get_player_spawn_position(player_index)
+		exclusions.append(Rect2(
+			spawn_position - Vector2(OBSTACLE_PLAYER_EXCLUSION_RADIUS, OBSTACLE_PLAYER_EXCLUSION_RADIUS),
+			Vector2(OBSTACLE_PLAYER_EXCLUSION_RADIUS * 2.0, OBSTACLE_PLAYER_EXCLUSION_RADIUS * 2.0)
+		))
+	return exclusions
+
+func _spawn_arena_obstacle(obstacle_rect: Rect2) -> void:
+	var body := StaticBody2D.new()
+	body.name = "ArenaObstacle"
+	body.collision_layer = 1
+	body.collision_mask = 1
+	body.add_to_group("arena_obstacle")
+	body.global_position = obstacle_rect.position + obstacle_rect.size * 0.5
+	var shape := CollisionShape2D.new()
+	var rectangle := RectangleShape2D.new()
+	rectangle.size = obstacle_rect.size
+	shape.shape = rectangle
+	body.add_child(shape)
+	var visual := Polygon2D.new()
+	var half_size := obstacle_rect.size * 0.5
+	visual.polygon = PackedVector2Array([
+		Vector2(-half_size.x, -half_size.y),
+		Vector2(half_size.x, -half_size.y),
+		Vector2(half_size.x, half_size.y),
+		Vector2(-half_size.x, half_size.y),
+	])
+	visual.color = Color(0.18, 0.2, 0.24, 0.92)
+	body.add_child(visual)
+	arena_obstacles.add_child(body)
+
+func _get_flow_obstacle_inflation() -> float:
+	return float(_flow_field.get_obstacle_inflation()) if _flow_field != null else 84.0
+
+func _build_flow_spawn_lane_points() -> Array:
+	var inner_margin := ARENA_MARGIN + 48.0
+	var points: Array = []
+	for ratio in [0.2, 0.5, 0.8]:
+		points.append(Vector2(lerpf(inner_margin, ARENA_SIZE.x - inner_margin, float(ratio)), inner_margin + 30.0))
+		points.append(Vector2(lerpf(inner_margin, ARENA_SIZE.x - inner_margin, float(ratio)), ARENA_SIZE.y - inner_margin - 30.0))
+		points.append(Vector2(inner_margin + 30.0, lerpf(inner_margin, ARENA_SIZE.y - inner_margin, float(ratio))))
+		points.append(Vector2(ARENA_SIZE.x - inner_margin - 30.0, lerpf(inner_margin, ARENA_SIZE.y - inner_margin, float(ratio))))
+	return points
+
+func _build_flow_connectivity_points() -> Array:
+	var points := _flow_spawn_lane_points.duplicate()
+	points.append(ARENA_CENTER)
+	for player_index in range(maxi(_player_configs.size(), 1)):
+		points.append(_get_player_spawn_position(player_index))
+	return points
+
+func _update_flow_field_targets() -> void:
+	if _flow_field == null or not _flow_field.has_obstacles():
+		return
+	var player_positions: Array = []
+	for player in _player_nodes:
+		if player == null or not is_instance_valid(player) or not (player is Node2D):
+			player_positions.append(null)
+			continue
+		if player.has_method("is_alive") and not player.is_alive():
+			player_positions.append(null)
+			continue
+		player_positions.append((player as Node2D).global_position)
+	_flow_field.update_targets(player_positions)
+	if _flow_reachability_warned:
+		return
+	for player_index in range(player_positions.size()):
+		if player_positions[player_index] == null:
+			continue
+		if not _flow_field.target_reaches_points(player_index, _flow_spawn_lane_points):
+			_flow_reachability_warned = true
+			push_warning("CoopManager: arena flow field for player %d cannot reach all enemy spawn lanes" % player_index)
+			return
 
 func _prewarm_combat_vfx() -> void:
 	var prewarm_position := ARENA_CENTER
@@ -704,6 +875,10 @@ func _physics_process(delta: float) -> void:
 	_combat_effects.update_scheduled_pulsar_emps()
 	_projectile_system.tick(delta)
 	_side_objectives.update(delta, _player_nodes)
+	_flow_target_update_elapsed += delta
+	if _flow_target_update_elapsed >= FLOW_TARGET_UPDATE_INTERVAL:
+		_flow_target_update_elapsed = 0.0
+		_update_flow_field_targets()
 	_update_radiance_auras()
 	_update_hazards(delta)
 	_update_revives(delta)
@@ -1372,7 +1547,7 @@ func _spawn_health_pickup(spawn_position: Vector2) -> void:
 	if _room_clear_started or not is_inside_tree():
 		return
 	var hp_pickup := HealthPickupData.new()
-	hp_pickup.global_position = spawn_position
+	hp_pickup.global_position = get_safe_pickup_position(spawn_position)
 	pickups.add_child(hp_pickup)
 
 func _on_player_downed(player) -> void:
@@ -1713,6 +1888,24 @@ func get_arena_center() -> Vector2:
 func get_player_target_nodes() -> Array:
 	return _player_nodes
 
+func get_player_index_for_node(node) -> int:
+	if node != null and is_instance_valid(node) and "player_index" in node:
+		return int(node.player_index)
+	return _player_nodes.find(node)
+
+func get_flow_direction_to_player(world_position: Vector2, target_player_index: int, fallback_dir: Vector2) -> Vector2:
+	if _flow_field == null:
+		return fallback_dir.normalized() if fallback_dir.length_squared() > 0.0001 else Vector2.ZERO
+	return _flow_field.sample(world_position, target_player_index, fallback_dir)
+
+func has_flow_obstacles() -> bool:
+	return _flow_field != null and _flow_field.has_obstacles()
+
+func get_safe_pickup_position(preferred_position: Vector2) -> Vector2:
+	if _flow_field == null or not _flow_field.has_obstacles():
+		return preferred_position
+	return _flow_field.nearest_passable_position(preferred_position)
+
 func get_projectile_nodes() -> Array:
 	return projectiles.get_children()
 
@@ -1811,6 +2004,7 @@ func get_runtime_pause_node_groups() -> Array:
 		projectiles.get_children(),
 		pickups.get_children(),
 		effects.get_children(),
+		arena_obstacles.get_children() if arena_obstacles != null else [],
 		_enemy_nodes,
 		_active_hazards,
 		_active_mines,

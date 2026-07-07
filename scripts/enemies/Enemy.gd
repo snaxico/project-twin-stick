@@ -7,6 +7,7 @@ const PULSAR_REACTIVE_TELEPORT_DISTANCE := 250.0
 const SEPARATION_RADIUS := 64.0
 const SEPARATION_STRENGTH := 120.0
 const SEPARATION_UPDATE_INTERVAL := 4
+const FLOW_SAMPLE_UPDATE_INTERVAL := 12
 const MAX_SEPARATION_NEIGHBORS := 8
 const HIVE_DEFLECTOR_VULNERABLE_WINDOW := 6.0
 const BLOOM_COLOR_MULTIPLIER := 1.45
@@ -164,6 +165,9 @@ var _aura_attack_mult := 1.0
 var _modifier_speed_mult := 1.0
 var _modifier_attack_mult := 1.0
 var _target: Node2D = null
+var _target_player_index := -1
+var _flow_direction_cache := Vector2.ZERO
+var _flow_direction_cache_frame := -1
 var _combat_owner: Node = null
 var _random := RandomNumberGenerator.new()
 var _next_contact_at := 0.0
@@ -608,26 +612,27 @@ func _physics_process(delta: float) -> void:
 	if _target != null:
 		var offset := _target.global_position - global_position
 		var distance := offset.length()
-		var direction := offset.normalized() if distance > 0.0 else Vector2.RIGHT
+		var raw_target_dir := offset.normalized() if distance > 0.0 else Vector2.RIGHT
+		var flow_dir := _get_flow_direction(raw_target_dir)
 		match enemy_type:
 			EnemyType.CHASER, EnemyType.SPLITTER, EnemyType.SPLITTER_MINI:
-				desired_velocity = direction * _get_effective_move_speed()
+				desired_velocity = flow_dir * _get_effective_move_speed()
 			EnemyType.CHARGER, EnemyType.ELITE_CHARGER:
-				desired_velocity = _update_charger_behavior(direction, distance, now)
+				desired_velocity = _update_charger_behavior(raw_target_dir, flow_dir, distance, now)
 			EnemyType.SPITTER, EnemyType.ELITE_SPITTER:
-				desired_velocity = _update_spitter_behavior(direction, distance, now)
+				desired_velocity = _update_spitter_behavior(raw_target_dir, flow_dir, distance, now)
 			EnemyType.BOMBER:
-				desired_velocity = _update_bomber_behavior(direction, distance, now)
+				desired_velocity = _update_bomber_behavior(flow_dir, distance, now)
 			EnemyType.ELITE_SUPPORT:
-				desired_velocity = _update_support_behavior(direction, distance, now)
+				desired_velocity = _update_support_behavior(raw_target_dir, flow_dir, distance, now)
 			EnemyType.BOSS_WARDEN:
-				desired_velocity = _update_warden_behavior(direction, distance, now)
+				desired_velocity = _update_warden_behavior(raw_target_dir, flow_dir, distance, now)
 			EnemyType.BOSS_HYDRA:
 				desired_velocity = _update_hydra_behavior(now)
 			EnemyType.BOSS_HIVE:
-				desired_velocity = _update_hive_behavior(direction, distance, now)
+				desired_velocity = _update_hive_behavior(raw_target_dir, flow_dir, distance, now)
 			EnemyType.BOSS_PULSAR:
-				desired_velocity = _update_pulsar_behavior(direction, distance, now)
+				desired_velocity = _update_pulsar_behavior(raw_target_dir, distance, now)
 		_attempt_contact_damage(now)
 	if _external_velocity.length() > 0.0:
 		_external_velocity = _external_velocity.move_toward(Vector2.ZERO, delta * 14.0)
@@ -717,7 +722,41 @@ func _refresh_target_if_due() -> void:
 	var frame := Engine.get_physics_frames()
 	if _target != null and is_instance_valid(_target) and frame % _target_refresh_interval != _target_refresh_frame_offset:
 		return
+	var previous_target := _target
 	_target = _find_target()
+	_target_player_index = _resolve_target_player_index(_target)
+	if _target != previous_target:
+		_flow_direction_cache_frame = -1
+
+func _resolve_target_player_index(target: Node2D) -> int:
+	if target == null or not is_instance_valid(target):
+		return -1
+	if "player_index" in target:
+		return int(target.player_index)
+	if _combat_owner != null and _combat_owner.has_method("get_player_index_for_node"):
+		return int(_combat_owner.get_player_index_for_node(target))
+	return -1
+
+func _get_flow_direction(raw_target_dir: Vector2) -> Vector2:
+	if _combat_owner == null or not _combat_owner.has_method("get_flow_direction_to_player"):
+		return raw_target_dir
+	if _combat_owner.has_method("has_flow_obstacles") and not bool(_combat_owner.has_flow_obstacles()):
+		return raw_target_dir
+	var frame := Engine.get_physics_frames()
+	if _flow_direction_cache_frame >= 0 and frame % FLOW_SAMPLE_UPDATE_INTERVAL != _target_refresh_frame_offset % FLOW_SAMPLE_UPDATE_INTERVAL:
+		return _flow_direction_cache
+	var flow_dir_variant = _combat_owner.get_flow_direction_to_player(global_position, _target_player_index, raw_target_dir)
+	if not (flow_dir_variant is Vector2):
+		return raw_target_dir
+	var flow_dir: Vector2 = flow_dir_variant as Vector2
+	if flow_dir.length_squared() > 0.0001:
+		var normalized_flow := flow_dir.normalized()
+		var blended_flow := normalized_flow * 0.85 + raw_target_dir * 0.15
+		_flow_direction_cache = blended_flow.normalized() if blended_flow.length_squared() > 0.0001 else normalized_flow
+	else:
+		_flow_direction_cache = raw_target_dir
+	_flow_direction_cache_frame = frame
+	return _flow_direction_cache
 
 func _get_lead_direction(fallback_direction: Vector2, _shot_speed: float, lead_time: float) -> Vector2:
 	if _target == null or not is_instance_valid(_target):
@@ -771,7 +810,7 @@ func _get_contact_range() -> float:
 		return 60.0
 	return (collision_shape.shape as CircleShape2D).radius + 45.0
 
-func _update_charger_behavior(direction: Vector2, distance: float, now: float) -> Vector2:
+func _update_charger_behavior(raw_direction: Vector2, flow_direction: Vector2, distance: float, now: float) -> Vector2:
 	var phase := _get_phase_ratio()
 	var is_elite := enemy_type == EnemyType.ELITE_CHARGER
 	var charge_speed := _get_effective_move_speed() * ((3.8 + phase) if is_elite else (3.0 + phase * 0.8))
@@ -784,23 +823,23 @@ func _update_charger_behavior(direction: Vector2, distance: float, now: float) -
 	var charge_cooldown := (lerpf(1.8, 1.1, phase) if is_elite else lerpf(2.4, 1.35, phase)) * ( _champion_attack_cooldown_mult if is_elite else 1.0)
 	var charge_range := 760.0 if is_elite else 440.0
 	if distance <= charge_range and now >= _next_ability_at:
-		_charge_direction = direction
+		_charge_direction = raw_direction
 		_charge_until = now + (0.72 if is_elite else 0.55)
 		_next_ability_at = now + charge_cooldown
 		_elite_charge_slam_pending = is_elite
 		if _combat_owner != null and _combat_owner.has_method("handle_enemy_charge_windup"):
 			_combat_owner.handle_enemy_charge_windup(global_position)
-	return direction * _get_effective_move_speed()
+	return flow_direction * _get_effective_move_speed()
 
-func _update_spitter_behavior(direction: Vector2, distance: float, now: float) -> Vector2:
+func _update_spitter_behavior(raw_direction: Vector2, flow_direction: Vector2, distance: float, now: float) -> Vector2:
 	var desired_velocity := Vector2.ZERO
 	if distance < 340.0:
-		desired_velocity = -direction * _get_effective_move_speed() * 0.8
+		desired_velocity = -raw_direction * _get_effective_move_speed() * 0.8
 	elif distance > 640.0:
-		desired_velocity = direction * _get_effective_move_speed() * 0.8
+		desired_velocity = flow_direction * _get_effective_move_speed() * 0.8
 	if now >= _next_fire_at and distance > 120.0:
 		_next_fire_at = now + _get_effective_fire_interval()
-		var attack_direction := _get_lead_direction(direction, projectile_speed, 0.35) if enemy_type == EnemyType.ELITE_SPITTER else direction
+		var attack_direction := _get_lead_direction(raw_direction, projectile_speed, 0.35) if enemy_type == EnemyType.ELITE_SPITTER else raw_direction
 		_emit_projectiles_at(attack_direction, 1 if enemy_type == EnemyType.SPITTER else 5, 0.16 if enemy_type == EnemyType.ELITE_SPITTER else 0.0, 0.9 if enemy_type == EnemyType.ELITE_SPITTER else 0.7)
 	if enemy_type == EnemyType.ELITE_SPITTER and now >= _next_ability_at:
 		_next_ability_at = now + 4.0 * _champion_attack_cooldown_mult
@@ -808,17 +847,17 @@ func _update_spitter_behavior(direction: Vector2, distance: float, now: float) -
 			_combat_owner.spawn_enemy_shockwave(global_position, 180.0, 10, 520.0, _feedback_color, false)
 	return desired_velocity
 
-func _update_bomber_behavior(direction: Vector2, distance: float, now: float) -> Vector2:
+func _update_bomber_behavior(flow_direction: Vector2, distance: float, now: float) -> Vector2:
 	if not _fuse_active and distance <= 180.0:
 		_fuse_active = true
 		_fuse_ends_at = now + 1.5
 	if _fuse_active and now >= _fuse_ends_at:
 		_trigger_bomber_explosion()
 		return Vector2.ZERO
-	return direction * _get_effective_move_speed()
+	return flow_direction * _get_effective_move_speed()
 
-func _update_support_behavior(direction: Vector2, _distance: float, now: float) -> Vector2:
-	var perpendicular := direction.orthogonal().normalized()
+func _update_support_behavior(raw_direction: Vector2, flow_direction: Vector2, _distance: float, now: float) -> Vector2:
+	var perpendicular := raw_direction.orthogonal().normalized()
 	var orbit_bias := perpendicular if int(now * 2.0) % 2 == 0 else -perpendicular
 	if now >= _next_ability_at:
 		_next_ability_at = now + 3.5 * _champion_attack_cooldown_mult
@@ -826,9 +865,10 @@ func _update_support_behavior(direction: Vector2, _distance: float, now: float) 
 			_combat_owner.apply_enemy_support_aura(global_position, 360.0, 1.18, 1.25, 3.0)
 		if _combat_owner != null and _combat_owner.has_method("spawn_enemy_shockwave"):
 			_combat_owner.spawn_enemy_shockwave(global_position, 210.0, 9, 420.0, _feedback_color, false)
-	return (direction * 0.45 + orbit_bias * 0.55).normalized() * _get_effective_move_speed()
+	var movement := flow_direction * 0.45 + orbit_bias * 0.55
+	return movement.normalized() * _get_effective_move_speed() if movement.length_squared() > 0.0001 else flow_direction * _get_effective_move_speed()
 
-func _update_warden_behavior(direction: Vector2, _distance: float, now: float) -> Vector2:
+func _update_warden_behavior(raw_direction: Vector2, flow_direction: Vector2, _distance: float, now: float) -> Vector2:
 	if now < _charge_until:
 		if now < _warden_charge_windup_until:
 			return Vector2.ZERO
@@ -843,7 +883,7 @@ func _update_warden_behavior(direction: Vector2, _distance: float, now: float) -
 			_combat_owner.spawn_enemy_shockwave(global_position, 80.0, 12, 420.0, _feedback_color, false)
 	if _charge_chain_remaining > 0:
 		_charge_chain_remaining -= 1
-		_charge_direction = direction
+		_charge_direction = raw_direction
 		_warden_charge_windup_until = now + 0.8
 		_charge_until = _warden_charge_windup_until + 0.5
 		_next_trail_at = now
@@ -859,7 +899,7 @@ func _update_warden_behavior(direction: Vector2, _distance: float, now: float) -
 			_combat_owner.schedule_enemy_shockwave(global_position, 260.0, 15, 700.0, _feedback_color, 0.8, false)
 	if now >= _next_ability_at:
 		_profile_attack_first_use("warden_charge_combo")
-		_charge_direction = direction
+		_charge_direction = raw_direction
 		_warden_charge_windup_until = now + 0.8
 		_charge_until = _warden_charge_windup_until + 0.55
 		_next_trail_at = now
@@ -868,7 +908,7 @@ func _update_warden_behavior(direction: Vector2, _distance: float, now: float) -
 		_next_ability_at = now + 3.1 * _champion_attack_cooldown_mult
 		if _combat_owner != null and _combat_owner.has_method("handle_enemy_charge_windup"):
 			_combat_owner.handle_enemy_charge_windup(global_position)
-	return direction * _get_effective_move_speed()
+	return flow_direction * _get_effective_move_speed()
 
 func _update_hydra_behavior(now: float) -> Vector2:
 	var rotation_speed := deg_to_rad(18.0)
@@ -904,7 +944,7 @@ func _update_hydra_behavior(now: float) -> Vector2:
 		_spawn_boss_attack_telegraph(280.0)
 	return Vector2.ZERO
 
-func _update_hive_behavior(direction: Vector2, distance: float, now: float) -> Vector2:
+func _update_hive_behavior(raw_direction: Vector2, flow_direction: Vector2, distance: float, now: float) -> Vector2:
 	_update_champion_deflector_positions(now)
 	# Deflectors block all damage while up. They must be CLEARABLE with a real damage window,
 	# or the Hive is permanently invincible (the old phase-gated respawn was dropped in the champion
@@ -917,8 +957,7 @@ func _update_hive_behavior(direction: Vector2, distance: float, now: float) -> V
 		_profile_attack_first_use("hive_deflectors")
 		_spawn_champion_deflectors(4)
 		_champion_deflectors_present = true
-	if distance < 240.0:
-		direction = -direction
+	var movement_direction := -raw_direction if distance < 240.0 else flow_direction
 	if now >= _next_burst_at:
 		_profile_attack_first_use("hive_poison_cloud")
 		_next_burst_at = now + 5.5 * _champion_attack_cooldown_mult
@@ -928,7 +967,7 @@ func _update_hive_behavior(direction: Vector2, distance: float, now: float) -> V
 			_combat_owner.spawn_enemy_hazard_zone(poison_origin, 160.0, 0.8, 0, Color(0.38, 0.9, 0.24, 0.22))
 		if _combat_owner != null and _combat_owner.has_method("schedule_enemy_hazard_zone"):
 			_combat_owner.schedule_enemy_hazard_zone(poison_origin, 160.0, 4.0, 5, Color(0.38, 0.9, 0.24, 0.32), 0.8)
-	return direction * _get_effective_move_speed()
+	return movement_direction * _get_effective_move_speed()
 
 func _spawn_champion_deflectors(count: int) -> void:
 	if not is_champion() or _combat_owner == null or not _combat_owner.has_method("spawn_champion_deflector_minions"):
