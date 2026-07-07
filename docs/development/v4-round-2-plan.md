@@ -32,8 +32,9 @@ instantaneous monitor reading — watch dense real rooms for residual physics-ov
 oldest when exceeded. Cheapen construct per-frame work if profiling points at it.
 
 **Acceptance:**
-- **Automated:** `--profile=entity_ramp` (50→200 ramp) and `--profile=champion:hive --players=2 --build=heavy`
-  both hold ≥60 `min_fps`; no single-digit-FPS cluster case.
+- **Automated:** `--profile=entity_ramp` (50→200 ramp) holds **`avg_fps` ≥ 60** (that harness/`ProfilingHarness.gd`
+  emits `avg_fps` only, no min), and `--profile=champion:hive --players=2 --build=heavy` holds **`min_fps` ≥ 60**
+  (the PerfRunner path emits `min_fps`); no single-digit-FPS cluster case.
 - **Manual:** a Controller run spamming Summon + Overload Grid in a spitter-dense room shows no lag spike; total
   projectiles (normal + homing) and summons stay within their caps.
 - *(Optional: add a `round2_stress` PerfRunner scenario — dense spitters + forced max summons — for an automated
@@ -121,8 +122,9 @@ feel and makes the roguelite room-choice a real decision.
 
 **How it works:**
 - **Archetype table — `data/room_archetypes.json`** (LOCKED: a JSON data file, not a const, for easy tuning):
-  each = `{ id, name, icon, short_desc, enemy_bias, themed_modifier_pool, density_profile, arena_size_hint,
-  reward_hint, depth_gate? }`.
+  each = `{ id, name, icon, short_desc, enemy_bias, themed_modifier_pool, modifier_count_max (0–2),
+  density_profile, reward_hint, depth_gate? }`. **No `arena_size` field** — arena size is a hardcoded const (see
+  the note below the table); `density_profile` = `WaveDirector` spawn-count/interval scale (already exists).
 - **Map gen** (`RunState._build_choice_step` / `_build_run_node`): assign each node an **archetype** (respect
   depth gates + **anti-repeat** so consecutive nodes differ), then roll intra-archetype variation. Replaces the
   random modifier roll.
@@ -135,20 +137,22 @@ feel and makes the roguelite room-choice a real decision.
   `_build_distinct_modifier_load` **appends any** major/minor modifier. Rework both to be **archetype-aware**:
   differentiate the 2 choices by **archetype** (not random modifier reroll), and only ever draw modifiers from
   the chosen archetype's themed pool, capped at 2.
-- **Variation within an archetype:** exact enemy sub-mix, arena-size roll, modifier count (0–2) + intensity,
-  density — so two Swarm rooms differ but both read as Swarm.
+- **Variation within an archetype:** exact enemy sub-mix, how many modifiers roll (0 → the archetype's
+  `modifier_count_max`) + which ones, density — so two Swarm rooms differ but both read as Swarm.
 
-**The 6 archetypes** (all map to existing enemies + modifiers — no new layout engine; arena size via the
-existing shrink/size lever):
+**The 6 archetypes** (all map to existing enemies + modifiers — no new layout engine). **Arena SIZE is NOT a
+lever:** `ARENA_SIZE` is a hardcoded const (`CoopManager.gd` / `WaveDirector.gd`); a room-configurable larger
+arena isn't wired (out of scope — deferred with physical structure). The only size effect is the existing
+**`shrinking_arena` modifier**. `Density` = `WaveDirector` spawn count/interval (already scales).
 
-| Archetype | Enemy bias | Themed modifier pool | Arena / density | Tests |
-|---|---|---|---|---|
-| **Standard** | balanced depth mix | any 1 (mild) | normal | baseline |
-| **Swarm** | chaser / splitter / mini | `swarm`, `accelerating_waves` | normal, +density | AOE / crowd |
-| **Elite Ambush** | few trash + 1–2 elites | `shielded`, `enemy_speed` | normal, −density | priority targets |
-| **Ranged Gauntlet** | spitter / elite_spitter | `accelerating_waves`, `enemy_speed` | larger arena | dodging projectiles |
-| **Hazard Field** | moderate mix | `fire_floor`, `ice_zone`, `mine_field` | normal | positioning |
-| **Pressure Cooker** | charger / bomber | `shrinking_arena`, `explosive_death` | shrinking | space denial |
+| Archetype | Enemy bias | Themed modifier pool | mod_max | Density | Tests |
+|---|---|---|---|---|---|
+| **Standard** | balanced depth mix | **all existing modifiers** | **1** | normal | baseline |
+| **Swarm** | chaser / splitter / mini | `swarm`, `accelerating_waves` | 2 | high | AOE / crowd |
+| **Elite Ambush** | few trash + 1–2 elites | `shielded`, `enemy_speed` | 2 | low | priority targets |
+| **Ranged Gauntlet** | spitter / elite_spitter | `accelerating_waves`, `enemy_speed` | 2 | normal | dodging projectiles |
+| **Hazard Field** | moderate mix | `fire_floor`, `ice_zone`, `mine_field` | 2 | normal | positioning |
+| **Pressure Cooker** | charger / bomber | `shrinking_arena`, `explosive_death` | 2 | normal | space denial (arena shrinks via its modifier) |
 
 **Files:** new **`data/room_archetypes.json`**; `RunState.gd` (`_build_choice_step` / `_build_run_node`, replace
 `_roll_modifiers_for_depth` with archetype assignment + themed-modifier draw; **rework `_ensure_route_traits_differ`
