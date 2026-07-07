@@ -12,9 +12,10 @@
 >   the player, and each other via `move_and_slide()`. `Enemy.gd` only zeroes collision **on death** (~L1183).
 >   So there is **no soft-vs-hard perf tradeoff — physics is already on.**
 > - **Model = keep existing physics + flow field for ROUTING.** Obstacles go on **layer 1**; enemies, player
->   (mask 1), and projectiles (mask 1) collide with them **with no mask changes and no added cost.** The flow
->   field only **steers enemies around obstacles** (so they don't press into a wall forever); **physics gives the
->   hard stop** (no clipping). No perf regression (physics unchanged, field cheap, obstacles = a few statics).
+>   (mask 1), and projectiles (mask 1) collide with them **with no mask changes.** The flow field only **steers
+>   enemies around obstacles** (so they don't press into a wall forever); **physics gives the hard stop** (no
+>   clipping). **Expected low added cost** (physics unchanged, field cheap, obstacles = a few statics) — but
+>   chokepoint bunching can add some `move_and_slide` contact work, so **validate against the baseline**.
 > - **Flow field drives BASE LOCOMOTION only, never aim/charge.** Split `raw_target_dir` (straight-to-player, for
 >   aiming/attacks/distance checks/charge/kite) from `flow_dir` (the field sample, for where the enemy *walks*).
 > - **Charge attacks (charger / boss dashes) go STRAIGHT** (raw dir) and are **stopped by physics** at obstacles
@@ -57,8 +58,11 @@ standard swarm-vs-target solution.
 - **Split by MOVEMENT vs AIM, not by enemy type.** Several behaviors (`_update_spitter_behavior`, the boss
   behaviors, `_update_charger_behavior`) derive *both* movement and aim from the single `direction` today — so
   pass **both** `raw_target_dir` and `flow_dir` in:
-  - **Locomotion *toward* the player → `flow_dir`:** chaser approach, spitter *approach* (when too far), boss
-    *approach* movement — all of it routes around obstacles.
+  - **Locomotion *toward* the player → `flow_dir`:** chaser approach, spitter *approach* (when too far), **bomber
+    approach** (`_update_bomber_behavior`), boss *approach* movement, and **elite support's toward-player
+    component** (`_update_support_behavior` returns `direction*0.45 + orbit_bias*0.55`; make the `*0.45` term use
+    `flow_dir`, **keep the `orbit_bias` perpendicular term unchanged**). All approach locomotion routes around
+    obstacles; audit every `_update_*_behavior` for a `direction`-based movement term.
   - **Aim / lead / distance checks / committed charge / retreat-away → `raw_target_dir`:** projectile fire dir +
     `_get_lead_direction`, the `distance` range checks, the charger/boss **charge** commit (straight,
     physics-stopped), and spitter **kite-retreat** (`-raw_target_dir`; obstacle-aware retreat is a follow-up —
@@ -92,14 +96,24 @@ standard swarm-vs-target solution.
   (`ArenaGeometry.enemy_spawn_position_for_edge`), or **side-objective / pickup placement zones** — otherwise an
   actor can be trapped inside a wall on spawn. Alternatively, relocate the affected spawn to the nearest passable
   cell. Author test layouts to keep clear of the arena edges + center spawn.
+- **⚠ Connectivity — inflation can seal a corridor / partition the grid.** After `FlowField.build`, **verify the
+  integration field reaches all enemy-spawn-lane cells** (every spawn edge can path to the player region). Require
+  a **minimum corridor width ≥ 2× the inflation** so a gap isn't fully closed, **reject/adjust** a layout that
+  partitions the arena, and in `sample` add a **nearest-reachable fallback** (if an enemy's cell has no path, route
+  toward the nearest cell that does, else `raw_target_dir`) so a stranded enemy is never frozen.
 - **Test/profiling layout:** a debug room config with a handful of blocks including **at least one concave case**
   (an L / a short corridor / a gap) — proves the field routes around it (the thing steering couldn't).
 
 ### 4. Perf validation
-- **Physics is already on** for 200 enemies (current baseline), so this adds only a few static colliders + the
-  flow field (per-enemy O(1) sample + gated BFS over ~756 cells). Add the test obstacles to `ProfilingHarness`
-  (or a `flowfield_stress` scenario) and confirm **200 enemies hold ≥60 `avg_fps` — no regression vs current.**
-  If it regresses, the field build/sample or obstacle-collider count is the suspect.
+- Physics is already on for 200 enemies (current baseline), so this adds only a few static colliders + the flow
+  field (per-enemy O(1) sample + gated BFS over ~756 cells) — **expected low added cost; validate against the
+  baseline** (chokepoint bunching can add some `move_and_slide` contact work, so don't assume zero).
+- **⚠ The perf harness must actually exercise the field.** `ProfilingHarness.ProfTarget` has **no `player_index`**,
+  so enemies targeting it resolve an invalid index → fall back to `raw_target_dir` → `FlowField.sample` never
+  runs, and the test measures nothing. **Give the profiling target a `player_index` (0)** (and load the test
+  obstacles), or add a dedicated `flowfield_stress` scenario with real player node(s) + obstacles.
+- Confirm **200 enemies + obstacles hold ≥60 `avg_fps`, no regression vs the obstacle-free baseline.** If it
+  regresses, the field build/sample or the obstacle-collider contact count is the suspect.
 
 ## Acceptance
 - A test room with a few obstacles (incl. a concave one): **200 enemies route around them** (visibly curve, funnel
