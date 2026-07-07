@@ -45,13 +45,14 @@ of spitters; no single-digit-FPS cluster case.
 - **Momentum HUD on every class** (`GameHud.gd`) — momentum pips are built ungated for all cards. **Make the
   bottom-card indicator class-specific:** Mobile = Momentum pips; Risk = **Heat bar**; Tank = **Overshield bar**;
   Controller = **Radiance indicator** (aura active / deployable count). Drop the momentum pips for non-Mobile.
-- **Controller ult "shielded minions on the right"** — **root cause found:** `_activate_overload_grid`
-  (`CoopManager.gd:1082`) calls `_reinforce_deployables` **then** spawns the overload constructs, so if the
-  player has the **Aegis mutation** the reinforce step shields the freshly-spawned constructs → they render as
-  "shielded minions." Not a stray bug — it's Aegis-shielded overload constructs. **Fix = legibility:** either
-  spawn the constructs **before** reinforce isn't the issue — make the shielded/overcharged state read
-  intentionally (clear overcharge VFX on ult constructs), **or** exclude the ult's temporary constructs from
-  Aegis. Decide + make it clearly readable.
+- **Controller ult "shielded minions on the right"** — **cause NOT yet identified; repro needed** (my earlier
+  root-cause was wrong). Verified what it is **not**: `_reinforce_deployables` (`CoopManager.gd`) only **heals**
+  existing deployables (no shield) and runs **before** the constructs spawn; and **`aegis` / `shield_amount` has
+  no implementation** — it's a **dead, data-only mutation** (grep finds it only in `data/mutations.json`). So
+  the "shield blob" is a mis-read visual; likely candidates: the reinforce shockwave-ring / glint VFX, an Orbit
+  deployable's ring, or the overload constructs' own look. **Do:** repro (Controller → cast Overload Grid → note
+  what the blob actually is), then give Overload constructs a clear **overcharged** read. **Separate item:**
+  `aegis` is dead data — implement its deployable-shield or drop it (cleanup).
 - **Element tag gating — CONCRETE** (`data/mutations.json` + `MutationSystem.gd` offer filter). Two changes:
   1. **Delivery gate:** set `fire_trail` / `freeze_shot` / `poison` `requires: [] → ["projectile"]` (mirrors
      `ricochet` / `piercing_rounds`, which already gate on `projectile`). This alone excludes the flamethrower
@@ -111,15 +112,21 @@ archetypes** the player **chooses between**, each with intra-theme variation. Ki
 feel and makes the roguelite room-choice a real decision.
 
 **How it works:**
-- **Archetype table** (new `data/room_archetypes.json` or a const): each = `{ id, name, icon, short_desc,
-  enemy_bias, themed_modifier_pool, density_profile, arena_size_hint, reward_hint, depth_gate? }`.
-- **Map gen** (`RunState._build_run_node` + map builder): assign each node an **archetype** (respect depth gates
-  + **anti-repeat** so consecutive nodes differ), then roll intra-archetype variation. Replaces the random
-  modifier roll.
-- **Player picks between 2–3 archetypes per node** at the next-room screen — readable cards (name / icon /
-  short_desc / reward hint), reusing the existing map + card UI style [[feedback-card-ui-style]]. "Swarm for XP
-  vs Elite Ambush for the rare."
-- **Modifiers per room: up to 2, both drawn from the archetype's themed pool** — never random cross-theme.
+- **Archetype table — `data/room_archetypes.json`** (LOCKED: a JSON data file, not a const, for easy tuning):
+  each = `{ id, name, icon, short_desc, enemy_bias, themed_modifier_pool, density_profile, arena_size_hint,
+  reward_hint, depth_gate? }`.
+- **Map gen** (`RunState._build_choice_step` / `_build_run_node`): assign each node an **archetype** (respect
+  depth gates + **anti-repeat** so consecutive nodes differ), then roll intra-archetype variation. Replaces the
+  random modifier roll.
+- **Choice count — LOCKED: 2 combat archetype choices per normal step; champion steps stay 1 forced card**
+  (matches the current `_build_choice_step`, 2/1 — don't change the step shape). Readable archetype cards (name /
+  icon / short_desc / reward hint), reusing the existing choice + card UI [[feedback-card-ui-style]].
+- **Modifiers per room: up to 2, both from the archetype's themed pool** — never random cross-theme.
+- **⚠ Replace the modifier-dedupe helpers** so they can't reintroduce off-theme / >2 stacks:
+  `RunState._ensure_route_traits_differ` currently rerolls via `_roll_modifiers_for_depth`, and
+  `_build_distinct_modifier_load` **appends any** major/minor modifier. Rework both to be **archetype-aware**:
+  differentiate the 2 choices by **archetype** (not random modifier reroll), and only ever draw modifiers from
+  the chosen archetype's themed pool, capped at 2.
 - **Variation within an archetype:** exact enemy sub-mix, arena-size roll, modifier count (0–2) + intensity,
   density — so two Swarm rooms differ but both read as Swarm.
 
@@ -135,13 +142,15 @@ existing shrink/size lever):
 | **Hazard Field** | moderate mix | `fire_floor`, `ice_zone`, `mine_field` | normal | positioning |
 | **Pressure Cooker** | charger / bomber | `shrinking_arena`, `explosive_death` | shrinking | space denial |
 
-**Files:** new `data/room_archetypes.json` (or const); `RunState.gd` (`_build_run_node`, replace
-`_roll_modifiers_for_depth` with archetype assignment + themed-modifier draw + anti-repeat); the next-room map /
-choice UI (`Bootstrap.gd` / map UI — present 2–3 archetype cards); `WaveDirector.gd` (consume archetype
-enemy-bias + density); `CoopManager.configure_room` (extend `room_config` with archetype fields).
-**Acceptance:** each map node offers a choice of 2–3 readable archetypes; a run visibly mixes room types (no two
-consecutive identical); every room carries ≤2 on-theme modifiers (no random cross-theme stacks); the 6
-archetypes each play distinctly. *(Biggest slice — new data + map-gen + choice UI; do last.)*
+**Files:** new **`data/room_archetypes.json`**; `RunState.gd` (`_build_choice_step` / `_build_run_node`, replace
+`_roll_modifiers_for_depth` with archetype assignment + themed-modifier draw; **rework `_ensure_route_traits_differ`
++ `_build_distinct_modifier_load` to archetype-aware dedupe**); the next-room choice UI (`RunFlow.gd` / choice
+cards — show the **2** archetype cards); `WaveDirector.gd` (consume archetype enemy-bias + density);
+`CoopManager.configure_room` (extend `room_config` with archetype fields).
+**Acceptance:** each **normal** step offers **2** readable archetype choices (champion steps stay 1 forced card);
+a run visibly mixes room types (no two consecutive identical); every room carries ≤2 **on-theme** modifiers (no
+random cross-theme stacks, verified via the reworked dedupe helpers); the 6 archetypes each play distinctly.
+*(Biggest slice — new data + map-gen + choice UI; do last.)*
 
 **Physical structure — DEFERRED (decision 2026-07-06).** Round 2 rooms are **open arenas**; archetype variety
 comes from enemy mix + themed modifiers + **arena size** only — **no internal obstacles / cover / chokepoints**.
