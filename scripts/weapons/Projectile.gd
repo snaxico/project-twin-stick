@@ -3,6 +3,11 @@ extends Area2D
 const FireTrailZoneData = preload("res://scripts/weapons/FireTrailZone.gd")
 const BASE_COLLISION_HALF_WIDTH := 4.0
 const BLOOM_COLOR_MULTIPLIER := 1.45
+# Enemy shots don't distance/lifetime-expire like player shots (they should reach the player instead of
+# fizzling mid-air), but they still need a generous travel cap so misses don't cross the whole 3600px arena
+# and pile up. ~1500px covers normal engagement range (a spitter at speed 380 travels this in ~4s), while
+# clearing shots that fly past. They also still despawn at the arena wall (use_arena_bounds).
+const ENEMY_PROJECTILE_MAX_DISTANCE := 1500.0
 
 @export var lifetime: float = 1.8
 
@@ -183,7 +188,7 @@ func setup_from_config(projectile_team: String, projectile_direction: Vector2, c
 		arena_bounds = config["arena_bounds"]
 		use_arena_bounds = true
 	if team == "enemy":
-		max_distance = 0.0
+		max_distance = ENEMY_PROJECTILE_MAX_DISTANCE
 		use_lifetime = false
 	_projectile_config = config.duplicate(true)
 
