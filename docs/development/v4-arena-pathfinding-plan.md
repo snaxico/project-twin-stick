@@ -43,21 +43,28 @@ standard swarm-vs-target solution.
   lowest-distance passable 8-neighbor). One field per player.
   - **Recompute cadence:** rebuild a player's field **only when that player enters a new cell** (track last
     cell/player). BFS over ~756 cells is microseconds; gating avoids per-frame cost.
-- **`sample(world_pos, target_player_index) -> Vector2`** — bilinear-interpolate the 4 nearest cell arrows (skip
-  blocked neighbors in the blend). **Fallback (no field / outside grid):** return the caller's `raw_target_dir`
-  so behavior is unchanged.
+- **`sample(world_pos, target_player_index, fallback_dir: Vector2) -> Vector2`** — bilinear-interpolate the 4
+  nearest cell arrows (skip blocked neighbors). **Returns `fallback_dir`** when there's no field / outside grid /
+  invalid target. *(The function can't derive raw dir itself — the caller passes `raw_target_dir`.)*
 - **`has_obstacles() -> bool`** — rooms with none skip flow entirely (enemies just use `raw_target_dir` — zero
   cost, identical to today).
 
 ### 2. Enemy integration (`scripts/enemies/Enemy.gd`) — split direction, keep collision
 **⚠ Do NOT globally overwrite the existing `direction`** — it's reused for aim, lead, kiting, and charge. Split it:
 - Compute **`raw_target_dir`** = `(_target.global_position - global_position).normalized()` (today's value), and
-  **`flow_dir`** = `FlowField.sample(global_position, _target_player_index)` when `FlowField.has_obstacles()`,
-  else `flow_dir = raw_target_dir`.
-- **Base locomotion uses `flow_dir`** (chaser/splitter approach velocity). **Everything else uses `raw_target_dir`:**
-  projectile aim + lead, spitter approach/kite offset, boss approach, distance checks, and the **charger/boss
-  charge direction** (charge commits straight, stopped by physics). → the field changes only *where enemies walk*,
-  never where they *aim or charge*.
+  **`flow_dir`** = `FlowField.sample(global_position, _target_player_index, raw_target_dir)` when
+  `FlowField.has_obstacles()`, else `flow_dir = raw_target_dir`.
+- **Split by MOVEMENT vs AIM, not by enemy type.** Several behaviors (`_update_spitter_behavior`, the boss
+  behaviors, `_update_charger_behavior`) derive *both* movement and aim from the single `direction` today — so
+  pass **both** `raw_target_dir` and `flow_dir` in:
+  - **Locomotion *toward* the player → `flow_dir`:** chaser approach, spitter *approach* (when too far), boss
+    *approach* movement — all of it routes around obstacles.
+  - **Aim / lead / distance checks / committed charge / retreat-away → `raw_target_dir`:** projectile fire dir +
+    `_get_lead_direction`, the `distance` range checks, the charger/boss **charge** commit (straight,
+    physics-stopped), and spitter **kite-retreat** (`-raw_target_dir`; obstacle-aware retreat is a follow-up —
+    physics stops one that backs into a wall).
+  - e.g. `_update_spitter_behavior(raw_dir, flow_dir, distance, now)` → approach `flow_dir * speed`, retreat
+    `-raw_dir * speed`, fire `raw_dir`. Base chaser velocity = `flow_dir * speed`.
 - **Keep `_apply_separation()`:** `velocity = flow_dir * _get_effective_move_speed() + _apply_separation()` →
   `move_and_slide()`.
 - **Enemies keep existing collision** (`layer/mask = 1`) — physics stops them at obstacles/walls. **No collision
@@ -76,6 +83,15 @@ standard swarm-vs-target solution.
   (`{ x, y, w, h }`). `CoopManager` (room setup) spawns one `StaticBody2D` block per rect (layer 1), adds each to
   an **`arena_obstacle`** group, and passes the rects to `FlowField.build`. **Reusable:** the Round-2 archetypes
   can later populate `obstacles` per archetype (that's the follow-up).
+- **⚠ Lifecycle — spawn under a cleared container:** `_clear_runtime_nodes` currently frees children of only
+  `[projectiles, enemies, pickups, effects]` (`CoopManager.gd`). Spawn obstacle blocks under a **dedicated
+  `arena_obstacles` container node** and **add it to that cleanup list** (or spawn under `effects`) so obstacles
+  are rebuilt per room and **don't leak between rooms**. Rebuild `FlowField` when the room's obstacles change.
+- **⚠ Spawn safety — validate rects against placement zones:** before spawning, **reject or relocate** any
+  obstacle rect (inflated) that overlaps **player spawn points**, the **enemy edge-spawn lanes/margins**
+  (`ArenaGeometry.enemy_spawn_position_for_edge`), or **side-objective / pickup placement zones** — otherwise an
+  actor can be trapped inside a wall on spawn. Alternatively, relocate the affected spawn to the nearest passable
+  cell. Author test layouts to keep clear of the arena edges + center spawn.
 - **Test/profiling layout:** a debug room config with a handful of blocks including **at least one concave case**
   (an L / a short corridor / a gap) — proves the field routes around it (the thing steering couldn't).
 
