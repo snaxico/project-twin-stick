@@ -45,15 +45,22 @@ of spitters; no single-digit-FPS cluster case.
 - **Momentum HUD on every class** (`GameHud.gd`) — momentum pips are built ungated for all cards. **Make the
   bottom-card indicator class-specific:** Mobile = Momentum pips; Risk = **Heat bar**; Tank = **Overshield bar**;
   Controller = **Radiance indicator** (aura active / deployable count). Drop the momentum pips for non-Mobile.
-- **Controller ult "shielded minions on the right"** (`CoopManager._activate_overload_grid`) — investigate:
-  likely the Aegis/reinforce shield VFX on the overload constructs rendering oddly/offset. Clarify or fix the
-  visual so it reads as "overcharged constructs," not a stray shielded blob.
-- **Element tag gating (decision: gate by delivery + dedupe)** (`MutationSystem.gd` + `data/mutations.json`) —
-  `fire_trail` / `freeze_shot` / `poison` currently `requires:[]` (any weapon), so "Fire Bullets" shows on the
-  flamethrower. **Change:** these on-hit "where the shot lands" effects **require a `projectile`-style delivery**
-  (not cone/beam/melee where a landing-pool is nonsensical), **and are not offered if the weapon already carries
-  that element** (no fire on flamethrower, etc.). Add the delivery requirement + a same-element exclusion in the
-  offer filter. Audit all elements against all weapons for logical fit.
+- **Controller ult "shielded minions on the right"** — **root cause found:** `_activate_overload_grid`
+  (`CoopManager.gd:1082`) calls `_reinforce_deployables` **then** spawns the overload constructs, so if the
+  player has the **Aegis mutation** the reinforce step shields the freshly-spawned constructs → they render as
+  "shielded minions." Not a stray bug — it's Aegis-shielded overload constructs. **Fix = legibility:** either
+  spawn the constructs **before** reinforce isn't the issue — make the shielded/overcharged state read
+  intentionally (clear overcharge VFX on ult constructs), **or** exclude the ult's temporary constructs from
+  Aegis. Decide + make it clearly readable.
+- **Element tag gating — CONCRETE** (`data/mutations.json` + `MutationSystem.gd` offer filter). Two changes:
+  1. **Delivery gate:** set `fire_trail` / `freeze_shot` / `poison` `requires: [] → ["projectile"]` (mirrors
+     `ricochet` / `piercing_rounds`, which already gate on `projectile`). This alone excludes the flamethrower
+     (`cone`) + beam / whirlwind (`melee`) / arc_wand (`chain`) — fixes "Fire Bullets on flamethrower."
+  2. **Same-element dedupe** in the offer filter: skip an element mutation if the equipped weapon already carries
+     that element tag.
+  ⚠ **Tradeoff (playtest watch-item):** non-projectile weapons (beam/whirlwind/arc_wand/flamethrower) then get
+  **no** elemental on-hit mutations — narrows their build pool. If that feels too thin, revisit (e.g. allow
+  slow/DoT on beam but keep landing-pool fire projectile-only).
 - **Ignite is unclear** — clarify its description (burn DoT + burst-on-death spread) in the ability text /
   encyclopedia, and **verify it actually fires** (burn applied, spread-on-death triggers).
 - **Flamethrower feels "like a beam"** (`ProjectileSystem._process_cone_fire` + its VFX) — smoother, flame-y
@@ -87,9 +94,9 @@ mutation is offered on a weapon it makes no sense for; Ignite reads clearly and 
   (`[0.2,0.35,0.5] → [0.15,0.25,0.35]`). **Risk unaffected** (Overheat overrides CDs with its 0.5s).
 - **Heat — STICKIER** (`Player.gd`) — `OVERHEAT_DECAY_PER_SECOND 14 → **6**`, `OVERHEAT_DECAY_DELAY 0.75 →
   **1.5**` so Risk ramps to high heat and holds it (more reward + more danger).
-- **HP pickups — FEWER DROPS, keep heal value** (`HealthPickup.gd` + drop logic) — cut the **drop chance**
-  (~⅓–½ as often); **heal amount unchanged** (a found pickup still matters; no steady stream). Locate the drop
-  knob in impl.
+- **HP pickups — FEWER DROPS, keep heal value** — `CoopManager.HEALTH_DROP_CHANCE **0.06 → 0.03**` (halve the
+  per-non-champion-kill drop chance); **`HealthPickup.heal_amount` stays 8** (a found pickup still matters; no
+  steady stream).
 
 **Acceptance:** arc is a strong pick, not the auto-best; summons are useful but not carry-alone; a boss survives
 a meaningful engagement; Tank can't facetank-and-win (must play); no class trivially dominant; heat feels
