@@ -1,0 +1,71 @@
+{
+  "archetypes": [
+    {
+      "id": "standard",
+      "name": "Standard",
+      "icon": "open",
+      "short_desc": "Balanced enemy mix with light variation.",
+      "enemy_bias": ["balanced"],
+      "themed_modifier_pool": ["swarm", "shielded", "enemy_speed", "accelerating_waves", "explosive_death", "fire_floor", "ice_zone", "mine_field", "shrinking_arena"],
+      "modifier_count_max": 1,
+      "density_profile": "normal",
+      "reward_hint": "Baseline reward odds"
+    },
+    {
+      "id": "swarm",
+      "name": "Swarm",
+      "icon": "swarm",
+      "short_desc": "Large packs of chasers and splitters.",
+      "enemy_bias": ["chaser", "chaser", "splitter", "splitter_mini"],
+      "themed_modifier_pool": ["swarm", "accelerating_waves"],
+      "modifier_count_max": 2,
+      "density_profile": "high",
+      "reward_hint": "Crowd-control test"
+    },
+    {
+      "id": "elite_ambush",
+      "name": "Elite Ambush",
+      "icon": "shield",
+      "short_desc": "Lower density with tougher priority threats.",
+      "enemy_bias": ["chaser", "charger", "elite_charger", "elite_spitter"],
+      "themed_modifier_pool": ["shielded", "enemy_speed"],
+      "modifier_count_max": 2,
+      "density_profile": "low",
+      "reward_hint": "Higher rare nudge"
+    },
+    {
+      "id": "ranged_gauntlet",
+      "name": "Ranged Gauntlet",
+      "icon": "bolt",
+      "short_desc": "Projectile-heavy rooms built around dodging.",
+      "enemy_bias": ["spitter", "spitter", "elite_spitter"],
+      "themed_modifier_pool": ["accelerating_waves", "enemy_speed"],
+      "modifier_count_max": 2,
+      "density_profile": "normal",
+      "reward_hint": "Projectile discipline"
+    },
+    {
+      "id": "hazard_field",
+      "name": "Hazard Field",
+      "icon": "flame",
+      "short_desc": "Moderate waves with positional hazards.",
+      "enemy_bias": ["balanced"],
+      "themed_modifier_pool": ["fire_floor", "ice_zone", "mine_field"],
+      "modifier_count_max": 2,
+      "density_profile": "normal",
+      "reward_hint": "Positioning reward"
+    },
+    {
+      "id": "pressure_cooker",
+      "name": "Pressure Cooker",
+      "icon": "shrink",
+      "short_desc": "Chargers and bombers compress the arena.",
+      "enemy_bias": ["charger", "charger", "bomber"],
+      "themed_modifier_pool": ["shrinking_arena", "explosive_death"],
+      "modifier_count_max": 2,
+      "density_profile": "normal",
+      "reward_hint": "Space-control test",
+      "depth_gate": 6
+    }
+  ]
+}

@@ -96,13 +96,13 @@
       "stats": {
         "range": 760.0,
         "chain_range": 260.0,
-        "chain_falloff": 0.82,
-        "fire_rate": 3.4,
+        "chain_falloff": 0.65,
+        "fire_rate": 2.9,
         "area": 5.0
       },
       "per_level": {
-        "damage": [18, 21, 24, 28, 33],
-        "chain_count": [3, 3, 4, 4, 5]
+        "damage": [16, 19, 22, 25, 29],
+        "chain_count": [2, 2, 3, 3, 4]
       }
     },
     {

@@ -54,6 +54,8 @@ var weapon_tags: Array = []
 var trigger_passives: Array = []
 var source_player_index := -1
 var use_lifetime := true
+var arena_bounds := Rect2()
+var use_arena_bounds := false
 var split_remaining: int = 0
 var _shooter_node: Node = null
 
@@ -119,6 +121,8 @@ func setup(projectile_team: String, projectile_direction: Vector2, projectile_sp
 	source_player_index = -1
 	split_remaining = 0
 	use_lifetime = projectile_team != "enemy"
+	arena_bounds = Rect2()
+	use_arena_bounds = false
 	_hit_targets.clear()
 	_projectile_config.clear()
 	_impact_pool_spawned = false
@@ -175,6 +179,12 @@ func setup_from_config(projectile_team: String, projectile_direction: Vector2, c
 	source_player_index = int(config.get("source_player_index", source_player_index))
 	split_remaining = max(0, int(config.get("split_count", split_remaining)))
 	use_lifetime = bool(config.get("use_lifetime", use_lifetime))
+	if config.has("arena_bounds") and config["arena_bounds"] is Rect2:
+		arena_bounds = config["arena_bounds"]
+		use_arena_bounds = true
+	if team == "enemy":
+		max_distance = 0.0
+		use_lifetime = false
 	_projectile_config = config.duplicate(true)
 
 func _ready() -> void:
@@ -243,6 +253,9 @@ func _physics_process(delta: float) -> void:
 		return
 	rotation = direction.angle()
 	global_position += direction * speed * delta
+	if use_arena_bounds and not arena_bounds.grow(96.0).has_point(global_position):
+		_finish_projectile()
+		return
 	if max_distance > 0.0 and global_position.distance_squared_to(_spawn_position) >= max_distance * max_distance:
 		_spawn_impact_fire_pool()
 		_finish_projectile()

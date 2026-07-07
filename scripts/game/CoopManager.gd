@@ -45,7 +45,8 @@ const REVIVE_RADIUS := 150.0
 const REVIVE_HOLD_DURATION := 1.2
 const HUD_REFRESH_INTERVAL := 0.08
 const BOSS_HIT_FEEDBACK_INTERVAL := 0.22
-const HEALTH_DROP_CHANCE := 0.06
+const HEALTH_DROP_CHANCE := 0.03
+const MAX_ACTIVE_SUMMONS := 5
 const ENEMY_SEPARATION_CELL_SIZE := 96.0
 const GAMEPLAY_INPUT_SUFFIXES := [
 	"move_left",
@@ -504,7 +505,7 @@ func _apply_bloodthirst_on_kill(enemy) -> void:
 		return
 	if not player.has_method("has_passive") or not player.has_passive("bloodthirst"):
 		return
-	var heal_amount := 5
+	var heal_amount := 2
 	if _mutation_system.has_mutation(player_index, "gorge"):
 		heal_amount += 3
 	var overshield_mult := 1.35 if _mutation_system.has_mutation(player_index, "overflow") else 1.0
@@ -836,7 +837,7 @@ func _on_player_ability_activated(player, slot_index: int, ability_id: String, o
 		"turret":
 			var turret := TurretNodeData.new()
 			turret.global_position = origin
-			turret.configure(stats, tint)
+			turret.configure(stats, tint, player)
 			turret.fire_requested.connect(_on_player_fire_requested)
 			effects.add_child(turret)
 			_active_turrets.append(turret)
@@ -930,7 +931,7 @@ func _spawn_ability_mines(origin: Vector2, stats: Dictionary) -> void:
 		var angle := TAU * float(mine_index) / float(max(mine_count, 1))
 		var mine := AbilityMineData.new()
 		mine.global_position = origin + Vector2.RIGHT.rotated(angle) * spread_radius
-		mine.configure(radius, damage, tint, trigger_radius, mine_health)
+		mine.configure(radius, damage, tint, trigger_radius, mine_health, int(stats.get("source_player_index", -1)))
 		effects.add_child(mine)
 		_active_mines.append(mine)
 
@@ -994,6 +995,7 @@ func _spawn_summons(player, origin: Vector2, stats: Dictionary, tint: Color) -> 
 	var construct_count := maxi(1, int(stats.get("construct_count", 2)))
 	var spread_radius := float(stats.get("spread_radius", 70.0))
 	for summon_index in range(construct_count):
+		_enforce_summon_cap(MAX_ACTIVE_SUMMONS - 1)
 		var summon := SummonNodeData.new()
 		var angle := TAU * float(summon_index) / float(construct_count)
 		summon.global_position = origin + Vector2.RIGHT.rotated(angle) * spread_radius
@@ -1004,10 +1006,15 @@ func _spawn_summons(player, origin: Vector2, stats: Dictionary, tint: Color) -> 
 			var flash := ParticleFactoryData.create_explosion_burst(tint.lightened(0.18), 0.72)
 			flash.global_position = summon.global_position
 			effects.add_child(flash)
+	_enforce_summon_cap()
 
 func _reinforce_deployables(origin: Vector2, stats: Dictionary, tint: Color) -> void:
 	var repair_amount := int(stats.get("repair_amount", 55))
 	var radius := float(stats.get("radius", 520.0))
+	var source_player_index := int(stats.get("source_player_index", -1))
+	var shield_amount := 0
+	if source_player_index >= 0 and _mutation_system.has_mutation(source_player_index, "aegis"):
+		shield_amount = int(_mutation_system.get_mutation_param("aegis", "shield_amount", 35))
 	for deployable in get_tree().get_nodes_in_group("player_deployable"):
 		if deployable == null or not is_instance_valid(deployable) or not (deployable is Node2D):
 			continue
@@ -1015,6 +1022,9 @@ func _reinforce_deployables(origin: Vector2, stats: Dictionary, tint: Color) -> 
 			continue
 		if deployable.has_method("heal_deployable"):
 			deployable.heal_deployable(repair_amount)
+		if shield_amount > 0 and deployable.has_method("apply_deployable_shield"):
+			deployable.apply_deployable_shield(shield_amount)
+		if deployable.has_method("heal_deployable") or shield_amount > 0:
 			if not _should_suppress_combat_vfx():
 				var glint := ParticleFactoryData.create_impact_ring(tint.lightened(0.2), 26.0, 2.2)
 				glint.global_position = (deployable as Node2D).global_position
@@ -1085,6 +1095,7 @@ func _activate_overload_grid(player, origin: Vector2, stats: Dictionary, tint: C
 	summon_stats["construct_count"] = int(stats.get("construct_count", 3))
 	summon_stats["construct_health"] = int(stats.get("construct_health", 160))
 	summon_stats["damage"] = int(stats.get("damage", 22))
+	summon_stats["overcharged"] = true
 	_spawn_summons(player, origin, summon_stats, tint.lightened(0.18))
 
 func _activate_firestorm(origin: Vector2, stats: Dictionary) -> void:
@@ -1497,6 +1508,18 @@ func _cleanup_helpers() -> void:
 	_active_summons = _cleanup_instance_array(_active_summons)
 	_active_mines = _cleanup_instance_array(_active_mines)
 
+
+func _enforce_summon_cap(target_count: int = MAX_ACTIVE_SUMMONS) -> void:
+	_active_summons = _cleanup_instance_array(_active_summons)
+	while _active_summons.size() > target_count:
+		var summon = _active_summons.pop_front()
+		if summon == null or not is_instance_valid(summon):
+			continue
+		if summon.has_method("despawn_deployable"):
+			summon.despawn_deployable()
+		else:
+			summon.queue_free()
+
 func _cleanup_instance_array(nodes: Array) -> Array:
 	var kept: Array = []
 	for node in nodes:
@@ -1646,6 +1669,19 @@ func get_modifier_definitions() -> Dictionary:
 
 func get_momentum_tier(player_index: int) -> int:
 	return _momentum_tracker.get_momentum_tier(player_index) if _momentum_tracker != null else 0
+
+func get_radiance_deployable_count(player_index: int = -1) -> int:
+	var total := 0
+	for deployable_list in [_active_turrets, _active_orbits, _active_summons, _active_mines]:
+		for deployable in deployable_list:
+			if deployable == null or not is_instance_valid(deployable):
+				continue
+			if player_index >= 0 and deployable.has_method("get_owner_player_index") and int(deployable.get_owner_player_index()) != player_index:
+				continue
+			if player_index >= 0 and not deployable.has_method("get_owner_player_index"):
+				continue
+			total += 1
+	return total
 
 func get_minor_modifier_flags() -> Dictionary:
 	return _minor_modifier_flags.duplicate()

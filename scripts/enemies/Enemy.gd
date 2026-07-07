@@ -445,13 +445,13 @@ func apply_champion_scale(room_number: int, player_count: int) -> void:
 	_champion_scale = player_scale * depth_scale
 	_champion_attack_cooldown_mult = clampf(1.0 - minf(depth, 30.0) * 0.01, 0.72, 1.0)
 	if enemy_type == EnemyType.BOSS_WARDEN:
-		max_health = 560.0 * _champion_scale
+		max_health = 1600.0 * _champion_scale
 	elif enemy_type == EnemyType.BOSS_HYDRA:
-		max_health = 680.0 * _champion_scale
+		max_health = 2000.0 * _champion_scale
 	elif enemy_type == EnemyType.BOSS_HIVE:
-		max_health = 640.0 * _champion_scale
+		max_health = 1800.0 * _champion_scale
 	elif enemy_type == EnemyType.BOSS_PULSAR:
-		max_health = 650.0 * _champion_scale
+		max_health = 1900.0 * _champion_scale
 	elif enemy_type == EnemyType.ELITE_CHARGER:
 		max_health = 400.0 * _champion_scale
 	elif enemy_type == EnemyType.ELITE_SPITTER:

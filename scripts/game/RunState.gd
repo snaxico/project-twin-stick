@@ -8,6 +8,7 @@ const ClassRegistryData = preload("res://scripts/game/ClassRegistry.gd")
 
 const WEAPONS_DATA_PATH := "res://data/weapons.json"
 const MODIFIERS_DATA_PATH := "res://data/modifiers.json"
+const ROOM_ARCHETYPES_DATA_PATH := "res://data/room_archetypes.json"
 const RUN_LENGTH := 10
 const CONTINUATION_PROGRESS_CAP := 1.65
 const RARE_NUDGE := 0.06
@@ -44,6 +45,8 @@ var _random := RandomNumberGenerator.new()
 var _node_lookup: Dictionary = {}
 var _weapons_by_id: Dictionary = {}
 var _modifiers_by_id: Dictionary = {}
+var _room_archetypes_by_id: Dictionary = {}
+var _room_archetype_ids: Array[String] = []
 var _ability_registry = AbilityRegistryData.new()
 var _class_registry = ClassRegistryData.new()
 var _structured_mid_boss_type := "warden"
@@ -56,12 +59,14 @@ func _ready() -> void:
 	_random.randomize()
 	_load_weapons()
 	_load_modifiers()
+	_load_room_archetypes()
 	_class_registry.reload()
 
 func start_new_run(configs: Array, debug_options: Dictionary = {}) -> void:
 	_random.randomize()
 	_load_weapons()
 	_load_modifiers()
+	_load_room_archetypes()
 	_class_registry.reload()
 	debug_run_setup = _build_default_debug_run_setup()
 	debug_run_setup.merge(debug_options, true)
@@ -593,30 +598,43 @@ func _build_choice_step(room_number: int) -> Array:
 	if _is_champion_step(room_number):
 		_last_champion_depth = room_number
 		return [_build_run_node(room_number, "boss", "champion")]
+	var previous_archetype_id := str(current_node.get("archetype_id", ""))
+	var archetypes := _draw_archetypes_for_depth(room_number, 2, previous_archetype_id)
 	var options: Array = [
-		_build_run_node(room_number, "combat", "a"),
-		_build_run_node(room_number, "combat", "b"),
+		_build_run_node(room_number, "combat", "a", archetypes[0] if archetypes.size() > 0 else {}),
+		_build_run_node(room_number, "combat", "b", archetypes[1] if archetypes.size() > 1 else {}),
 	]
 	_ensure_route_traits_differ(options)
 	_ensure_route_options_differ(options)
 	_assign_route_rare_bonus(options)
 	return options
 
-func _build_run_node(room_number: int, room_type: String, slot: String) -> Dictionary:
+func _build_run_node(room_number: int, room_type: String, slot: String, archetype: Dictionary = {}) -> Dictionary:
 	var is_champion := room_type != "combat"
+	var has_archetype := room_type == "combat" and not archetype.is_empty()
+	var title := ("Champion - Room %d" if is_champion else "Room %d") % room_number
+	if has_archetype:
+		title = "%s - Room %d" % [str(archetype.get("name", "Room")), room_number]
 	var node := {
 		"id": "room_%d_%s" % [room_number, slot],
 		"room_type": room_type,
 		"depth": room_number,
-		"title": ("Champion - Room %d" if is_champion else "Room %d") % room_number,
-		"description": "Forced champion encounter." if is_champion else "Choose this room.",
+		"title": title,
+		"description": "Forced champion encounter." if is_champion else str(archetype.get("short_desc", "Choose this room.")),
 		"objective": "kill_all",
 		"side_objective": "" if is_champion else _roll_side_objective("combat"),
-		"enemy_pool": _get_endless_enemy_pool(room_number),
+		"enemy_pool": _build_archetype_enemy_pool(archetype, room_number) if has_archetype else _get_endless_enemy_pool(room_number),
 		"boss_type": _champion_boss_type(room_number) if is_champion else "",
-		"modifiers": _roll_modifiers_for_depth(room_number, room_type),
+		"modifiers": _roll_archetype_modifiers(archetype) if has_archetype else [],
 		"next_node_ids": [],
 	}
+	if has_archetype:
+		node["archetype_id"] = str(archetype.get("id", ""))
+		node["archetype_name"] = str(archetype.get("name", "Room"))
+		node["archetype_icon"] = str(archetype.get("icon", "open"))
+		node["short_desc"] = str(archetype.get("short_desc", ""))
+		node["reward_hint"] = str(archetype.get("reward_hint", ""))
+		node["density_profile"] = str(archetype.get("density_profile", "normal"))
 	_refresh_route_metadata(node)
 	return node
 
@@ -707,15 +725,13 @@ func _ensure_route_traits_differ(row: Array) -> void:
 		return
 	var first := row[0] as Dictionary
 	var second := row[1] as Dictionary
-	if str(first.get("trait_label", "")) != str(second.get("trait_label", "")):
-		return
-	for _attempt in range(4):
-		second["modifiers"] = _roll_modifiers_for_depth(int(second.get("depth", 1)), str(second.get("room_type", "combat")))
-		_refresh_route_metadata(second)
-		if str(first.get("trait_label", "")) != str(second.get("trait_label", "")):
-			row[1] = second
+	if first.has("archetype_id") and second.has("archetype_id"):
+		if str(first.get("archetype_id", "")) != str(second.get("archetype_id", "")):
 			return
-	row[1] = second
+		var replacements := _draw_archetypes_for_depth(int(second.get("depth", 1)), 1, str(first.get("archetype_id", "")))
+		if not replacements.is_empty():
+			row[1] = _build_run_node(int(second.get("depth", 1)), str(second.get("room_type", "combat")), "b", replacements[0])
+		return
 
 func _assign_route_rare_bonus(row: Array) -> void:
 	if row.size() < 2:
@@ -770,7 +786,13 @@ func _danger_score_for(node: Dictionary) -> int:
 		else:
 			minor_mods += 1
 	var enemy_pool: Array = node.get("enemy_pool", []) as Array
-	return minor_mods + major_mods * 2 + clampi(enemy_pool.size() - 2, 0, 2)
+	var density_score := 0
+	match str(node.get("density_profile", "normal")):
+		"high":
+			density_score = 1
+		"low":
+			density_score = -1
+	return maxi(0, minor_mods + major_mods * 2 + clampi(enemy_pool.size() - 2, 0, 2) + density_score)
 
 func _danger_pips_for_score(danger_score: int) -> int:
 	if danger_score <= 1:
@@ -780,6 +802,11 @@ func _danger_pips_for_score(danger_score: int) -> int:
 	return 3
 
 func _trait_for(node: Dictionary) -> Dictionary:
+	if node.has("archetype_id"):
+		return {
+			"label": str(node.get("archetype_name", TRAIT_FALLBACK["label"])),
+			"icon": str(node.get("archetype_icon", TRAIT_FALLBACK["icon"])),
+		}
 	var modifiers: Array = node.get("modifiers", []) as Array
 	for mod_id in ["fire_floor", "ice_zone", "mine_field", "shrinking_arena"]:
 		if modifiers.has(mod_id):
@@ -822,60 +849,110 @@ func _build_route_option_signature(node: Dictionary) -> String:
 	var modifiers: Array = (node.get("modifiers", []) as Array).duplicate()
 	modifiers.sort()
 	return "%s|%s|%s" % [
-		str(node.get("room_type", "combat")),
+		str(node.get("room_type", "combat")) + ":" + str(node.get("archetype_id", "")),
 		",".join(PackedStringArray(enemy_pool)),
 		",".join(PackedStringArray(modifiers)),
 	]
 
 func _build_distinct_modifier_load(node: Dictionary, seen_signatures: Dictionary) -> Array:
-	var base_modifiers: Array = (node.get("modifiers", []) as Array).duplicate()
-	var candidate_ids := _get_modifier_ids_by_category("minor")
-	candidate_ids.append_array(_get_modifier_ids_by_category("major"))
-	candidate_ids.sort()
-	for modifier_id in candidate_ids:
-		if base_modifiers.has(modifier_id):
-			continue
-		var candidate_modifiers := base_modifiers.duplicate()
-		candidate_modifiers.append(modifier_id)
-		var candidate_node := node.duplicate(true)
-		candidate_node["modifiers"] = candidate_modifiers
-		var signature := _build_route_option_signature(candidate_node)
-		if not seen_signatures.has(signature):
-			return candidate_modifiers
+	if node.has("archetype_id"):
+		var archetype: Dictionary = _room_archetypes_by_id.get(str(node.get("archetype_id", "")), {}) as Dictionary
+		var max_count := clampi(int(archetype.get("modifier_count_max", 0)), 0, 2)
+		var pool: Array = (archetype.get("themed_modifier_pool", []) as Array).duplicate()
+		pool.shuffle()
+		for desired_count in range(0, max_count + 1):
+			var candidate_modifiers: Array = []
+			for index in range(min(desired_count, pool.size())):
+				candidate_modifiers.append(str(pool[index]))
+			var candidate_node := node.duplicate(true)
+			candidate_node["modifiers"] = candidate_modifiers
+			var candidate_signature := _build_route_option_signature(candidate_node)
+			if not seen_signatures.has(candidate_signature):
+				return candidate_modifiers
+		return []
 	return []
 
-func _roll_modifiers_for_depth(room_number: int, room_type: String) -> Array:
-	if room_type == "combat" and room_number <= 1:
+func _draw_archetypes_for_depth(room_number: int, count: int, previous_archetype_id: String = "") -> Array:
+	var candidates: Array = []
+	for archetype_id in _room_archetype_ids:
+		if archetype_id == previous_archetype_id and _room_archetype_ids.size() > count:
+			continue
+		var archetype: Dictionary = _room_archetypes_by_id.get(archetype_id, {}) as Dictionary
+		if archetype.is_empty():
+			continue
+		var depth_gate := int(archetype.get("depth_gate", 1))
+		if room_number < depth_gate:
+			continue
+		candidates.append(archetype.duplicate(true))
+	if candidates.size() < count:
+		for archetype_id in _room_archetype_ids:
+			var archetype: Dictionary = _room_archetypes_by_id.get(archetype_id, {}) as Dictionary
+			if not archetype.is_empty() and not candidates.has(archetype):
+				candidates.append(archetype.duplicate(true))
+	candidates.shuffle()
+	var selected: Array = []
+	var seen_ids: Dictionary = {}
+	for archetype_variant in candidates:
+		var archetype := archetype_variant as Dictionary
+		var archetype_id := str(archetype.get("id", ""))
+		if archetype_id.is_empty() or seen_ids.has(archetype_id):
+			continue
+		selected.append(archetype)
+		seen_ids[archetype_id] = true
+		if selected.size() >= count:
+			break
+	if selected.is_empty():
+		selected.append(_fallback_archetype())
+	while selected.size() < count:
+		selected.append(_fallback_archetype())
+	return selected
+
+func _fallback_archetype() -> Dictionary:
+	if _room_archetypes_by_id.has("standard"):
+		return (_room_archetypes_by_id["standard"] as Dictionary).duplicate(true)
+	return {
+		"id": "standard",
+		"name": "Standard",
+		"icon": "open",
+		"short_desc": "Balanced enemy mix.",
+		"enemy_bias": ["balanced"],
+		"themed_modifier_pool": [],
+		"modifier_count_max": 0,
+		"density_profile": "normal",
+		"reward_hint": "Baseline reward odds",
+	}
+
+func _build_archetype_enemy_pool(archetype: Dictionary, room_number: int) -> Array[String]:
+	var bias: Array = (archetype.get("enemy_bias", ["balanced"]) as Array).duplicate()
+	if bias.is_empty() or bias.has("balanced"):
+		return _get_endless_enemy_pool(room_number)
+	var result: Array[String] = []
+	for enemy_id_variant in bias:
+		var enemy_id := str(enemy_id_variant)
+		if enemy_id.is_empty() or enemy_id == "balanced":
+			continue
+		result.append(enemy_id)
+	var base_pool := _get_endless_enemy_pool(room_number)
+	base_pool.shuffle()
+	for index in range(min(2, base_pool.size())):
+		result.append(base_pool[index])
+	if result.is_empty():
+		return _get_endless_enemy_pool(room_number)
+	return result
+
+func _roll_archetype_modifiers(archetype: Dictionary) -> Array:
+	var max_count := clampi(int(archetype.get("modifier_count_max", 0)), 0, 2)
+	if max_count <= 0:
 		return []
-	var depth_ratio := clampf(float(room_number) / 20.0, 0.0, 1.0)
-	var minor_max := 1 + int(round(depth_ratio))
-	var major_min := int(floor(depth_ratio + 0.0001))
-	var major_max := 1 + int(round(depth_ratio))
-	if room_type != "combat":
-		major_min += 1
-	return _roll_modifier_selection(1, minor_max, major_min, major_max)
-
-func _roll_modifier_selection(minor_min: int, minor_max: int, major_min: int, major_max: int) -> Array:
+	var pool: Array = (archetype.get("themed_modifier_pool", []) as Array).duplicate()
+	if pool.is_empty():
+		return []
+	pool.shuffle()
+	var desired_count := _random.randi_range(0, mini(max_count, pool.size()))
 	var results: Array = []
-	var minor_ids := _get_modifier_ids_by_category("minor")
-	var major_ids := _get_modifier_ids_by_category("major")
-	var desired_minor := _random.randi_range(minor_min, max(minor_min, minor_max)) if minor_max > 0 else 0
-	var desired_major := _random.randi_range(major_min, max(major_min, major_max)) if major_max > 0 else 0
-	minor_ids.shuffle()
-	major_ids.shuffle()
-	for index in range(min(desired_minor, minor_ids.size())):
-		results.append(minor_ids[index])
-	for index in range(min(desired_major, major_ids.size())):
-		results.append(major_ids[index])
+	for index in range(desired_count):
+		results.append(str(pool[index]))
 	return results
-
-func _get_modifier_ids_by_category(category: String) -> Array:
-	var ids: Array = []
-	for modifier_id in _modifiers_by_id.keys():
-		var definition: Dictionary = _modifiers_by_id[modifier_id] as Dictionary
-		if str(definition.get("category", "")) == category:
-			ids.append(str(modifier_id))
-	return ids
 
 func _rebuild_node_lookup() -> void:
 	_node_lookup.clear()
@@ -980,6 +1057,27 @@ func _load_modifiers() -> void:
 		if modifier_id.is_empty():
 			continue
 		_modifiers_by_id[modifier_id] = modifier
+
+func _load_room_archetypes() -> void:
+	_room_archetypes_by_id.clear()
+	_room_archetype_ids.clear()
+	if not FileAccess.file_exists(ROOM_ARCHETYPES_DATA_PATH):
+		return
+	var file := FileAccess.open(ROOM_ARCHETYPES_DATA_PATH, FileAccess.READ)
+	if file == null:
+		return
+	var parsed: Variant = JSON.parse_string(file.get_as_text())
+	if not (parsed is Dictionary):
+		return
+	for entry in ((parsed as Dictionary).get("archetypes", []) as Array):
+		if not (entry is Dictionary):
+			continue
+		var archetype: Dictionary = (entry as Dictionary).duplicate(true)
+		var archetype_id := str(archetype.get("id", ""))
+		if archetype_id.is_empty():
+			continue
+		_room_archetypes_by_id[archetype_id] = archetype
+		_room_archetype_ids.append(archetype_id)
 
 func _format_name(raw_name: String) -> String:
 	var parts: Array = []

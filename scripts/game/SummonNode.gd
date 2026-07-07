@@ -10,6 +10,7 @@ var _attack_radius := 58.0
 var _attack_interval := 0.55
 var _tint := Color.WHITE
 var _next_attack_at := 0.0
+var _overcharged := false
 
 func configure(owner_node, stats: Dictionary, color: Color) -> void:
 	_owner = owner_node
@@ -18,6 +19,7 @@ func configure(owner_node, stats: Dictionary, color: Color) -> void:
 	_detection_range = float(stats.get("range", stats.get("detection_range", 640.0)))
 	_attack_radius = float(stats.get("attack_radius", 58.0))
 	_attack_interval = maxf(0.1, float(stats.get("attack_interval", 0.55)))
+	_overcharged = bool(stats.get("overcharged", false))
 	_tint = color
 	configure_deployable_health(int(stats.get("construct_health", stats.get("health", 100))), true)
 
@@ -76,6 +78,9 @@ func _get_source_player_index() -> int:
 		return int(_owner.player_index)
 	return -1
 
+func get_owner_player_index() -> int:
+	return _get_source_player_index()
+
 func _get_combat_owner() -> Node:
 	var current := get_parent()
 	while current != null:
@@ -88,5 +93,12 @@ func _get_combat_owner() -> Node:
 func _draw() -> void:
 	draw_circle(Vector2.ZERO, 18.0, Color(_tint.r, _tint.g, _tint.b, 0.48))
 	draw_arc(Vector2.ZERO, 23.0, 0.0, TAU, 20, Color(_tint.r, _tint.g, _tint.b, 0.84), 3.0)
+	if _overcharged:
+		draw_arc(Vector2.ZERO, 29.0, -0.3, PI - 0.3, 18, Color(1.0, 0.96, 0.54, 0.86), 3.0)
+		draw_arc(Vector2.ZERO, 29.0, PI - 0.3, TAU - 0.3, 18, Color(0.56, 0.94, 1.0, 0.78), 3.0)
+		draw_line(Vector2(-9.0, 0.0), Vector2(0.0, -13.0), Color(1.0, 1.0, 0.7, 0.92), 3.0)
+		draw_line(Vector2(0.0, -13.0), Vector2(9.0, 0.0), Color(1.0, 1.0, 0.7, 0.92), 3.0)
+		draw_line(Vector2(9.0, 0.0), Vector2(0.0, 13.0), Color(1.0, 1.0, 0.7, 0.92), 3.0)
+		draw_line(Vector2(0.0, 13.0), Vector2(-9.0, 0.0), Color(1.0, 1.0, 0.7, 0.92), 3.0)
 	draw_arc(Vector2.ZERO, _attack_radius, -0.45, 0.45, 8, Color(_tint.r, _tint.g, _tint.b, 0.28), 2.0)
 	_draw_deployable_health_bar(30.0)

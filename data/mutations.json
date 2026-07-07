@@ -3,7 +3,7 @@
     {
       "id": "quick_reflexes",
       "name": "Quick Reflexes",
-      "description": "Ability cooldowns recharge 20%, 35%, then 50% faster. Risk does not use cooldown mutations.",
+      "description": "Ability cooldowns recharge 15%, 25%, then 35% faster. Risk does not use cooldown mutations.",
       "icon": "quick_reflexes",
       "category": "ability",
       "group": "ability",
@@ -11,7 +11,7 @@
       "max_level": 3,
       "requires": [],
       "apply": "ability",
-      "params": { "cooldown_values": [0.2, 0.35, 0.5] }
+      "params": { "cooldown_values": [0.15, 0.25, 0.35] }
     },
     {
       "id": "wide_pulse",
@@ -22,7 +22,7 @@
       "group": "ability",
       "rarity": "common",
       "max_level": 3,
-      "requires": [],
+      "requires": ["projectile"],
       "apply": "ability",
       "params": { "area_bonus_per_level": 0.25 }
     },
@@ -35,7 +35,7 @@
       "group": "ability",
       "rarity": "common",
       "max_level": 3,
-      "requires": [],
+      "requires": ["projectile"],
       "apply": "ability",
       "params": { "duration_bonus_per_level": 0.333 }
     },
@@ -48,7 +48,7 @@
       "group": "attribute",
       "rarity": "common",
       "max_level": 3,
-      "requires": [],
+      "requires": ["projectile"],
       "apply": "passive",
       "params": { "move_speed_values": [0.15, 0.3, 0.45] }
     },

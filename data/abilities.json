@@ -7,7 +7,7 @@
       "tags": ["blast"],
       "slot": "def",
       "type": "instant",
-      "cooldown": 5.0,
+      "cooldown": 6.25,
       "duration": 0.0,
       "stats": {
         "damage": 28.0,
@@ -23,7 +23,7 @@
       "tags": ["mobility"],
       "slot": "def",
       "type": "movement",
-      "cooldown": 1.5,
+      "cooldown": 1.9,
       "duration": 0.2,
       "stats": {
         "dash_speed": 1180.0,
@@ -38,7 +38,7 @@
       "tags": ["buff"],
       "slot": "off",
       "type": "sustained",
-      "cooldown": 12.0,
+      "cooldown": 15.0,
       "duration": 6.0,
       "stats": {
         "fire_rate_multiplier": 1.5,
@@ -52,7 +52,7 @@
       "tags": ["defense"],
       "slot": "def",
       "type": "sustained",
-      "cooldown": 9.0,
+      "cooldown": 11.0,
       "duration": 3.0,
       "stats": {
         "radius": 78.0
@@ -65,7 +65,7 @@
       "tags": ["summon"],
       "slot": "off",
       "type": "sustained",
-      "cooldown": 12.0,
+      "cooldown": 15.0,
       "duration": 9.0,
       "stats": {
         "damage": 16,
@@ -82,7 +82,7 @@
       "tags": ["summon"],
       "slot": "off",
       "type": "instant",
-      "cooldown": 7.0,
+      "cooldown": 9.0,
       "duration": 0.0,
       "stats": {
         "mine_count": 4,
@@ -100,7 +100,7 @@
       "tags": ["summon"],
       "slot": "off",
       "type": "sustained",
-      "cooldown": 12.0,
+      "cooldown": 15.0,
       "duration": 5.0,
       "stats": {
         "orb_count": 3,
@@ -119,7 +119,7 @@
       "tags": ["field"],
       "slot": "class",
       "type": "sustained",
-      "cooldown": 8.0,
+      "cooldown": 10.0,
       "duration": 3.0,
       "stats": {
         "trail_radius": 88.0,
@@ -135,7 +135,7 @@
       "tags": ["blast"],
       "slot": "class",
       "type": "instant",
-      "cooldown": 7.0,
+      "cooldown": 9.0,
       "duration": 0.0,
       "stats": {
         "damage": 28,
@@ -152,7 +152,7 @@
       "tags": ["defense"],
       "slot": "class",
       "type": "instant",
-      "cooldown": 8.0,
+      "cooldown": 10.0,
       "duration": 0.0,
       "stats": {
         "radius": 210.0,
@@ -168,7 +168,7 @@
       "tags": ["bolt"],
       "slot": "class",
       "type": "instant",
-      "cooldown": 5.0,
+      "cooldown": 6.25,
       "duration": 0.0,
       "stats": {
         "damage": 28,
@@ -188,7 +188,7 @@
       "tags": ["blast"],
       "slot": "class",
       "type": "instant",
-      "cooldown": 6.0,
+      "cooldown": 7.5,
       "duration": 0.0,
       "stats": {
         "damage": 38,
@@ -204,7 +204,7 @@
       "tags": ["field"],
       "slot": "class",
       "type": "sustained",
-      "cooldown": 9.0,
+      "cooldown": 11.0,
       "duration": 4.0,
       "stats": {
         "radius": 185.0,
@@ -220,7 +220,7 @@
       "tags": ["bolt"],
       "slot": "class",
       "type": "instant",
-      "cooldown": 5.5,
+      "cooldown": 7.0,
       "duration": 0.0,
       "stats": {
         "damage": 42,
@@ -240,14 +240,14 @@
       "tags": ["summon"],
       "slot": "class",
       "type": "instant",
-      "cooldown": 12.0,
+      "cooldown": 15.0,
       "duration": 0.0,
       "stats": {
         "construct_count": 2,
         "construct_health": 100,
-        "damage": 14,
+        "damage": 10,
         "attack_radius": 58.0,
-        "attack_interval": 0.55,
+        "attack_interval": 0.70,
         "detection_range": 640.0,
         "move_speed": 260.0,
         "spread_radius": 72.0
@@ -260,7 +260,7 @@
       "tags": ["buff"],
       "slot": "class",
       "type": "instant",
-      "cooldown": 9.0,
+      "cooldown": 11.0,
       "duration": 0.0,
       "stats": {
         "repair_amount": 55,
@@ -274,7 +274,7 @@
       "tags": ["bolt", "blast", "dot"],
       "slot": "class",
       "type": "instant",
-      "cooldown": 4.0,
+      "cooldown": 5.0,
       "duration": 0.0,
       "stats": {
         "damage": 44,
@@ -295,11 +295,11 @@
     {
       "id": "ignite",
       "name": "Ignite",
-      "description": "Ignite nearby enemies and make them burst on death.",
+      "description": "Burn nearby enemies over time and mark them to burst fire damage on death.",
       "tags": ["dot"],
       "slot": "class",
       "type": "instant",
-      "cooldown": 5.0,
+      "cooldown": 6.25,
       "duration": 0.0,
       "stats": {
         "radius": 230.0,
@@ -342,7 +342,7 @@
         "move_speed_multiplier": 1.08,
         "attack_speed_multiplier": 1.35,
         "damage_multiplier": 1.28,
-        "heal": 35
+        "heal": 25
       }
     },
     {
@@ -357,9 +357,9 @@
       "stats": {
         "radius": 720.0,
         "repair_amount": 90,
-        "construct_count": 3,
+        "construct_count": 2,
         "construct_health": 160,
-        "damage": 22,
+        "damage": 16,
         "attack_radius": 62.0,
         "attack_interval": 0.45,
         "detection_range": 760.0,

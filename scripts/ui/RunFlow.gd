@@ -133,11 +133,18 @@ func _build_route_card(node: Dictionary) -> Button:
 	detail_label.add_theme_font_size_override("font_size", 12)
 	detail_label.add_theme_color_override("font_color", Color(0.78, 0.88, 0.94, 0.92))
 	var room_label := "Champion: %s" % _format_boss_name(str(node.get("boss_type", "Champion"))) if room_type == "boss" else "Enemies: %s" % enemy_text
-	detail_label.text = "Room %d\n%s\n%s" % [
-		int(node.get("depth", 1)),
+	var detail_lines := PackedStringArray([
+		"Room %d" % int(node.get("depth", 1)),
 		room_label,
 		objective_text,
-	]
+	])
+	var short_desc := str(node.get("short_desc", ""))
+	if not short_desc.is_empty():
+		detail_lines.append(short_desc)
+	var reward_hint := str(node.get("reward_hint", ""))
+	if not reward_hint.is_empty():
+		detail_lines.append(reward_hint)
+	detail_label.text = "\n".join(detail_lines)
 	layout.add_child(detail_label)
 
 	var spacer := Control.new()

@@ -7,14 +7,16 @@ var trigger_radius := 52.0
 var explosion_radius := 88.0
 var damage := 42
 var tint := Color(1.0, 0.82, 0.34, 1.0)
+var owner_player_index := -1
 var _detonating := false
 var _detonate_at := 0.0
 
-func configure(radius: float, mine_damage: int, color: Color, mine_trigger_radius: float = 52.0, mine_health: int = 45) -> void:
+func configure(radius: float, mine_damage: int, color: Color, mine_trigger_radius: float = 52.0, mine_health: int = 45, source_player_index: int = -1) -> void:
 	explosion_radius = radius
 	trigger_radius = mine_trigger_radius
 	damage = mine_damage
 	tint = color
+	owner_player_index = source_player_index
 	configure_deployable_health(mine_health, true)
 	set_physics_process(true)
 	queue_redraw()
@@ -45,7 +47,7 @@ func _explode() -> void:
 		if enemy == null or not is_instance_valid(enemy) or not enemy.has_method("is_alive") or not enemy.is_alive():
 			continue
 		if enemy.global_position.distance_squared_to(global_position) <= explosion_radius_sq:
-			enemy.apply_damage(damage)
+			enemy.apply_damage(damage, owner_player_index)
 			_spawn_hit_sparks(enemy.global_position, enemy.global_position - global_position)
 			if enemy.has_method("apply_knockback"):
 				enemy.apply_knockback((enemy.global_position - global_position).normalized(), 320.0)
@@ -71,6 +73,9 @@ func _draw() -> void:
 	draw_arc(Vector2.ZERO, 16.0, 0.0, TAU, 18, ring_color, 3.0)
 	draw_arc(Vector2.ZERO, trigger_radius, 0.0, TAU, 20, Color(tint.r, tint.g, tint.b, 0.2), 2.0)
 	_draw_deployable_health_bar(21.0, 30.0)
+
+func get_owner_player_index() -> int:
+	return owner_player_index
 
 func _get_candidate_enemies(radius: float) -> Array:
 	var tree := get_tree()

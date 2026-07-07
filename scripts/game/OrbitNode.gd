@@ -127,6 +127,9 @@ func _get_owner_player_index() -> int:
 		return -1
 	return int(owner_node.get("player_index"))
 
+func get_owner_player_index() -> int:
+	return _get_owner_player_index()
+
 func _spawn_hit_sparks(hit_position: Vector2, direction: Vector2) -> void:
 	var parent_node := get_parent()
 	if parent_node == null:

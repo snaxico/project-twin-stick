@@ -197,6 +197,15 @@ func build() -> void:
 			momentum_row.add_child(pip)
 			momentum_pips.append(pip)
 
+		var passive_bar := ProgressBar.new()
+		passive_bar.show_percentage = false
+		passive_bar.min_value = 0.0
+		passive_bar.max_value = 100.0
+		passive_bar.value = 0.0
+		passive_bar.custom_minimum_size = Vector2(120.0, 6.0)
+		_apply_progress_bar_tint(passive_bar, tint.lightened(0.16), 0.82)
+		card_layout.add_child(passive_bar)
+
 		var ability_row := HBoxContainer.new()
 		ability_row.add_theme_constant_override("separation", 8)
 		card_layout.add_child(ability_row)
@@ -240,7 +249,9 @@ func build() -> void:
 			"passive_label": passive_label,
 			"health_bar": health_bar,
 			"ability_slots": ability_slots,
+			"momentum_row": momentum_row,
 			"momentum_pips": momentum_pips,
+			"passive_bar": passive_bar,
 		})
 
 
@@ -599,14 +610,37 @@ func _refresh_class_state_text(card: Dictionary, health_state: Dictionary, playe
 	if passive_label == null:
 		return
 	var details := ""
+	var passive_ratio := 0.0
+	var show_momentum := passive_id == "momentum"
+	var momentum_row: HBoxContainer = card.get("momentum_row", null)
+	if momentum_row != null:
+		momentum_row.visible = show_momentum
+	var passive_bar: ProgressBar = card.get("passive_bar", null)
+	if passive_bar != null:
+		passive_bar.visible = not show_momentum and not passive_id.is_empty()
 	if passive_id == "overheat":
-		details = "Heat %d" % int(health_state.get("heat", 0))
+		var heat := float(health_state.get("heat", 0.0))
+		details = "Heat %d" % int(round(heat))
+		passive_ratio = clampf(heat / 100.0, 0.0, 1.0)
 	elif passive_id == "bloodthirst":
-		details = "Overshield %d" % int(health_state.get("overshield", 0))
+		var overshield := float(health_state.get("overshield", 0.0))
+		var max_health := maxf(float(health_state.get("max", 1)), 1.0)
+		details = "Overshield %d" % int(round(overshield))
+		passive_ratio = clampf(overshield / maxf(max_health * 0.25, 1.0), 0.0, 1.0)
 	elif passive_id == "momentum":
 		details = "Momentum"
 	elif passive_id == "radiance":
-		details = "Radiance"
+		var deployable_count := int(_coop.call("get_radiance_deployable_count", player_index)) if _coop != null and _coop.has_method("get_radiance_deployable_count") else 0
+		details = "Radiance  %d active" % deployable_count
+		passive_ratio = clampf(float(deployable_count) / 5.0, 0.0, 1.0)
+	if passive_bar != null:
+		passive_bar.value = passive_ratio * 100.0
+		if passive_id == "overheat":
+			_apply_progress_bar_tint(passive_bar, Color(1.0, 0.4, 0.16, 1.0), 0.86)
+		elif passive_id == "bloodthirst":
+			_apply_progress_bar_tint(passive_bar, Color(0.42, 0.78, 1.0, 1.0), 0.86)
+		elif passive_id == "radiance":
+			_apply_progress_bar_tint(passive_bar, Color(1.0, 0.88, 0.38, 1.0), 0.86)
 	var detail_text := "  |  %s" % details if not details.is_empty() else ""
 	passive_label.text = "%s%s" % [passive_name, detail_text]
 	passive_label.add_theme_color_override("font_color", accent.lightened(0.28))

@@ -83,6 +83,9 @@ func get_mutation_count(player_index: int, mutation_id: String) -> int:
 func get_mutation_level(player_index: int, mutation_id: String) -> int:
 	return mini(get_mutation_count(player_index, mutation_id), _get_max_level(mutation_id))
 
+func get_mutation_param(mutation_id: String, param_name: String, default_value: Variant) -> Variant:
+	return _get_param(mutation_id, param_name, default_value)
+
 func get_active_mutations(player_index: int) -> Array:
 	var active: Array = []
 	for mutation_id in RunState.get_mutations(player_index):
@@ -204,7 +207,7 @@ func get_ability_cooldown_reduction(player_index: int) -> float:
 	var level := get_mutation_level(player_index, "quick_reflexes")
 	if level <= 0:
 		return 0.0
-	var values: Array = _get_param("quick_reflexes", "cooldown_values", [0.2, 0.35, 0.5]) as Array
+	var values: Array = _get_param("quick_reflexes", "cooldown_values", [0.15, 0.25, 0.35]) as Array
 	if values.is_empty():
 		return 0.0
 	return float(values[mini(level - 1, values.size() - 1)])
@@ -312,6 +315,8 @@ func _can_still_pick(player_index: int, mutation_id: String) -> bool:
 		return false
 	if not _mutation_requirements_met(player_index, mutation_id):
 		return false
+	if _is_element_weapon_mutation_redundant(player_index, mutation_id):
+		return false
 	if _is_stackable(mutation_id):
 		return get_mutation_level(player_index, mutation_id) < _get_max_level(mutation_id)
 	return not has_mutation(player_index, mutation_id)
@@ -401,6 +406,24 @@ func _mutation_targets_item(mutation: Dictionary, item_tags: Dictionary) -> bool
 		if not item_tags.has(str(tag_variant)):
 			return false
 	return true
+
+func _is_element_weapon_mutation_redundant(player_index: int, mutation_id: String) -> bool:
+	if not _definition_map.has(mutation_id):
+		return false
+	var mutation: Dictionary = _definition_map[mutation_id] as Dictionary
+	if str(mutation.get("apply", "")) != "weapon":
+		return false
+	var element_tags := ["fire", "frost", "toxic"]
+	var mutation_element := ""
+	for tag_variant in (mutation.get("tags", []) as Array):
+		var tag := str(tag_variant)
+		if element_tags.has(tag):
+			mutation_element = tag
+			break
+	if mutation_element.is_empty():
+		return false
+	var weapon := RunState.get_weapon(player_index)
+	return (weapon.get("tags", []) as Array).has(mutation_element)
 
 func _get_param(mutation_id: String, param_name: String, default_value: Variant) -> Variant:
 	if not _definition_map.has(mutation_id):

@@ -142,6 +142,7 @@ func _continuous_spawn(room_elapsed: float) -> void:
 		var current_interval := _spawn_interval
 		var base_ramp := clampf(room_elapsed / BASE_RAMP_DURATION, 0.0, 1.0)
 		current_interval = lerpf(_spawn_interval, _spawn_interval * 0.55, base_ramp)
+		current_interval *= _get_density_interval_multiplier()
 		if bool(flags.get("accelerating_waves", false)):
 			var ramp := clampf(room_elapsed / min(_room_duration, 25.0), 0.0, 1.0)
 			current_interval = lerpf(current_interval, current_interval * 0.6, ramp)
@@ -196,7 +197,7 @@ func _get_enemy_count_multiplier() -> float:
 	var player_mult := 1.5 if int(_coop.call("get_player_count")) >= 2 else 1.0
 	var progress := RunState.get_run_progress()
 	var density_mult := lerpf(1.15, 1.4, clampf(progress, 0.0, 1.0)) + maxf(progress - 1.0, 0.0) * 0.12
-	return player_mult * density_mult
+	return player_mult * density_mult * _get_density_count_multiplier()
 
 
 func _scale_spawn_count(base_count: int) -> int:
@@ -223,6 +224,24 @@ func _get_spawn_interval() -> float:
 	var continuation := maxf(progress - 1.0, 0.0)
 	var base := lerpf(0.58, 0.40, arc_progress) - continuation * 0.12
 	return maxf(base, 0.30)
+
+func _get_density_count_multiplier() -> float:
+	match str(_room_config.get("density_profile", "normal")):
+		"high":
+			return 1.25
+		"low":
+			return 0.75
+		_:
+			return 1.0
+
+func _get_density_interval_multiplier() -> float:
+	match str(_room_config.get("density_profile", "normal")):
+		"high":
+			return 0.85
+		"low":
+			return 1.2
+		_:
+			return 1.0
 
 
 func _get_champion_spawn_delay() -> float:

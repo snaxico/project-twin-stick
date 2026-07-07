@@ -1,9 +1,9 @@
 class_name UltimateCharge
 extends Node
 
-const DAMAGE_CHARGE_RATE := 0.0018
-const KILL_CHARGE := 0.05
-const CHAMPION_KILL_CHARGE := 0.30
+const DAMAGE_CHARGE_RATE := 0.0012
+const KILL_CHARGE := 0.02
+const CHAMPION_KILL_CHARGE := 0.20
 
 var _player_nodes: Array = []
 var _charge_by_player: Array = []

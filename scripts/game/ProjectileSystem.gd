@@ -7,6 +7,7 @@ const ParticleFactoryData = preload("res://scripts/juice/ParticleFactory.gd")
 const ArenaGeometry = preload("res://scripts/game/ArenaGeometry.gd")
 
 const MAX_ACTIVE_PROJECTILES := 180
+const MAX_ACTIVE_HOMING := 40
 const ENEMY_PROJECTILE_COLOR := Color(1.0, 0.0, 0.0, 1.0)
 const COMBAT_VFX_LOAD_THRESHOLD := 150
 const BEAM_VISUAL_GRACE := 0.16
@@ -178,19 +179,21 @@ func handle_enemy_fire(origin: Vector2, direction: Vector2, speed: float, damage
 	cleanup_active_projectiles()
 	if _active_projectiles.size() >= MAX_ACTIVE_PROJECTILES:
 		return
-	_activate_projectile(team, origin, direction, {
+	var projectile_config := {
 		"speed": speed,
 		"damage": damage,
 		"color": ENEMY_PROJECTILE_COLOR,
 		"feedback_profile": "enemy",
 		"impact_weight": projectile_scale,
 		"collision_half_width": 6.0 * projectile_scale,
-		"use_lifetime": true,
-	})
+		"arena_bounds": _get_arena_bounds(),
+	}
+	_activate_projectile(team, origin, direction, projectile_config)
 
 
 func spawn_enemy_homing_orbs(origin: Vector2, count: int, speed: float, duration: float, damage: int, _color: Color) -> void:
 	for index in range(count):
+		_enforce_homing_cap(MAX_ACTIVE_HOMING - 1)
 		var target: Node2D = _coop.call("get_nearest_player_to", origin)
 		var direction := Vector2.RIGHT.rotated(TAU * float(index) / float(max(count, 1)))
 		if target != null:
@@ -205,12 +208,12 @@ func spawn_enemy_homing_orbs(origin: Vector2, count: int, speed: float, duration
 			"feedback_profile": "enemy",
 			"impact_weight": 1.4,
 			"collision_half_width": 12.0,
-			"use_lifetime": true,
+			"arena_bounds": _get_arena_bounds(),
 		}, origin + direction * 32.0)
 		_active_homing_projectiles.append({
 			"projectile": projectile,
 			"target": target,
-			"expires_at": _current_time_seconds() + duration,
+			"homing_until": _current_time_seconds() + maxf(duration, 0.0),
 		})
 
 
@@ -226,8 +229,9 @@ func update_beam_visual_timeouts(now: float) -> void:
 
 func should_suppress_combat_vfx() -> bool:
 	cleanup_active_projectiles()
+	_cleanup_homing_projectiles()
 	var enemy_count := int(_coop.call("get_enemy_count")) if _coop != null and _coop.has_method("get_enemy_count") else 0
-	return enemy_count + _active_projectiles.size() >= COMBAT_VFX_LOAD_THRESHOLD
+	return enemy_count + _active_projectiles.size() + _active_homing_projectiles.size() >= COMBAT_VFX_LOAD_THRESHOLD
 
 
 func _process_beam_fire(origin: Vector2, direction: Vector2, projectile_config: Dictionary) -> void:
@@ -330,6 +334,21 @@ func _spawn_weapon_cone(origin: Vector2, direction: Vector2, cone_range: float, 
 	var cone := ParticleFactoryData.create_flame_cone(color, cone_range, half_angle, direction)
 	cone.global_position = origin
 	_effects_container.add_child(cone)
+	var flame_count := 5
+	for index in range(flame_count):
+		var flame_direction := direction.rotated(lerpf(-half_angle, half_angle, float(index) / float(maxi(flame_count - 1, 1))))
+		var trail := ParticleFactoryData.create_projectile_trail(color.lightened(0.18), "embers")
+		trail.global_position = origin + flame_direction * lerpf(38.0, cone_range * 0.52, randf())
+		trail.rotation = flame_direction.angle()
+		trail.scale = Vector2.ONE * randf_range(0.7, 1.25)
+		_effects_container.add_child(trail)
+		var trail_id := int(trail.get_instance_id())
+		var timer := get_tree().create_timer(0.14)
+		timer.timeout.connect(func():
+			var trail_node := instance_from_id(trail_id) as Node
+			if trail_node != null:
+				trail_node.queue_free()
+		)
 
 func _spawn_chain_visual(points: Array, color: Color) -> void:
 	if points.size() < 2 or should_suppress_combat_vfx():
@@ -392,11 +411,8 @@ func _update_homing_projectiles(_delta: float) -> void:
 			continue
 		if projectile.has_method("is_projectile_active") and not projectile.is_projectile_active():
 			continue
-		if now >= float(entry.get("expires_at", 0.0)):
-			if projectile.has_method("_finish_projectile"):
-				projectile._finish_projectile()
-			else:
-				projectile.queue_free()
+		if now >= float(entry.get("homing_until", 0.0)):
+			kept.append(entry)
 			continue
 		var target = entry.get("target", null)
 		if target == null or not is_instance_valid(target) or not target.has_method("is_alive") or not target.is_alive():
@@ -476,6 +492,37 @@ func cleanup_active_projectiles() -> void:
 		if projectile != null and is_instance_valid(projectile) and projectile.has_method("is_projectile_active") and projectile.is_projectile_active():
 			kept.append(projectile)
 	_active_projectiles = kept
+
+
+func _cleanup_homing_projectiles() -> void:
+	var kept: Array = []
+	for entry_variant in _active_homing_projectiles:
+		var entry := entry_variant as Dictionary
+		var projectile = entry.get("projectile", null)
+		if projectile != null and is_instance_valid(projectile) and (not projectile.has_method("is_projectile_active") or projectile.is_projectile_active()):
+			kept.append(entry)
+	_active_homing_projectiles = kept
+
+
+func _enforce_homing_cap(target_count: int = MAX_ACTIVE_HOMING) -> void:
+	_cleanup_homing_projectiles()
+	while _active_homing_projectiles.size() > target_count:
+		var entry: Dictionary = _active_homing_projectiles.pop_front()
+		var projectile = entry.get("projectile", null)
+		if projectile == null or not is_instance_valid(projectile):
+			continue
+		if projectile.has_method("_finish_projectile"):
+			projectile._finish_projectile()
+		else:
+			projectile.queue_free()
+
+
+func _get_arena_bounds() -> Rect2:
+	if _coop != null and _coop.has_method("get_arena_rect"):
+		var arena_rect = _coop.call("get_arena_rect")
+		if arena_rect is Rect2:
+			return arena_rect
+	return Rect2()
 
 
 func _on_projectile_impact(origin: Vector2, direction: Vector2, team: String, color: Color, feedback_profile: String, impact_weight: float, target: Node, combat_context: Dictionary) -> void:
