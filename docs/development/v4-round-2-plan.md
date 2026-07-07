@@ -49,8 +49,8 @@ oldest when exceeded. Cheapen construct per-frame work if profiling points at it
   ~40–50 basic kills = full.)
 - **Enemy projectiles despawn early** (`ProjectileSystem.handle_enemy_fire` + `spawn_enemy_homing_orbs` +
   `Projectile.gd`) — enemy shots currently **lifetime-expire**: both paths pass `"use_lifetime": true`, which
-  **overrides** the `team != "enemy"` default (`Projectile.gd` reads it via `config.get`), **and** they despawn
-  at `max_distance`. **Change: `team == "enemy"` projectiles (normal AND homing) ignore BOTH lifetime and
+  **overrides** the `team != "enemy"` default (`Projectile.gd` reads it via `config.get`). **Change:
+  `team == "enemy"` projectiles (normal AND homing) ignore BOTH lifetime and
   `max_distance`** — persist until they hit a **wall / player / summon**. **Add an arena-bounds despawn** as the
   backstop (off-screen shots don't accumulate — required for perf; pairs with the Slice 1 homing cap). Verify
   wall + player + deployable collision all despawn.
