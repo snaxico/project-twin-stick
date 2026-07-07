@@ -20,16 +20,24 @@ enemy separation in clustered swarms"). Clustered check went from **100 enemies 
 144, 200 @ 119). *Residual (current-state Known Risks): a fully-overlapped 200-enemy cluster still shows a low
 instantaneous monitor reading — watch dense real rooms for residual physics-overlap cost.*
 
-**② Projectiles** (`ProjectileSystem.gd` / `Projectile.gd`) — many spitters + shots still lag. Confirm enemy
-projectiles are **pooled** and honor `MAX_ACTIVE_PROJECTILES`; the projectile-persistence change (Slice 2) must
-**not** let count grow unbounded — arena-bound despawn is the backstop.
+**② Projectiles** (`ProjectileSystem.gd` / `Projectile.gd`) — many spitters + shots still lag. Two paths:
+- **Normal shots** use `_active_projectiles` + `MAX_ACTIVE_PROJECTILES` (180) — already pooled/capped.
+- **⚠ Homing orbs BYPASS the cap:** `spawn_enemy_homing_orbs` instantiates directly into
+  `_active_homing_projectiles` with **no `MAX_ACTIVE_PROJECTILES` check** (`ProjectileSystem.gd`). Add a
+  concrete cap **`MAX_ACTIVE_HOMING := 40`** (drop-oldest when exceeded) **and** include homing orbs in the
+  Slice 2 enemy-projectile persistence + arena-bound despawn — otherwise persistence turns this into a leak.
 
-**③ Summon cap** (`CoopManager.gd`) — summon spam + Controller-ult lag. Add a **hard cap on total active
-summons** (~5) regardless of recast/Legion/Overload; drop the oldest when exceeded. Cheapen construct
-per-frame work if profiling points at it.
+**③ Summon cap** (`CoopManager.gd`) — summon spam + Controller-ult lag. Add an exact hard cap
+**`MAX_ACTIVE_SUMMONS := 5`** on total active summons (regardless of recast / Legion / Overload); drop the
+oldest when exceeded. Cheapen construct per-frame work if profiling points at it.
 
-**Acceptance:** PerfRunner `--build=heavy --players=2` holds ~60fps in a packed cluster + summon-spam + firestorm
-of spitters; no single-digit-FPS cluster case.
+**Acceptance:**
+- **Automated:** `--profile=entity_ramp` (50→200 ramp) and `--profile=champion:hive --players=2 --build=heavy`
+  both hold ≥60 `min_fps`; no single-digit-FPS cluster case.
+- **Manual:** a Controller run spamming Summon + Overload Grid in a spitter-dense room shows no lag spike; total
+  projectiles (normal + homing) and summons stay within their caps.
+- *(Optional: add a `round2_stress` PerfRunner scenario — dense spitters + forced max summons — for an automated
+  repro of the exact combined case, since the existing profiles don't script it.)*
 
 ---
 
