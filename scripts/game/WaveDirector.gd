@@ -196,7 +196,7 @@ func _roll_wave_enemy_type(pool: Array) -> String:
 func _get_enemy_count_multiplier() -> float:
 	var player_mult := 1.5 if int(_coop.call("get_player_count")) >= 2 else 1.0
 	var progress := RunState.get_run_progress()
-	var density_mult := lerpf(1.15, 1.4, clampf(progress, 0.0, 1.0)) + maxf(progress - 1.0, 0.0) * 0.12
+	var density_mult := lerpf(1.0, 1.4, clampf(progress, 0.0, 1.0)) + maxf(progress - 1.0, 0.0) * 0.12
 	return player_mult * density_mult * _get_density_count_multiplier()
 
 
@@ -222,7 +222,7 @@ func _get_spawn_interval() -> float:
 	var progress := RunState.get_run_progress()
 	var arc_progress := clampf(progress, 0.0, 1.0)
 	var continuation := maxf(progress - 1.0, 0.0)
-	var base := lerpf(0.58, 0.40, arc_progress) - continuation * 0.12
+	var base := lerpf(0.90, 0.40, arc_progress) - continuation * 0.12
 	return maxf(base, 0.30)
 
 func _get_density_count_multiplier() -> float:
@@ -262,7 +262,7 @@ func _get_burst_size(is_opening: bool) -> int:
 	var progress := RunState.get_run_progress()
 	var arc_progress := clampf(progress, 0.0, 1.0)
 	var continuation := maxf(progress - 1.0, 0.0)
-	var base := lerpf(6.0 if is_opening else 5.0, 9.0 if is_opening else 10.0, arc_progress)
+	var base := lerpf(4.0 if is_opening else 3.0, 9.0 if is_opening else 10.0, arc_progress)
 	var continuation_bonus := continuation * (3.0 if is_opening else 5.0)
 	return maxi(1, int(round(base + continuation_bonus)))
 

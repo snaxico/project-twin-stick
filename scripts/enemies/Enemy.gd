@@ -306,7 +306,7 @@ func _configure_type(type_name: String) -> void:
 			enemy_type = EnemyType.SPITTER
 			max_health = 14.0
 			move_speed = 350.0
-			fire_interval = 1.35
+			fire_interval = 1.8
 			projectile_damage = 4
 			projectile_speed = 380.0
 			contact_damage = 4
