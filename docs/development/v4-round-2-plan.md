@@ -89,7 +89,7 @@ mutation is offered on a weapon it makes no sense for; Ignite reads clearly and 
 - **Arc Wand** (best-by-far) `data/weapons.json` — `damage [18,21,24,28,33] → [16,19,22,25,29]`, `chain_count
   [3,3,4,4,5] → [2,2,3,3,4]`, `chain_falloff 0.82 → 0.65` (later jumps hurt far less), `fire_rate 3.4 → 2.9`.
 - **Summons** (too strong + lag) `data/abilities.json` — `summon.damage 14 → 10`, `attack_interval 0.55 → 0.70`;
-  `overload_grid.construct_count 3 → 2`, `damage 22 → 16`; + the **Slice 1 hard cap (~5 active)**.
+  `overload_grid.construct_count 3 → 2`, `damage 22 → 16`; + the **Slice 1 hard cap `MAX_ACTIVE_SUMMONS := 5`**.
 - **Bosses** (`Enemy.gd`) — **~2× HP**: warden 800→**1600**, hydra 1000→**2000**, hive 900→**1800**, pulsar
   950→**1900** (champion scale unchanged). *(Deeper boss-in-swarm rework parked.)*
 - **Tank sustain — HARDER (must play, no facetank):** `Player.gd` `BLOODTHIRST_MAX_OVERSHIELD_RATIO 0.65 →
