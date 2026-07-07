@@ -4,15 +4,23 @@
 > chokepoints). Branch `v4/class-system`, checkout `D:\GameDev\Project_Twin_stick`. Standalone feature —
 > independent of the Round 2 slices.
 >
-> **Decisions (LOCKED with the user 2026-07-06):**
-> - **Pathfinding = flow field** (not Godot NavigationAgent — too slow at 200 agents; not steering — gets stuck
->   on concave obstacles). Scales O(1) per enemy, handles chokepoints/corridors.
-> - **Soft collision** — enemies stay in **ghost mode** (`collision_mask = 0`, physics skips them → preserves
->   the 200-enemy budget); the flow field routes them around walls; a cheap nudge if one slips into a wall cell.
->   **No hard enemy↔obstacle physics** (that would re-add physics for 200 bodies — the exact cost we disabled).
-> - **All enemies** use the field for their base "toward player" direction.
-> - **Minimal first** — build the tech + a few test obstacles, prove it at 200 enemies; per-archetype layouts
->   are a later follow-up.
+> **Decisions (LOCKED 2026-07-06; collision premise CORRECTED after review):**
+> - **Pathfinding = flow field** (not NavigationAgent — too slow at 200 agents; not steering — gets stuck on
+>   concave obstacles). Scales O(1) per enemy, handles chokepoints/corridors.
+> - **⚠ Correction — there is NO "ghost mode."** Alive enemies are already `CharacterBody2D` with
+>   `collision_layer = 1`, `collision_mask = 1` (`Enemy.tscn`); they **already collide** with the arena walls,
+>   the player, and each other via `move_and_slide()`. `Enemy.gd` only zeroes collision **on death** (~L1183).
+>   So there is **no soft-vs-hard perf tradeoff — physics is already on.**
+> - **Model = keep existing physics + flow field for ROUTING.** Obstacles go on **layer 1**; enemies, player
+>   (mask 1), and projectiles (mask 1) collide with them **with no mask changes and no added cost.** The flow
+>   field only **steers enemies around obstacles** (so they don't press into a wall forever); **physics gives the
+>   hard stop** (no clipping). No perf regression (physics unchanged, field cheap, obstacles = a few statics).
+> - **Flow field drives BASE LOCOMOTION only, never aim/charge.** Split `raw_target_dir` (straight-to-player, for
+>   aiming/attacks/distance checks/charge/kite) from `flow_dir` (the field sample, for where the enemy *walks*).
+> - **Charge attacks (charger / boss dashes) go STRAIGHT** (raw dir) and are **stopped by physics** at obstacles
+>   — not flow-routed.
+> - **All enemies** use the field for base locomotion; **minimal first** (tech + a room-config test layout,
+>   proven at 200 enemies).
 
 ---
 
@@ -27,56 +35,69 @@ standard swarm-vs-target solution.
 
 ### 1. `scripts/game/FlowField.gd` (new; owned per-room, e.g. by `CoopManager`)
 - **Grid** over `ARENA_RECT` at **`CELL_SIZE := 100.0`** (3600×2100 → ~36×21 ≈ **756 cells**).
-- **`build(obstacle_rects: Array[Rect2])`** — mark cells overlapping an obstacle as **blocked**.
+- **`build(obstacle_rects: Array[Rect2])`** — mark cells **blocked** where they overlap an obstacle rect
+  **inflated by (enemy contact radius + a clearance margin)**, so routing keeps a gap and enemies aim for
+  passable cell centers (physics stops any residual clipping). Empty obstacle list ⇒ no blocked cells.
 - **`update_targets(player_positions: Array[Vector2])`** — per player: BFS/Dijkstra **integration field**
   (distance-to-player over passable cells), then a **flow field** (each cell → unit vector toward its
   lowest-distance passable 8-neighbor). One field per player.
   - **Recompute cadence:** rebuild a player's field **only when that player enters a new cell** (track last
     cell/player). BFS over ~756 cells is microseconds; gating avoids per-frame cost.
-- **`sample(world_pos, target_index) -> Vector2`** — bilinear-interpolate the 4 nearest cell arrows for smooth
-  motion (skip blocked neighbors in the blend). **Fallback:** outside grid / no field → straight-to-player
-  vector (so open rooms behave exactly like today).
-- **`is_blocked(world_pos) -> bool`** + **`nearest_passable_dir(world_pos) -> Vector2`** — for the soft nudge.
+- **`sample(world_pos, target_player_index) -> Vector2`** — bilinear-interpolate the 4 nearest cell arrows (skip
+  blocked neighbors in the blend). **Fallback (no field / outside grid):** return the caller's `raw_target_dir`
+  so behavior is unchanged.
+- **`has_obstacles() -> bool`** — rooms with none skip flow entirely (enemies just use `raw_target_dir` — zero
+  cost, identical to today).
 
-### 2. Enemy integration (`scripts/enemies/Enemy.gd`)
-- In `_physics_process`, replace the straight-line `direction` (toward `_target`) with
-  **`FlowField.sample(global_position, target_index)`**. Open-room result ≈ straight line → **behavior
-  unchanged where there are no obstacles.**
-- Keep separation on top: `desired_velocity = flow_dir * _get_effective_move_speed() + _apply_separation()`.
-- **Soft wall-correction:** if `FlowField.is_blocked(global_position)`, add a small push along
-  `nearest_passable_dir()` so ghost-mode enemies don't sit inside a wall. (Cheap grid lookup.)
-- **Enemies stay `collision_mask = 0`** (ghost mode — no physics collision; 200-enemy budget preserved).
-- **Special behaviors keep working:** charger dash, spitter kite, boss patterns layer *on top* of the field's
-  "toward player" base direction (they use the field for approach; their attack/kite logic is unchanged).
-- **Multi-player:** each enemy samples the field of **its target player** (nearest, per existing
-  `_find_target`). 1–2 players → 1–2 fields, each gated on cell-change. Still cheap.
+### 2. Enemy integration (`scripts/enemies/Enemy.gd`) — split direction, keep collision
+**⚠ Do NOT globally overwrite the existing `direction`** — it's reused for aim, lead, kiting, and charge. Split it:
+- Compute **`raw_target_dir`** = `(_target.global_position - global_position).normalized()` (today's value), and
+  **`flow_dir`** = `FlowField.sample(global_position, _target_player_index)` when `FlowField.has_obstacles()`,
+  else `flow_dir = raw_target_dir`.
+- **Base locomotion uses `flow_dir`** (chaser/splitter approach velocity). **Everything else uses `raw_target_dir`:**
+  projectile aim + lead, spitter approach/kite offset, boss approach, distance checks, and the **charger/boss
+  charge direction** (charge commits straight, stopped by physics). → the field changes only *where enemies walk*,
+  never where they *aim or charge*.
+- **Keep `_apply_separation()`:** `velocity = flow_dir * _get_effective_move_speed() + _apply_separation()` →
+  `move_and_slide()`.
+- **Enemies keep existing collision** (`layer/mask = 1`) — physics stops them at obstacles/walls. **No collision
+  changes, no ghost mode.** (Physics handles clipping, so no wall-nudge needed.)
+- **Target player index:** resolve when the target is set. In `_refresh_target_if_due`, store
+  **`_target_player_index`** from the target Player node (Players expose `player_index`; add
+  `CoopManager.get_player_index_for_node(node) -> int` if cleaner than reading the property). Enemies whose target
+  isn't a player (edge) fall back to `raw_target_dir`.
+- **Open-room parity:** no obstacles ⇒ `flow_dir == raw_target_dir` ⇒ behavior identical to today.
 
-### 3. Obstacles (minimal first)
-- An obstacle = a **`StaticBody2D` rectangular block** on the obstacle collision layer. **Player (mask 1) +
-  projectiles already collide with `StaticBody2D`** — obstacles slot into that with no extra work (shots stop
-  at walls, player can't walk through).
-- **Test layout:** a handful of blocks in a debug/test room — include at least **one concave case** (an L / a
-  short corridor / a gap between two blocks) to prove the field routes around it (the thing steering couldn't).
-- Feed the obstacle `Rect2`s to `FlowField.build`.
-- **Not now:** per-archetype curated layouts (later — ties into the Round 2 room archetypes once the tech holds).
+### 3. Obstacles — room-config field (decision 2026-07-06: room-config now)
+- **Obstacle = `StaticBody2D` rectangular block on layer 1.** Everything already masks layer 1, so **enemies +
+  player (mask 1) + projectiles (layer 2/mask 1) collide with it with NO mask changes** (shots stop at it, player
+  and enemies can't pass through).
+- **Source = room config:** add an **`obstacles`** field to the room config — a list of arena-coordinate rects
+  (`{ x, y, w, h }`). `CoopManager` (room setup) spawns one `StaticBody2D` block per rect (layer 1), adds each to
+  an **`arena_obstacle`** group, and passes the rects to `FlowField.build`. **Reusable:** the Round-2 archetypes
+  can later populate `obstacles` per archetype (that's the follow-up).
+- **Test/profiling layout:** a debug room config with a handful of blocks including **at least one concave case**
+  (an L / a short corridor / a gap) — proves the field routes around it (the thing steering couldn't).
 
-### 4. Perf validation (the whole point of "soft")
-- Add obstacles + the flow field to `ProfilingHarness` (or a `flowfield_stress` scenario) and confirm **200
-  enemies hold ≥60 `avg_fps`** — i.e. near-current, since soft adds only grid math (per-enemy O(1) sample +
-  gated BFS). If it regresses, the field build/sample is the suspect, not physics.
+### 4. Perf validation
+- **Physics is already on** for 200 enemies (current baseline), so this adds only a few static colliders + the
+  flow field (per-enemy O(1) sample + gated BFS over ~756 cells). Add the test obstacles to `ProfilingHarness`
+  (or a `flowfield_stress` scenario) and confirm **200 enemies hold ≥60 `avg_fps` — no regression vs current.**
+  If it regresses, the field build/sample or obstacle-collider count is the suspect.
 
 ## Acceptance
-- A test room with a few obstacles (incl. a concave one): **200 enemies route around them** — visibly curve
-  around walls, funnel through gaps, **none stuck pressing into a wall**, none sitting inside a wall.
-- **Player + projectiles collide** with obstacles.
-- **Rooms with no obstacles behave identically to today** (flow-field fallback = straight-to-player; zero
-  regression).
-- **200 enemies + obstacles hold ≥60 `avg_fps`** (ProfilingHarness).
+- A test room with a few obstacles (incl. a concave one): **200 enemies route around them** (visibly curve, funnel
+  through gaps), **none stuck pressing into a wall**; enemies **physically stop** at obstacles (no clipping).
+- **Aim/charge unaffected:** spitters still shoot *at the player* (not along corridor-flow); chargers still charge
+  *straight at the player* (stopped by walls). Only walking paths bend.
+- **Player + projectiles collide** with obstacles (both already mask layer 1).
+- **Rooms with no obstacles behave identically to today** (`flow_dir == raw_target_dir`; zero regression).
+- **200 enemies + obstacles hold ≥60 `avg_fps`** (no regression vs the current physics baseline).
 
 ## Out of scope (follow-ups)
-- Per-archetype / curated room layouts (author real rooms once the tech is proven).
-- Hard enemy↔obstacle collision (only if soft's corner-clipping looks bad in playtest).
-- Ranged-enemy line-of-sight / cover mechanics (shooting only when they can see you).
+- Per-archetype / curated room layouts (populate `obstacles` per archetype once the tech is proven).
+- Obstacle-aware charging (charges are straight + physics-stopped for now).
+- Ranged-enemy line-of-sight / cover mechanics.
 
 ## Notes
 - Codex may be editing this tree in parallel (Round 2 is implementing) — **re-read before edits.** See
