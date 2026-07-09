@@ -8,15 +8,15 @@
 > phase order; validate + commit per phase; don't push unless asked.** Parallel Codex may edit the tree —
 > **re-read before each edit.**
 >
-> **Rev 7 (2026-07-07) — resolves review round 5 (findings 1–7); rounds 1–4 retained.** Stranded enemies are
-> **relocated to a spawn lane** after a cover transition (no room-clear soft-lock — F1); profiling harness
-> corrected — **per-enemy immortal flag** so the smoke dummy stays damageable (F2), load = **194 chaser + 6
-> spitter** (respects the shooter budget — F3), a **`profiling` room flag disables opening/stream/burst spawning**
-> (F4), and a **`CoopManager.profiling_inject(count, seed)`** API with seeded RNG + `nearest_passable_position`
-> placement (F5); Tesla per-tick **dedup** (F6); acceptance aligned to relocation (F7). Rounds 1–4 retained
-> (twist arrays, composition→WaveDirector, single obstacle owner, clip-guard, off-center Bastion, elite_spitter
-> out, team-neutral hazard). Verified vs `PerfRunner`/`WaveDirector`/`CoopManager`. **All six phases
-> implementation-ready.**
+> **Rev 8 (2026-07-07) — resolves review round 6 (findings 1–6); rounds 1–5 retained.** Profiling immortality
+> now **clamps HP ≥ 1 and runs the full damage path** (representative hazard cost, not a no-op — F1);
+> **`_build_single_room_map` copies `where`/`profiling`/`composition` into the node** (F2); **`_ensure_route_
+> options_differ` + its call removed** (it was the last live caller of the retired `_build_distinct_modifier_load`
+> — F3); relocation reachability uses the public **`target_reaches_points`** over alive players with valid fields
+> (F4); a fixed **`PROFILING_SEED`** is propagated to injected enemies + Drifting Cover for determinism (F5);
+> archetype **`icon` IDs assigned** (swarm/open/scan/shield/bolt — F6). Rounds 1–5 retained (relocation, profiling
+> load 194+6, single obstacle owner, twist arrays, composition→WaveDirector, off-center Bastion, elite_spitter
+> out). Verified vs `RunFlow`/`RunState`/`FlowField`/`Enemy`. **All six phases implementation-ready.**
 >
 > **Validation gate (per phase):**
 > ```powershell
@@ -28,16 +28,20 @@
 > ```
 > **⚠ Per-WHERE validation (F2–F5, F9, F11)** — in **`PerfRunner`**, scenario **`where:<id>`** (new `_run`
 > branch; `entity_ramp` never instantiates a mechanic):
-> - **Setup:** load `RunFlow.tscn`, start a real combat room with `_room_config.where = id` + `Mixed`
->   composition **and a `profiling` room flag** that makes `WaveDirector` **skip `spawn_opening_burst` +
->   `_continuous_spawn`** (no opening burst / stream / timed bursts) so the population is exactly what's injected
->   (F4).
-> - **Load (F3, F5):** a new **`CoopManager.profiling_inject(count := 200, seed)`** API (PerfRunner can't reach
->   the private `_wave_director`) injects a fixed **194 `chaser` + 6 `spitter`** (6 = the shooter budget, so the
->   projectile load is representative — F3) at **seeded-RNG** positions, each snapped to
->   `_flow_field.nearest_passable_position` (reproducible + clear of cover — F5). Each injected enemy gets a
->   **per-enemy `set_profiling_immortal(true)`** — *its* `apply_damage` no-ops (a **per-enemy flag, not global
->   `debug_profiling`**) — so hazards can't thin the load (F2).
+> - **Setup:** load `RunFlow.tscn`, start a real combat room with `where = id` + `Mixed` composition + a
+>   `profiling` flag that makes `WaveDirector` **skip `spawn_opening_burst` + `_continuous_spawn`** (no opening
+>   burst / stream / timed bursts) so the population is exactly what's injected (F4). These `where`/`profiling`/
+>   `composition` fields ride in via `debug_run_setup`; **`_build_single_room_map` (RunState L566) must copy all
+>   three into the node** — it currently copies none, so without this the mechanic is Open and waves still spawn (F2).
+> - **Load (F1, F3, F5):** new **`CoopManager.profiling_inject(count := 200, seed)`** (PerfRunner can't reach the
+>   private `_wave_director`) injects a fixed **194 `chaser` + 6 `spitter`** (6 = the shooter budget → representative
+>   projectile load — F3). Determinism (F5): a fixed **`const PROFILING_SEED := 20260707`** seeded RNG for
+>   positions (each snapped to `_flow_field.nearest_passable_position` — reproducible + clear of cover); **seed
+>   each injected `Enemy._random`** (instead of its `_random.randomize()`) and **Drifting Cover's step RNG** under
+>   `profiling`, so the whole run is deterministic. Each injected enemy gets **per-enemy `set_profiling_immortal(true)`**:
+>   `apply_damage` runs the **full normal path** (hit signals + VFX + particles — the real hazard cost, F1) but
+>   **clamps `current_health = max(current_health - dmg, 1)`** so it never dies (per-enemy flag, not global
+>   `debug_profiling`) — sustains the load *with* representative damage-path cost.
 > - **Perf:** for moving cover, force a step every `STEP` while sampling; after `WARMUP_SECONDS` sample `avg_fps`
 >   over `SAMPLE_SECONDS`, print the CSV line, **`quit(1)` if `<60`** else `quit(0)`.
 > - **`--smoke`** (separate assertion pass; the dummy is a **normal damageable** enemy — **not** immortal — F2):
@@ -176,13 +180,15 @@ WHO + selection + TWIST loop on **existing** modifiers (WHERE = Open until Phase
 
 **WHO — 5 archetypes** (populate `composition`):
 
-| Archetype | melee_density | melee_bias | shooters | shooter_ratio | Depth |
-|---|---|---|---|---|---|
-| Horde | high | chaser, chaser, splitter | — | 0.0 | 1+ |
-| Mixed | medium | chaser, charger, splitter, bomber | spitter | 0.20 | 1+ |
-| Splitters | high | splitter, splitter_mini, chaser | — | 0.0 | 3+ |
-| Pressure | medium | charger, charger, bomber | — | 0.0 | 3+ |
-| Gauntlet | low | chaser | spitter | 0.50 | 4+ |
+| Archetype | icon | melee_density | melee_bias | shooters | shooter_ratio | Depth |
+|---|---|---|---|---|---|---|
+| Horde | `swarm` | high | chaser, chaser, splitter | — | 0.0 | 1+ |
+| Mixed | `open` | medium | chaser, charger, splitter, bomber | spitter | 0.20 | 1+ |
+| Splitters | `scan` | high | splitter, splitter_mini, chaser | — | 0.0 | 3+ |
+| Pressure | `shield` | medium | charger, charger, bomber | — | 0.0 | 3+ |
+| Gauntlet | `bolt` | low | chaser | spitter | 0.50 | 4+ |
+
+*(All `icon` IDs resolve in `RunFlow._trait_icon_text` — F6; `open` → the default glyph.)*
 
 *(elite_spitter removed — F1. Gates eased so ≥3 archetypes are eligible by depth 3. Elites archetype returns
 post-Phase-6 with non-champion elite IDs.)*
@@ -226,7 +232,10 @@ already reads). **Fallback:** if `composition` is empty — **champion, debug, a
 existing `enemy_pool` + `density_profile` path unchanged (those rooms still write `enemy_pool`, archetype rooms
 write `composition`). **Danger derived** (`_refresh_route_metadata`): base by density (low/med/high→1/2/3) `+1`
 if shooters `+` twist count, clamped to pip max. **Retire** old `_roll_archetype_modifiers` /
-`_build_distinct_modifier_load`. **Fallback migration (F8):** update `_fallback_archetype()` (RunState L915) to
+`_build_distinct_modifier_load` **and `_ensure_route_options_differ()` + its call in `_build_choice_step`
+(RunState L609)** — archetypes are already distinct, and that helper is the last live caller of the retired
+`_build_distinct_modifier_load` (L721), so removing it avoids a dangling call (F3). **Fallback migration (F8):**
+update `_fallback_archetype()` (RunState L915) to
 emit the **new schema** — a `Mixed` `composition`, `where_pool:["open"]`, `twist_pool:[]` — not the old
 `enemy_bias`/`themed_modifier_pool`. Retain `_build_archetype_enemy_pool` **only** for the champion/debug/endless
 `enemy_pool` path (F1); archetype rooms now use `composition`.
@@ -441,11 +450,13 @@ Each is `scripts/arena/<X>Mechanic.gd extends ArenaMechanic`, keyed off WHERE, b
      disable its `CollisionShape2D`, THEN `queue_free()`** (F7 — `queue_free` alone leaves it solid until
      frame-end while the field already excludes it); spawn new / reposition changed. `_active_obstacle_rects =
      rects`; `_update_flow_field_targets()`.
-  5. **Relocate stranded enemies (F1):** a trapped enemy would **soft-lock room-clear** (which needs the enemy
-     list empty), and raw fallback can't cross physical cover. So after the target update, scan live enemies;
-     any whose cell is **unreachable in every player's field** (distance == INF) is **teleported to a random
-     enemy-spawn-lane point** (`ArenaGeometry.enemy_spawn_position_for_edge`, which connectivity guarantees
-     reaches a player). **Return true.** ⇒ a transition can never trap an enemy behind cover.
+  5. **Relocate stranded enemies (F1):** a trapped enemy would **soft-lock room-clear** (needs the enemy list
+     empty), and raw fallback can't cross physical cover. After the target update, scan live enemies;
+     **reachability via the public API (F4):** an enemy is stranded if **no alive player with a valid field**
+     returns `_flow_field.target_reaches_points(player_index, [enemy.global_position]) == true` (iterate only
+     alive players that have a field; **skip relocation entirely if no player has a valid field**). A stranded
+     enemy is **teleported to a random enemy-spawn-lane point** (`ArenaGeometry.enemy_spawn_position_for_edge`,
+     which connectivity guarantees reaches a player). **Return true.** ⇒ a transition can never trap an enemy.
 
 **Motion — discrete telegraph-then-snap (F6/F7).** Shared `MOVE_TELEGRAPH := 0.5` (Pop-up Pillars use their own
 `0.4` up/down). A step = telegraph (ghost outline at destination; block unmoved) → snap
