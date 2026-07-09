@@ -8,14 +8,14 @@
 > phase order; validate + commit per phase; don't push unless asked.** Parallel Codex may edit the tree —
 > **re-read before each edit.**
 >
-> **Rev 10 (2026-07-07) — resolves review round 8 (findings 1–5); rounds 1–7 retained.** `profiling_inject(seed:
-> int, count := 200)` — required arg first (F1); PerfRunner sets **`side_objective: ""`** so no random objective
-> enters the benchmark (F2); the Batch-A smoke dummy is **removed + unregistered before sampling** with an
-> enemy-count-==-200 assert (F3); profiling relocation draws its edge from the **seeded profiling RNG** (F4);
-> **Definition of Done** now requires `current-state.md` + a history entry per phase (solo-dev-rules — F5).
-> Rounds 1–7 retained (gate resize, `has_target_field`, smoke/perf lifecycle, seed-before-setup, `relocate_to`,
-> immortality clamps HP, composition→WaveDirector). Verified vs `RunState`/`PerfRunner`/`ArenaGeometry`. **All
-> six phases implementation-ready.**
+> **Rev 11 (2026-07-07) — resolves review round 9 (findings 1–5); rounds 1–8 retained.** Moving cover no longer
+> freezes under density — the overlap guard **rejects only PLAYER overlap; enemies on a destination are relocated
+> at snap** (F1), and Batch-B smoke asserts a transition actually applied; the smoke dummy is removed via a
+> dedicated **`CoopManager.profiling_remove_enemy`** (no kill/XP/drop — F2); `profiling_inject` **derives the mix
+> from `count`** (`spitter=min(6,count)` — F3); profiling relocation computes the **full position** from the
+> seeded RNG (F4); history is **create-or-append** (F5). Rounds 1–8 retained (param order, `side_objective:""`,
+> gate resize, `has_target_field`, smoke/perf lifecycle, composition→WaveDirector). Verified vs
+> `CoopManager`/`ArenaGeometry`. **All six phases implementation-ready.**
 >
 > **Validation gate (per phase):**
 > ```powershell
@@ -36,7 +36,8 @@
 >   the benchmark (F2-round8).
 > - **Load (F1, F3, F5):** new **`CoopManager.profiling_inject(seed: int, count: int = 200)`** (required arg
 >   first — F1-round8; PerfRunner can't reach the private `_wave_director`) injects a fixed **194 `chaser` + 6
->   `spitter`** (6 = the shooter budget → representative
+>   `spitter`** — derived from `count` so it's never inconsistent: **`spitter_count = min(6, count)`,
+>   `chaser_count = count - spitter_count`** (F3-round9; 6 = the shooter budget → representative
 >   projectile load — F3). Determinism (F5): a fixed **`const PROFILING_SEED := 20260707`** seeded RNG for
 >   positions (each snapped to `_flow_field.nearest_passable_position` — reproducible + clear of cover); **seed
 >   each injected `Enemy._random` BEFORE `setup()`** (which consumes `_random` in `_configure_type` for the
@@ -52,11 +53,14 @@
 >   `avg_fps < 60`, else `quit(0)`. Without `--smoke`: warmup → sample → exit on the fps threshold.
 > - **`--smoke` assertions** (the dummy is a **normal damageable** enemy — not immortal — F2):
 >   - **Batch-A:** a stationary damageable dummy in an active hazard zone → assert **HP drops** (team-neutral),
->     then **remove + unregister the dummy before sampling** and assert the registered enemy count is **exactly
->     200** (the dummy must not skew the perf population — F3-round8).
+>     then remove it via a dedicated **`CoopManager.profiling_remove_enemy(enemy)`** (unregisters from
+>     `_enemy_nodes` + frees, **no kill/XP/drop effects** — F2-round9; `queue_free` alone leaves it in
+>     `_enemy_nodes`, and `_on_enemy_died` would fire death effects) before sampling, and assert the registered
+>     count is **exactly 200** (F3-round8).
 >   - **Batch-B:** an enemy projectile through a cover rect **despawns** (shot-block); after a forced step,
->     **every live enemy passes the reachability check** (`has_target_field` + `target_reaches_points`, F2) — no
->     soft-lock (F1).
+>     **assert at least one `rebuild_obstacles` returned `true` and the mechanic state actually changed**
+>     (F1-round9 — the transition wasn't perpetually rejected) **and every live enemy passes the reachability
+>     check** (`has_target_field` + `target_reaches_points`, F2) — no soft-lock/freeze.
 > One `--profile=where:<id>` run per implemented mechanic id is part of that phase's acceptance.
 
 ---
@@ -446,12 +450,13 @@ Each is `scripts/arena/<X>Mechanic.gd extends ArenaMechanic`, keyed off WHERE, b
      step)** every rect need only clear the **edge bands** — `ARENA_RECT.grow(-OBSTACLE_EDGE_EXCLUSION).encloses(
      rect.grow(_get_flow_obstacle_inflation()))`. The **center-box + player-spawn exclusions are spawn-time
      only**, so moving cover may cross the mid-field mid-game (resolves Bulwark — F5).
-  2. **Clip guard (F3, F4) — only NEW or MOVED rects** (diff `rects` vs `_active_obstacle_rects`; unchanged &
-     removed rects skip it, so an enemy resting against a *stationary* block never blocks another block's step).
-     For each such rect, `const ACTOR_R := 40.0`; broad-phase
-     `get_nearby_enemy_target_nodes(rect.get_center(), rect.size.length()*0.5 + ACTOR_R)` then precise
-     `rect.grow(ACTOR_R).has_point(actor.global_position)` over those enemies **and** `_player_nodes`. Any hit →
-     **return false** (skip this step; block stays; retry next).
+  2. **Overlap guard — only NEW or MOVED rects** (diff `rects` vs `_active_obstacle_rects`; unchanged & removed
+     rects skip it). `const ACTOR_R := 40.0`. **Reject the step only if a PLAYER overlaps** a new/moved rect
+     (`rect.grow(ACTOR_R).has_point(player.global_position)` over `_player_nodes`) → **return false** (we never
+     shove a player). **Enemies overlapping a new/moved rect are NOT a rejection (F1-round9):** collect them into
+     `to_relocate` and push them out **at snap** (step 5). This is why dense rooms (esp. Shifting Maze, whose
+     pillars rise in lanes enemies occupy) never permanently freeze a transition — only a player standing on the
+     destination defers it. *(Enemies are relocated, not crushed; the flow field is rebuilt for the new layout.)*
   3. `_flow_field.build(rects)`; validate connectivity over `points = spawn-lane points + **current live
      `_player_nodes` positions**` (F5 — not just initial spawns). If it fails → `build(previous_set)` **and call
      `_update_flow_field_targets()`** (F4 — `build` clears all fields, so without this enemies drop to raw
@@ -468,13 +473,15 @@ Each is `scripts/arena/<X>Mechanic.gd extends ArenaMechanic`, keyed off WHERE, b
      `target_reaches_points` returns `true` when the field is *absent*, so it can't tell reachable from missing.
      An enemy is stranded iff, over **alive players where `has_target_field` is true**, none returns
      `target_reaches_points(pi, [enemy.global_position]) == true` (**skip relocation entirely if no player has a
-     field**). A stranded enemy is relocated via a new **`Enemy.relocate_to(pos)`** that sets position **and
-     resets its cached flow-dir + sample frame** (F5 — else the stale direction is reused at the new spot), to a
-     spawn-lane point (`ArenaGeometry.enemy_spawn_position_for_edge`, which connectivity guarantees reaches a
-     player). **Under `profiling`, draw the lane/edge from the seeded profiling RNG** rather than the global
-     `randf` inside `enemy_spawn_position_for_edge`, so the benchmark stays deterministic (F4-round8). Then set
-     `_enemy_separation_grid_frame = -1` to invalidate the separation grid (F5). **Return true.** ⇒ a transition
-     can never trap an enemy.
+     field**). A stranded enemy **and every enemy in the step-2 `to_relocate` set** (destination-overlap) is moved
+     via a new **`Enemy.relocate_to(pos)`** that sets position **and resets its cached flow-dir + sample frame**
+     (F5 — else the stale direction is reused at the new spot), to a spawn-lane point (connectivity guarantees it
+     reaches a player). **Compute the FULL position deterministically under `profiling` (F4-round9):**
+     `enemy_spawn_position_for_edge` uses global `randf` for **both** the edge *and* the along-edge coordinate, so
+     under `profiling` generate the whole position from the **seeded profiling RNG** (or use a **fixed validated
+     lane point**) — no global RNG. Then set `_enemy_separation_grid_frame = -1` (F5). **Return true.** ⇒ a
+     transition never traps **or freezes**: overlapped enemies are pushed to a reachable lane; only a player on
+     the destination defers the step.
 
 **Motion — discrete telegraph-then-snap (F6/F7).** Shared `MOVE_TELEGRAPH := 0.5` (Pop-up Pillars use their own
 `0.4` up/down). A step = telegraph (ghost outline at destination; block unmoved) → snap
@@ -511,8 +518,9 @@ prevent trapping / room-clear soft-lock** (F1/F7); telegraph-then-snap reads cle
 - Canonical tree `D:\GameDev\Project_Twin_stick` on `v4/class-system`; parallel Codex may edit — re-read first.
 - Validate + commit **per phase/slice**; **don't push unless asked.** All numbers first-pass, playtest-tuned.
 - **Definition of Done (per phase + the final integration slice) — `docs/process/solo-dev-rules.md`:** after a
-  phase's code validates, **update `docs/development/current-state.md` and add a `docs/development/history/<date>.md`
-  entry** recording what shipped (F5-round8). Not optional — part of each phase's acceptance.
+  phase's code validates, **update `docs/development/current-state.md` and create-or-append the current date's
+  `docs/development/history/<date>.md` entry** recording what shipped (F5-round8; **append** if the date file
+  already exists — multiple phases can land the same day, F5-round9). Not optional — part of each phase's acceptance.
 - **All six phases are implementation-ready** (Rev 3, §§2–8b). Phase 4's outcome is empirical (a perf number);
   its failure branch is bounded to instrumentation + a plan amendment (§7).
 - New files: `scripts/arena/ArenaMechanic.gd` (base) + one `<X>Mechanic.gd` per WHERE mechanic.
