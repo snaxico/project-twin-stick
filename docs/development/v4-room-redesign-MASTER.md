@@ -8,15 +8,15 @@
 > phase order; validate + commit per phase; don't push unless asked.** Parallel Codex may edit the tree —
 > **re-read before each edit.**
 >
-> **Rev 6 (2026-07-07) — resolves review round 4 (findings 1–9); rounds 1–3 retained.** Per-archetype
-> `twist_pool` arrays; `--where` folded into **`--profile=where:<id>`** in `PerfRunner` with a **reproducible
-> immortal 200-enemy load** (fixed mix, direct injection, sample + `quit(1)` on <60fps); connectivity **rollback
-> re-runs `_update_flow_field_targets`** (F4); connectivity uses **current player positions**, trap guarantee
-> scoped to players (F5); Islands iterates a **snapshot** (F6); removed obstacle bodies **disable collision
-> before `queue_free`** (F7); `_fallback_archetype` **migrated to the new schema** (F8); Pinwheel broad-phase =
-> `ARM_LEN+ARM_W/2` + **dedup** (F9). Rounds 1–3 retained (elite_spitter out, shooter algo, single obstacle
-> owner, off-center Bastion, clip-guard scalar/changed-only, composition→WaveDirector, team-neutral hazard,
-> bounded Phase-4). Verified vs `PerfRunner`/`RunState`/`CoopManager`. **All six phases implementation-ready.**
+> **Rev 7 (2026-07-07) — resolves review round 5 (findings 1–7); rounds 1–4 retained.** Stranded enemies are
+> **relocated to a spawn lane** after a cover transition (no room-clear soft-lock — F1); profiling harness
+> corrected — **per-enemy immortal flag** so the smoke dummy stays damageable (F2), load = **194 chaser + 6
+> spitter** (respects the shooter budget — F3), a **`profiling` room flag disables opening/stream/burst spawning**
+> (F4), and a **`CoopManager.profiling_inject(count, seed)`** API with seeded RNG + `nearest_passable_position`
+> placement (F5); Tesla per-tick **dedup** (F6); acceptance aligned to relocation (F7). Rounds 1–4 retained
+> (twist arrays, composition→WaveDirector, single obstacle owner, clip-guard, off-center Bastion, elite_spitter
+> out, team-neutral hazard). Verified vs `PerfRunner`/`WaveDirector`/`CoopManager`. **All six phases
+> implementation-ready.**
 >
 > **Validation gate (per phase):**
 > ```powershell
@@ -26,19 +26,24 @@
 > & $GODOT --headless --path 'D:\GameDev\Project_Twin_stick' -- --profile=flowfield_stress  # Phase 4 only
 > & $GODOT --headless --path 'D:\GameDev\Project_Twin_stick' -- --profile=where:fire_grid --smoke  # per-mechanic
 > ```
-> **⚠ Per-WHERE validation (F2, F3, F9, F11)** — implemented in **`PerfRunner`** (the `--profile=`-gated autoload;
-> `entity_ramp` never instantiates a mechanic):
-> - **Scenario `where:<id>`** (new `_run` branch, alongside `room:`): load `RunFlow.tscn`, start a real combat
->   room with `_room_config.where = id` + a **fixed composition** (`Mixed`), set `RunState.debug_profiling`
->   (players immortal) **and extend it to make profiling enemies immortal** (`apply_damage` no-ops under the
->   flag) so hazards can't thin the load. **Inject exactly 200 enemies** (fixed mix **160 `chaser` + 40 `spitter`**)
->   via a direct `WaveDirector.spawn_enemy_instance` loop at random arena positions (not the ramp). For moving
->   cover, force a mechanic step every `STEP` during sampling. After `WARMUP_SECONDS`, sample `avg_fps` over
->   `SAMPLE_SECONDS`, print the CSV line, and **`get_tree().quit(1)` if `avg_fps < 60`** else `quit(0)`. (Use
->   **200** everywhere — unified.)
-> - **`--smoke`** flag adds functional asserts, scoped by tier (F7):
->   - **Batch-A:** spawn a **stationary dummy enemy in an active hazard zone**, assert **its HP drops** (team-neutral, F5).
->   - **Batch-B:** assert **an enemy projectile fired through a cover rect despawns on it** (shot-block), **`validate_connectivity` holds** after a forced step, **players stay reachable** (F5). Fail ⇒ `quit(1)`.
+> **⚠ Per-WHERE validation (F2–F5, F9, F11)** — in **`PerfRunner`**, scenario **`where:<id>`** (new `_run`
+> branch; `entity_ramp` never instantiates a mechanic):
+> - **Setup:** load `RunFlow.tscn`, start a real combat room with `_room_config.where = id` + `Mixed`
+>   composition **and a `profiling` room flag** that makes `WaveDirector` **skip `spawn_opening_burst` +
+>   `_continuous_spawn`** (no opening burst / stream / timed bursts) so the population is exactly what's injected
+>   (F4).
+> - **Load (F3, F5):** a new **`CoopManager.profiling_inject(count := 200, seed)`** API (PerfRunner can't reach
+>   the private `_wave_director`) injects a fixed **194 `chaser` + 6 `spitter`** (6 = the shooter budget, so the
+>   projectile load is representative — F3) at **seeded-RNG** positions, each snapped to
+>   `_flow_field.nearest_passable_position` (reproducible + clear of cover — F5). Each injected enemy gets a
+>   **per-enemy `set_profiling_immortal(true)`** — *its* `apply_damage` no-ops (a **per-enemy flag, not global
+>   `debug_profiling`**) — so hazards can't thin the load (F2).
+> - **Perf:** for moving cover, force a step every `STEP` while sampling; after `WARMUP_SECONDS` sample `avg_fps`
+>   over `SAMPLE_SECONDS`, print the CSV line, **`quit(1)` if `<60`** else `quit(0)`.
+> - **`--smoke`** (separate assertion pass; the dummy is a **normal damageable** enemy — **not** immortal — F2):
+>   - **Batch-A:** a **stationary damageable dummy** in an active hazard zone → assert **HP drops** (team-neutral, F5).
+>   - **Batch-B:** an enemy projectile through a cover rect **despawns** (shot-block); after a forced step,
+>     **every live enemy is reachable** (no soft-lock — F1). Fail ⇒ `quit(1)`.
 > One `--profile=where:<id>` run per implemented mechanic id is part of that phase's acceptance.
 
 ---
@@ -402,14 +407,15 @@ Each is `scripts/arena/<X>Mechanic.gd extends ArenaMechanic`, keyed off WHERE, b
   The 4 wedge gaps are always safe; no telegraph (continuous rotation is readable). Draw: 4 rotating capsules + hub.
 - **Tesla Arcs** (`TeslaArcsMechanic`) — 4 fixed pylons (inset positions). `ARC_PERIOD:=2.6`; each period a
   predefined set of node-pairs runs `TELEGRAPH:=0.6` (dim line) → `ACTIVE:=1.0` (live), rotating which pairs
-  each period. While live, any actor within `ARC_W:=46` of the arc segment → `apply_damage(6)` every `0.4`.
-  Draw: pylons + telegraph/live jagged lines.
+  each period. Tick `0.4`: collect actors within `ARC_W:=46` of **any** live arc segment into a **dedup set**
+  (so an actor at the diagonal-schedule crossing takes **one** 6-tick, not two — F6), then `apply_damage(6)`
+  once each. Draw: pylons + telegraph/live jagged lines.
 - **Drifting Clouds** (`DriftingCloudsMechanic`) — `CLOUD_COUNT:=2` blobs radius `CLOUD_R:=200`, drift
   `DRIFT:=60 px/s`, bounce off `_arena` edges. Tick `0.6`: `damage_circle(cloud_center, CLOUD_R, 4)`. Localized
   ⇒ safe outside the clouds. Draw: soft translucent blobs.
 
-**Acceptance (each):** readable, hits both teams where stated, safe space exists, no perf regression on
-`entity_ramp`.
+**Acceptance (each):** readable, hits both teams where stated, safe space exists, holds **≥60fps on its
+`--profile=where:<id>` run** (§1).
 
 ## 8b. PHASE 6 — Batch-B WHERE (physical cover; gated on Phase 4 ≥60fps)
 
@@ -430,13 +436,16 @@ Each is `scripts/arena/<X>Mechanic.gd extends ArenaMechanic`, keyed off WHERE, b
   3. `_flow_field.build(rects)`; validate connectivity over `points = spawn-lane points + **current live
      `_player_nodes` positions**` (F5 — not just initial spawns). If it fails → `build(previous_set)` **and call
      `_update_flow_field_targets()`** (F4 — `build` clears all fields, so without this enemies drop to raw
-     fallback until the periodic update), **return false**. *(Guarantee scope, F5: keeps **players + spawn lanes**
-     connected; a stray enemy sealed in a passable pocket is **non-fatal** — it uses `sample`'s raw fallback. We
-     do not validate every passable cell.)*
+     fallback until the periodic update), **return false**.
   4. Reconcile bodies to `rects`: for a **removed** body, **first set `collision_layer=collision_mask=0` and
      disable its `CollisionShape2D`, THEN `queue_free()`** (F7 — `queue_free` alone leaves it solid until
      frame-end while the field already excludes it); spawn new / reposition changed. `_active_obstacle_rects =
-     rects`; `_update_flow_field_targets()`; **return true**.
+     rects`; `_update_flow_field_targets()`.
+  5. **Relocate stranded enemies (F1):** a trapped enemy would **soft-lock room-clear** (which needs the enemy
+     list empty), and raw fallback can't cross physical cover. So after the target update, scan live enemies;
+     any whose cell is **unreachable in every player's field** (distance == INF) is **teleported to a random
+     enemy-spawn-lane point** (`ArenaGeometry.enemy_spawn_position_for_edge`, which connectivity guarantees
+     reaches a player). **Return true.** ⇒ a transition can never trap an enemy behind cover.
 
 **Motion — discrete telegraph-then-snap (F6/F7).** Shared `MOVE_TELEGRAPH := 0.5` (Pop-up Pillars use their own
 `0.4` up/down). A step = telegraph (ghost outline at destination; block unmoved) → snap
@@ -464,8 +473,8 @@ center box `x∈[1340,2260]×y∈[690,1410]`).
   `(ci+ri)%2 == up_parity` (checkerboard flip — F6) → one `rebuild_obstacles(up_set)`.
 
 Charges go straight (physics-stopped). **Acceptance:** ≥60fps @200 through a forced moving-cover transition
-(§1, F9); cover blocks shots; clip guard prevents pop-under; connectivity revert prevents trapping;
-telegraph-then-snap reads clearly.
+(§1, F9); cover blocks shots; clip guard prevents pop-under; **connectivity revert + stranded-enemy relocation
+prevent trapping / room-clear soft-lock** (F1/F7); telegraph-then-snap reads clearly.
 
 ---
 
