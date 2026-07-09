@@ -8,14 +8,14 @@
 > phase order; validate + commit per phase; don't push unless asked.** Parallel Codex may edit the tree —
 > **re-read before each edit.**
 >
-> **Rev 11 (2026-07-07) — resolves review round 9 (findings 1–5); rounds 1–8 retained.** Moving cover no longer
-> freezes under density — the overlap guard **rejects only PLAYER overlap; enemies on a destination are relocated
-> at snap** (F1), and Batch-B smoke asserts a transition actually applied; the smoke dummy is removed via a
-> dedicated **`CoopManager.profiling_remove_enemy`** (no kill/XP/drop — F2); `profiling_inject` **derives the mix
-> from `count`** (`spitter=min(6,count)` — F3); profiling relocation computes the **full position** from the
-> seeded RNG (F4); history is **create-or-append** (F5). Rounds 1–8 retained (param order, `side_objective:""`,
-> gate resize, `has_target_field`, smoke/perf lifecycle, composition→WaveDirector). Verified vs
-> `CoopManager`/`ArenaGeometry`. **All six phases implementation-ready.**
+> **Rev 12 (2026-07-07) — resolves review round 10 (findings 1–5); rounds 1–9 retained.** Batch-B smoke splits
+> **static Bastion** (placement / connectivity / shot-block only) from **moving cover** (forced via
+> **`profiling_force_where_step`** + a mechanic **`revision`** counter — F1/F2); snap transitions also relocate
+> overlapping **pickups + `player_deployable`s** to nearest-passable (collector orbs stay collectable, deployables
+> not embedded — F3); Drifting Cover gets **pairwise non-overlap** validation (F4); an **automated shooter-budget
+> smoke** covers reservation / overflow / cancel-release / death-release (F5). Rounds 1–9 retained (density-freeze
+> fix, `profiling_remove_enemy`, count-derived mix, full seeded relocation, single obstacle owner). Verified vs
+> `CoopManager`/`SideObjectiveController`. **All six phases implementation-ready.**
 >
 > **Validation gate (per phase):**
 > ```powershell
@@ -57,10 +57,14 @@
 >     `_enemy_nodes` + frees, **no kill/XP/drop effects** — F2-round9; `queue_free` alone leaves it in
 >     `_enemy_nodes`, and `_on_enemy_died` would fire death effects) before sampling, and assert the registered
 >     count is **exactly 200** (F3-round8).
->   - **Batch-B:** an enemy projectile through a cover rect **despawns** (shot-block); after a forced step,
->     **assert at least one `rebuild_obstacles` returned `true` and the mechanic state actually changed**
->     (F1-round9 — the transition wasn't perpetually rejected) **and every live enemy passes the reachability
->     check** (`has_target_field` + `target_reaches_points`, F2) — no soft-lock/freeze.
+>   - **Batch-B (all IDs):** an enemy projectile through a cover rect **despawns** (shot-block); initial
+>     placement + connectivity validated.
+>   - **Batch-B (moving cover only — NOT static Bastion, which has no transition, F1-round10):** call
+>     **`CoopManager.profiling_force_where_step() -> bool`** (a profiling facade — `_where_mechanic` is private,
+>     so PerfRunner can't force/observe a step directly, F2-round10; it drives one mechanic step and returns
+>     whether the snap applied) and read the mechanic's exposed **state-revision counter**; assert **the step
+>     applied (`true`) and the revision advanced** (not perpetually rejected — F1-round9), then **every live
+>     enemy passes the reachability check** (`has_target_field` + `target_reaches_points`, F2) — no soft-lock.
 > One `--profile=where:<id>` run per implemented mechanic id is part of that phase's acceptance.
 
 ---
@@ -164,6 +168,11 @@ in `spawn_enemy_instance` lets a whole burst of shooters through before any incr
   the deferred call args) so cancel/death both know what to subtract. Clamp ≥0.
 - **Acceptance:** even a full opening burst never exceeds the budget on screen; surplus arrives as melee; total
   enemy count unchanged; `_active_shooter_budget` returns to 0 across rooms and after cancelled spawns (no leak).
+- **Automated budget smoke (F5-round10)** — a focused test covering the four paths the profiling injection
+  bypasses: (1) **reservation** — rolling a shooter increments the budget; (2) **overflow conversion** — a
+  shooter roll over budget spawns melee instead; (3) **cancellation release** — a cancelled deferred spawn
+  releases its reservation; (4) **death release** — a shooter's death decrements. Assert `_active_shooter_budget`
+  is exact after each.
 
 ### Slice 3 — `ranged_gauntlet` data (`data/room_archetypes.json`), interim until Phase 2
 `enemy_bias`: `["spitter","spitter","elite_spitter"]` → `["spitter","spitter","charger","chaser"]` (**remove
@@ -456,7 +465,10 @@ Each is `scripts/arena/<X>Mechanic.gd extends ArenaMechanic`, keyed off WHERE, b
      shove a player). **Enemies overlapping a new/moved rect are NOT a rejection (F1-round9):** collect them into
      `to_relocate` and push them out **at snap** (step 5). This is why dense rooms (esp. Shifting Maze, whose
      pillars rise in lanes enemies occupy) never permanently freeze a transition — only a player standing on the
-     destination defers it. *(Enemies are relocated, not crushed; the flow field is rebuilt for the new layout.)*
+     destination defers it. **Also collect overlapping NON-player actors into `to_relocate` (F3-round10):**
+     `pickups.get_children()` (health / collector orbs — else a rising pillar buries one and a **collector**
+     side-objective becomes unreachable) **and** the **`player_deployable` group** (turret / summon / mine — else
+     embedded inside cover). They're relocated at snap (step 5), not crushed.
   3. `_flow_field.build(rects)`; validate connectivity over `points = spawn-lane points + **current live
      `_player_nodes` positions**` (F5 — not just initial spawns). If it fails → `build(previous_set)` **and call
      `_update_flow_field_targets()`** (F4 — `build` clears all fields, so without this enemies drop to raw
@@ -479,15 +491,21 @@ Each is `scripts/arena/<X>Mechanic.gd extends ArenaMechanic`, keyed off WHERE, b
      reaches a player). **Compute the FULL position deterministically under `profiling` (F4-round9):**
      `enemy_spawn_position_for_edge` uses global `randf` for **both** the edge *and* the along-edge coordinate, so
      under `profiling` generate the whole position from the **seeded profiling RNG** (or use a **fixed validated
-     lane point**) — no global RNG. Then set `_enemy_separation_grid_frame = -1` (F5). **Return true.** ⇒ a
-     transition never traps **or freezes**: overlapped enemies are pushed to a reachable lane; only a player on
+     lane point**) — no global RNG. **Overlapping pickups + `player_deployable`s in `to_relocate`** are instead
+     nudged to `_flow_field.nearest_passable_position(their_pos)` (stay local, just clear of the cover — a
+     collector orb must remain collectable; F3-round10). Then set `_enemy_separation_grid_frame = -1` (F5).
+     **Return true.** ⇒ a transition never traps **or freezes**: overlapped enemies are pushed to a reachable
+     lane, pickups/deployables clear of cover; only a player on
      the destination defers the step.
 
 **Motion — discrete telegraph-then-snap (F6/F7).** Shared `MOVE_TELEGRAPH := 0.5` (Pop-up Pillars use their own
 `0.4` up/down). A step = telegraph (ghost outline at destination; block unmoved) → snap
 (`rebuild_obstacles(next_rects)`); if rejected, skip + retry. Initial placements are spawn-safe; moving steps are
 edge-safe + guarded (§interior `x∈[240,3360]`, `y∈[240,1860]`; physical cover initial placement also clears the
-center box `x∈[1340,2260]×y∈[690,1410]`).
+center box `x∈[1340,2260]×y∈[690,1410]`). **Each moving-cover mechanic increments a `revision` on every applied
+snap and exposes `profiling_force_step() -> bool` (force one step now, return whether it applied);
+`CoopManager.profiling_force_where_step() -> bool` forwards to the active `_where_mechanic`** (private) for the
+Batch-B smoke assertion (F2-round10). **Static Bastion has no `profiling_force_step`** — it's not a moving cover.
 
 - **Bastion** (F4 — **not a centered lone block**): two off-center static pillars flanking the mid-field,
   `Rect2(700,800,340,500)` + `Rect2(2560,800,340,500)`. Static → build once, no motion. *(The one permitted
@@ -503,7 +521,9 @@ center box `x∈[1340,2260]×y∈[690,1410]`).
   (`±300`, lands exactly on the `2800` endpoint — F6), reverse at ends, every `STEP:=2.0`. Crosses the mid-field
   via moving-step edge-only safety + clip + connectivity (F5).
 - **Drifting Cover** — 2 rects `260×180`, start `[(800,600),(2540,1320)]`; each `STEP:=2.0` picks a **random
-  cardinal** offset from `{(+300,0),(-300,0),(0,+300),(0,-300)}` (F6); skip if `rebuild_obstacles` rejects.
+  cardinal** offset from `{(+300,0),(-300,0),(0,+300),(0,-300)}` (F6). **Pairwise validation (F4-round10):** the
+  step's candidate set must have the **two blocks non-overlapping** (each grown by the inflation); if they'd
+  intersect, reroll the offset (a few tries) or skip that block's move. Skip if `rebuild_obstacles` rejects.
 - **Shifting Maze** — `220×220` slots, cols `x=[560,1040,2560,3040]` × rows `y=[520,1050,1580]` (12 slots, all
   clear of the center box by x). `up_parity` toggles each `STEP:=2.5`; slot(ci,ri) is up iff
   `(ci+ri)%2 == up_parity` (checkerboard flip — F6) → one `rebuild_obstacles(up_set)`.
