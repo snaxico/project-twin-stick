@@ -8,14 +8,14 @@
 > phase order; validate + commit per phase; don't push unless asked.** Parallel Codex may edit the tree —
 > **re-read before each edit.**
 >
-> **Rev 9 (2026-07-07) — resolves review round 7 (findings 1–6); rounds 1–6 retained.** Sliding-Gates
-> size-changed rects **remove+respawn** (reposition only same-size — F1); new **`FlowField.has_target_field`**
-> so an absent field is distinguishable from reachable (F2); **`--smoke` runs during warmup → then perf sample →
-> one final exit** (F3); injected enemies are **seeded before `setup()`** (which consumes `_random` — F4);
-> relocation via **`Enemy.relocate_to(pos)`** resets the cached flow-dir + separation grid (F5); the
-> **side-objective icon is removed** from the card (no glyph mapping — F6). Rounds 1–6 retained (immortality
-> clamps HP, node carries where/profiling/composition, relocation, single obstacle owner, composition→WaveDirector).
-> Verified vs `FlowField`/`PerfRunner`/`Enemy`/`CoopManager`/`RunFlow`. **All six phases implementation-ready.**
+> **Rev 10 (2026-07-07) — resolves review round 8 (findings 1–5); rounds 1–7 retained.** `profiling_inject(seed:
+> int, count := 200)` — required arg first (F1); PerfRunner sets **`side_objective: ""`** so no random objective
+> enters the benchmark (F2); the Batch-A smoke dummy is **removed + unregistered before sampling** with an
+> enemy-count-==-200 assert (F3); profiling relocation draws its edge from the **seeded profiling RNG** (F4);
+> **Definition of Done** now requires `current-state.md` + a history entry per phase (solo-dev-rules — F5).
+> Rounds 1–7 retained (gate resize, `has_target_field`, smoke/perf lifecycle, seed-before-setup, `relocate_to`,
+> immortality clamps HP, composition→WaveDirector). Verified vs `RunState`/`PerfRunner`/`ArenaGeometry`. **All
+> six phases implementation-ready.**
 >
 > **Validation gate (per phase):**
 > ```powershell
@@ -32,8 +32,11 @@
 >   burst / stream / timed bursts) so the population is exactly what's injected (F4). These `where`/`profiling`/
 >   `composition` fields ride in via `debug_run_setup`; **`_build_single_room_map` (RunState L566) must copy all
 >   three into the node** — it currently copies none, so without this the mechanic is Open and waves still spawn (F2).
-> - **Load (F1, F3, F5):** new **`CoopManager.profiling_inject(count := 200, seed)`** (PerfRunner can't reach the
->   private `_wave_director`) injects a fixed **194 `chaser` + 6 `spitter`** (6 = the shooter budget → representative
+>   PerfRunner also sets **`side_objective: ""`** in `debug_run_setup` so no random side objective is rolled into
+>   the benchmark (F2-round8).
+> - **Load (F1, F3, F5):** new **`CoopManager.profiling_inject(seed: int, count: int = 200)`** (required arg
+>   first — F1-round8; PerfRunner can't reach the private `_wave_director`) injects a fixed **194 `chaser` + 6
+>   `spitter`** (6 = the shooter budget → representative
 >   projectile load — F3). Determinism (F5): a fixed **`const PROFILING_SEED := 20260707`** seeded RNG for
 >   positions (each snapped to `_flow_field.nearest_passable_position` — reproducible + clear of cover); **seed
 >   each injected `Enemy._random` BEFORE `setup()`** (which consumes `_random` in `_configure_type` for the
@@ -48,7 +51,9 @@
 >   while sampling); print the CSV line and issue **one** exit — `quit(1)` if the smoke assert failed **or**
 >   `avg_fps < 60`, else `quit(0)`. Without `--smoke`: warmup → sample → exit on the fps threshold.
 > - **`--smoke` assertions** (the dummy is a **normal damageable** enemy — not immortal — F2):
->   - **Batch-A:** a stationary damageable dummy in an active hazard zone → assert **HP drops** (team-neutral).
+>   - **Batch-A:** a stationary damageable dummy in an active hazard zone → assert **HP drops** (team-neutral),
+>     then **remove + unregister the dummy before sampling** and assert the registered enemy count is **exactly
+>     200** (the dummy must not skew the perf population — F3-round8).
 >   - **Batch-B:** an enemy projectile through a cover rect **despawns** (shot-block); after a forced step,
 >     **every live enemy passes the reachability check** (`has_target_field` + `target_reaches_points`, F2) — no
 >     soft-lock (F1).
@@ -465,7 +470,9 @@ Each is `scripts/arena/<X>Mechanic.gd extends ArenaMechanic`, keyed off WHERE, b
      `target_reaches_points(pi, [enemy.global_position]) == true` (**skip relocation entirely if no player has a
      field**). A stranded enemy is relocated via a new **`Enemy.relocate_to(pos)`** that sets position **and
      resets its cached flow-dir + sample frame** (F5 — else the stale direction is reused at the new spot), to a
-     random `ArenaGeometry.enemy_spawn_position_for_edge` (connectivity guarantees it reaches a player); then set
+     spawn-lane point (`ArenaGeometry.enemy_spawn_position_for_edge`, which connectivity guarantees reaches a
+     player). **Under `profiling`, draw the lane/edge from the seeded profiling RNG** rather than the global
+     `randf` inside `enemy_spawn_position_for_edge`, so the benchmark stays deterministic (F4-round8). Then set
      `_enemy_separation_grid_frame = -1` to invalidate the separation grid (F5). **Return true.** ⇒ a transition
      can never trap an enemy.
 
@@ -503,6 +510,9 @@ prevent trapping / room-clear soft-lock** (F1/F7); telegraph-then-snap reads cle
 ## 9. Notes
 - Canonical tree `D:\GameDev\Project_Twin_stick` on `v4/class-system`; parallel Codex may edit — re-read first.
 - Validate + commit **per phase/slice**; **don't push unless asked.** All numbers first-pass, playtest-tuned.
+- **Definition of Done (per phase + the final integration slice) — `docs/process/solo-dev-rules.md`:** after a
+  phase's code validates, **update `docs/development/current-state.md` and add a `docs/development/history/<date>.md`
+  entry** recording what shipped (F5-round8). Not optional — part of each phase's acceptance.
 - **All six phases are implementation-ready** (Rev 3, §§2–8b). Phase 4's outcome is empirical (a perf number);
   its failure branch is bounded to instrumentation + a plan amendment (§7).
 - New files: `scripts/arena/ArenaMechanic.gd` (base) + one `<X>Mechanic.gd` per WHERE mechanic.
