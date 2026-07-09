@@ -8,15 +8,14 @@
 > phase order; validate + commit per phase; don't push unless asked.** Parallel Codex may edit the tree —
 > **re-read before each edit.**
 >
-> **Rev 8 (2026-07-07) — resolves review round 6 (findings 1–6); rounds 1–5 retained.** Profiling immortality
-> now **clamps HP ≥ 1 and runs the full damage path** (representative hazard cost, not a no-op — F1);
-> **`_build_single_room_map` copies `where`/`profiling`/`composition` into the node** (F2); **`_ensure_route_
-> options_differ` + its call removed** (it was the last live caller of the retired `_build_distinct_modifier_load`
-> — F3); relocation reachability uses the public **`target_reaches_points`** over alive players with valid fields
-> (F4); a fixed **`PROFILING_SEED`** is propagated to injected enemies + Drifting Cover for determinism (F5);
-> archetype **`icon` IDs assigned** (swarm/open/scan/shield/bolt — F6). Rounds 1–5 retained (relocation, profiling
-> load 194+6, single obstacle owner, twist arrays, composition→WaveDirector, off-center Bastion, elite_spitter
-> out). Verified vs `RunFlow`/`RunState`/`FlowField`/`Enemy`. **All six phases implementation-ready.**
+> **Rev 9 (2026-07-07) — resolves review round 7 (findings 1–6); rounds 1–6 retained.** Sliding-Gates
+> size-changed rects **remove+respawn** (reposition only same-size — F1); new **`FlowField.has_target_field`**
+> so an absent field is distinguishable from reachable (F2); **`--smoke` runs during warmup → then perf sample →
+> one final exit** (F3); injected enemies are **seeded before `setup()`** (which consumes `_random` — F4);
+> relocation via **`Enemy.relocate_to(pos)`** resets the cached flow-dir + separation grid (F5); the
+> **side-objective icon is removed** from the card (no glyph mapping — F6). Rounds 1–6 retained (immortality
+> clamps HP, node carries where/profiling/composition, relocation, single obstacle owner, composition→WaveDirector).
+> Verified vs `FlowField`/`PerfRunner`/`Enemy`/`CoopManager`/`RunFlow`. **All six phases implementation-ready.**
 >
 > **Validation gate (per phase):**
 > ```powershell
@@ -37,17 +36,22 @@
 >   private `_wave_director`) injects a fixed **194 `chaser` + 6 `spitter`** (6 = the shooter budget → representative
 >   projectile load — F3). Determinism (F5): a fixed **`const PROFILING_SEED := 20260707`** seeded RNG for
 >   positions (each snapped to `_flow_field.nearest_passable_position` — reproducible + clear of cover); **seed
->   each injected `Enemy._random`** (instead of its `_random.randomize()`) and **Drifting Cover's step RNG** under
->   `profiling`, so the whole run is deterministic. Each injected enemy gets **per-enemy `set_profiling_immortal(true)`**:
+>   each injected `Enemy._random` BEFORE `setup()`** (which consumes `_random` in `_configure_type` for the
+>   initial fire time — so `profiling_inject` seeds between instantiate and `setup()`, or via an optional seed
+>   arg on the spawn path — F4), replacing that enemy's `_random.randomize()`; also seed **Drifting Cover's step
+>   RNG** under `profiling`, so the whole run is deterministic. Each injected enemy gets **per-enemy `set_profiling_immortal(true)`**:
 >   `apply_damage` runs the **full normal path** (hit signals + VFX + particles — the real hazard cost, F1) but
 >   **clamps `current_health = max(current_health - dmg, 1)`** so it never dies (per-enemy flag, not global
 >   `debug_profiling`) — sustains the load *with* representative damage-path cost.
-> - **Perf:** for moving cover, force a step every `STEP` while sampling; after `WARMUP_SECONDS` sample `avg_fps`
->   over `SAMPLE_SECONDS`, print the CSV line, **`quit(1)` if `<60`** else `quit(0)`.
-> - **`--smoke`** (separate assertion pass; the dummy is a **normal damageable** enemy — **not** immortal — F2):
->   - **Batch-A:** a **stationary damageable dummy** in an active hazard zone → assert **HP drops** (team-neutral, F5).
+> - **Lifecycle (F3):** with `--smoke`, run the functional assertions **during `WARMUP_SECONDS`** (load present),
+>   record pass/fail; **then** sample `avg_fps` over `SAMPLE_SECONDS` (force a moving-cover step every `STEP`
+>   while sampling); print the CSV line and issue **one** exit — `quit(1)` if the smoke assert failed **or**
+>   `avg_fps < 60`, else `quit(0)`. Without `--smoke`: warmup → sample → exit on the fps threshold.
+> - **`--smoke` assertions** (the dummy is a **normal damageable** enemy — not immortal — F2):
+>   - **Batch-A:** a stationary damageable dummy in an active hazard zone → assert **HP drops** (team-neutral).
 >   - **Batch-B:** an enemy projectile through a cover rect **despawns** (shot-block); after a forced step,
->     **every live enemy is reachable** (no soft-lock — F1). Fail ⇒ `quit(1)`.
+>     **every live enemy passes the reachability check** (`has_target_field` + `target_reaches_points`, F2) — no
+>     soft-lock (F1).
 > One `--profile=where:<id>` run per implemented mechanic id is part of that phase's acceptance.
 
 ---
@@ -167,8 +171,9 @@ Cut the cluttered card (~9 elements) to four, keep the panel/glow style. Works o
   `WHERE_DISPLAY`/`_format_modifier_name` lookup), and **cap at 2** (WHERE first). None → render nothing.
   *(Pre-Phase-2, `where` is absent → falls back to `modifiers` as today.)*
 - **Row 3 (keep):** `rare_label` (L155-162).
-- **CUT `detail_label` (L126-148):** Room N, `Enemies:` dump, `Objective: Clear`, short_desc, reward_hint. Keep
-  only a small icon for a **real** side_objective.
+- **CUT `detail_label` (L126-148) entirely:** Room N, `Enemies:` dump, `Objective: Clear`, short_desc,
+  reward_hint — **and no side-objective icon** (F6 — there's no glyph mapping for `hold_zone`/`kill_streak`/
+  `collector`; the card stays name+icon · danger · ≤2 tags · reward only).
 - **Champion card:** name = `Champion: <boss>`; one `Champion` chip; keep danger + reward.
 - **Acceptance:** name+icon · danger · ≤2 tags · reward only; no dump/prose; parse clean.
 
@@ -448,15 +453,21 @@ Each is `scripts/arena/<X>Mechanic.gd extends ArenaMechanic`, keyed off WHERE, b
      fallback until the periodic update), **return false**.
   4. Reconcile bodies to `rects`: for a **removed** body, **first set `collision_layer=collision_mask=0` and
      disable its `CollisionShape2D`, THEN `queue_free()`** (F7 — `queue_free` alone leaves it solid until
-     frame-end while the field already excludes it); spawn new / reposition changed. `_active_obstacle_rects =
-     rects`; `_update_flow_field_targets()`.
+     frame-end while the field already excludes it). For a **changed** rect, **only reposition if the size is
+     unchanged; if the size changed (e.g. Sliding Gates' `gap_y` changes both rect heights), remove+respawn**
+     the body — do not reuse it, since its `RectangleShape2D.size` + visual polygon would be stale (F1). Spawn
+     new rects fresh. `_active_obstacle_rects = rects`; `_update_flow_field_targets()`.
   5. **Relocate stranded enemies (F1):** a trapped enemy would **soft-lock room-clear** (needs the enemy list
-     empty), and raw fallback can't cross physical cover. After the target update, scan live enemies;
-     **reachability via the public API (F4):** an enemy is stranded if **no alive player with a valid field**
-     returns `_flow_field.target_reaches_points(player_index, [enemy.global_position]) == true` (iterate only
-     alive players that have a field; **skip relocation entirely if no player has a valid field**). A stranded
-     enemy is **teleported to a random enemy-spawn-lane point** (`ArenaGeometry.enemy_spawn_position_for_edge`,
-     which connectivity guarantees reaches a player). **Return true.** ⇒ a transition can never trap an enemy.
+     empty), and raw fallback can't cross physical cover. **Reachability (F2, F4):** add
+     **`FlowField.has_target_field(player_index) -> bool`** (`return _fields.has(player_index)`) — needed because
+     `target_reaches_points` returns `true` when the field is *absent*, so it can't tell reachable from missing.
+     An enemy is stranded iff, over **alive players where `has_target_field` is true**, none returns
+     `target_reaches_points(pi, [enemy.global_position]) == true` (**skip relocation entirely if no player has a
+     field**). A stranded enemy is relocated via a new **`Enemy.relocate_to(pos)`** that sets position **and
+     resets its cached flow-dir + sample frame** (F5 — else the stale direction is reused at the new spot), to a
+     random `ArenaGeometry.enemy_spawn_position_for_edge` (connectivity guarantees it reaches a player); then set
+     `_enemy_separation_grid_frame = -1` to invalidate the separation grid (F5). **Return true.** ⇒ a transition
+     can never trap an enemy.
 
 **Motion — discrete telegraph-then-snap (F6/F7).** Shared `MOVE_TELEGRAPH := 0.5` (Pop-up Pillars use their own
 `0.4` up/down). A step = telegraph (ghost outline at destination; block unmoved) → snap
