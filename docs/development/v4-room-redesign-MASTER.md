@@ -8,16 +8,15 @@
 > phase order; validate + commit per phase; don't push unless asked.** Parallel Codex may edit the tree —
 > **re-read before each edit.**
 >
-> **Rev 5 (2026-07-07) — resolves review round 3 (findings 1–9); rounds 1–2 retained.** `composition` now
-> written to the node + consumed by `WaveDirector` (enemy_pool fallback for champion/debug/endless); **single
-> obstacle owner** — the mechanic declares rects, `CoopManager.rebuild_obstacles` reconciles bodies; clip guard
-> checks **only new/moved rects** with a **scalar radius** (`rect.size.length()*0.5+40`); moving steps skip the
-> spawn-time center-box/player exclusions so **Bulwark can cross**; Sliding-Gates `y→290..1810` (clears edge
-> bands); Bulwark steps land on endpoints; Drifting-Cover = random cardinal; Maze parity-flip defined; Batch-B
-> smoke uses **shot-block + connectivity** (not HP); each `--where` runs a **timed ~180-enemy load at ≥60fps**;
-> Islands uses public `get_enemy_target_nodes`. Rounds 1–2 retained (elite_spitter out, shooter algo, Open
-> weighting, off-center Bastion, team-neutral hazard, whitelist, budget reservation, bounded Phase-4). Verified
-> vs `CoopManager`/`ArenaGeometry`. **All six phases implementation-ready.**
+> **Rev 6 (2026-07-07) — resolves review round 4 (findings 1–9); rounds 1–3 retained.** Per-archetype
+> `twist_pool` arrays; `--where` folded into **`--profile=where:<id>`** in `PerfRunner` with a **reproducible
+> immortal 200-enemy load** (fixed mix, direct injection, sample + `quit(1)` on <60fps); connectivity **rollback
+> re-runs `_update_flow_field_targets`** (F4); connectivity uses **current player positions**, trap guarantee
+> scoped to players (F5); Islands iterates a **snapshot** (F6); removed obstacle bodies **disable collision
+> before `queue_free`** (F7); `_fallback_archetype` **migrated to the new schema** (F8); Pinwheel broad-phase =
+> `ARM_LEN+ARM_W/2` + **dedup** (F9). Rounds 1–3 retained (elite_spitter out, shooter algo, single obstacle
+> owner, off-center Bastion, clip-guard scalar/changed-only, composition→WaveDirector, team-neutral hazard,
+> bounded Phase-4). Verified vs `PerfRunner`/`RunState`/`CoopManager`. **All six phases implementation-ready.**
 >
 > **Validation gate (per phase):**
 > ```powershell
@@ -25,17 +24,22 @@
 > & $GODOT --headless --path 'D:\GameDev\Project_Twin_stick' --quit                    # parse
 > & $GODOT --headless --path 'D:\GameDev\Project_Twin_stick' -- --profile=entity_ramp   # perf (avg_fps>=60)
 > & $GODOT --headless --path 'D:\GameDev\Project_Twin_stick' -- --profile=flowfield_stress  # Phase 4 only
-> & $GODOT --headless --path 'D:\GameDev\Project_Twin_stick' -- --where=fire_grid --smoke   # per-mechanic
+> & $GODOT --headless --path 'D:\GameDev\Project_Twin_stick' -- --profile=where:fire_grid --smoke  # per-mechanic
 > ```
-> **⚠ Per-WHERE validation (F9, F11).** `entity_ramp` never instantiates a mechanic. Add a debug entry point
-> **`--where=<id>`** (in `ProfilingHarness`/debug bootstrap) that forces a combat room with that WHERE + a fixed
-> composition **and a representative load (~180 enemies)**, runs timed, and **enforces `avg_fps ≥ 60`** (moving
-> cover: the run must include forced transitions). **`--smoke`** adds functional asserts, scoped by tier (F7):
-> - **Batch-A** (hazards): spawn a **stationary dummy enemy in an active hazard zone** and assert **its HP drops**
->   (team-neutral damage, F5).
-> - **Batch-B** (cover): assert **an enemy projectile fired through a cover rect despawns on it** (shot-block),
->   **`validate_connectivity` holds** after a forced step, and **no actor is trapped** (clip guard + revert).
-> One `--where` run per implemented mechanic id is part of that phase's acceptance.
+> **⚠ Per-WHERE validation (F2, F3, F9, F11)** — implemented in **`PerfRunner`** (the `--profile=`-gated autoload;
+> `entity_ramp` never instantiates a mechanic):
+> - **Scenario `where:<id>`** (new `_run` branch, alongside `room:`): load `RunFlow.tscn`, start a real combat
+>   room with `_room_config.where = id` + a **fixed composition** (`Mixed`), set `RunState.debug_profiling`
+>   (players immortal) **and extend it to make profiling enemies immortal** (`apply_damage` no-ops under the
+>   flag) so hazards can't thin the load. **Inject exactly 200 enemies** (fixed mix **160 `chaser` + 40 `spitter`**)
+>   via a direct `WaveDirector.spawn_enemy_instance` loop at random arena positions (not the ramp). For moving
+>   cover, force a mechanic step every `STEP` during sampling. After `WARMUP_SECONDS`, sample `avg_fps` over
+>   `SAMPLE_SECONDS`, print the CSV line, and **`get_tree().quit(1)` if `avg_fps < 60`** else `quit(0)`. (Use
+>   **200** everywhere — unified.)
+> - **`--smoke`** flag adds functional asserts, scoped by tier (F7):
+>   - **Batch-A:** spawn a **stationary dummy enemy in an active hazard zone**, assert **its HP drops** (team-neutral, F5).
+>   - **Batch-B:** assert **an enemy projectile fired through a cover rect despawns on it** (shot-block), **`validate_connectivity` holds** after a forced step, **players stay reachable** (F5). Fail ⇒ `quit(1)`.
+> One `--profile=where:<id>` run per implemented mechanic id is part of that phase's acceptance.
 
 ---
 
@@ -217,7 +221,10 @@ already reads). **Fallback:** if `composition` is empty — **champion, debug, a
 existing `enemy_pool` + `density_profile` path unchanged (those rooms still write `enemy_pool`, archetype rooms
 write `composition`). **Danger derived** (`_refresh_route_metadata`): base by density (low/med/high→1/2/3) `+1`
 if shooters `+` twist count, clamped to pip max. **Retire** old `_roll_archetype_modifiers` /
-`_build_distinct_modifier_load`.
+`_build_distinct_modifier_load`. **Fallback migration (F8):** update `_fallback_archetype()` (RunState L915) to
+emit the **new schema** — a `Mixed` `composition`, `where_pool:["open"]`, `twist_pool:[]` — not the old
+`enemy_bias`/`themed_modifier_pool`. Retain `_build_archetype_enemy_pool` **only** for the champion/debug/endless
+`enemy_pool` path (F1); archetype rooms now use `composition`.
 
 **Acceptance:** 2 distinct archetype choices/step, no impossible-repeat stalls; each plays its identity; WHERE
 never rolls an unbuilt mechanic; danger tracks composition; card shows name · danger · ≤2 tags · reward.
@@ -241,9 +248,18 @@ Pop-up Pillars · Sliding Gates · Shifting Maze · Bulwark.
 | Pressure | Mine Grid, Bulwark, Sliding Gates, Pop-up Pillars, Open |
 | Gauntlet | Central Bastion, Drifting Cover, Pop-up Pillars, Frost Grid, Islands, Tesla Arcs, Fire Grid |
 
-**TWIST `twist_pool`** (roll 0–1): Enemy Speed · Shielded · Explosive Death · Accelerating Waves.
-*(Shrinking Arena removed — it squeezes the arena, which the model rejects, and would double as a 2nd arena
-mechanic (F7).)* Light theming (Splitters↔Explosive Death).
+**TWIST — per-archetype `twist_pool`** (roll 0–1; duplicate entries = weight):
+
+| Archetype | twist_pool |
+|---|---|
+| Horde | `enemy_speed, accelerating_waves, shielded` |
+| Mixed | `enemy_speed, shielded, explosive_death, accelerating_waves` |
+| Splitters | `explosive_death, explosive_death, enemy_speed` |
+| Pressure | `enemy_speed, explosive_death, shielded` |
+| Gauntlet | `shielded, accelerating_waves, enemy_speed` |
+
+*(Existing stat modifiers only; Shrinking Arena excluded — it squeezes the arena, which the model rejects, and
+would double as a 2nd arena mechanic (F7).)*
 
 **⚠ Team-neutral hazard contract (F5).** Existing hazards damage **players only** (`FireFloorModifier` /
 `IceZoneModifier` / `MineFieldModifier` iterate `_player_nodes`), and `MineFieldModifier` is a moving
@@ -374,14 +390,16 @@ Each is `scripts/arena/<X>Mechanic.gd extends ArenaMechanic`, keyed off WHERE, b
 - **Islands** (`IslandsMechanic`) — floor is a hazard sea except `PAD_COUNT:=4` safe circles (`PAD_R:=150`) at a
   fixed set of positions; every `RESHUFFLE:=4.0` the pads jump to the next fixed set, with `TELEGRAPH:=0.6`
   where the new pads glow before the old expire. Damage tick `0.5`: any **player** not within a pad →
-  `apply_damage(4)`. **Enemies** not within a pad → `apply_damage(2)` every `1.0` (iterate the public
-  `_coop.get_enemy_target_nodes()` — F8; thins the swarm without deleting it — playtest-tune). Draw: sea tint +
-  pad rings.
+  `apply_damage(4)`. **Enemies** not within a pad → `apply_damage(2)` every `1.0` (iterate a **snapshot**
+  `_coop.get_enemy_target_nodes().duplicate()` with `is_instance_valid` guards — F6, since lethal damage mutates
+  the backing `_enemy_nodes` mid-iteration; thins the swarm without deleting it — playtest-tune). Draw: sea tint
+  + pad rings.
 - **Pinwheel** (`PinwheelMechanic`) — `ARM_COUNT:=4` capsules from arena center, length `ARM_LEN:=520`, width
-  `ARM_W:=70`, rotating `SPIN:=0.5 rad/s`. Tick `0.4`: any actor within `ARM_W/2` of an arm segment
-  (center→tip at the current angle; point-to-segment distance) → `apply_damage(5)` (players over `_players`,
-  enemies over `_coop.get_nearby_enemy_target_nodes(center, ARM_LEN)`). The 4 wedge gaps are always safe; no
-  telegraph needed (continuous rotation is readable). Draw: 4 rotating capsules + hub.
+  `ARM_W:=70`, rotating `SPIN:=0.5 rad/s`. Tick `0.4`: collect actors within `ARM_W/2` of any arm segment
+  (center→tip at the current angle; point-to-segment distance) into a **dedup set** (so the shared hub isn't
+  hit once per overlapping arm — F9), then `apply_damage(5)` once each. Candidates: `_players` +
+  `_coop.get_nearby_enemy_target_nodes(center, ARM_LEN + ARM_W/2)` (broad phase covers the rounded tip — F9).
+  The 4 wedge gaps are always safe; no telegraph (continuous rotation is readable). Draw: 4 rotating capsules + hub.
 - **Tesla Arcs** (`TeslaArcsMechanic`) — 4 fixed pylons (inset positions). `ARC_PERIOD:=2.6`; each period a
   predefined set of node-pairs runs `TELEGRAPH:=0.6` (dim line) → `ACTIVE:=1.0` (live), rotating which pairs
   each period. While live, any actor within `ARC_W:=46` of the arc segment → `apply_damage(6)` every `0.4`.
@@ -409,10 +427,16 @@ Each is `scripts/arena/<X>Mechanic.gd extends ArenaMechanic`, keyed off WHERE, b
      `get_nearby_enemy_target_nodes(rect.get_center(), rect.size.length()*0.5 + ACTOR_R)` then precise
      `rect.grow(ACTOR_R).has_point(actor.global_position)` over those enemies **and** `_player_nodes`. Any hit →
      **return false** (skip this step; block stays; retry next).
-  3. `_flow_field.build(rects)`; if `not validate_connectivity(_build_flow_connectivity_points())` → rebuild
-     with the **previous** set, **return false**.
-  4. Reconcile bodies to `rects` (spawn new / free removed / reposition changed), `_active_obstacle_rects = rects`,
-     `_update_flow_field_targets()`, **return true**.
+  3. `_flow_field.build(rects)`; validate connectivity over `points = spawn-lane points + **current live
+     `_player_nodes` positions**` (F5 — not just initial spawns). If it fails → `build(previous_set)` **and call
+     `_update_flow_field_targets()`** (F4 — `build` clears all fields, so without this enemies drop to raw
+     fallback until the periodic update), **return false**. *(Guarantee scope, F5: keeps **players + spawn lanes**
+     connected; a stray enemy sealed in a passable pocket is **non-fatal** — it uses `sample`'s raw fallback. We
+     do not validate every passable cell.)*
+  4. Reconcile bodies to `rects`: for a **removed** body, **first set `collision_layer=collision_mask=0` and
+     disable its `CollisionShape2D`, THEN `queue_free()`** (F7 — `queue_free` alone leaves it solid until
+     frame-end while the field already excludes it); spawn new / reposition changed. `_active_obstacle_rects =
+     rects`; `_update_flow_field_targets()`; **return true**.
 
 **Motion — discrete telegraph-then-snap (F6/F7).** Shared `MOVE_TELEGRAPH := 0.5` (Pop-up Pillars use their own
 `0.4` up/down). A step = telegraph (ghost outline at destination; block unmoved) → snap
