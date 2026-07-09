@@ -8,16 +8,16 @@
 > phase order; validate + commit per phase; don't push unless asked.** Parallel Codex may edit the tree —
 > **re-read before each edit.**
 >
-> **Rev 4 (2026-07-07) — resolves review round 2 (findings 1–11); round 1 already resolved.** `elite_spitter`
-> removed from all normal-room paths (it's a champion) + its rework dropped; **shooter selection algorithm**
-> defined (`shooter_ratio` + roll); **Open is always a weighted WHERE candidate**; **Bastion redesigned
-> off-center** (2 spawn-safe flanking pillars); **concrete spawn-safe coordinates for every mechanic**; atomic
-> **`rebuild_obstacles`** API with a **clip guard** (no pop-under) + connectivity-revert (no trap); **discrete
-> telegraph-then-snap** motion for all moving cover; `_spawn_arena_obstacle` returns the body; initial-target
-> rebuild after Batch-B activation (F9); `where`/`modifiers` node keys + card wiring; per-`--where` smoke tests.
-> Verified against `ArenaGeometry` spawn positions + `CoopManager` exclusion constants + obstacle API. Round 1
-> (F1–10) fixes retained: WHERE whitelist, no-repeat relax, budget reservation, team-neutral hazard, dynamic
-> pulse, twist removal, bounded Phase-4 failure. **All six phases implementation-ready.**
+> **Rev 5 (2026-07-07) — resolves review round 3 (findings 1–9); rounds 1–2 retained.** `composition` now
+> written to the node + consumed by `WaveDirector` (enemy_pool fallback for champion/debug/endless); **single
+> obstacle owner** — the mechanic declares rects, `CoopManager.rebuild_obstacles` reconciles bodies; clip guard
+> checks **only new/moved rects** with a **scalar radius** (`rect.size.length()*0.5+40`); moving steps skip the
+> spawn-time center-box/player exclusions so **Bulwark can cross**; Sliding-Gates `y→290..1810` (clears edge
+> bands); Bulwark steps land on endpoints; Drifting-Cover = random cardinal; Maze parity-flip defined; Batch-B
+> smoke uses **shot-block + connectivity** (not HP); each `--where` runs a **timed ~180-enemy load at ≥60fps**;
+> Islands uses public `get_enemy_target_nodes`. Rounds 1–2 retained (elite_spitter out, shooter algo, Open
+> weighting, off-center Bastion, team-neutral hazard, whitelist, budget reservation, bounded Phase-4). Verified
+> vs `CoopManager`/`ArenaGeometry`. **All six phases implementation-ready.**
 >
 > **Validation gate (per phase):**
 > ```powershell
@@ -27,12 +27,15 @@
 > & $GODOT --headless --path 'D:\GameDev\Project_Twin_stick' -- --profile=flowfield_stress  # Phase 4 only
 > & $GODOT --headless --path 'D:\GameDev\Project_Twin_stick' -- --where=fire_grid --smoke   # per-mechanic
 > ```
-> **⚠ Per-WHERE validation (F11).** `entity_ramp` only checks generic perf. Add a debug entry point
-> **`--where=<id>`** (in `ProfilingHarness`/debug bootstrap) that forces a combat room with that WHERE id + a
-> fixed composition, and **`--smoke`** that (a) spawns a **stationary dummy enemy at a known hazard location**
-> and **asserts its HP drops** (team-neutral damage, F5), (b) for Batch-B, asserts `validate_connectivity` holds
-> after a forced moving-cover transition and no actor is trapped. One `--where` run per implemented mechanic id
-> is part of that phase's acceptance.
+> **⚠ Per-WHERE validation (F9, F11).** `entity_ramp` never instantiates a mechanic. Add a debug entry point
+> **`--where=<id>`** (in `ProfilingHarness`/debug bootstrap) that forces a combat room with that WHERE + a fixed
+> composition **and a representative load (~180 enemies)**, runs timed, and **enforces `avg_fps ≥ 60`** (moving
+> cover: the run must include forced transitions). **`--smoke`** adds functional asserts, scoped by tier (F7):
+> - **Batch-A** (hazards): spawn a **stationary dummy enemy in an active hazard zone** and assert **its HP drops**
+>   (team-neutral damage, F5).
+> - **Batch-B** (cover): assert **an enemy projectile fired through a cover rect despawns on it** (shot-block),
+>   **`validate_connectivity` holds** after a forced step, and **no actor is trapped** (clip guard + revert).
+> One `--where` run per implemented mechanic id is part of that phase's acceptance.
 
 ---
 
@@ -203,9 +206,17 @@ twist/modifier path.
 depth gate; **the two must differ from each other** (always satisfiable). **No-repeat-vs-previous applies only
 when ≥3 archetypes are eligible** at that depth; with exactly 2 eligible it is dropped. Champion steps unchanged.
 
-**Build node** (`_build_run_node` L614): roll 1 available WHERE + 0–1 TWIST; write `where` + `modifiers`.
-**Danger derived** (`_refresh_route_metadata`): base by density (low/med/high→1/2/3) `+1` if shooters `+` twist
-count, clamped to pip max. **WaveDirector** consumes `composition`. **Retire** old `_roll_archetype_modifiers` /
+**Build node** (`_build_run_node` L614): roll 1 available WHERE + 0–1 TWIST; write `where`, `modifiers`, and
+**`composition`** (the archetype's composition dict).
+
+**Composition consumption (F1).** `CoopManager.start_room` (L545) reads `var comp := _room_config.get("composition", {})`
+and passes it to `_wave_director.start_room(...)` (add a `composition` arg). `WaveDirector`: store `_composition`;
+`_roll_wave_enemy_type` uses the F2 algorithm over `_composition` (`shooters`/`shooter_ratio`/`melee_bias`);
+`density_profile` ← `_composition.melee_density` (low/medium/high → the values `_get_density_count_multiplier`
+already reads). **Fallback:** if `composition` is empty — **champion, debug, and endless rooms** — keep the
+existing `enemy_pool` + `density_profile` path unchanged (those rooms still write `enemy_pool`, archetype rooms
+write `composition`). **Danger derived** (`_refresh_route_metadata`): base by density (low/med/high→1/2/3) `+1`
+if shooters `+` twist count, clamped to pip max. **Retire** old `_roll_archetype_modifiers` /
 `_build_distinct_modifier_load`.
 
 **Acceptance:** 2 distinct archetype choices/step, no impossible-repeat stalls; each plays its identity; WHERE
@@ -282,8 +293,11 @@ func damage_circle(center: Vector2, radius: float, dmg: int, hit_players := true
 add a `match str(_room_config.get("where","open"))` that instantiates the matching mechanic, calls
 `setup(ARENA_RECT, _player_nodes, self)` (+ `set_variant(...)` for the grid), `effects.add_child(...)`, and
 stores a `_where_mechanic` ref (null it in the room-reset block L585-588 so it clears per room, like the other
-modifier refs). `where` comes from the Phase-2 roll; `"open"`/default = no mechanic. Batch-B cases additionally
-spawn obstacles + build the flow field (§8b).
+modifier refs). `where` comes from the Phase-2 roll; `"open"`/default = no mechanic. **Batch-B cases (F2 — single
+owner):** in `setup`, the mechanic calls `_coop.rebuild_obstacles(initial_rects, true)` to place its cover; it
+does **not** use `room_config.obstacles` / `_setup_room_obstacles`. The mechanic owns only its logical **state**
+(pillars up, gate position, patrol index…) and declares a **rect set** each step; `CoopManager` owns the bodies
+and reconciles them (§8b). No `obstacles` key is written to the node.
 
 **⚠ Ordering fix (F9):** room-start (`start_room` ~L544) runs `_update_flow_field_targets()` (L565) →
 `_apply_active_modifiers()` (L566) → `spawn_opening_burst()` (L567). Batch-B cover created at L566 mutates the
@@ -360,8 +374,9 @@ Each is `scripts/arena/<X>Mechanic.gd extends ArenaMechanic`, keyed off WHERE, b
 - **Islands** (`IslandsMechanic`) — floor is a hazard sea except `PAD_COUNT:=4` safe circles (`PAD_R:=150`) at a
   fixed set of positions; every `RESHUFFLE:=4.0` the pads jump to the next fixed set, with `TELEGRAPH:=0.6`
   where the new pads glow before the old expire. Damage tick `0.5`: any **player** not within a pad →
-  `apply_damage(4)`. **Enemies** not within a pad → `apply_damage(2)` every `1.0` (iterate `_coop._enemy_nodes`;
-  thins the swarm without deleting it — playtest-tune). Draw: sea tint + pad rings.
+  `apply_damage(4)`. **Enemies** not within a pad → `apply_damage(2)` every `1.0` (iterate the public
+  `_coop.get_enemy_target_nodes()` — F8; thins the swarm without deleting it — playtest-tune). Draw: sea tint +
+  pad rings.
 - **Pinwheel** (`PinwheelMechanic`) — `ARM_COUNT:=4` capsules from arena center, length `ARM_LEN:=520`, width
   `ARM_W:=70`, rotating `SPIN:=0.5 rad/s`. Tick `0.4`: any actor within `ARM_W/2` of an arm segment
   (center→tip at the current angle; point-to-segment distance) → `apply_damage(5)` (players over `_players`,
@@ -380,25 +395,30 @@ Each is `scripts/arena/<X>Mechanic.gd extends ArenaMechanic`, keyed off WHERE, b
 
 ## 8b. PHASE 6 — Batch-B WHERE (physical cover; gated on Phase 4 ≥60fps)
 
-**Runtime obstacle API changes (F8), `CoopManager`:**
-- `_spawn_arena_obstacle(rect) -> StaticBody2D` — **return the created body** (was `void`) so a mechanic can
-  retain / reposition / disable it.
-- New `func rebuild_obstacles(rects: Array) -> bool` (atomic apply):
-  1. reject if any rect fails `_is_obstacle_rect_spawn_safe`;
-  2. **clip guard (F6):** reject if any rect grown by the actor radius (~40) intersects a **live** actor —
-     iterate `_player_nodes` + `get_nearby_enemy_target_nodes(rect.get_center(), rect_half_extent+60)`;
+**Runtime obstacle API (F8, F2 — single owner).** The mechanic owns only its logical **state** and declares a
+**rect set** each step; `CoopManager` owns the bodies and **reconciles** them (no body refs leak to mechanics).
+- `_spawn_arena_obstacle(rect) -> StaticBody2D` — return the body (was `void`), for the internal reconcile.
+- `func rebuild_obstacles(rects: Array, initial := false) -> bool`:
+  1. **Bounds (F5):** if `initial`, every rect must pass full `_is_obstacle_rect_spawn_safe`. **Else (a moving
+     step)** every rect need only clear the **edge bands** — `ARENA_RECT.grow(-OBSTACLE_EDGE_EXCLUSION).encloses(
+     rect.grow(_get_flow_obstacle_inflation()))`. The **center-box + player-spawn exclusions are spawn-time
+     only**, so moving cover may cross the mid-field mid-game (resolves Bulwark — F5).
+  2. **Clip guard (F3, F4) — only NEW or MOVED rects** (diff `rects` vs `_active_obstacle_rects`; unchanged &
+     removed rects skip it, so an enemy resting against a *stationary* block never blocks another block's step).
+     For each such rect, `const ACTOR_R := 40.0`; broad-phase
+     `get_nearby_enemy_target_nodes(rect.get_center(), rect.size.length()*0.5 + ACTOR_R)` then precise
+     `rect.grow(ACTOR_R).has_point(actor.global_position)` over those enemies **and** `_player_nodes`. Any hit →
+     **return false** (skip this step; block stays; retry next).
   3. `_flow_field.build(rects)`; if `not validate_connectivity(_build_flow_connectivity_points())` → rebuild
-     with the **previous** rect set and **return false**;
-  4. else spawn/reposition/enable bodies to match `rects`, set `_active_obstacle_rects = rects`, call
+     with the **previous** set, **return false**.
+  4. Reconcile bodies to `rects` (spawn new / free removed / reposition changed), `_active_obstacle_rects = rects`,
      `_update_flow_field_targets()`, **return true**.
-  A mechanic **never applies a step `rebuild_obstacles` rejected** — the block stays where it was; retry next step.
 
-**Motion model — LOCKED: discrete telegraph-then-snap (F7).** All moving cover is stationary between steps.
-A step = `TELEGRAPH` (a ghost outline drawn at the destination; block unmoved, collision unchanged) → **snap**
-(one `rebuild_obstacles` call with the new rect set). No continuous motion ⇒ no continuous flow updates; each
-step is a single gated rebuild (microseconds post-Phase-4). Initial obstacles register via `_setup_room_obstacles`
-(unsafe rects rejected there). Coords below pass `_is_obstacle_rect_spawn_safe` — interior `x∈[240,3360]`,
-`y∈[240,1860]`; physical cover also clears the center box `x∈[1340,2260]×y∈[690,1410]`.
+**Motion — discrete telegraph-then-snap (F6/F7).** Shared `MOVE_TELEGRAPH := 0.5` (Pop-up Pillars use their own
+`0.4` up/down). A step = telegraph (ghost outline at destination; block unmoved) → snap
+(`rebuild_obstacles(next_rects)`); if rejected, skip + retry. Initial placements are spawn-safe; moving steps are
+edge-safe + guarded (§interior `x∈[240,3360]`, `y∈[240,1860]`; physical cover initial placement also clears the
+center box `x∈[1340,2260]×y∈[690,1410]`).
 
 - **Bastion** (F4 — **not a centered lone block**): two off-center static pillars flanking the mid-field,
   `Rect2(700,800,340,500)` + `Rect2(2560,800,340,500)`. Static → build once, no motion. *(The one permitted
@@ -407,20 +427,21 @@ step is a single gated rebuild (microseconds post-Phase-4). Initial obstacles re
 - **Pop-up Pillars** — 5 rects `260×260` at `[(620,560),(2720,560),(620,1280),(2720,1280),(1670,1480)]`; each
   raise/lower on staggered `PERIOD:=3.0` (up `1.8`/down `1.2`, `TELEGRAPH:=0.4`, start delays `0,-0.6,-1.2,-1.8,
   -2.4`). Each transition → `rebuild_obstacles` with the current up-set.
-- **Sliding Gates** — off-center vertical wall at `x=2400`, width `180`, split into top `Rect2(2400,240,180,
-  gap_y-240)` + bottom `Rect2(2400,gap_y+GAP,180,1860-gap_y-GAP)`, `GAP:=420`; `gap_y` steps among `[520,900,
-  1280]` every `STEP:=1.5`.
-- **Bulwark** — 1 rect `120×520`, start `Rect2(700,790,120,520)`; patrol `x∈[700,2900]` stepping `±300` every
-  `STEP:=2.0` (reverse at ends). The clip + connectivity guards let it cross the mid-field only when clear.
-- **Drifting Cover** — 2 rects `260×180`, start `[(800,600),(2540,1320)]`; each `STEP:=2.0` targets a spot
-  `±300` from current (skip if `rebuild_obstacles` rejects).
-- **Shifting Maze** — `220×220` pillar slots on an off-center grid, cols `x=[560,1040,2560,3040]`, rows
-  `y=[520,1050,1580]` (12 slots, all clear of the center box by x); each `STEP:=2.5` a checkerboard subset is
-  up, the rest down → one `rebuild_obstacles`.
+- **Sliding Gates** — vertical wall `x=2400`, width `180`, top `Rect2(2400,290,180,gap_y-290)` + bottom
+  `Rect2(2400,gap_y+GAP,180,1810-gap_y-GAP)`, `GAP:=420`, `gap_y ∈ [610,900,1190]` stepping `STEP:=1.5`. Wall
+  spans `y 290..1810` so `grow(40)` stays clear of the edge bands (F5).
+- **Bulwark** — `120×520` at `y=790..1310`, start `x=700`; patrol `x ∈ {700,1000,1300,1600,1900,2200,2500,2800}`
+  (`±300`, lands exactly on the `2800` endpoint — F6), reverse at ends, every `STEP:=2.0`. Crosses the mid-field
+  via moving-step edge-only safety + clip + connectivity (F5).
+- **Drifting Cover** — 2 rects `260×180`, start `[(800,600),(2540,1320)]`; each `STEP:=2.0` picks a **random
+  cardinal** offset from `{(+300,0),(-300,0),(0,+300),(0,-300)}` (F6); skip if `rebuild_obstacles` rejects.
+- **Shifting Maze** — `220×220` slots, cols `x=[560,1040,2560,3040]` × rows `y=[520,1050,1580]` (12 slots, all
+  clear of the center box by x). `up_parity` toggles each `STEP:=2.5`; slot(ci,ri) is up iff
+  `(ci+ri)%2 == up_parity` (checkerboard flip — F6) → one `rebuild_obstacles(up_set)`.
 
-Charges go straight (physics-stopped). **Acceptance:** routes ≥60fps @200 (Phase 4 holds), cover blocks shots,
-clip guard prevents pop-under (F6), connectivity revert prevents trapping, telegraph-then-snap reads clearly;
-`--where=<id> --smoke` (F11) asserts connectivity + no-trap after a forced step.
+Charges go straight (physics-stopped). **Acceptance:** ≥60fps @200 through a forced moving-cover transition
+(§1, F9); cover blocks shots; clip guard prevents pop-under; connectivity revert prevents trapping;
+telegraph-then-snap reads clearly.
 
 ---
 
