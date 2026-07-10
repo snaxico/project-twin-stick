@@ -2,6 +2,21 @@ extends Control
 
 const GAME_WORLD_SCENE = preload("res://scenes/game/GameWorld.tscn")
 const MODIFIERS_DATA_PATH := "res://data/modifiers.json"
+const WHERE_DISPLAY := {
+	"fire_grid": "Fire Grid",
+	"frost_grid": "Frost Grid",
+	"mine_grid": "Mine Grid",
+	"islands": "Islands",
+	"pinwheel": "Pinwheel",
+	"tesla_arcs": "Tesla Arcs",
+	"drifting_clouds": "Drifting Clouds",
+	"bastion": "Bastion",
+	"popup_pillars": "Pop-up Pillars",
+	"sliding_gates": "Sliding Gates",
+	"bulwark": "Bulwark",
+	"drifting_cover": "Drifting Cover",
+	"shifting_maze": "Shifting Maze",
+}
 
 signal return_to_menu_requested(open_meta_menu: bool)
 
@@ -99,7 +114,8 @@ func _build_route_card(node: Dictionary) -> Button:
 	var trait_label := Label.new()
 	trait_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	trait_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	trait_label.text = "%s  %s" % [_trait_icon_text(str(node.get("trait_icon", "open"))), str(node.get("trait_label", "Open room"))]
+	var trait_text := "Champion: %s" % _format_boss_name(str(node.get("boss_type", "Champion"))) if room_type == "boss" else str(node.get("trait_label", "Open room"))
+	trait_label.text = "%s  %s" % [_trait_icon_text("shield" if room_type == "boss" else str(node.get("trait_icon", "open"))), trait_text]
 	trait_label.add_theme_font_size_override("font_size", 15)
 	trait_label.add_theme_color_override("font_color", Color(0.88, 0.98, 1.0, 0.96))
 	title_row.add_child(trait_label)
@@ -111,41 +127,25 @@ func _build_route_card(node: Dictionary) -> Button:
 	danger_label.add_theme_color_override("font_color", Color(1.0, 0.72, 0.28, 0.96))
 	title_row.add_child(danger_label)
 
-	var modifiers: Array = node.get("modifiers", []) as Array
 	var chip_flow := HFlowContainer.new()
 	chip_flow.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	chip_flow.add_theme_constant_override("h_separation", 5)
 	chip_flow.add_theme_constant_override("v_separation", 5)
 	layout.add_child(chip_flow)
-	if modifiers.is_empty():
-		chip_flow.add_child(_build_modifier_chip("Open"))
+	if room_type == "boss":
+		chip_flow.add_child(_build_modifier_chip("Champion"))
 	else:
+		var chips: Array = []
+		var where_id := str(node.get("where", "open"))
+		if where_id != "open" and not where_id.is_empty():
+			chips.append(_format_where_name(where_id))
+		var modifiers: Array = node.get("modifiers", []) as Array
 		for mod_id_variant in modifiers:
-			chip_flow.add_child(_build_modifier_chip(_format_modifier_name(str(mod_id_variant))))
-
-	var enemies: Array = node.get("enemy_pool", []) as Array
-	var enemy_text := "Champion" if room_type == "boss" else ", ".join(enemies)
-	var side_objective := str(node.get("side_objective", ""))
-	var objective_text := "Objective: %s" % _format_modifier_name(side_objective) if not side_objective.is_empty() else "Objective: Clear"
-	var detail_label := Label.new()
-	detail_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	detail_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	detail_label.add_theme_font_size_override("font_size", 12)
-	detail_label.add_theme_color_override("font_color", Color(0.78, 0.88, 0.94, 0.92))
-	var room_label := "Champion: %s" % _format_boss_name(str(node.get("boss_type", "Champion"))) if room_type == "boss" else "Enemies: %s" % enemy_text
-	var detail_lines := PackedStringArray([
-		"Room %d" % int(node.get("depth", 1)),
-		room_label,
-		objective_text,
-	])
-	var short_desc := str(node.get("short_desc", ""))
-	if not short_desc.is_empty():
-		detail_lines.append(short_desc)
-	var reward_hint := str(node.get("reward_hint", ""))
-	if not reward_hint.is_empty():
-		detail_lines.append(reward_hint)
-	detail_label.text = "\n".join(detail_lines)
-	layout.add_child(detail_label)
+			if chips.size() >= 2:
+				break
+			chips.append(_format_modifier_name(str(mod_id_variant)))
+		for chip_text in chips:
+			chip_flow.add_child(_build_modifier_chip(str(chip_text)))
 
 	var spacer := Control.new()
 	spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -369,6 +369,11 @@ func _format_modifier_name(mod_id: String) -> String:
 			continue
 		parts.append(word.capitalize())
 	return " ".join(parts)
+
+func _format_where_name(where_id: String) -> String:
+	if WHERE_DISPLAY.has(where_id):
+		return str(WHERE_DISPLAY[where_id])
+	return _format_modifier_name(where_id)
 
 func _format_boss_name(boss_type: String) -> String:
 	if boss_type.is_empty():

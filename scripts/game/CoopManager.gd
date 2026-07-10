@@ -30,8 +30,20 @@ const ParticleFactoryData = preload("res://scripts/juice/ParticleFactory.gd")
 const HitStopManagerData = preload("res://scripts/juice/HitStopManager.gd")
 const PauseDebugUiData = preload("res://scripts/game/PauseDebugUi.gd")
 const FlowFieldData = preload("res://scripts/game/FlowField.gd")
+const PulsingGridMechanicData = preload("res://scripts/arena/PulsingGridMechanic.gd")
+const IslandsMechanicData = preload("res://scripts/arena/IslandsMechanic.gd")
+const PinwheelMechanicData = preload("res://scripts/arena/PinwheelMechanic.gd")
+const TeslaArcsMechanicData = preload("res://scripts/arena/TeslaArcsMechanic.gd")
+const DriftingCloudsMechanicData = preload("res://scripts/arena/DriftingCloudsMechanic.gd")
+const BastionMechanicData = preload("res://scripts/arena/BastionMechanic.gd")
+const PopupPillarsMechanicData = preload("res://scripts/arena/PopupPillarsMechanic.gd")
+const SlidingGatesMechanicData = preload("res://scripts/arena/SlidingGatesMechanic.gd")
+const BulwarkMechanicData = preload("res://scripts/arena/BulwarkMechanic.gd")
+const DriftingCoverMechanicData = preload("res://scripts/arena/DriftingCoverMechanic.gd")
+const ShiftingMazeMechanicData = preload("res://scripts/arena/ShiftingMazeMechanic.gd")
 
 const MODIFIERS_DATA_PATH := "res://data/modifiers.json"
+const PROFILING_SEED := 20260707
 
 const ARENA_SIZE := Vector2(3600.0, 2100.0)
 const ARENA_RECT := Rect2(Vector2.ZERO, ARENA_SIZE)
@@ -49,7 +61,7 @@ const BOSS_HIT_FEEDBACK_INTERVAL := 0.22
 const HEALTH_DROP_CHANCE := 0.03
 const MAX_ACTIVE_SUMMONS := 5
 const ENEMY_SEPARATION_CELL_SIZE := 96.0
-const FLOW_FIELD_CELL_SIZE := 100.0
+const FLOW_FIELD_CELL_SIZE := 150.0
 const FLOW_TARGET_UPDATE_INTERVAL := 0.12
 const OBSTACLE_EDGE_EXCLUSION := ARENA_MARGIN + 168.0
 const OBSTACLE_PLAYER_EXCLUSION_RADIUS := 150.0
@@ -159,6 +171,7 @@ var _fire_floor_modifier = null
 var _ice_zone_modifier = null
 var _mine_field_modifier = null
 var _shrinking_arena_modifier = null
+var _where_mechanic = null
 var _active_turrets: Array = []
 var _active_orbits: Array = []
 var _active_summons: Array = []
@@ -173,9 +186,12 @@ var _hit_stop_manager = null
 var arena_obstacles: Node2D = null
 var _flow_field = null
 var _active_obstacle_rects: Array = []
+var _active_obstacle_bodies: Array = []
 var _flow_spawn_lane_points: Array = []
 var _flow_reachability_warned := false
 var _flow_target_update_elapsed := 0.0
+var _profiling_rng := RandomNumberGenerator.new()
+var _profiling_spawn_lane_cursor := 0
 
 func configure_players(configs: Array) -> void:
 	_player_configs = configs.duplicate()
@@ -543,6 +559,9 @@ func _start_room() -> void:
 	_room_elapsed = 0.0
 	_room_type = str(_room_config.get("room_type", "combat"))
 	_room_enemy_pool = ( _room_config.get("enemy_pool", []) as Array).duplicate()
+	var room_composition: Dictionary = _room_config.get("composition", {}) as Dictionary
+	if not room_composition.is_empty():
+		_room_config["density_profile"] = str(room_composition.get("melee_density", _room_config.get("density_profile", "normal")))
 	_room_depth = int(_room_config.get("depth", 1))
 	_room_rare_bonus = maxf(float(_room_config.get("rare_bonus", 0.0)), 0.0)
 	_enemies_killed = 0
@@ -564,6 +583,7 @@ func _start_room() -> void:
 		player.global_position = _get_player_spawn_position(int(player.player_index))
 	_update_flow_field_targets()
 	_apply_active_modifiers()
+	_update_flow_field_targets()
 	_wave_director.spawn_opening_burst()
 	_refresh_hud()
 
@@ -586,14 +606,18 @@ func _clear_runtime_nodes() -> void:
 	_ice_zone_modifier = null
 	_mine_field_modifier = null
 	_shrinking_arena_modifier = null
+	_where_mechanic = null
 	if _combat_effects != null:
 		_combat_effects.clear_runtime()
 	_enemy_separation_grid.clear()
 	_enemy_separation_grid_frame = -1
 	_active_obstacle_rects.clear()
+	_active_obstacle_bodies.clear()
 	_flow_spawn_lane_points.clear()
 	_flow_reachability_warned = false
 	_flow_target_update_elapsed = 0.0
+	_profiling_rng.seed = PROFILING_SEED
+	_profiling_spawn_lane_cursor = 0
 	if _flow_field != null:
 		_flow_field.build([])
 	_invalidate_runtime_caches()
@@ -610,6 +634,7 @@ func _setup_room_obstacles() -> void:
 	for child in arena_obstacles.get_children():
 		child.queue_free()
 	_active_obstacle_rects.clear()
+	_active_obstacle_bodies.clear()
 	_flow_spawn_lane_points = _build_flow_spawn_lane_points()
 	_flow_reachability_warned = false
 	_flow_target_update_elapsed = 0.0
@@ -637,7 +662,7 @@ func _setup_room_obstacles() -> void:
 		_flow_field.build([])
 	_active_obstacle_rects = accepted_rects
 	for obstacle_rect in _active_obstacle_rects:
-		_spawn_arena_obstacle(obstacle_rect)
+		_active_obstacle_bodies.append(_spawn_arena_obstacle(obstacle_rect))
 
 func _parse_obstacle_rect(obstacle_variant) -> Rect2:
 	if obstacle_variant is Rect2:
@@ -678,7 +703,7 @@ func _build_obstacle_exclusion_rects() -> Array:
 		))
 	return exclusions
 
-func _spawn_arena_obstacle(obstacle_rect: Rect2) -> void:
+func _spawn_arena_obstacle(obstacle_rect: Rect2) -> StaticBody2D:
 	var body := StaticBody2D.new()
 	body.name = "ArenaObstacle"
 	body.collision_layer = 1
@@ -701,6 +726,164 @@ func _spawn_arena_obstacle(obstacle_rect: Rect2) -> void:
 	visual.color = Color(0.18, 0.2, 0.24, 0.92)
 	body.add_child(visual)
 	arena_obstacles.add_child(body)
+	return body
+
+func rebuild_obstacles(rects: Array, initial := false) -> bool:
+	_ensure_arena_obstacle_container()
+	if _flow_field == null:
+		_flow_field = FlowFieldData.new()
+		_flow_field.setup(ARENA_RECT, FLOW_FIELD_CELL_SIZE)
+	var next_rects: Array = []
+	for rect_variant in rects:
+		var rect := _parse_obstacle_rect(rect_variant)
+		if rect.size.x <= 0.0 or rect.size.y <= 0.0:
+			return false
+		if initial:
+			if not _is_obstacle_rect_spawn_safe(rect):
+				return false
+		elif not _is_obstacle_rect_step_safe(rect):
+			return false
+		next_rects.append(rect)
+	var moved_rects := _changed_obstacle_rects(next_rects)
+	var to_relocate: Array = []
+	for rect in moved_rects:
+		var actor_rect := (rect as Rect2).grow(40.0)
+		for player in _player_nodes:
+			if player != null and is_instance_valid(player) and player is Node2D and actor_rect.has_point((player as Node2D).global_position):
+				return false
+		for enemy in _enemy_nodes:
+			if enemy != null and is_instance_valid(enemy) and enemy is Node2D and actor_rect.has_point((enemy as Node2D).global_position):
+				if not to_relocate.has(enemy):
+					to_relocate.append(enemy)
+		for pickup in pickups.get_children():
+			if pickup != null and is_instance_valid(pickup) and pickup is Node2D and actor_rect.has_point((pickup as Node2D).global_position):
+				if not to_relocate.has(pickup):
+					to_relocate.append(pickup)
+		for deployable in get_tree().get_nodes_in_group("player_deployable"):
+			if deployable != null and is_instance_valid(deployable) and deployable is Node2D and actor_rect.has_point((deployable as Node2D).global_position):
+				if not to_relocate.has(deployable):
+					to_relocate.append(deployable)
+	var previous_rects := _active_obstacle_rects.duplicate()
+	_flow_field.build(next_rects)
+	if not _flow_field.validate_connectivity(_build_flow_runtime_connectivity_points()):
+		_flow_field.build(previous_rects)
+		_update_flow_field_targets()
+		return false
+	var previous_bodies := _active_obstacle_bodies.duplicate()
+	var used_old_body_indices: Dictionary = {}
+	var next_bodies: Array = []
+	for next_index in range(next_rects.size()):
+		var next_rect: Rect2 = next_rects[next_index] as Rect2
+		var body = _take_matching_obstacle_body(next_rect, previous_rects, previous_bodies, used_old_body_indices)
+		if body == null:
+			body = _spawn_arena_obstacle(next_rect)
+		else:
+			_reposition_arena_obstacle_body(body, next_rect)
+		next_bodies.append(body)
+	for old_index in range(previous_bodies.size()):
+		if used_old_body_indices.has(old_index):
+			continue
+		var old_body = previous_bodies[old_index]
+		if old_body != null and is_instance_valid(old_body):
+			_disable_and_free_obstacle(old_body)
+	_active_obstacle_rects = next_rects.duplicate()
+	_active_obstacle_bodies = next_bodies
+	_update_flow_field_targets()
+	_relocate_stranded_runtime_nodes(to_relocate)
+	_enemy_separation_grid_frame = -1
+	return true
+
+func _disable_and_free_obstacle(node: Node) -> void:
+	if node is CollisionObject2D:
+		(node as CollisionObject2D).collision_layer = 0
+		(node as CollisionObject2D).collision_mask = 0
+	var shape := node.get_node_or_null("CollisionShape2D") as CollisionShape2D
+	if shape != null:
+		shape.disabled = true
+	node.queue_free()
+
+func _take_matching_obstacle_body(next_rect: Rect2, previous_rects: Array, previous_bodies: Array, used_old_body_indices: Dictionary):
+	for old_index in range(previous_rects.size()):
+		if used_old_body_indices.has(old_index):
+			continue
+		if (previous_rects[old_index] as Rect2) == next_rect:
+			used_old_body_indices[old_index] = true
+			return previous_bodies[old_index]
+	for old_index in range(previous_rects.size()):
+		if used_old_body_indices.has(old_index):
+			continue
+		var old_rect: Rect2 = previous_rects[old_index] as Rect2
+		if old_rect.size == next_rect.size:
+			used_old_body_indices[old_index] = true
+			return previous_bodies[old_index]
+	return null
+
+func _reposition_arena_obstacle_body(body: StaticBody2D, obstacle_rect: Rect2) -> void:
+	if body == null or not is_instance_valid(body):
+		return
+	body.global_position = obstacle_rect.position + obstacle_rect.size * 0.5
+
+func _is_obstacle_rect_step_safe(obstacle_rect: Rect2) -> bool:
+	var interior := ARENA_RECT.grow(-OBSTACLE_EDGE_EXCLUSION)
+	return interior.encloses(obstacle_rect.grow(_get_flow_obstacle_inflation()))
+
+func _changed_obstacle_rects(next_rects: Array) -> Array:
+	var changed: Array = []
+	for rect in next_rects:
+		if not _active_obstacle_rects.has(rect):
+			changed.append(rect)
+	return changed
+
+func _build_flow_runtime_connectivity_points() -> Array:
+	var points := _build_flow_connectivity_points()
+	for player in _player_nodes:
+		if player != null and is_instance_valid(player) and player is Node2D:
+			points.append((player as Node2D).global_position)
+	return points
+
+func _relocate_stranded_runtime_nodes(initial_nodes: Array) -> void:
+	if _flow_field == null or not _flow_field.has_obstacles():
+		return
+	var to_relocate := initial_nodes.duplicate()
+	var any_field := false
+	for player_index in range(_player_nodes.size()):
+		if _flow_field.has_target_field(player_index):
+			any_field = true
+			break
+	if any_field:
+		for enemy in _enemy_nodes:
+			if enemy == null or not is_instance_valid(enemy) or not (enemy is Node2D):
+				continue
+			if enemy.has_method("is_alive") and not enemy.is_alive():
+				continue
+			var reachable := false
+			for player_index in range(_player_nodes.size()):
+				if not _flow_field.has_target_field(player_index):
+					continue
+				if _flow_field.target_reaches_points(player_index, [(enemy as Node2D).global_position]):
+					reachable = true
+					break
+			if not reachable and not to_relocate.has(enemy):
+				to_relocate.append(enemy)
+	for node in to_relocate:
+		if node == null or not is_instance_valid(node) or not (node is Node2D):
+			continue
+		if _enemy_nodes.has(node):
+			var lane_position := _next_profiling_lane_point() if RunState.debug_profiling else _get_enemy_spawn_position()
+			lane_position = _flow_field.nearest_passable_position(lane_position)
+			if node.has_method("relocate_to"):
+				node.relocate_to(lane_position)
+			else:
+				(node as Node2D).global_position = lane_position
+		else:
+			(node as Node2D).global_position = _flow_field.nearest_passable_position((node as Node2D).global_position)
+
+func _next_profiling_lane_point() -> Vector2:
+	if _flow_spawn_lane_points.is_empty():
+		return ARENA_CENTER
+	var point: Vector2 = _flow_spawn_lane_points[_profiling_spawn_lane_cursor % _flow_spawn_lane_points.size()]
+	_profiling_spawn_lane_cursor += 1
+	return point
 
 func _get_flow_obstacle_inflation() -> float:
 	return float(_flow_field.get_obstacle_inflation()) if _flow_field != null else 84.0
@@ -842,8 +1025,44 @@ func _apply_active_modifiers() -> void:
 		_shrinking_arena_modifier.setup(ARENA_RECT)
 		effects.add_child(_shrinking_arena_modifier)
 		_spawn_modifier_activation_vfx("shrinking_arena", Color(0.96, 0.32, 0.28, 0.72))
+	_apply_where_mechanic()
 	_apply_modifier_tint()
 	_populate_modifier_hud()
+
+func _apply_where_mechanic() -> void:
+	var where_id := str(_room_config.get("where", "open"))
+	if where_id == "open" or where_id.is_empty():
+		return
+	var mechanic = null
+	match where_id:
+		"fire_grid", "frost_grid", "mine_grid":
+			mechanic = PulsingGridMechanicData.new()
+			mechanic.set_variant(where_id)
+		"islands":
+			mechanic = IslandsMechanicData.new()
+		"pinwheel":
+			mechanic = PinwheelMechanicData.new()
+		"tesla_arcs":
+			mechanic = TeslaArcsMechanicData.new()
+		"drifting_clouds":
+			mechanic = DriftingCloudsMechanicData.new()
+		"bastion":
+			mechanic = BastionMechanicData.new()
+		"popup_pillars":
+			mechanic = PopupPillarsMechanicData.new()
+		"sliding_gates":
+			mechanic = SlidingGatesMechanicData.new()
+		"bulwark":
+			mechanic = BulwarkMechanicData.new()
+		"drifting_cover":
+			mechanic = DriftingCoverMechanicData.new()
+		"shifting_maze":
+			mechanic = ShiftingMazeMechanicData.new()
+		_:
+			return
+	_where_mechanic = mechanic
+	_where_mechanic.setup(ARENA_RECT, _player_nodes, self)
+	effects.add_child(_where_mechanic)
 
 func _apply_modifier_tint() -> void:
 	# Reset to neutral each room; a MAJOR hazard washes the world (not the UI layer) with its
@@ -913,6 +1132,135 @@ func queue_enemy_spawn(enemy_type: String, spawn_position: Vector2, health_multi
 func register_enemy(enemy: Node2D) -> void:
 	if enemy != null and is_instance_valid(enemy) and not _enemy_nodes.has(enemy):
 		_enemy_nodes.append(enemy)
+
+func profiling_inject(seed: int, count: int = 200) -> bool:
+	if _wave_director == null:
+		return false
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed
+	var spitter_count := mini(6, count)
+	var chaser_count := maxi(count - spitter_count, 0)
+	var spawned := 0
+	for index in range(chaser_count):
+		if _profiling_spawn_enemy("chaser", _profiling_position(rng), seed + spawned) == null:
+			return false
+		spawned += 1
+	for index in range(spitter_count):
+		if _profiling_spawn_enemy("spitter", _profiling_position(rng), seed + spawned) == null:
+			return false
+		spawned += 1
+	_enemy_separation_grid_frame = -1
+	return spawned == count
+
+func profiling_remove_enemy(enemy) -> void:
+	if enemy == null or not is_instance_valid(enemy):
+		return
+	if enemy.has_method("get_type_name") and _wave_director != null:
+		_wave_director.notify_enemy_removed(str(enemy.get_type_name()))
+	_enemy_nodes.erase(enemy)
+	enemy.queue_free()
+	_enemy_separation_grid_frame = -1
+
+func profiling_force_where_step() -> bool:
+	if _where_mechanic == null or not is_instance_valid(_where_mechanic) or not _where_mechanic.has_method("profiling_force_step"):
+		return false
+	return bool(_where_mechanic.profiling_force_step())
+
+func profiling_where_revision() -> int:
+	if _where_mechanic == null or not is_instance_valid(_where_mechanic):
+		return 0
+	if "revision" in _where_mechanic:
+		return int(_where_mechanic.revision)
+	return 0
+
+func profiling_registered_enemy_count() -> int:
+	return _enemy_nodes.size()
+
+func profiling_all_enemies_reachable() -> bool:
+	if _flow_field == null or not _flow_field.has_obstacles():
+		return true
+	var player_indices: Array = []
+	for player_index in range(_player_nodes.size()):
+		if _flow_field.has_target_field(player_index):
+			player_indices.append(player_index)
+	if player_indices.is_empty():
+		return false
+	for enemy in _enemy_nodes:
+		if enemy == null or not is_instance_valid(enemy) or not (enemy is Node2D):
+			continue
+		var reachable := false
+		for player_index in player_indices:
+			if _flow_field.target_reaches_points(int(player_index), [(enemy as Node2D).global_position]):
+				reachable = true
+				break
+		if not reachable:
+			return false
+	return true
+
+func profiling_cover_blocks_projectile() -> bool:
+	if _active_obstacle_rects.is_empty():
+		return true
+	var rect: Rect2 = _active_obstacle_rects[0] as Rect2
+	var query := PhysicsRayQueryParameters2D.create(
+		Vector2(rect.position.x - 120.0, rect.get_center().y),
+		Vector2(rect.end.x + 120.0, rect.get_center().y)
+	)
+	query.collision_mask = 1
+	query.collide_with_bodies = true
+	query.collide_with_areas = false
+	var hit := get_world_2d().direct_space_state.intersect_ray(query)
+	return not hit.is_empty() and hit.get("collider", null) is StaticBody2D
+
+func profiling_run_shooter_budget_smoke() -> bool:
+	if _wave_director == null:
+		return false
+	var comp := {"melee_bias": ["chaser"], "shooters": ["spitter"], "shooter_ratio": 1.0}
+	_wave_director.profiling_reset_shooter_budget()
+	var first := str(_wave_director.profiling_pick_spawn_type(comp))
+	if first != "spitter" or _wave_director.get_active_shooter_budget() != 1:
+		return false
+	_wave_director.profiling_reset_shooter_budget()
+	var budget := 6 + 2 * maxi(get_player_count() - 1, 0)
+	for _index in range(budget):
+		if str(_wave_director.profiling_pick_spawn_type(comp)) != "spitter":
+			return false
+	if _wave_director.get_active_shooter_budget() != budget:
+		return false
+	if str(_wave_director.profiling_pick_spawn_type(comp)) != "chaser":
+		return false
+	if _wave_director.get_active_shooter_budget() != budget:
+		return false
+	_wave_director.profiling_reset_shooter_budget()
+	if str(_wave_director.profiling_pick_spawn_type(comp)) != "spitter":
+		return false
+	_wave_director.profiling_cancel_reserved_spawn("spitter")
+	if _wave_director.get_active_shooter_budget() != 0:
+		return false
+	_wave_director.profiling_reset_shooter_budget()
+	if str(_wave_director.profiling_pick_spawn_type(comp)) != "spitter":
+		return false
+	var shooter = _wave_director.spawn_enemy_instance("spitter", ARENA_CENTER + Vector2(420.0, 0.0), 1.0, PROFILING_SEED)
+	if shooter == null:
+		return false
+	_on_enemy_died(shooter)
+	if is_instance_valid(shooter):
+		shooter.queue_free()
+	return _wave_director.get_active_shooter_budget() == 0
+
+func _profiling_spawn_enemy(enemy_type: String, spawn_position: Vector2, rng_seed: int):
+	var enemy = _wave_director.spawn_enemy_instance(enemy_type, spawn_position, 1.0, rng_seed)
+	if enemy != null and enemy.has_method("set_profiling_immortal"):
+		enemy.set_profiling_immortal(true)
+	return enemy
+
+func _profiling_position(rng: RandomNumberGenerator) -> Vector2:
+	var pos := Vector2(
+		rng.randf_range(ARENA_RECT.position.x + ARENA_MARGIN + 80.0, ARENA_RECT.end.x - ARENA_MARGIN - 80.0),
+		rng.randf_range(ARENA_RECT.position.y + ARENA_MARGIN + 80.0, ARENA_RECT.end.y - ARENA_MARGIN - 80.0)
+	)
+	if _flow_field != null:
+		return _flow_field.nearest_passable_position(pos)
+	return pos
 
 func register_hazard_zone(hazard: Node) -> void:
 	if hazard != null and is_instance_valid(hazard) and not _active_hazards.has(hazard):
@@ -1496,12 +1844,13 @@ func add_screen_trauma(amount: float) -> void:
 
 func _on_enemy_died(enemy) -> void:
 	_enemy_nodes.erase(enemy)
+	var enemy_type_name := str(enemy.get_type_name())
 	if _wave_director != null:
 		_wave_director.clear_active_boss_if(enemy)
+		_wave_director.notify_enemy_removed(enemy_type_name)
 	_enemies_killed += 1
 	_gain_shared_momentum()
 	_apply_bloodthirst_on_kill(enemy)
-	var enemy_type_name := str(enemy.get_type_name())
 	if _ultimate_charge != null and enemy.has_method("get_last_damage_player_index"):
 		_ultimate_charge.add_kill(int(enemy.get_last_damage_player_index()), EnemyTypes.is_champion(enemy_type_name))
 	if EnemyTypes.is_champion(enemy_type_name):
@@ -2014,7 +2363,7 @@ func get_runtime_pause_node_groups() -> Array:
 	]
 
 func get_runtime_pause_singletons() -> Array:
-	return [_fire_floor_modifier, _ice_zone_modifier, _mine_field_modifier, _shrinking_arena_modifier]
+	return [_fire_floor_modifier, _ice_zone_modifier, _mine_field_modifier, _shrinking_arena_modifier, _where_mechanic]
 
 func _sync_player_health_state(player) -> void:
 	if player == null or not is_instance_valid(player):

@@ -15,6 +15,13 @@
 > real `_on_enemy_died`, `_build_archetype_enemy_pool` deleted, `profiling_where_revision`, Frost once-per-player).
 > Verified vs `CoopManager`/`WaveDirector`. **All six phases implementation-ready.**
 >
+> **Rev 17 (2026-07-10) — implementation note / Phase 4b amendment.** Phase 4's first safe fixes moved
+> flow-field cost out of `sample()` but left `update_targets` dominated by vector rebuilds under
+> `flowfield_stress`. The implemented amendment replaces per-cell nearest-reachable ring searches with
+> reverse-BFS escape-vector generation, rate-limits per-player target-field rebuilds, and coarsens flow-field
+> cells from `100px` to `150px`. Latest `flowfield_stress` reached **59.4 avg FPS at 200 enemies** with
+> instrumentation showing **physics** as the dominant remaining bucket, not flow-field sampling/rebuilds.
+>
 > **Validation gate (per phase):**
 > ```powershell
 > $GODOT = 'D:\GameDev\Godot_v4.6.2-stable_win64.exe\Godot_v4.6.2-stable_win64_console.exe'

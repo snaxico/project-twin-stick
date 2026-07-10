@@ -128,6 +128,25 @@ abilities, ultimates, and base mutations are free.
 
 ## Encounter Systems
 
+- V4 room redesign is implemented on `v4/class-system`:
+  - combat rooms are built from WHO (`composition`) + WHERE (`where`) + TWIST (`modifiers`)
+  - normal room archetypes are Horde, Mixed, Splitters, Pressure, and Gauntlet
+  - former `elite_*` enemies are champion-only and no longer spawn through normal compositions
+  - route cards show archetype, danger, up to two WHERE/TWIST chips, and reward odds
+  - spitter is now a capped ranged special with a 0.45s telegraphed 3-shot fan
+  - WaveDirector reserves the global shooter budget at spawn selection and releases it on cancellation/death
+- Implemented WHERE mechanics:
+  - Fire Grid, Frost Grid, Mine Grid
+  - Islands, Pinwheel, Tesla Arcs, Drifting Clouds
+  - Bastion, Pop-up Pillars, Sliding Gates, Bulwark, Drifting Cover, Shifting Maze
+- Physical cover is owned by `CoopManager.rebuild_obstacles`; mechanics declare rect sets, while CoopManager
+  validates bounds/connectivity, rebuilds flow targets, and relocates stranded enemies, pickups, and
+  `player_deployable` nodes.
+- FlowField Phase 4/4b landed: obstacle inflation is `40`, sample reads precomputed vectors,
+  `has_target_field` exists for reachability checks, nearest-reachable escape vectors are built with a
+  reverse BFS, target-field rebuilds are rate-limited per player, and the flow grid is `150px`. The latest
+  `flowfield_stress` run is no longer flow-field dominated and reached `59.4` avg FPS at 200 enemies; the
+  remaining bottleneck is general physics/body movement at the synthetic 200-enemy + 200-projectile load.
 - Rooms use continuous time-based spawning:
   - opening burst at room start
   - enemies spawn on a timer until room duration expires
@@ -298,21 +317,18 @@ Last validation run in this state:
 - **Element mutations gate by delivery + dedupe** (`c9b9953`): fire_trail/freeze_shot/poison require
   `projectile` (no longer offered on flamethrower/beam/whirlwind/arc_wand) + same-element dedupe.
 - **Per-class HUD indicator:** momentum pips only for Mobile; Heat/Overshield/Radiance for the others.
-- **Rooms = hybrid curated archetypes** (`data/room_archetypes.json`): 6 archetypes (standard/swarm/elite_ambush/
-  ranged_gauntlet/hazard_field/pressure_cooker), player picks **2** combat choices per normal step (champion
-  steps stay 1), <=2 on-theme modifiers, archetype-aware dedupe, `density_profile` drives spawn scaling. Replaces
-  the random per-room modifier roll. Ranged Gauntlet `depth_gate: 6`.
+- **Rooms = WHO + WHERE + TWIST** (`data/room_archetypes.json`): 5 normal archetypes (Horde/Mixed/Splitters/
+  Pressure/Gauntlet), player picks **2** combat choices per normal step (champion steps stay 1), exactly one
+  WHERE mechanic when eligible, and 0-1 existing TWIST modifier. `composition.melee_density` drives spawn scaling;
+  former `elite_*` enemies are champion-only and are not in normal compositions.
 - **Early-difficulty / perf ease (`da160bb`):** opening burst `6->4`, continuous `5->3`, early spawn interval
   `0.58->0.90s`, early density mult `1.15->1.0` (all ramp back up by mid-run); spitter `fire_interval 1.35->1.8`.
   Fewer early enemies + projectiles for the weak-start phase, and lower concurrent entity count.
-- **Flow-field pathfinding (`f2f4ea5`) — IMPLEMENTED but NOT live in play + PERF-BLOCKED:** `FlowField.gd`
-  (grid, per-player fields gated on cell-change, sample+nearest-reachable fallback, connectivity validation),
-  enemy movement/aim split (locomotion=flow, aim/charge/retreat=raw) across all types, obstacles on layer 1 in a
-  cleared `arena_obstacles` container with spawn-safety + connectivity checks. **⚠ No room authors obstacles yet,
-  so the flow field is OFF during normal play** (enemies use raw dir). **⚠ KNOWN PERF BLOCKER:** with obstacles
-  on, `flowfield_stress` drops to **16 fps at 200 enemies** (vs 142 baseline) — the per-enemy `sample()` path is
-  the cost (nearest-reachable flood-fill + 84px inflation). **Must optimize (precompute nearest-reachable at
-  build; reduce inflation) before authoring obstacles into rooms.** Plan: `docs/development/v4-arena-pathfinding-plan.md`.
+- **Flow-field pathfinding (`f2f4ea5` + V4 Phase 4/4b) — LIVE for cover rooms:** `FlowField.gd` now uses
+  precomputed vectors, reverse-BFS escape vectors, 40px obstacle inflation, 150px cells, per-player rebuild
+  throttling, and `has_target_field` reachability checks. Physical-cover WHERE rooms author obstacles through
+  `CoopManager.rebuild_obstacles`. Latest `flowfield_stress` is `59.4` avg FPS at 200 enemies; instrumentation
+  now reports physics as dominant rather than flow-field sampling or target rebuilds.
 
 ## Known Risks
 

@@ -212,6 +212,11 @@ var _pulsar_emp_at := 0.0
 var _elite_charge_slam_pending := false
 var _warden_charge_slam_pending := false
 var _warden_charge_windup_until := 0.0
+var _spitter_windup_until := 0.0
+var _spitter_aim_dir := Vector2.RIGHT
+var _spitter_windup_active := false
+var _spitter_windup_len := 0.0
+var _profiling_immortal := false
 var _profiled_attack_markers: Dictionary = {}
 var _hydra_sweep_until := 0.0
 var _hydra_sweep_windup_until := 0.0
@@ -267,6 +272,10 @@ func setup(type_name: String, combat_owner: Node) -> void:
 	_elite_charge_slam_pending = false
 	_warden_charge_slam_pending = false
 	_warden_charge_windup_until = 0.0
+	_spitter_windup_until = 0.0
+	_spitter_aim_dir = Vector2.RIGHT
+	_spitter_windup_active = false
+	_spitter_windup_len = 0.0
 	_hydra_sweep_until = 0.0
 	_hydra_sweep_windup_until = 0.0
 	_hydra_sweep_started_at = 0.0
@@ -304,9 +313,9 @@ func _configure_type(type_name: String) -> void:
 			_feedback_weight = 1.1
 		"spitter":
 			enemy_type = EnemyType.SPITTER
-			max_health = 14.0
+			max_health = 30.0
 			move_speed = 350.0
-			fire_interval = 1.8
+			fire_interval = 2.0
 			projectile_damage = 4
 			projectile_speed = 380.0
 			contact_damage = 4
@@ -541,9 +550,9 @@ func apply_damage(amount: int, source_player_index: int = -1) -> void:
 		_spawn_hit_particles(1.1, true)
 		_update_visual_state()
 		return
-	current_health = max(current_health - amount, 0.0)
+	current_health = max(current_health - amount, 1.0 if _profiling_immortal else 0.0)
 	_hit_punch = 1.0
-	var lethal := current_health <= 0.0
+	var lethal := current_health <= 0.0 and not _profiling_immortal
 	hit_received.emit(self, amount, lethal)
 	if lethal:
 		_die()
@@ -577,6 +586,17 @@ func apply_poison(dps: float, duration: float) -> void:
 	_poison_dps += max(dps, 0.0)
 	_poison_until = max(_poison_until, _current_time_seconds() + max(duration, 0.1))
 	_poison_tick_at = min(_poison_tick_at, _current_time_seconds() + 0.2) if _poison_tick_at > 0.0 else _current_time_seconds() + 0.2
+
+func seed_rng(seed: int) -> void:
+	_random.seed = seed
+
+func set_profiling_immortal(enabled: bool) -> void:
+	_profiling_immortal = enabled
+
+func relocate_to(pos: Vector2) -> void:
+	global_position = pos
+	_flow_direction_cache = Vector2.ZERO
+	_flow_direction_cache_frame = -1
 
 func apply_ignite_on_death(radius: float, damage_amount: int) -> void:
 	_ignite_on_death_radius = maxf(_ignite_on_death_radius, radius)
@@ -837,6 +857,19 @@ func _update_spitter_behavior(raw_direction: Vector2, flow_direction: Vector2, d
 		desired_velocity = -raw_direction * _get_effective_move_speed() * 0.8
 	elif distance > 640.0:
 		desired_velocity = flow_direction * _get_effective_move_speed() * 0.8
+	if enemy_type == EnemyType.SPITTER:
+		if _spitter_windup_active and now >= _spitter_windup_until:
+			_emit_projectiles_at(_spitter_aim_dir, 3, 0.22, 0.7)
+			_spitter_windup_active = false
+		elif not _spitter_windup_active and now >= _next_fire_at and distance > 120.0:
+			_spitter_windup_active = true
+			_spitter_windup_len = 0.45
+			_spitter_windup_until = now + _spitter_windup_len
+			_spitter_aim_dir = raw_direction
+			_next_fire_at = now + _get_effective_fire_interval()
+		if _spitter_windup_active:
+			desired_velocity *= 0.35
+		return desired_velocity
 	if now >= _next_fire_at and distance > 120.0:
 		_next_fire_at = now + _get_effective_fire_interval()
 		var attack_direction := _get_lead_direction(raw_direction, projectile_speed, 0.35) if enemy_type == EnemyType.ELITE_SPITTER else raw_direction
@@ -1293,9 +1326,15 @@ func _update_dynamic_visuals(delta: float) -> void:
 	var breathe := 1.0 + sin(_idle_phase) * 0.03
 	var squash_x := 1.0 - _hit_punch * 0.22  # recoil: squash along facing, bulge across
 	var squash_y := 1.0 + _hit_punch * 0.18
+	var windup_scale := 1.0
+	if _spitter_windup_active and _spitter_windup_len > 0.0:
+		var now := _current_time_seconds()
+		var windup_start := _spitter_windup_until - _spitter_windup_len
+		var windup_k := clampf((now - windup_start) / _spitter_windup_len, 0.0, 1.0)
+		windup_scale = 1.0 + 0.30 * windup_k
 	visual.scale = Vector2(
-		_visual_anim_base.x * spawn_scale * breathe * squash_x,
-		_visual_anim_base.y * spawn_scale * breathe * squash_y
+		_visual_anim_base.x * spawn_scale * breathe * squash_x * windup_scale,
+		_visual_anim_base.y * spawn_scale * breathe * squash_y * windup_scale
 	)
 	if _fuse_active:
 		visual.modulate = Color(1.2, 1.0, 0.8, 1.0)

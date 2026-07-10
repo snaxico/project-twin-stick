@@ -13,6 +13,21 @@ const RUN_LENGTH := 10
 const CONTINUATION_PROGRESS_CAP := 1.65
 const RARE_NUDGE := 0.06
 const RARE_CHANCE_CAP := 0.60
+const IMPLEMENTED_WHERE: Array = [
+	"fire_grid",
+	"frost_grid",
+	"mine_grid",
+	"islands",
+	"pinwheel",
+	"tesla_arcs",
+	"drifting_clouds",
+	"bastion",
+	"popup_pillars",
+	"sliding_gates",
+	"bulwark",
+	"drifting_cover",
+	"shifting_maze",
+]
 const CHAMPION_INTERVAL_BANDS := [
 	{"until_depth": 10, "interval": 5},
 	{"until_depth": 20, "interval": 4},
@@ -575,6 +590,10 @@ func _build_single_room_map() -> Array:
 	node["objective"] = str(debug_run_setup.get("room_objective", "kill_all"))
 	node["side_objective"] = str(debug_run_setup.get("side_objective", node.get("side_objective", "")))
 	node["modifiers"] = (debug_run_setup.get("modifiers", []) as Array).duplicate()
+	node["where"] = str(debug_run_setup.get("where", node.get("where", "open")))
+	node["profiling"] = bool(debug_run_setup.get("profiling", false))
+	if debug_run_setup.has("composition"):
+		node["composition"] = (debug_run_setup.get("composition", {}) as Dictionary).duplicate(true)
 	node["next_node_ids"] = []
 	node["enemy_pool"] = _enemy_pool_from_debug_mix(str(debug_run_setup.get("enemy_mix", "mixed")), room_depth)
 	if debug_run_setup.has("obstacles"):
@@ -607,7 +626,6 @@ func _build_choice_step(room_number: int) -> Array:
 		_build_run_node(room_number, "combat", "b", archetypes[1] if archetypes.size() > 1 else {}),
 	]
 	_ensure_route_traits_differ(options)
-	_ensure_route_options_differ(options)
 	_assign_route_rare_bonus(options)
 	return options
 
@@ -625,9 +643,11 @@ func _build_run_node(room_number: int, room_type: String, slot: String, archetyp
 		"description": "Forced champion encounter." if is_champion else str(archetype.get("short_desc", "Choose this room.")),
 		"objective": "kill_all",
 		"side_objective": "" if is_champion else _roll_side_objective("combat"),
-		"enemy_pool": _build_archetype_enemy_pool(archetype, room_number) if has_archetype else _get_endless_enemy_pool(room_number),
+		"enemy_pool": [] if has_archetype else _get_endless_enemy_pool(room_number),
 		"boss_type": _champion_boss_type(room_number) if is_champion else "",
-		"modifiers": _roll_archetype_modifiers(archetype) if has_archetype else [],
+		"where": _roll_archetype_where(archetype) if has_archetype else "open",
+		"modifiers": _roll_archetype_twist(archetype) if has_archetype else [],
+		"composition": (archetype.get("composition", {}) as Dictionary).duplicate(true) if has_archetype else {},
 		"next_node_ids": [],
 	}
 	if has_archetype:
@@ -636,7 +656,8 @@ func _build_run_node(room_number: int, room_type: String, slot: String, archetyp
 		node["archetype_icon"] = str(archetype.get("icon", "open"))
 		node["short_desc"] = str(archetype.get("short_desc", ""))
 		node["reward_hint"] = str(archetype.get("reward_hint", ""))
-		node["density_profile"] = str(archetype.get("density_profile", "normal"))
+		var composition: Dictionary = node.get("composition", {}) as Dictionary
+		node["density_profile"] = str(composition.get("melee_density", archetype.get("density_profile", "normal")))
 		var obstacles: Array = (archetype.get("obstacles", []) as Array).duplicate(true)
 		if not obstacles.is_empty():
 			node["obstacles"] = obstacles
@@ -708,23 +729,6 @@ func _enemy_pool_from_debug_mix(enemy_mix: String, depth: int) -> Array[String]:
 		_:
 			return _get_endless_enemy_pool(depth)
 
-func _ensure_route_options_differ(row: Array) -> void:
-	var seen_signatures: Dictionary = {}
-	for node_index in range(row.size()):
-		if not (row[node_index] is Dictionary):
-			continue
-		var node: Dictionary = row[node_index]
-		var signature := _build_route_option_signature(node)
-		if not seen_signatures.has(signature):
-			seen_signatures[signature] = true
-			continue
-		var replacement_modifiers := _build_distinct_modifier_load(node, seen_signatures)
-		if not replacement_modifiers.is_empty():
-			node["modifiers"] = replacement_modifiers
-			_refresh_route_metadata(node)
-			row[node_index] = node
-			seen_signatures[_build_route_option_signature(node)] = true
-
 func _ensure_route_traits_differ(row: Array) -> void:
 	if row.size() < 2:
 		return
@@ -781,23 +785,18 @@ func _refresh_route_metadata(node: Dictionary) -> void:
 	node["rare_chance"] = _rare_chance_for_depth(int(node.get("depth", 1)), float(node.get("rare_bonus", 0.0)))
 
 func _danger_score_for(node: Dictionary) -> int:
-	var minor_mods := 0
-	var major_mods := 0
-	for mod_id_variant in (node.get("modifiers", []) as Array):
-		var mod_id := str(mod_id_variant)
-		var category := str((_modifiers_by_id.get(mod_id, {}) as Dictionary).get("category", "minor"))
-		if category == "major":
-			major_mods += 1
-		else:
-			minor_mods += 1
-	var enemy_pool: Array = node.get("enemy_pool", []) as Array
-	var density_score := 0
-	match str(node.get("density_profile", "normal")):
+	var density_score := 2
+	var composition: Dictionary = node.get("composition", {}) as Dictionary
+	match str(composition.get("melee_density", node.get("density_profile", "medium"))):
 		"high":
-			density_score = 1
+			density_score = 3
 		"low":
-			density_score = -1
-	return maxi(0, minor_mods + major_mods * 2 + clampi(enemy_pool.size() - 2, 0, 2) + density_score)
+			density_score = 1
+		_:
+			density_score = 2
+	var shooter_score := 1 if not (composition.get("shooters", []) as Array).is_empty() else 0
+	var twist_score := (node.get("modifiers", []) as Array).size()
+	return maxi(0, density_score + shooter_score + twist_score)
 
 func _danger_pips_for_score(danger_score: int) -> int:
 	if danger_score <= 1:
@@ -848,39 +847,15 @@ func _rare_chance_for_depth(depth: int, rare_bonus: float = 0.0) -> float:
 	var base_chance := lerpf(0.20, 0.45, clampf(float(depth - 1) / 19.0, 0.0, 1.0))
 	return clampf(base_chance + rare_bonus, 0.0, RARE_CHANCE_CAP)
 
-func _build_route_option_signature(node: Dictionary) -> String:
-	var enemy_pool: Array = (node.get("enemy_pool", []) as Array).duplicate()
-	enemy_pool.sort()
-	var modifiers: Array = (node.get("modifiers", []) as Array).duplicate()
-	modifiers.sort()
-	return "%s|%s|%s" % [
-		str(node.get("room_type", "combat")) + ":" + str(node.get("archetype_id", "")),
-		",".join(PackedStringArray(enemy_pool)),
-		",".join(PackedStringArray(modifiers)),
-	]
-
-func _build_distinct_modifier_load(node: Dictionary, seen_signatures: Dictionary) -> Array:
-	if node.has("archetype_id"):
-		var archetype: Dictionary = _room_archetypes_by_id.get(str(node.get("archetype_id", "")), {}) as Dictionary
-		var max_count := clampi(int(archetype.get("modifier_count_max", 0)), 0, 2)
-		var pool: Array = (archetype.get("themed_modifier_pool", []) as Array).duplicate()
-		pool.shuffle()
-		for desired_count in range(0, max_count + 1):
-			var candidate_modifiers: Array = []
-			for index in range(min(desired_count, pool.size())):
-				candidate_modifiers.append(str(pool[index]))
-			var candidate_node := node.duplicate(true)
-			candidate_node["modifiers"] = candidate_modifiers
-			var candidate_signature := _build_route_option_signature(candidate_node)
-			if not seen_signatures.has(candidate_signature):
-				return candidate_modifiers
-		return []
-	return []
-
 func _draw_archetypes_for_depth(room_number: int, count: int, previous_archetype_id: String = "") -> Array:
 	var candidates: Array = []
+	var eligible_count := 0
 	for archetype_id in _room_archetype_ids:
-		if archetype_id == previous_archetype_id and _room_archetype_ids.size() > count:
+		var archetype_for_count: Dictionary = _room_archetypes_by_id.get(archetype_id, {}) as Dictionary
+		if not archetype_for_count.is_empty() and room_number >= int(archetype_for_count.get("depth_gate", 1)):
+			eligible_count += 1
+	for archetype_id in _room_archetype_ids:
+		if archetype_id == previous_archetype_id and eligible_count >= 3:
 			continue
 		var archetype: Dictionary = _room_archetypes_by_id.get(archetype_id, {}) as Dictionary
 		if archetype.is_empty():
@@ -917,47 +892,48 @@ func _fallback_archetype() -> Dictionary:
 		return (_room_archetypes_by_id["standard"] as Dictionary).duplicate(true)
 	return {
 		"id": "standard",
-		"name": "Standard",
+		"name": "Mixed",
 		"icon": "open",
 		"short_desc": "Balanced enemy mix.",
-		"enemy_bias": ["balanced"],
-		"themed_modifier_pool": [],
-		"modifier_count_max": 0,
+		"composition": {
+			"melee_density": "medium",
+			"melee_bias": ["chaser", "charger", "splitter", "bomber"],
+			"shooters": ["spitter"],
+			"shooter_ratio": 0.2
+		},
+		"where_pool": ["open"],
+		"twist_pool": [],
 		"density_profile": "normal",
 		"reward_hint": "Baseline reward odds",
 	}
 
-func _build_archetype_enemy_pool(archetype: Dictionary, room_number: int) -> Array[String]:
-	var bias: Array = (archetype.get("enemy_bias", ["balanced"]) as Array).duplicate()
-	if bias.is_empty() or bias.has("balanced"):
-		return _get_endless_enemy_pool(room_number)
-	var result: Array[String] = []
-	for enemy_id_variant in bias:
-		var enemy_id := str(enemy_id_variant)
-		if enemy_id.is_empty() or enemy_id == "balanced":
+func _roll_archetype_where(archetype: Dictionary) -> String:
+	var candidates: Array = ["open"]
+	var weights: Array = [1]
+	for where_variant in (archetype.get("where_pool", []) as Array):
+		var where_id := str(where_variant)
+		if where_id == "open" or not IMPLEMENTED_WHERE.has(where_id):
 			continue
-		result.append(enemy_id)
-	var base_pool := _get_endless_enemy_pool(room_number)
-	base_pool.shuffle()
-	for index in range(min(2, base_pool.size())):
-		result.append(base_pool[index])
-	if result.is_empty():
-		return _get_endless_enemy_pool(room_number)
-	return result
+		candidates.append(where_id)
+		weights.append(3)
+	var total_weight := 0
+	for weight in weights:
+		total_weight += int(weight)
+	var roll := _random.randi_range(1, maxi(total_weight, 1))
+	var cursor := 0
+	for index in range(candidates.size()):
+		cursor += int(weights[index])
+		if roll <= cursor:
+			return str(candidates[index])
+	return "open"
 
-func _roll_archetype_modifiers(archetype: Dictionary) -> Array:
-	var max_count := clampi(int(archetype.get("modifier_count_max", 0)), 0, 2)
-	if max_count <= 0:
+func _roll_archetype_twist(archetype: Dictionary) -> Array:
+	if _random.randf() >= 0.55:
 		return []
-	var pool: Array = (archetype.get("themed_modifier_pool", []) as Array).duplicate()
+	var pool: Array = (archetype.get("twist_pool", []) as Array)
 	if pool.is_empty():
 		return []
-	pool.shuffle()
-	var desired_count := _random.randi_range(0, mini(max_count, pool.size()))
-	var results: Array = []
-	for index in range(desired_count):
-		results.append(str(pool[index]))
-	return results
+	return [str(pool[_random.randi_range(0, pool.size() - 1)])]
 
 func _rebuild_node_lookup() -> void:
 	_node_lookup.clear()

@@ -1,8 +1,9 @@
 extends RefCounted
 
-const CELL_SIZE := 100.0
-const OBSTACLE_INFLATION := 84.0
+const CELL_SIZE := 150.0
+const OBSTACLE_INFLATION := 40.0
 const INF_DISTANCE := 100000000.0
+const TARGET_REBUILD_MIN_INTERVAL_MS := 150
 const NEIGHBOR_OFFSETS := [
 	Vector2i(-1, -1), Vector2i(0, -1), Vector2i(1, -1),
 	Vector2i(-1, 0), Vector2i(1, 0),
@@ -16,7 +17,30 @@ var _rows := 0
 var _blocked := PackedByteArray()
 var _fields: Dictionary = {}
 var _last_target_cells: Dictionary = {}
+var _last_field_rebuild_ms: Dictionary = {}
 var _obstacle_count := 0
+
+static var profile_enabled := false
+static var _profile_sample_usec := 0
+static var _profile_sample_calls := 0
+static var _profile_update_usec := 0
+static var _profile_update_calls := 0
+
+
+static func profiling_reset() -> void:
+	_profile_sample_usec = 0
+	_profile_sample_calls = 0
+	_profile_update_usec = 0
+	_profile_update_calls = 0
+
+
+static func profiling_snapshot() -> Dictionary:
+	return {
+		"sample_usec": _profile_sample_usec,
+		"sample_calls": _profile_sample_calls,
+		"update_usec": _profile_update_usec,
+		"update_calls": _profile_update_calls,
+	}
 
 
 func setup(arena_rect: Rect2, cell_size: float = CELL_SIZE) -> void:
@@ -37,6 +61,7 @@ func build(obstacle_rects: Array) -> void:
 	_reset_grid()
 	_fields.clear()
 	_last_target_cells.clear()
+	_last_field_rebuild_ms.clear()
 	_obstacle_count = obstacle_rects.size()
 	for obstacle_variant in obstacle_rects:
 		if not (obstacle_variant is Rect2):
@@ -58,7 +83,11 @@ func has_obstacles() -> bool:
 
 
 func update_targets(player_positions: Array) -> void:
+	var profile_start := Time.get_ticks_usec() if profile_enabled else 0
 	if not has_obstacles():
+		if profile_enabled:
+			_profile_update_usec += Time.get_ticks_usec() - profile_start
+			_profile_update_calls += 1
 		return
 	var valid_indices: Dictionary = {}
 	for player_index in range(player_positions.size()):
@@ -75,20 +104,37 @@ func update_targets(player_positions: Array) -> void:
 		var target_cell := _index_to_cell(target_index)
 		if _fields.has(player_index) and _last_target_cells.get(player_index, Vector2i(-999, -999)) == target_cell:
 			continue
+		var now_ms := Time.get_ticks_msec()
+		if _fields.has(player_index) and now_ms - int(_last_field_rebuild_ms.get(player_index, 0)) < TARGET_REBUILD_MIN_INTERVAL_MS:
+			continue
 		var distances := _build_distances(target_index)
 		_fields[player_index] = {
 			"distances": distances,
 			"vectors": _build_vectors(distances),
-			"nearest_cache": {},
 		}
 		_last_target_cells[player_index] = target_cell
+		_last_field_rebuild_ms[player_index] = now_ms
 	for key in _fields.keys():
 		if not valid_indices.has(int(key)):
 			_fields.erase(key)
 			_last_target_cells.erase(key)
+			_last_field_rebuild_ms.erase(key)
+	if profile_enabled:
+		_profile_update_usec += Time.get_ticks_usec() - profile_start
+		_profile_update_calls += 1
 
 
 func sample(world_position: Vector2, target_player_index: int, fallback_dir: Vector2) -> Vector2:
+	if profile_enabled:
+		var profile_start := Time.get_ticks_usec()
+		var result := _sample_impl(world_position, target_player_index, fallback_dir)
+		_profile_sample_usec += Time.get_ticks_usec() - profile_start
+		_profile_sample_calls += 1
+		return result
+	return _sample_impl(world_position, target_player_index, fallback_dir)
+
+
+func _sample_impl(world_position: Vector2, target_player_index: int, fallback_dir: Vector2) -> Vector2:
 	var fallback := _normalized_or_zero(fallback_dir)
 	if not has_obstacles() or target_player_index < 0 or not _fields.has(target_player_index):
 		return fallback
@@ -96,20 +142,14 @@ func sample(world_position: Vector2, target_player_index: int, fallback_dir: Vec
 		return fallback
 	var field: Dictionary = _fields[target_player_index] as Dictionary
 	var vectors: PackedVector2Array = field.get("vectors", PackedVector2Array()) as PackedVector2Array
-	var distances: PackedFloat32Array = field.get("distances", PackedFloat32Array()) as PackedFloat32Array
 	if vectors.is_empty():
 		return fallback
 	var current_cell := _world_to_cell(world_position)
 	if _is_cell_in_bounds(current_cell):
 		var current_index := _cell_index(current_cell)
-		if not bool(_blocked[current_index]):
-			var current_vector := vectors[current_index]
-			if current_vector.length_squared() > 0.0001:
-				return current_vector.normalized()
-			if not distances.is_empty() and float(distances[current_index]) >= INF_DISTANCE * 0.5:
-				var nearest_vector := _nearest_reachable_direction_cached(field, current_index)
-				if nearest_vector.length_squared() > 0.0001:
-					return nearest_vector
+		var current_vector := vectors[current_index]
+		if current_vector.length_squared() > 0.0001:
+			return current_vector.normalized()
 	return fallback
 
 
@@ -148,6 +188,10 @@ func target_reaches_points(target_player_index: int, points: Array) -> bool:
 		if index < 0 or float(distances[index]) >= INF_DISTANCE * 0.5:
 			return false
 	return true
+
+
+func has_target_field(target_player_index: int) -> bool:
+	return _fields.has(target_player_index)
 
 
 func nearest_passable_position(world_position: Vector2) -> Vector2:
@@ -192,12 +236,17 @@ func _build_vectors(distances: PackedFloat32Array) -> PackedVector2Array:
 	var vectors := PackedVector2Array()
 	vectors.resize(_cols * _rows)
 	vectors.fill(Vector2.ZERO)
+	var escape_visited := PackedByteArray()
+	escape_visited.resize(_cols * _rows)
+	escape_visited.fill(0)
+	var escape_queue: Array = []
 	for index in range(_cols * _rows):
-		if bool(_blocked[index]):
-			continue
 		var current_distance := float(distances[index])
-		if current_distance >= INF_DISTANCE * 0.5:
+		if bool(_blocked[index]) or current_distance >= INF_DISTANCE * 0.5:
 			continue
+		escape_visited[index] = 1
+		if _has_unreached_neighbor(index, distances):
+			escape_queue.append(index)
 		if current_distance <= 0.0:
 			continue
 		var current_cell := _index_to_cell(index)
@@ -216,59 +265,43 @@ func _build_vectors(distances: PackedFloat32Array) -> PackedVector2Array:
 		if best_index >= 0:
 			var vector := _cell_center(_index_to_cell(best_index)) - _cell_center(current_cell)
 			vectors[index] = vector.normalized() if vector.length_squared() > 0.0001 else Vector2.ZERO
+	_fill_escape_vectors(vectors, escape_visited, escape_queue)
 	return vectors
 
 
-func _nearest_reachable_direction(index: int, distances: PackedFloat32Array) -> Vector2:
-	var origin_cell := _index_to_cell(index)
-	var origin := _cell_center(_index_to_cell(index))
-	var max_radius := maxi(_cols, _rows)
-	for search_radius in range(1, max_radius + 1):
-		var best_index := -1
-		var best_distance_sq := INF
-		for cell_y in range(origin_cell.y - search_radius, origin_cell.y + search_radius + 1):
-			for cell_x in range(origin_cell.x - search_radius, origin_cell.x + search_radius + 1):
-				if abs(cell_x - origin_cell.x) != search_radius and abs(cell_y - origin_cell.y) != search_radius:
-					continue
-				var candidate_cell := Vector2i(cell_x, cell_y)
-				if not _is_cell_in_bounds(candidate_cell):
-					continue
-				var candidate_index := _cell_index(candidate_cell)
-				if bool(_blocked[candidate_index]) or float(distances[candidate_index]) >= INF_DISTANCE * 0.5:
-					continue
-				var distance_sq := origin.distance_squared_to(_cell_center(candidate_cell))
-				if distance_sq < best_distance_sq:
-					best_distance_sq = distance_sq
-					best_index = candidate_index
-		if best_index >= 0:
-			var local_vector := _cell_center(_index_to_cell(best_index)) - origin
-			return local_vector.normalized() if local_vector.length_squared() > 0.0001 else Vector2.ZERO
-	var best_index := -1
-	var best_distance_sq := INF
-	for candidate_index in range(_cols * _rows):
-		if bool(_blocked[candidate_index]) or float(distances[candidate_index]) >= INF_DISTANCE * 0.5:
+func _has_unreached_neighbor(index: int, distances: PackedFloat32Array) -> bool:
+	var cell := _index_to_cell(index)
+	for offset_variant in NEIGHBOR_OFFSETS:
+		var offset: Vector2i = offset_variant as Vector2i
+		var neighbor_cell := cell + offset
+		if not _is_cell_in_bounds(neighbor_cell):
 			continue
-		var distance_sq := origin.distance_squared_to(_cell_center(_index_to_cell(candidate_index)))
-		if distance_sq < best_distance_sq:
-			best_distance_sq = distance_sq
-			best_index = candidate_index
-	if best_index < 0:
-		return Vector2.ZERO
-	var vector := _cell_center(_index_to_cell(best_index)) - origin
-	return vector.normalized() if vector.length_squared() > 0.0001 else Vector2.ZERO
+		var neighbor_index := _cell_index(neighbor_cell)
+		if bool(_blocked[neighbor_index]) or float(distances[neighbor_index]) >= INF_DISTANCE * 0.5:
+			return true
+	return false
 
 
-func _nearest_reachable_direction_cached(field: Dictionary, index: int) -> Vector2:
-	var nearest_cache: Dictionary = field.get("nearest_cache", {}) as Dictionary
-	if nearest_cache.has(index):
-		return nearest_cache[index] as Vector2
-	var distances: PackedFloat32Array = field.get("distances", PackedFloat32Array()) as PackedFloat32Array
-	if distances.is_empty():
-		return Vector2.ZERO
-	var direction := _nearest_reachable_direction(index, distances)
-	nearest_cache[index] = direction
-	field["nearest_cache"] = nearest_cache
-	return direction
+func _fill_escape_vectors(vectors: PackedVector2Array, visited: PackedByteArray, queue: Array) -> void:
+	var cursor := 0
+	while cursor < queue.size():
+		var current_index := int(queue[cursor])
+		cursor += 1
+		var current_cell := _index_to_cell(current_index)
+		var current_center := _cell_center(current_cell)
+		for offset_variant in NEIGHBOR_OFFSETS:
+			var offset: Vector2i = offset_variant as Vector2i
+			var neighbor_cell := current_cell + offset
+			if not _is_cell_in_bounds(neighbor_cell):
+				continue
+			var neighbor_index := _cell_index(neighbor_cell)
+			if bool(visited[neighbor_index]):
+				continue
+			visited[neighbor_index] = 1
+			var neighbor_center := _cell_center(neighbor_cell)
+			var escape_vector := current_center - neighbor_center
+			vectors[neighbor_index] = escape_vector.normalized() if escape_vector.length_squared() > 0.0001 else Vector2.ZERO
+			queue.append(neighbor_index)
 
 
 func _nearest_passable_index_for_point(world_position: Vector2) -> int:

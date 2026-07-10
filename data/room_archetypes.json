@@ -1,71 +1,89 @@
 {
   "archetypes": [
     {
-      "id": "standard",
-      "name": "Standard",
-      "icon": "open",
-      "short_desc": "Balanced enemy mix with light variation.",
-      "enemy_bias": ["balanced"],
-      "themed_modifier_pool": ["swarm", "shielded", "enemy_speed", "accelerating_waves", "explosive_death", "fire_floor", "ice_zone", "mine_field", "shrinking_arena"],
-      "modifier_count_max": 1,
-      "density_profile": "normal",
-      "reward_hint": "Baseline reward odds"
-    },
-    {
-      "id": "swarm",
-      "name": "Swarm",
+      "id": "horde",
+      "name": "Horde",
       "icon": "swarm",
-      "short_desc": "Large packs of chasers and splitters.",
-      "enemy_bias": ["chaser", "chaser", "splitter", "splitter_mini"],
-      "themed_modifier_pool": ["swarm", "accelerating_waves"],
-      "modifier_count_max": 2,
+      "short_desc": "Dense melee packs built for crowd control.",
+      "composition": {
+        "melee_density": "high",
+        "melee_bias": ["chaser", "chaser", "splitter"],
+        "shooters": [],
+        "shooter_ratio": 0.0
+      },
+      "where_pool": ["fire_grid", "islands", "pinwheel", "tesla_arcs", "drifting_clouds", "sliding_gates", "open"],
+      "twist_pool": ["enemy_speed", "accelerating_waves", "shielded"],
       "density_profile": "high",
-      "reward_hint": "Crowd-control test"
+      "reward_hint": "Crowd-control test",
+      "depth_gate": 1
     },
     {
-      "id": "elite_ambush",
-      "name": "Elite Ambush",
+      "id": "mixed",
+      "name": "Mixed",
+      "icon": "open",
+      "short_desc": "Balanced melee with a few readable ranged threats.",
+      "composition": {
+        "melee_density": "medium",
+        "melee_bias": ["chaser", "charger", "splitter", "bomber"],
+        "shooters": ["spitter"],
+        "shooter_ratio": 0.2
+      },
+      "where_pool": ["fire_grid", "frost_grid", "islands", "pinwheel", "tesla_arcs", "drifting_clouds", "open"],
+      "twist_pool": ["enemy_speed", "shielded", "explosive_death", "accelerating_waves"],
+      "density_profile": "medium",
+      "reward_hint": "Baseline reward odds",
+      "depth_gate": 1
+    },
+    {
+      "id": "splitters",
+      "name": "Splitters",
+      "icon": "scan",
+      "short_desc": "Splitting packs that punish sloppy cleanup.",
+      "composition": {
+        "melee_density": "high",
+        "melee_bias": ["splitter", "splitter_mini", "chaser"],
+        "shooters": [],
+        "shooter_ratio": 0.0
+      },
+      "where_pool": ["fire_grid", "mine_grid", "tesla_arcs", "shifting_maze", "open"],
+      "twist_pool": ["explosive_death", "explosive_death", "enemy_speed"],
+      "density_profile": "high",
+      "reward_hint": "Cleanup discipline",
+      "depth_gate": 3
+    },
+    {
+      "id": "pressure",
+      "name": "Pressure",
       "icon": "shield",
-      "short_desc": "Lower density with tougher priority threats.",
-      "enemy_bias": ["chaser", "charger", "elite_charger", "elite_spitter"],
-      "themed_modifier_pool": ["shielded", "enemy_speed"],
-      "modifier_count_max": 2,
-      "density_profile": "low",
-      "reward_hint": "Higher rare nudge"
-    },
-    {
-      "id": "ranged_gauntlet",
-      "name": "Ranged Gauntlet",
-      "icon": "bolt",
-      "short_desc": "Projectile-heavy rooms built around dodging.",
-      "enemy_bias": ["spitter", "spitter", "elite_spitter"],
-      "themed_modifier_pool": ["accelerating_waves", "enemy_speed"],
-      "modifier_count_max": 2,
-      "density_profile": "normal",
-      "reward_hint": "Projectile discipline"
-    },
-    {
-      "id": "hazard_field",
-      "name": "Hazard Field",
-      "icon": "flame",
-      "short_desc": "Moderate waves with positional hazards.",
-      "enemy_bias": ["balanced"],
-      "themed_modifier_pool": ["fire_floor", "ice_zone", "mine_field"],
-      "modifier_count_max": 2,
-      "density_profile": "normal",
-      "reward_hint": "Positioning reward"
-    },
-    {
-      "id": "pressure_cooker",
-      "name": "Pressure Cooker",
-      "icon": "shrink",
-      "short_desc": "Chargers and bombers compress the arena.",
-      "enemy_bias": ["charger", "charger", "bomber"],
-      "themed_modifier_pool": ["shrinking_arena", "explosive_death"],
-      "modifier_count_max": 2,
-      "density_profile": "normal",
+      "short_desc": "Chargers and bombers force movement without ranged spam.",
+      "composition": {
+        "melee_density": "medium",
+        "melee_bias": ["charger", "charger", "bomber"],
+        "shooters": [],
+        "shooter_ratio": 0.0
+      },
+      "where_pool": ["mine_grid", "bulwark", "sliding_gates", "popup_pillars", "open"],
+      "twist_pool": ["enemy_speed", "explosive_death", "shielded"],
+      "density_profile": "medium",
       "reward_hint": "Space-control test",
-      "depth_gate": 6
+      "depth_gate": 3
+    },
+    {
+      "id": "gauntlet",
+      "name": "Gauntlet",
+      "icon": "bolt",
+      "short_desc": "Low-density rooms with capped priority shooters.",
+      "composition": {
+        "melee_density": "low",
+        "melee_bias": ["chaser"],
+        "shooters": ["spitter"],
+        "shooter_ratio": 0.5
+      },
+      "where_pool": ["bastion", "drifting_cover", "popup_pillars", "frost_grid", "islands", "tesla_arcs", "fire_grid"],
+      "twist_pool": ["shielded", "accelerating_waves", "enemy_speed"],
+      "density_profile": "low",
+      "reward_hint": "Projectile discipline",
+      "depth_gate": 4
     }
   ]
 }

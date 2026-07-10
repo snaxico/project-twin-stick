@@ -75,6 +75,8 @@ func _ready() -> void:
 	_projectile_renderer.set_projectile_container(_projectiles_container)
 	_projectiles_container.add_child(_projectile_renderer)
 	if _flowfield_profile:
+		FlowFieldData.profile_enabled = true
+		FlowFieldData.profiling_reset()
 		_flow_field = FlowFieldData.new()
 		_flow_field.setup(ARENA_RECT)
 		_spawn_flowfield_obstacles()
@@ -93,6 +95,8 @@ func _ready() -> void:
 	_update_flowfield_targets()
 	print("=== PROFILING HARNESS START (vsync off, minefield=%s, flowfield=%s) ===" % [str(INCLUDE_MINEFIELD), str(_flowfield_profile)])
 	print("step,enemy_budget,live_enemies,live_proj,avg_fps,process_ms,physics_ms,draw_calls,nodes")
+	if _flowfield_profile:
+		print("flowfield_bucket_step,physics_ms,sample_ms,update_targets_ms,dominant")
 
 func _is_flowfield_profile() -> bool:
 	for arg in OS.get_cmdline_user_args():
@@ -203,9 +207,22 @@ func _emit_row() -> void:
 		_step_index, STEPS[_step_index], _enemies.size(), live_proj,
 		_fps_sum / f, _proc_sum / f, _phys_sum / f, _draw_sum / f, _node_sum / f,
 	])
+	if _flowfield_profile:
+		var flow_profile := FlowFieldData.profiling_snapshot()
+		var sample_ms := float(flow_profile.get("sample_usec", 0)) / 1000.0 / f
+		var update_ms := float(flow_profile.get("update_usec", 0)) / 1000.0 / f
+		var physics_ms := _phys_sum / f
+		var dominant := "physics"
+		if sample_ms >= physics_ms and sample_ms >= update_ms:
+			dominant = "sample"
+		elif update_ms >= physics_ms and update_ms >= sample_ms:
+			dominant = "update_targets"
+		print("%d,%.3f,%.3f,%.3f,%s" % [_step_index, physics_ms, sample_ms, update_ms, dominant])
 
 func _reset_accumulators() -> void:
 	_fps_sum = 0.0; _proc_sum = 0.0; _phys_sum = 0.0; _draw_sum = 0.0; _node_sum = 0.0; _frames = 0
+	if _flowfield_profile:
+		FlowFieldData.profiling_reset()
 
 func _apply_budget(budget: int) -> void:
 	_prune_dead()
