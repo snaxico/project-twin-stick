@@ -147,6 +147,10 @@ abilities, ultimates, and base mutations are free.
   reverse BFS, target-field rebuilds are rate-limited per player, and the flow grid is `150px`. The latest
   `flowfield_stress` run is no longer flow-field dominated and reached `59.4` avg FPS at 200 enemies; the
   remaining bottleneck is general physics/body movement at the synthetic 200-enemy + 200-projectile load.
+- That residual physics cost only occurs with physical cover (enemies bunching around obstacles), so rooms with
+  a Batch-B cover WHERE cap concurrent enemies at `WaveDirector.MAX_OBSTACLE_ENEMIES = 160` (gated on
+  `CoopManager.has_flow_obstacles()`); open/hazard rooms stay uncapped. Keeps cover rooms ≥60fps and readable;
+  the perf probes inject 200 directly and intentionally bypass the cap.
 - Rooms use continuous time-based spawning:
   - opening burst at room start
   - enemies spawn on a timer until room duration expires

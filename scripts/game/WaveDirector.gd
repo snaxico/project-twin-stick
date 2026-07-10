@@ -11,6 +11,11 @@ const BASE_RAMP_DURATION := 45.0
 const CHAMPION_SPAWN_DELAY := 10.0
 const SHOOTER_COST := {"spitter": 1}
 const SHOOTER_BUDGET_BASE := 6
+# Physics wall: ~200 CharacterBody2D enemies bunching around physical cover push move_and_slide past the
+# 60fps budget. Open rooms have no obstacles and stay uncapped (the swarm power-fantasy lives there). When a
+# room has physical cover (a Batch-B WHERE mechanic), cap the concurrent live+pending count — this keeps cover
+# rooms readable AND performant. Density-scaled spawning still fills up to the cap and refills as enemies die.
+const MAX_OBSTACLE_ENEMIES := 160
 
 var _coop: Node = null
 var _enemies_parent: Node = null
@@ -85,6 +90,8 @@ func spawn_opening_burst() -> void:
 	var health_multiplier := 0.5 if bool(flags.get("swarm", false)) else 1.0
 	var start_edge := randi() % 4
 	for index in range(burst_size):
+		if _obstacle_enemy_cap_reached():
+			break
 		var enemy_type := _pick_spawn_type(_room_composition if not _room_composition.is_empty() else _room_enemy_pool)
 		var reserved_cost := _shooter_cost(enemy_type)
 		var spawn_position := _get_enemy_spawn_position_for_index(index, start_edge)
@@ -169,6 +176,8 @@ func _continuous_spawn(room_elapsed: float) -> void:
 		var batch := _consume_scaled_stream_count(2 if bool(flags.get("swarm", false)) else 1)
 		var stream_start_edge := randi() % 4 if batch > 1 else 0
 		for index in range(batch):
+			if _obstacle_enemy_cap_reached():
+				break
 			var enemy_type := _pick_spawn_type(_room_composition if not _room_composition.is_empty() else _room_enemy_pool)
 			var reserved_cost := _shooter_cost(enemy_type)
 			var spawn_position := _get_enemy_spawn_position() if batch == 1 else _get_enemy_spawn_position_for_index(index, stream_start_edge)
@@ -182,6 +191,8 @@ func _continuous_spawn(room_elapsed: float) -> void:
 		burst_size = _scale_spawn_count(burst_size)
 		var burst_start_edge := randi() % 4
 		for index in range(burst_size):
+			if _obstacle_enemy_cap_reached():
+				break
 			var enemy_type := _pick_spawn_type(_room_composition if not _room_composition.is_empty() else _room_enemy_pool)
 			var reserved_cost := _shooter_cost(enemy_type)
 			var spawn_position := _get_enemy_spawn_position_for_index(index, burst_start_edge)
@@ -279,6 +290,14 @@ func _release_shooter_reservation(cost: int) -> void:
 
 func _is_profiling_no_spawn() -> bool:
 	return bool(_room_config.get("profiling", false))
+
+
+func _obstacle_enemy_cap_reached() -> bool:
+	# Only caps rooms with physical cover (Batch-B WHERE). Open/hazard rooms have no obstacles and stay uncapped.
+	if _coop == null or not bool(_coop.call("has_flow_obstacles")):
+		return false
+	var live := int(_coop.call("get_live_enemy_count"))
+	return live + _pending_enemy_spawns >= MAX_OBSTACLE_ENEMIES
 
 
 func profiling_reset_shooter_budget() -> void:

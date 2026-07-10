@@ -22,6 +22,17 @@
 > cells from `100px` to `150px`. Latest `flowfield_stress` reached **59.4 avg FPS at 200 enemies** with
 > instrumentation showing **physics** as the dominant remaining bucket, not flow-field sampling/rebuilds.
 >
+> **Rev 18 (2026-07-10) — residual physics: cover-only enemy cap (Phase 6).** The remaining `physics_ms` wall at
+> 200 enemies is `move_and_slide`/separation cost from enemies bunching around **physical cover** — it does NOT
+> occur in open/hazard rooms (`entity_ramp` passes 200). Rather than a global cap (which would kill the swarm
+> power-fantasy in open rooms) or a physics rewrite (real work for a load a designed room shouldn't reach), the
+> fix is a **cover-only concurrent-enemy cap: `WaveDirector.MAX_OBSTACLE_ENEMIES := 160`, gated on
+> `CoopManager.has_flow_obstacles()`** (new `get_live_enemy_count()` accessor). All three spawn loops break
+> before the shooter pick when `live + pending >= 160` (no reservation leak); density scaling still fills to the
+> cap and refills as enemies die. Open rooms stay uncapped. Measured headroom: 150 enemies = 110fps, so a 160
+> ceiling holds comfortably ≥60fps — and it also keeps cover rooms *readable* (200 in a maze is unplayable). The
+> perf probes (`flowfield_stress`, `where:<id>`) inject 200 directly and intentionally bypass the cap (worst-case
+> probes). Raw 200-in-obstacles physics optimization is logged as an optional general-headroom follow-up.
 > **Validation gate (per phase):**
 > ```powershell
 > $GODOT = 'D:\GameDev\Godot_v4.6.2-stable_win64.exe\Godot_v4.6.2-stable_win64_console.exe'

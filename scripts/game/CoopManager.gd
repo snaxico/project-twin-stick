@@ -1269,6 +1269,9 @@ func register_hazard_zone(hazard: Node) -> void:
 func is_enemy_list_empty() -> bool:
 	return _enemy_nodes.is_empty()
 
+func get_live_enemy_count() -> int:
+	return _enemy_nodes.size()
+
 func is_room_clear_started() -> bool:
 	return _room_clear_started
 
