@@ -8,13 +8,12 @@
 > phase order; validate + commit per phase; don't push unless asked.** Parallel Codex may edit the tree —
 > **re-read before each edit.**
 >
-> **Rev 15 (2026-07-07) — resolves review round 13 (1 P2 + 1 P3; NO P1 blockers); rounds 1–12 retained.** The
-> shooter-budget smoke **entry moves to `CoopManager.profiling_run_shooter_budget_smoke() -> bool`** (on the live
-> CoopManager — resolves the call path since `WaveDirector.gd` has no `class_name`, P3), and its **death-release
-> case drives the real `CoopManager._on_enemy_died` hook** so a *missing* `notify_enemy_removed` wiring is caught
-> (P2). Rounds 1–12 retained (self-contained budget smoke, `_build_archetype_enemy_pool` deleted,
-> `profiling_where_revision`, Frost once-per-player, `IMPLEMENTED_WHERE`@RunState). Verified vs
-> `CoopManager`/`WaveDirector`. **All six phases implementation-ready.**
+> **Rev 16 (2026-07-07) — resolves review round 14 (1 P2; NO P1 blockers); rounds 1–13 retained.** The
+> `shooter_budget` scenario now starts its room with the **`profiling` no-spawn flag** (`WaveDirector` skips
+> `spawn_opening_burst` + `_continuous_spawn`) and the smoke **resets `_active_shooter_budget = 0`** before its
+> assertions — isolating it from normal wave spawning (P2). Rounds 1–13 retained (budget-smoke on CoopManager +
+> real `_on_enemy_died`, `_build_archetype_enemy_pool` deleted, `profiling_where_revision`, Frost once-per-player).
+> Verified vs `CoopManager`/`WaveDirector`. **All six phases implementation-ready.**
 >
 > **Validation gate (per phase):**
 > ```powershell
@@ -26,9 +25,12 @@
 > & $GODOT --headless --path 'D:\GameDev\Project_Twin_stick' -- --profile=shooter_budget --smoke   # Phase 1
 > ```
 > **Phase 1 acceptance requires `--profile=shooter_budget --smoke`** (F2-round11) — a `PerfRunner` scenario that
-> **starts a room via `RunFlow` and calls `CoopManager.profiling_run_shooter_budget_smoke() -> bool`** on the
-> live `CoopManager` (the entry lives on `CoopManager`, which owns both `_wave_director` and the death hook —
-> resolving the call path since `WaveDirector.gd` has no `class_name`, P3-round13). It drives reservation +
+> **starts a room via `RunFlow` — with the `profiling` no-spawn flag (§Setup: `WaveDirector` skips
+> `spawn_opening_burst` + `_continuous_spawn`, so no opening burst / stream / bursts run — P2-round14)** and calls
+> **`CoopManager.profiling_run_shooter_budget_smoke() -> bool`** on the live `CoopManager` (the entry lives on
+> `CoopManager`, which owns both `_wave_director` and the death hook — resolving the call path since
+> `WaveDirector.gd` has no `class_name`, P3-round13). The routine first **resets `_active_shooter_budget = 0`**
+> (so any residual state can't perturb the exact assertions — P2-round14), then drives reservation +
 > overflow + cancel-release through `_wave_director`, and for **death-release routes through the real
 > `CoopManager._on_enemy_died(shooter)` hook** (not a direct `notify_enemy_removed`, so a *missing hook wiring*
 > is caught — P2-round13); asserts `_active_shooter_budget` exactly after each. `quit(1)` if it returns false.
