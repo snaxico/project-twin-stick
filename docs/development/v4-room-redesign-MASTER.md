@@ -8,14 +8,13 @@
 > phase order; validate + commit per phase; don't push unless asked.** Parallel Codex may edit the tree —
 > **re-read before each edit.**
 >
-> **Rev 14 (2026-07-07) — resolves review round 12 (1 P2 + 1 P3; NO P1 blockers); rounds 1–11 retained.** The
-> shooter-budget smoke is now a self-contained **`WaveDirector.profiling_run_shooter_budget_smoke() -> bool`**
-> (forces picks/cancels/deaths + asserts `_active_shooter_budget` exactly — no private-state access — P2);
-> **`_build_archetype_enemy_pool` deleted** with the old `enemy_bias` schema (champion/debug/endless use
-> `_get_endless_enemy_pool` / `_enemy_pool_from_debug_mix`, not it — P3). Rounds 1–11 retained
-> (`profiling_where_revision`, budget-smoke gate wiring, Frost once-per-player, `IMPLEMENTED_WHERE`@RunState,
-> Bastion scoping, pickup/deployable relocation). Verified vs `RunState`/`WaveDirector`. **All six phases
-> implementation-ready.**
+> **Rev 15 (2026-07-07) — resolves review round 13 (1 P2 + 1 P3; NO P1 blockers); rounds 1–12 retained.** The
+> shooter-budget smoke **entry moves to `CoopManager.profiling_run_shooter_budget_smoke() -> bool`** (on the live
+> CoopManager — resolves the call path since `WaveDirector.gd` has no `class_name`, P3), and its **death-release
+> case drives the real `CoopManager._on_enemy_died` hook** so a *missing* `notify_enemy_removed` wiring is caught
+> (P2). Rounds 1–12 retained (self-contained budget smoke, `_build_archetype_enemy_pool` deleted,
+> `profiling_where_revision`, Frost once-per-player, `IMPLEMENTED_WHERE`@RunState). Verified vs
+> `CoopManager`/`WaveDirector`. **All six phases implementation-ready.**
 >
 > **Validation gate (per phase):**
 > ```powershell
@@ -27,9 +26,12 @@
 > & $GODOT --headless --path 'D:\GameDev\Project_Twin_stick' -- --profile=shooter_budget --smoke   # Phase 1
 > ```
 > **Phase 1 acceptance requires `--profile=shooter_budget --smoke`** (F2-round11) — a `PerfRunner` scenario that
-> calls **`WaveDirector.profiling_run_shooter_budget_smoke() -> bool`**, a **self-contained** routine that drives
-> reservation / overflow / cancel-release / death-release with forced picks/cancels/deaths and asserts
-> `_active_shooter_budget` exactly (no external access to private state — F1-round12); `quit(1)` if it returns false.
+> **starts a room via `RunFlow` and calls `CoopManager.profiling_run_shooter_budget_smoke() -> bool`** on the
+> live `CoopManager` (the entry lives on `CoopManager`, which owns both `_wave_director` and the death hook —
+> resolving the call path since `WaveDirector.gd` has no `class_name`, P3-round13). It drives reservation +
+> overflow + cancel-release through `_wave_director`, and for **death-release routes through the real
+> `CoopManager._on_enemy_died(shooter)` hook** (not a direct `notify_enemy_removed`, so a *missing hook wiring*
+> is caught — P2-round13); asserts `_active_shooter_budget` exactly after each. `quit(1)` if it returns false.
 > **⚠ Per-WHERE validation (F2–F5, F9, F11)** — in **`PerfRunner`**, scenario **`where:<id>`** (new `_run`
 > branch; `entity_ramp` never instantiates a mechanic):
 > - **Setup:** load `RunFlow.tscn`, start a real combat room with `where = id` + `Mixed` composition + a
@@ -177,9 +179,10 @@ in `spawn_enemy_instance` lets a whole burst of shooters through before any incr
   bypasses: (1) **reservation** — rolling a shooter increments the budget; (2) **overflow conversion** — a
   shooter roll over budget spawns melee instead; (3) **cancellation release** — a cancelled deferred spawn
   releases its reservation; (4) **death release** — a shooter's death decrements. Assert `_active_shooter_budget`
-  is exact after each. **Implemented as `WaveDirector.profiling_run_shooter_budget_smoke() -> bool`** (a
-  self-contained routine: forces picks/cancels/deaths + asserts, returns pass/fail — F1-round12), **wired as the
-  `PerfRunner` scenario `--profile=shooter_budget --smoke` and required for Phase-1 acceptance** (F2-round11).
+  is exact after each. **Entry: `CoopManager.profiling_run_shooter_budget_smoke() -> bool`** (on the live
+  CoopManager — resolves the call path, P3-round13); the **death-release case drives the real
+  `CoopManager._on_enemy_died` hook** so a missing `notify_enemy_removed` wiring is caught (P2-round13). **Wired
+  as `--profile=shooter_budget --smoke`, required for Phase-1 acceptance** (F2-round11).
 
 ### Slice 3 — `ranged_gauntlet` data (`data/room_archetypes.json`), interim until Phase 2
 `enemy_bias`: `["spitter","spitter","elite_spitter"]` → `["spitter","spitter","charger","chaser"]` (**remove
