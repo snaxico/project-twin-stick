@@ -8,14 +8,13 @@
 > phase order; validate + commit per phase; don't push unless asked.** Parallel Codex may edit the tree —
 > **re-read before each edit.**
 >
-> **Rev 12 (2026-07-07) — resolves review round 10 (findings 1–5); rounds 1–9 retained.** Batch-B smoke splits
-> **static Bastion** (placement / connectivity / shot-block only) from **moving cover** (forced via
-> **`profiling_force_where_step`** + a mechanic **`revision`** counter — F1/F2); snap transitions also relocate
-> overlapping **pickups + `player_deployable`s** to nearest-passable (collector orbs stay collectable, deployables
-> not embedded — F3); Drifting Cover gets **pairwise non-overlap** validation (F4); an **automated shooter-budget
-> smoke** covers reservation / overflow / cancel-release / death-release (F5). Rounds 1–9 retained (density-freeze
-> fix, `profiling_remove_enemy`, count-derived mix, full seeded relocation, single obstacle owner). Verified vs
-> `CoopManager`/`SideObjectiveController`. **All six phases implementation-ready.**
+> **Rev 13 (2026-07-07) — resolves review round 11 (findings 1–3 + unclear); rounds 1–10 retained.** Added
+> **`CoopManager.profiling_where_revision() -> int`** as the supported read path for the moving-cover smoke (F1);
+> the shooter-budget smoke is **wired as `--profile=shooter_budget --smoke` and required for Phase-1 acceptance**
+> (F2); Frost-Grid slow computes **`inside_any_live_frost_cell` once per player then applies/clears once** (no
+> per-cell clobber — F3); **`IMPLEMENTED_WHERE` pinned to `RunState.gd`** (unclear). Rounds 1–10 retained
+> (Bastion scoping, pickup/deployable relocation, Drifting-Cover pairwise, budget smoke, density-freeze fix).
+> Verified vs `CoopManager`/`IceZoneModifier`/`RunState`. **All six phases implementation-ready.**
 >
 > **Validation gate (per phase):**
 > ```powershell
@@ -24,7 +23,11 @@
 > & $GODOT --headless --path 'D:\GameDev\Project_Twin_stick' -- --profile=entity_ramp   # perf (avg_fps>=60)
 > & $GODOT --headless --path 'D:\GameDev\Project_Twin_stick' -- --profile=flowfield_stress  # Phase 4 only
 > & $GODOT --headless --path 'D:\GameDev\Project_Twin_stick' -- --profile=where:fire_grid --smoke  # per-mechanic
+> & $GODOT --headless --path 'D:\GameDev\Project_Twin_stick' -- --profile=shooter_budget --smoke   # Phase 1
 > ```
+> **Phase 1 acceptance requires `--profile=shooter_budget --smoke`** (F2-round11) — a `PerfRunner` scenario
+> running the budget smoke of §Slice 2 (reservation / overflow / cancel-release / death-release); `quit(1)` on
+> any failure.
 > **⚠ Per-WHERE validation (F2–F5, F9, F11)** — in **`PerfRunner`**, scenario **`where:<id>`** (new `_run`
 > branch; `entity_ramp` never instantiates a mechanic):
 > - **Setup:** load `RunFlow.tscn`, start a real combat room with `where = id` + `Mixed` composition + a
@@ -62,8 +65,8 @@
 >   - **Batch-B (moving cover only — NOT static Bastion, which has no transition, F1-round10):** call
 >     **`CoopManager.profiling_force_where_step() -> bool`** (a profiling facade — `_where_mechanic` is private,
 >     so PerfRunner can't force/observe a step directly, F2-round10; it drives one mechanic step and returns
->     whether the snap applied) and read the mechanic's exposed **state-revision counter**; assert **the step
->     applied (`true`) and the revision advanced** (not perpetually rejected — F1-round9), then **every live
+>     whether the snap applied) and read **`CoopManager.profiling_where_revision()`** (F1-round11); assert **the
+>     step applied (`true`) and the revision advanced** (not perpetually rejected — F1-round9), then **every live
 >     enemy passes the reachability check** (`has_target_field` + `target_reaches_points`, F2) — no soft-lock.
 > One `--profile=where:<id>` run per implemented mechanic id is part of that phase's acceptance.
 
@@ -172,7 +175,8 @@ in `spawn_enemy_instance` lets a whole burst of shooters through before any incr
   bypasses: (1) **reservation** — rolling a shooter increments the budget; (2) **overflow conversion** — a
   shooter roll over budget spawns melee instead; (3) **cancellation release** — a cancelled deferred spawn
   releases its reservation; (4) **death release** — a shooter's death decrements. Assert `_active_shooter_budget`
-  is exact after each.
+  is exact after each. **Wired as the `PerfRunner` scenario `--profile=shooter_budget --smoke` and required for
+  Phase-1 acceptance** (F2-round11).
 
 ### Slice 3 — `ranged_gauntlet` data (`data/room_archetypes.json`), interim until Phase 2
 `enemy_bias`: `["spitter","spitter","elite_spitter"]` → `["spitter","spitter","charger","chaser"]` (**remove
@@ -231,7 +235,8 @@ post-Phase-6 with non-champion elite IDs.)*
 - **TWIST roll** = **55% one** (uniform over `twist_pool`) / **45% none**.
 
 **Schema** — extend `data/room_archetypes.json`: each archetype has `composition` (incl. `shooter_ratio`), a
-**`where_pool`**, and a **`twist_pool`**. Add a global **`const IMPLEMENTED_WHERE: Array`** (grows per phase:
+**`where_pool`**, and a **`twist_pool`**. Add **`const IMPLEMENTED_WHERE: Array` in `RunState.gd`** (the selection owner; pinned so it's not invented at
+implementation time — round11-unclear) (grows per phase:
 `[]` → P3 adds `fire_grid,frost_grid,mine_grid` → P5 adds `islands,pinwheel,tesla_arcs,drifting_clouds` → P6
 adds cover ids).
 
@@ -372,10 +377,12 @@ One mechanic, three variants (`fire_grid`/`frost_grid`/`mine_grid`) via `set_var
   whose position is inside that cell rect —
   - `fire_grid` — `apply_damage(5)`; enemies via `_coop.get_nearby_enemy_target_nodes(cell_center, 400)`
     filtered to point-in-cell; players via point-in-cell over `_players`.
-  - `frost_grid` — `apply_damage(3)`; **and** each frame, players inside a live cell get
-    `apply_zone_modifier("frost_grid", 0.5, 1.0)` (slow), else `clear_zone_modifier("frost_grid")` (mirrors
-    `IceZoneModifier`; clear all on `_exit_tree`). *(Enemy slow out of scope — the team-neutral requirement is
-    met by the damage.)*
+  - `frost_grid` — `apply_damage(3)`; **for the slow, per player per frame compute a single
+    `inside_any_live_frost_cell` bool (scan ALL live cells first), THEN apply once:** true →
+    `apply_zone_modifier("frost_grid", 0.5, 1.0)`, else `clear_zone_modifier("frost_grid")` (F3-round11 —
+    **never clear inside the per-cell loop**, or a later live cell clears the slow a prior cell set; mirrors
+    `IceZoneModifier`'s `inside_any_patch` pattern). Clear all on `_exit_tree`. *(Enemy slow out of scope — the
+    team-neutral requirement is met by the damage.)*
   - `mine_grid` — no per-tick damage. Each live cell has an armed mine at its center; each frame, if any player
     or nearby enemy is within `MINE_TRIGGER:=110` of it → `damage_circle(mine_center, MINE_BLAST:=150,
     MINE_DMG:=22)` and mark that cell **spent** until it re-arms next armed phase.
@@ -504,8 +511,9 @@ Each is `scripts/arena/<X>Mechanic.gd extends ArenaMechanic`, keyed off WHERE, b
 edge-safe + guarded (§interior `x∈[240,3360]`, `y∈[240,1860]`; physical cover initial placement also clears the
 center box `x∈[1340,2260]×y∈[690,1410]`). **Each moving-cover mechanic increments a `revision` on every applied
 snap and exposes `profiling_force_step() -> bool` (force one step now, return whether it applied);
-`CoopManager.profiling_force_where_step() -> bool` forwards to the active `_where_mechanic`** (private) for the
-Batch-B smoke assertion (F2-round10). **Static Bastion has no `profiling_force_step`** — it's not a moving cover.
+`CoopManager.profiling_force_where_step() -> bool`** forwards to the active `_where_mechanic` (private) and
+**`CoopManager.profiling_where_revision() -> int`** reads its `revision` (a supported read path — the smoke must
+not touch private state, F1-round11). **Static Bastion has no `profiling_force_step`** — it's not a moving cover.
 
 - **Bastion** (F4 — **not a centered lone block**): two off-center static pillars flanking the mid-field,
   `Rect2(700,800,340,500)` + `Rect2(2560,800,340,500)`. Static → build once, no motion. *(The one permitted
