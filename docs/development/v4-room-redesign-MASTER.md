@@ -8,13 +8,14 @@
 > phase order; validate + commit per phase; don't push unless asked.** Parallel Codex may edit the tree —
 > **re-read before each edit.**
 >
-> **Rev 13 (2026-07-07) — resolves review round 11 (findings 1–3 + unclear); rounds 1–10 retained.** Added
-> **`CoopManager.profiling_where_revision() -> int`** as the supported read path for the moving-cover smoke (F1);
-> the shooter-budget smoke is **wired as `--profile=shooter_budget --smoke` and required for Phase-1 acceptance**
-> (F2); Frost-Grid slow computes **`inside_any_live_frost_cell` once per player then applies/clears once** (no
-> per-cell clobber — F3); **`IMPLEMENTED_WHERE` pinned to `RunState.gd`** (unclear). Rounds 1–10 retained
-> (Bastion scoping, pickup/deployable relocation, Drifting-Cover pairwise, budget smoke, density-freeze fix).
-> Verified vs `CoopManager`/`IceZoneModifier`/`RunState`. **All six phases implementation-ready.**
+> **Rev 14 (2026-07-07) — resolves review round 12 (1 P2 + 1 P3; NO P1 blockers); rounds 1–11 retained.** The
+> shooter-budget smoke is now a self-contained **`WaveDirector.profiling_run_shooter_budget_smoke() -> bool`**
+> (forces picks/cancels/deaths + asserts `_active_shooter_budget` exactly — no private-state access — P2);
+> **`_build_archetype_enemy_pool` deleted** with the old `enemy_bias` schema (champion/debug/endless use
+> `_get_endless_enemy_pool` / `_enemy_pool_from_debug_mix`, not it — P3). Rounds 1–11 retained
+> (`profiling_where_revision`, budget-smoke gate wiring, Frost once-per-player, `IMPLEMENTED_WHERE`@RunState,
+> Bastion scoping, pickup/deployable relocation). Verified vs `RunState`/`WaveDirector`. **All six phases
+> implementation-ready.**
 >
 > **Validation gate (per phase):**
 > ```powershell
@@ -25,9 +26,10 @@
 > & $GODOT --headless --path 'D:\GameDev\Project_Twin_stick' -- --profile=where:fire_grid --smoke  # per-mechanic
 > & $GODOT --headless --path 'D:\GameDev\Project_Twin_stick' -- --profile=shooter_budget --smoke   # Phase 1
 > ```
-> **Phase 1 acceptance requires `--profile=shooter_budget --smoke`** (F2-round11) — a `PerfRunner` scenario
-> running the budget smoke of §Slice 2 (reservation / overflow / cancel-release / death-release); `quit(1)` on
-> any failure.
+> **Phase 1 acceptance requires `--profile=shooter_budget --smoke`** (F2-round11) — a `PerfRunner` scenario that
+> calls **`WaveDirector.profiling_run_shooter_budget_smoke() -> bool`**, a **self-contained** routine that drives
+> reservation / overflow / cancel-release / death-release with forced picks/cancels/deaths and asserts
+> `_active_shooter_budget` exactly (no external access to private state — F1-round12); `quit(1)` if it returns false.
 > **⚠ Per-WHERE validation (F2–F5, F9, F11)** — in **`PerfRunner`**, scenario **`where:<id>`** (new `_run`
 > branch; `entity_ramp` never instantiates a mechanic):
 > - **Setup:** load `RunFlow.tscn`, start a real combat room with `where = id` + `Mixed` composition + a
@@ -175,8 +177,9 @@ in `spawn_enemy_instance` lets a whole burst of shooters through before any incr
   bypasses: (1) **reservation** — rolling a shooter increments the budget; (2) **overflow conversion** — a
   shooter roll over budget spawns melee instead; (3) **cancellation release** — a cancelled deferred spawn
   releases its reservation; (4) **death release** — a shooter's death decrements. Assert `_active_shooter_budget`
-  is exact after each. **Wired as the `PerfRunner` scenario `--profile=shooter_budget --smoke` and required for
-  Phase-1 acceptance** (F2-round11).
+  is exact after each. **Implemented as `WaveDirector.profiling_run_shooter_budget_smoke() -> bool`** (a
+  self-contained routine: forces picks/cancels/deaths + asserts, returns pass/fail — F1-round12), **wired as the
+  `PerfRunner` scenario `--profile=shooter_budget --smoke` and required for Phase-1 acceptance** (F2-round11).
 
 ### Slice 3 — `ranged_gauntlet` data (`data/room_archetypes.json`), interim until Phase 2
 `enemy_bias`: `["spitter","spitter","elite_spitter"]` → `["spitter","spitter","charger","chaser"]` (**remove
@@ -265,8 +268,10 @@ if shooters `+` twist count, clamped to pip max. **Retire** old `_roll_archetype
 `_build_distinct_modifier_load` (L721), so removing it avoids a dangling call (F3). **Fallback migration (F8):**
 update `_fallback_archetype()` (RunState L915) to
 emit the **new schema** — a `Mixed` `composition`, `where_pool:["open"]`, `twist_pool:[]` — not the old
-`enemy_bias`/`themed_modifier_pool`. Retain `_build_archetype_enemy_pool` **only** for the champion/debug/endless
-`enemy_pool` path (F1); archetype rooms now use `composition`.
+`enemy_bias`/`themed_modifier_pool`. **Delete `_build_archetype_enemy_pool` with the old `enemy_bias` schema**
+(P3-round12): champion/debug/endless rooms already build their `enemy_pool` via `_get_endless_enemy_pool` /
+`_enemy_pool_from_debug_mix` (not this helper), and archetype rooms now use `composition` — so it has no caller
+in the new model.
 
 **Acceptance:** 2 distinct archetype choices/step, no impossible-repeat stalls; each plays its identity; WHERE
 never rolls an unbuilt mechanic; danger tracks composition; card shows name · danger · ≤2 tags · reward.
