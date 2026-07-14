@@ -624,9 +624,9 @@ func _refresh_class_state_text(card: Dictionary, health_state: Dictionary, playe
 		passive_ratio = clampf(heat / 100.0, 0.0, 1.0)
 	elif passive_id == "bloodthirst":
 		var overshield := float(health_state.get("overshield", 0.0))
-		var max_health := maxf(float(health_state.get("max", 1)), 1.0)
+		var overshield_max := maxf(float(health_state.get("overshield_max", 1.0)), 1.0)
 		details = "Overshield %d" % int(round(overshield))
-		passive_ratio = clampf(overshield / maxf(max_health * 0.25, 1.0), 0.0, 1.0)
+		passive_ratio = clampf(overshield / overshield_max, 0.0, 1.0)
 	elif passive_id == "momentum":
 		details = "Momentum"
 	elif passive_id == "radiance":

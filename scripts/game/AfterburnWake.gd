@@ -13,6 +13,7 @@ var damage := 10
 var tick_interval := 0.35
 var knockback_force := 80.0
 var source_player_index := -1
+var wake_heal_per_hit := 0
 var _remaining := 0.0
 var _emit_accumulator := 0.0
 
@@ -28,6 +29,7 @@ func configure(wake_owner: Node2D, stats: Dictionary, target_parent: Node) -> vo
 	tick_interval = maxf(0.1, float(stats.get("tick_interval", tick_interval)))
 	knockback_force = maxf(0.0, float(stats.get("knockback_force", knockback_force)))
 	source_player_index = int(stats.get("source_player_index", -1))
+	wake_heal_per_hit = maxi(0, int(stats.get("wake_heal_per_hit", 0)))
 	_remaining = wake_duration
 	_emit_accumulator = emit_interval
 
@@ -55,6 +57,8 @@ func _emit_segment(position: Vector2) -> void:
 		tick_interval,
 		"player",
 		knockback_force,
-		source_player_index
+		source_player_index,
+		owner_node,
+		wake_heal_per_hit
 	)
 	effects_parent.add_child(zone)

@@ -294,14 +294,14 @@
     {
       "id": "vampiric_wake",
       "name": "Vampiric Wake",
-      "description": "Afterburn's wake heals the player for part of its damage.",
+      "description": "Afterburn damage heals 1 HP per hit, up to 4 HP per second.",
       "icon": "afterburn",
       "category": "class",
       "group": "ability",
       "rarity": "rare",
       "requires": ["mobile", "field"],
       "apply": "ability",
-      "params": { "wake_lifesteal": 0.12 }
+      "params": { "wake_heal_per_hit": 1, "wake_heal_cap_per_second": 4 }
     },
     {
       "id": "implosion",
@@ -338,7 +338,7 @@
       "rarity": "rare",
       "requires": ["tank"],
       "apply": "passive",
-      "params": { "heal_per_kill_bonus": 3 }
+      "params": { "heal_per_kill_bonus": 2 }
     },
     {
       "id": "overflow",

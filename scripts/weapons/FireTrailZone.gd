@@ -8,11 +8,13 @@ var tick_interval: float = 0.5
 var team: String = "player"
 var knockback_force: float = 0.0
 var source_player_index := -1
+var healing_owner: Node = null
+var wake_heal_per_hit := 0
 
 var _expires_at: float = 0.0
 var _next_tick_at: float = 0.0
 
-func configure(zone_radius: float, zone_damage: int, zone_lifetime: float, zone_tick_interval: float, zone_team: String, zone_knockback_force: float = 0.0, zone_source_player_index: int = -1) -> void:
+func configure(zone_radius: float, zone_damage: int, zone_lifetime: float, zone_tick_interval: float, zone_team: String, zone_knockback_force: float = 0.0, zone_source_player_index: int = -1, zone_healing_owner: Node = null, zone_wake_heal_per_hit: int = 0) -> void:
 	radius = max(zone_radius, 8.0)
 	damage = max(zone_damage, 1)
 	lifetime = max(zone_lifetime, 0.1)
@@ -20,6 +22,8 @@ func configure(zone_radius: float, zone_damage: int, zone_lifetime: float, zone_
 	team = zone_team
 	knockback_force = max(zone_knockback_force, 0.0)
 	source_player_index = zone_source_player_index
+	healing_owner = zone_healing_owner
+	wake_heal_per_hit = maxi(0, zone_wake_heal_per_hit)
 	queue_redraw()
 
 func _ready() -> void:
@@ -51,10 +55,28 @@ func _apply_tick_damage() -> void:
 		if knockback_force > 0.0 and target.has_method("apply_knockback"):
 			var knockback_direction := (target_node.global_position - global_position).normalized()
 			target.apply_knockback(knockback_direction, knockback_force)
+		var health_before = _numeric_current_health(target)
 		if team == "player":
 			target.apply_damage(damage, source_player_index)
 		else:
 			target.apply_damage(damage)
+		var health_after = _numeric_current_health(target)
+		if health_before != null and health_after != null and float(health_after) < float(health_before):
+			_try_apply_wake_heal()
+
+func _numeric_current_health(target):
+	if not ("current_health" in target):
+		return null
+	var value = target.get("current_health")
+	if typeof(value) != TYPE_INT and typeof(value) != TYPE_FLOAT:
+		return null
+	return value
+
+func _try_apply_wake_heal() -> void:
+	if wake_heal_per_hit <= 0 or healing_owner == null or not is_instance_valid(healing_owner):
+		return
+	if healing_owner.has_method("try_apply_wake_heal"):
+		healing_owner.try_apply_wake_heal(wake_heal_per_hit)
 
 func _get_targets_for_team() -> Array:
 	var combat_owner := _get_combat_owner()

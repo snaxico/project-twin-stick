@@ -4,9 +4,14 @@ const BLADE_COUNT := 3
 const BLADE_RADIUS := 30.0
 const BLADE_SPEED := 130.0
 const MIN_CENTER_DISTANCE := BLADE_RADIUS * 2.0 + 120.0
-const CONTACT_DAMAGE := 8
-const REHIT_COOLDOWN := 0.5
+const CONTACT_DAMAGE := 9
+const REHIT_COOLDOWN := 0.6
 const COSMETIC_SPIN_SPEED := 4.5
+const START_LAYOUTS := [
+	[Vector2(864, 588), Vector2(2592, 672), Vector2(1872, 1554)],
+	[Vector2(620, 520), Vector2(2100, 650), Vector2(2920, 1500)],
+	[Vector2(900, 1450), Vector2(1650, 500), Vector2(3000, 900)],
+]
 
 var _positions: Array = []
 var _directions: Array = []
@@ -16,15 +21,11 @@ var _spin := 0.0
 
 func setup(arena: Rect2, players: Array, coop: Node) -> void:
 	super.setup(arena, players, coop)
-	var starts := [
-		Vector2(0.24, 0.28),
-		Vector2(0.72, 0.32),
-		Vector2(0.52, 0.74),
-	]
+	var starts: Array = START_LAYOUTS[_variant_index] as Array
 	var rng := RandomNumberGenerator.new()
-	rng.randomize()
+	rng.seed = _room_seed
 	for index in range(BLADE_COUNT):
-		_positions.append(_arena.position + _arena.size * (starts[index] as Vector2))
+		_positions.append(_arena.position + starts[index] as Vector2)
 		_directions.append(Vector2.RIGHT.rotated(rng.randf_range(0.0, TAU)))
 		_hit_cooldowns.append({})
 
@@ -109,7 +110,7 @@ func _valid_player(player) -> bool:
 func _draw() -> void:
 	for center_variant in _positions:
 		var center := center_variant as Vector2
-		draw_circle(center, BLADE_RADIUS, Color(0.82, 0.18, 0.12, 0.85))
+		draw_circle(center, BLADE_RADIUS, Color(1.0, 0.3, 0.14, 0.9))
 		draw_arc(center, BLADE_RADIUS, 0.0, TAU, 24, Color(1.0, 0.72, 0.24, 0.95), 4.0)
 		for spoke in range(6):
 			var direction := Vector2.RIGHT.rotated(_spin + TAU * float(spoke) / 6.0)

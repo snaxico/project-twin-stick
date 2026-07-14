@@ -12,8 +12,8 @@ const MOUSE_AIM_IDLE_SECONDS := 0.65
 const MAX_MOMENTUM_TIER := 4
 const ABILITY_SLOT_COUNT := 4
 const ABILITY_FACE_BUTTONS := [JOY_BUTTON_A, JOY_BUTTON_X, JOY_BUTTON_B, JOY_BUTTON_Y]
-const BLOODTHIRST_OVERSHIELD_DECAY_PER_SECOND := 13.0
-const BLOODTHIRST_MAX_OVERSHIELD_RATIO := 0.16
+const BLOODTHIRST_OVERSHIELD_DECAY_PER_SECOND := 15.0
+const BLOODTHIRST_MAX_OVERSHIELD_RATIO := 0.12
 const OVERHEAT_MAX_HEAT := 100.0
 const OVERHEAT_HEAT_PER_CAST := 12.0
 const OVERHEAT_DECAY_PER_SECOND := 6.0
@@ -105,6 +105,9 @@ var _momentum_tier := 0
 var _momentum_move_bonus := 0.0
 var _momentum_fire_rate_bonus := 0.0
 var _overshield := 0.0
+var _wake_heal_tokens := 0.0
+var _wake_heal_capacity := 0.0
+var _wake_heal_refill_per_second := 0.0
 var _overheat_heat := 0.0
 var _overheat_damage_bonus := 0.0
 var _last_heat_gain_at := -999.0
@@ -167,6 +170,7 @@ func get_health_state() -> Dictionary:
 		"current": current_health,
 		"max": max_health,
 		"overshield": int(ceil(_overshield)),
+		"overshield_max": float(max_health) * BLOODTHIRST_MAX_OVERSHIELD_RATIO if _passive_id == "bloodthirst" else 0.0,
 		"heat": int(round(_overheat_heat)),
 		"ultimate": _ultimate_charge,
 		"class_id": _class_id,
@@ -236,6 +240,7 @@ func set_input_locked(locked: bool) -> void:
 	_ability_pressed_last_frame = _build_ability_pressed_state()
 
 func apply_loadout(loadout: Dictionary) -> void:
+	var previous_wake_capacity := _wake_heal_capacity
 	_mutation_ids = (loadout.get("mutations", []) as Array).duplicate()
 	_class_id = str(loadout.get("class_id", ""))
 	_passive_id = str(loadout.get("passive_id", ""))
@@ -273,6 +278,7 @@ func apply_loadout(loadout: Dictionary) -> void:
 			dash_state.cooldown_duration = max(0.1, float(slot.get("cooldown", 3.0)))
 			dash_state.dash_speed = float((slot.get("stats", {}) as Dictionary).get("dash_speed", 1180.0))
 			_dash_states[slot_index] = dash_state
+	_configure_wake_healing(_wake_heal_cap_from_slots(), previous_wake_capacity)
 	_ability_pressed_last_frame = _build_ability_pressed_state()
 	_shield_until = 0.0
 	_shield_was_active = false
@@ -361,10 +367,18 @@ func apply_bloodthirst_heal(amount: int, overshield_multiplier: float = 1.0) -> 
 		var healed := mini(max_health - current_health, remaining)
 		current_health += healed
 		remaining -= healed
-	if current_health >= max_health:
-		var overshield_gain := float(amount if remaining <= 0 else remaining) * maxf(overshield_multiplier, 0.0)
+	if current_health >= max_health and remaining > 0:
+		var overshield_gain := float(remaining) * maxf(overshield_multiplier, 0.0)
 		_overshield = minf(_overshield + overshield_gain, float(max_health) * BLOODTHIRST_MAX_OVERSHIELD_RATIO)
 	health_changed.emit(current_health, max_health)
+
+func try_apply_wake_heal(amount: int) -> bool:
+	if amount <= 0 or _wake_heal_capacity <= 0.0 or _wake_heal_tokens + 0.0001 < float(amount):
+		return false
+	if not heal(amount):
+		return false
+	_wake_heal_tokens = maxf(0.0, _wake_heal_tokens - float(amount))
+	return true
 
 func apply_damage(amount: int) -> void:
 	if _is_downed or amount <= 0:
@@ -826,6 +840,8 @@ func _emit_ability(slot_index: int, direction: Vector2) -> void:
 	ability_activated.emit(self, slot_index, ability_id, global_position, direction.normalized() if direction.length() > 0.0 else Vector2.RIGHT, payload)
 
 func _update_passive_runtime(delta: float, now: float) -> void:
+	if not _is_downed and _wake_heal_capacity > 0.0:
+		_wake_heal_tokens = minf(_wake_heal_capacity, _wake_heal_tokens + _wake_heal_refill_per_second * delta)
 	if _overshield > 0.0:
 		_overshield = maxf(0.0, _overshield - BLOODTHIRST_OVERSHIELD_DECAY_PER_SECOND * delta)
 	if _passive_id != "overheat":
@@ -833,6 +849,26 @@ func _update_passive_runtime(delta: float, now: float) -> void:
 	if _overheat_heat <= 0.0 or now < _last_heat_gain_at + OVERHEAT_DECAY_DELAY:
 		return
 	_set_overheat_heat(maxf(0.0, _overheat_heat - OVERHEAT_DECAY_PER_SECOND * delta))
+
+func _wake_heal_cap_from_slots() -> float:
+	for slot_variant in _ability_slots:
+		var slot := slot_variant as Dictionary
+		if str(slot.get("id", "")) != "afterburn":
+			continue
+		var stats := slot.get("stats", {}) as Dictionary
+		return maxf(0.0, float(stats.get("wake_heal_cap_per_second", 0.0)))
+	return 0.0
+
+func _configure_wake_healing(new_capacity: float, previous_capacity: float) -> void:
+	new_capacity = maxf(0.0, new_capacity)
+	if previous_capacity <= 0.0 and new_capacity > 0.0:
+		_wake_heal_tokens = new_capacity
+	elif previous_capacity > 0.0 and new_capacity > 0.0:
+		_wake_heal_tokens = new_capacity * clampf(_wake_heal_tokens / previous_capacity, 0.0, 1.0)
+	else:
+		_wake_heal_tokens = 0.0
+	_wake_heal_capacity = new_capacity
+	_wake_heal_refill_per_second = new_capacity
 
 func _add_overheat(amount: float) -> void:
 	_last_heat_gain_at = _current_time_seconds()

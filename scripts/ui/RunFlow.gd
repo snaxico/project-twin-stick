@@ -12,6 +12,7 @@ const WHERE_DISPLAY := {
 	"bastion": "Bastion",
 	"popup_pillars": "Pop-up Pillars",
 	"drifting_cover": "Drifting Cover",
+	"sweeping_laser_lanes": "Sweeping Laser Lanes",
 }
 
 signal return_to_menu_requested(open_meta_menu: bool)

@@ -11,7 +11,7 @@
         "shooters": [],
         "shooter_ratio": 0.0
       },
-      "where_pool": ["fire_grid", "pinwheel", "tesla_arcs", "drifting_clouds", "open"],
+      "where_pool": ["fire_grid", "pinwheel", "tesla_arcs", "drifting_clouds", "sweeping_laser_lanes", "open"],
       "twist_pool": ["enemy_speed", "accelerating_waves", "shielded"],
       "density_profile": "high",
       "reward_hint": "Crowd-control test",
@@ -28,7 +28,7 @@
         "shooters": ["spitter"],
         "shooter_ratio": 0.2
       },
-      "where_pool": ["fire_grid", "frost_grid", "pinwheel", "tesla_arcs", "drifting_clouds", "open"],
+      "where_pool": ["fire_grid", "frost_grid", "pinwheel", "tesla_arcs", "drifting_clouds", "sweeping_laser_lanes", "open"],
       "twist_pool": ["enemy_speed", "shielded", "explosive_death", "accelerating_waves"],
       "density_profile": "medium",
       "reward_hint": "Baseline reward odds",
@@ -45,7 +45,7 @@
         "shooters": [],
         "shooter_ratio": 0.0
       },
-      "where_pool": ["fire_grid", "mine_grid", "tesla_arcs", "open"],
+      "where_pool": ["fire_grid", "mine_grid", "tesla_arcs", "sweeping_laser_lanes", "open"],
       "twist_pool": ["explosive_death", "explosive_death", "enemy_speed"],
       "density_profile": "high",
       "reward_hint": "Cleanup discipline",
@@ -79,7 +79,7 @@
         "shooters": ["spitter"],
         "shooter_ratio": 0.5
       },
-      "where_pool": ["bastion", "drifting_cover", "popup_pillars", "frost_grid", "tesla_arcs", "fire_grid"],
+      "where_pool": ["bastion", "drifting_cover", "popup_pillars", "frost_grid", "tesla_arcs", "fire_grid", "sweeping_laser_lanes"],
       "twist_pool": ["shielded", "accelerating_waves", "enemy_speed"],
       "density_profile": "low",
       "reward_hint": "Projectile discipline",

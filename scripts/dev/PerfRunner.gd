@@ -89,6 +89,8 @@ func _run(scenario: String, players: int, build: String, smoke: bool) -> void:
 	}
 	if profiling_room:
 		options["where"] = where_id
+		options["where_variant"] = clampi(int(_read_arg("--variant=", "0")), 0, 2)
+		options["where_seed"] = PROFILING_SEED
 		options["profiling"] = true
 		options["side_objective"] = ""
 		options["composition"] = {
@@ -211,6 +213,10 @@ class _Profiler extends Node:
 			if not _smoke_passed:
 				push_error("PerfRunner: where smoke failed for %s" % where_id)
 				get_tree().quit(1)
+			else:
+				print("where_smoke=%s variant=%d passed" % [where_id, int(RunState.current_node.get("where_variant", 0))])
+				get_tree().quit(0)
+			return
 		if where_id == "drifting_cover":
 			if _elapsed >= _next_forced_step_at:
 				_next_forced_step_at = _elapsed + 2.0

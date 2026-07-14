@@ -4,6 +4,13 @@ class_name ArenaMechanic
 var _arena: Rect2
 var _players: Array = []
 var _coop: Node = null
+var _variant_index := 0
+var _room_seed := 0
+
+
+func configure_variant(index: int, room_seed: int) -> void:
+	_variant_index = clampi(index, 0, 2)
+	_room_seed = room_seed
 
 
 func setup(arena: Rect2, players: Array, coop: Node) -> void:
@@ -14,7 +21,7 @@ func setup(arena: Rect2, players: Array, coop: Node) -> void:
 	queue_redraw()
 
 
-func damage_circle(center: Vector2, radius: float, dmg: int, hit_players := true) -> void:
+func damage_circle(center: Vector2, radius: float, dmg: int, hit_players := true, hit_enemies := true) -> void:
 	var radius_sq := radius * radius
 	if hit_players:
 		for player in _players:
@@ -24,7 +31,7 @@ func damage_circle(center: Vector2, radius: float, dmg: int, hit_players := true
 				continue
 			if (player as Node2D).global_position.distance_squared_to(center) <= radius_sq and player.has_method("apply_damage"):
 				player.apply_damage(dmg)
-	if _coop == null or not _coop.has_method("get_nearby_enemy_target_nodes"):
+	if not hit_enemies or _coop == null or not _coop.has_method("get_nearby_enemy_target_nodes"):
 		return
 	for enemy in _coop.get_nearby_enemy_target_nodes(center, radius):
 		if enemy == null or not is_instance_valid(enemy) or not (enemy is Node2D):

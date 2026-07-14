@@ -142,9 +142,13 @@ abilities, ultimates, and base mutations are free.
   - Fire/Frost/Mine Hazard Floors share moving safe-zone geometry while retaining distinct route skins
   - Roaming Sawblades, Tesla Arcs, Drifting Clouds
   - Bastion, Pop-up Pillars, Drifting Cover
-- Hazard Floors, Sawblades, and pillar rise damage target players only. Hazard Floor transitions preserve a
-  reachable safe zone; Sawblades maintain a 120px dodge lane and cannot pair with Shrinking Arena; Pop-up
-  Pillars use three irregular nine-pillar layouts with connectivity-gated obstacle rebuilds.
+  - Sweeping Laser Lanes with a fixed co-op opening and alternating horizontal/vertical sweeps
+- Every non-open WHERE has three hidden deterministic layouts with no immediate selected-layout repeat;
+  Fire/Frost/Mine share one Hazard Floor family history. Retries reuse the selected layout and seed.
+- All WHERE damage targets players only. Hazard Floor transitions preserve a reachable safe zone; Sawblades
+  maintain a 120px dodge lane and cannot pair with Shrinking Arena; Pop-up Pillars use three irregular
+  nine-pillar layouts with connectivity-gated obstacle rebuilds. Drifting Cover applies moves transactionally
+  and retries rejected layouts without desynchronizing visuals from collision.
 - Physical cover is owned by `CoopManager.rebuild_obstacles`; mechanics declare rect sets, while CoopManager
   validates bounds/connectivity, rebuilds flow targets, and relocates stranded enemies, pickups, and
   `player_deployable` nodes.
@@ -291,7 +295,15 @@ Last validation run in this state:
     - Result: `avg_fps=145.0`, `min_fps=144.0`, `max_frame_ms=6.944`.
 - Post-review PerfRunner rerun for the V4 polish density/VFX check:
   - `Godot_v4.6.2-stable_win64_console.exe --headless --path D:\GameDev\Project_Twin_stick -- --profile=champion:hive --players=2 --build=heavy`
-  - Result: `avg_fps=144.9`, `min_fps=144.0`, `max_frame_ms=6.944`.
+    - Result: `avg_fps=144.9`, `min_fps=144.0`, `max_frame_ms=6.944`.
+- V4 arena/balance follow-up acceptance:
+  - focused runtime check passed WHERE history/reset, all nine Hazard Floor phase/mine geometries,
+    players-only damage routing, Tank exact-fill/cap behavior, and capped real-damage-only Wake healing
+  - all `10` non-open WHERE IDs passed variants `0/1/2` through PerfRunner smoke (`30/30`)
+  - deterministic pre entity-ramp 160: `101.4/88.6/99.3` FPS (median `99.3`)
+  - deterministic post entity-ramp 160: `93.4/90.9/100.8` FPS (median `93.4`, passes `>=89.4` retention)
+  - deterministic pre flow-field 160: `55.2/53.1/57.5` FPS
+  - deterministic post flow-field 160: `53.7/50.3/51.3` FPS; the required all-runs `>=60` gate failed
 - Clustered contact-swarm performance check after bounding enemy separation:
   - Temporary dev scene spawned `25/50/100/150/200` chasers in a tight contact-range cluster around a dummy
     player.
@@ -329,6 +341,8 @@ Last validation run in this state:
   delay `0.75->1.5` (stickier); ult charge `KILL 0.05->0.02` (~1/room); HP-pickup drop chance `0.06->0.03`
   (heal 8 unchanged); homing-projectile cap `MAX_ACTIVE_HOMING=40`.
 - The July 14 follow-up further reduces Tank overshield cap to `0.16` and raises decay to `13/s`.
+- The arena/balance follow-up reduces Tank kill healing to `1` (`+2` with Gorge), overshield cap to `0.12`,
+  decay to `15/s`, and Blood Frenzy healing to `15`; Overflow remains `1.35x`.
 - **Enemy projectiles now persist** until they hit a wall/player/summon (ignore lifetime + max_distance for
   `team==enemy`), with an arena-bounds despawn backstop.
 - **Element mutations gate by delivery + dedupe** (`c9b9953`): fire_trail/freeze_shot/poison require
@@ -358,10 +372,11 @@ Last validation run in this state:
 - Phase 4 tuning is first-pass and should get one more live `1P` / `2P` feel check, especially rooms `10+`.
 - Champion readability inside dense waves still needs live validation after the cooldown/damage tuning.
 - The two next-room cards depend on existing enemy/modifier differentiation; keep watching whether choices feel meaningful.
-- `vampiric_wake` still declares `wake_lifesteal` without a runtime consumer; ownership/rounding behavior was not
-  specified by the approved patch and remains deliberately unimplemented.
-- The July 14 isolated `flowfield_stress` 200+200 bucket varied from `31.9` to `54.9` FPS across consecutive
-  runs; `entity_ramp` reached `138.3` FPS. Recheck the flow probe before drawing a tuning conclusion.
+- Vampiric Wake now heals `1 HP` only after real Afterburn enemy HP damage. One player-owned bucket shared by
+  all wake casts/segments caps healing at `4 HP/s`; immunity, misses, full health, and zero damage spend nothing.
+- The deterministic July 14 follow-up `flowfield_stress` gate still fails at the retained 160 cover cap after
+  the approved bounded hot-path cleanup: pre `55.2/53.1/57.5`, post `53.7/50.3/51.3` FPS. Physics remains
+  dominant; do not lower the cap or begin a broad refactor without a separate approved performance plan.
 - New V4 polish tuning is still first-pass and needs live 1P/2P feel checks across all four classes.
 - Deep runs may exhaust upgrade variety; parked until real run depths are known.
 - Objective-panel icons still use simple letter fallback glyphs (`H` / `K` / `C`).
@@ -369,7 +384,6 @@ Last validation run in this state:
 
 ## Next Step
 
-Run a focused 1P/2P live playtest of the July 14 patch across all four classes. Prioritize Hazard Floor
-reachability/mine readability, Sawblade dodge lanes, pillar rise warnings, Orbit uptime, Tank sustain, the
-Afterburn wake, and controller focus on the pause/route screens. Re-run `flowfield_stress` in a quiet session
-because the latest isolated measurements were unusually variable.
+Run a focused 1P/2P live playtest of all three WHERE layouts, especially laser opening readability and Drifting
+Cover transitions, plus Tank sustain and Vampiric Wake healing. The flow-field 160 gate is documented as failed;
+any broader optimization needs its own approved plan.

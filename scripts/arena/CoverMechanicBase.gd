@@ -49,5 +49,5 @@ func _tick_telegraph(delta: float) -> bool:
 func _draw_telegraph() -> void:
 	for rect_variant in _telegraph_rects:
 		var rect: Rect2 = rect_variant as Rect2
-		draw_rect(rect, Color(0.82, 0.9, 1.0, 0.12), true)
-		draw_rect(rect, Color(0.82, 0.95, 1.0, 0.55), false, 2.0)
+		draw_rect(rect, Color(1.0, 0.72, 0.2, 0.12), true)
+		draw_rect(rect, Color(1.0, 0.72, 0.2, 0.78), false, 2.0)

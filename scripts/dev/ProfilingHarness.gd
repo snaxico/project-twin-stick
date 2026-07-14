@@ -18,7 +18,7 @@ const ARENA_RECT := Rect2(Vector2.ZERO, Vector2(4800.0, 2700.0))
 const ENEMY_TYPES := ["chaser", "charger", "spitter", "splitter", "bomber"]
 
 # Each step holds this many enemies AND this many projectiles for SAMPLE_SECONDS.
-const STEPS := [50, 100, 150, 200]
+const STEPS := [50, 100, 150, 160, 200]
 const SAMPLE_SECONDS := 5.0
 const WARMUP_SECONDS := 2.5
 const FLOW_TARGET_UPDATE_INTERVAL := 0.12
@@ -53,7 +53,7 @@ var _target_phase := 0.0
 var _flow_target_update_elapsed := 0.0
 
 func _ready() -> void:
-	randomize()
+	seed(20260707)
 	_flowfield_profile = _is_flowfield_profile()
 	# Uncap framerate so FPS reveals the true ceiling (vsync would pin it to ~60 and hide it).
 	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)

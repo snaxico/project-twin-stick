@@ -23,6 +23,7 @@ const IMPLEMENTED_WHERE: Array = [
 	"bastion",
 	"popup_pillars",
 	"drifting_cover",
+	"sweeping_laser_lanes",
 ]
 const CHAMPION_INTERVAL_BANDS := [
 	{"until_depth": 10, "interval": 5},
@@ -65,6 +66,7 @@ var _structured_final_boss_type := "hydra"
 var _structured_total_combat_depth := 1
 var _last_champion_depth := 0
 var _champion_bag: Array[String] = []
+var _where_variant_history: Dictionary = {}
 
 func _ready() -> void:
 	_random.randomize()
@@ -105,6 +107,7 @@ func start_new_run(configs: Array, debug_options: Dictionary = {}) -> void:
 	_apply_debug_starting_progress()
 	_structured_total_combat_depth = RUN_LENGTH
 	_last_champion_depth = 0
+	_where_variant_history.clear()
 	_apply_debug_starting_mutations()
 	for _index in range(player_configs.size()):
 		player_health_states.append({"current": 100, "max": 100})
@@ -146,6 +149,7 @@ func select_map_node(node_id: String) -> bool:
 		return false
 	current_node = node
 	current_node_id = node_id
+	_record_selected_where_variant(node)
 	return true
 
 func resolve_current_noncombat_node() -> Dictionary:
@@ -588,6 +592,8 @@ func _build_single_room_map() -> Array:
 	node["modifiers"] = (debug_run_setup.get("modifiers", []) as Array).duplicate()
 	node["where"] = str(debug_run_setup.get("where", node.get("where", "open")))
 	node["profiling"] = bool(debug_run_setup.get("profiling", false))
+	node["where_variant"] = clampi(int(debug_run_setup.get("where_variant", 0)), 0, 2)
+	node["where_seed"] = int(debug_run_setup.get("where_seed", 20260707 if bool(node["profiling"]) else 0))
 	if debug_run_setup.has("composition"):
 		node["composition"] = (debug_run_setup.get("composition", {}) as Dictionary).duplicate(true)
 	node["next_node_ids"] = []
@@ -647,6 +653,9 @@ func _build_run_node(room_number: int, room_type: String, slot: String, archetyp
 		"composition": (archetype.get("composition", {}) as Dictionary).duplicate(true) if has_archetype else {},
 		"next_node_ids": [],
 	}
+	if where_id != "open":
+		node["where_variant"] = _roll_where_variant(where_id)
+		node["where_seed"] = _random.randi()
 	if has_archetype:
 		node["archetype_id"] = str(archetype.get("id", ""))
 		node["archetype_name"] = str(archetype.get("name", "Room"))
@@ -923,6 +932,25 @@ func _roll_archetype_where(archetype: Dictionary) -> String:
 		if roll <= cursor:
 			return str(candidates[index])
 	return "open"
+
+func _where_history_key(where_id: String) -> String:
+	if where_id == "fire_grid" or where_id == "frost_grid" or where_id == "mine_grid":
+		return "hazard_floor"
+	return where_id
+
+func _roll_where_variant(where_id: String) -> int:
+	var key := _where_history_key(where_id)
+	var previous := int(_where_variant_history.get(key, -1))
+	var candidates := [0, 1, 2]
+	if previous >= 0:
+		candidates.erase(previous)
+	return int(candidates[_random.randi_range(0, candidates.size() - 1)])
+
+func _record_selected_where_variant(node: Dictionary) -> void:
+	var where_id := str(node.get("where", "open"))
+	if where_id == "open" or not node.has("where_variant"):
+		return
+	_where_variant_history[_where_history_key(where_id)] = clampi(int(node.get("where_variant", 0)), 0, 2)
 
 func _roll_archetype_twist(archetype: Dictionary, where_id := "open") -> Array:
 	if _random.randf() >= 0.55:

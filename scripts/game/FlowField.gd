@@ -90,6 +90,7 @@ func update_targets(player_positions: Array) -> void:
 			_profile_update_calls += 1
 		return
 	var valid_indices: Dictionary = {}
+	var now_ms := Time.get_ticks_msec()
 	for player_index in range(player_positions.size()):
 		var position_variant = player_positions[player_index]
 		if not (position_variant is Vector2):
@@ -104,7 +105,6 @@ func update_targets(player_positions: Array) -> void:
 		var target_cell := _index_to_cell(target_index)
 		if _fields.has(player_index) and _last_target_cells.get(player_index, Vector2i(-999, -999)) == target_cell:
 			continue
-		var now_ms := Time.get_ticks_msec()
 		if _fields.has(player_index) and now_ms - int(_last_field_rebuild_ms.get(player_index, 0)) < TARGET_REBUILD_MIN_INTERVAL_MS:
 			continue
 		var distances := _build_distances(target_index)
@@ -149,7 +149,7 @@ func _sample_impl(world_position: Vector2, target_player_index: int, fallback_di
 		var current_index := _cell_index(current_cell)
 		var current_vector := vectors[current_index]
 		if current_vector.length_squared() > 0.0001:
-			return current_vector.normalized()
+			return current_vector
 	return fallback
 
 

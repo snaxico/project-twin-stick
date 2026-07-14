@@ -51,9 +51,7 @@ var _t := 0.0
 
 func setup(arena: Rect2, players: Array, coop: Node) -> void:
 	super.setup(arena, players, coop)
-	var rng := RandomNumberGenerator.new()
-	rng.randomize()
-	_layout = (LAYOUTS[rng.randi_range(0, LAYOUTS.size() - 1)] as Array).duplicate(true)
+	_layout = (LAYOUTS[_variant_index] as Array).duplicate(true)
 	_states = _compute_states()
 	_current_rects = _rects_for_states(_states)
 	_apply_rects(_current_rects, true)
@@ -143,10 +141,10 @@ func _draw() -> void:
 				draw_rect(rect, Color(0.58, 0.86, 1.0, 0.92), false, 3.0)
 				draw_line(rect.position + Vector2(5, 6), Vector2(rect.end.x - 5, rect.position.y + 6), Color(0.8, 0.95, 1.0, 0.95), 5.0)
 			"rising":
-				draw_rect(rect, Color(1.0, 0.58, 0.1, 0.12 + pulse * 0.12), true)
-				_draw_dashed_rect(rect, Color(1.0, 0.72, 0.22, pulse))
+				draw_rect(rect, Color(1.0, 0.72, 0.2, 0.12 + pulse * 0.12), true)
+				_draw_dashed_rect(rect, Color(1.0, 0.72, 0.2, pulse))
 			_:
-				draw_rect(rect, Color(0.2, 0.36, 0.5, 0.08), true)
+				draw_rect(rect, Color(0.2, 0.36, 0.5, 0.1), true)
 				draw_rect(rect, Color(0.42, 0.62, 0.78, 0.18), false, 2.0)
 
 

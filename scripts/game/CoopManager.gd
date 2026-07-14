@@ -38,6 +38,7 @@ const DriftingCloudsMechanicData = preload("res://scripts/arena/DriftingCloudsMe
 const BastionMechanicData = preload("res://scripts/arena/BastionMechanic.gd")
 const PopupPillarsMechanicData = preload("res://scripts/arena/PopupPillarsMechanic.gd")
 const DriftingCoverMechanicData = preload("res://scripts/arena/DriftingCoverMechanic.gd")
+const SweepingLaserLanesMechanicData = preload("res://scripts/arena/SweepingLaserLanesMechanic.gd")
 
 const MODIFIERS_DATA_PATH := "res://data/modifiers.json"
 const PROFILING_SEED := 20260707
@@ -537,9 +538,9 @@ func _apply_bloodthirst_on_kill(enemy) -> void:
 		return
 	if not player.has_method("has_passive") or not player.has_passive("bloodthirst"):
 		return
-	var heal_amount := 2
+	var heal_amount := 1
 	if _mutation_system.has_mutation(player_index, "gorge"):
-		heal_amount += 3
+		heal_amount += 2
 	var overshield_mult := 1.35 if _mutation_system.has_mutation(player_index, "overflow") else 1.0
 	player.apply_bloodthirst_heal(heal_amount, overshield_mult)
 
@@ -1051,9 +1052,15 @@ func _apply_where_mechanic() -> void:
 			mechanic = PopupPillarsMechanicData.new()
 		"drifting_cover":
 			mechanic = DriftingCoverMechanicData.new()
+		"sweeping_laser_lanes":
+			mechanic = SweepingLaserLanesMechanicData.new()
 		_:
 			return
 	_where_mechanic = mechanic
+	_where_mechanic.configure_variant(
+		clampi(int(_room_config.get("where_variant", 0)), 0, 2),
+		int(_room_config.get("where_seed", PROFILING_SEED if RunState.debug_profiling else 0))
+	)
 	_where_mechanic.setup(ARENA_RECT, _player_nodes, self)
 	effects.add_child(_where_mechanic)
 
@@ -1409,7 +1416,7 @@ func _on_player_ability_activated(player, slot_index: int, ability_id: String, o
 			_apply_timed_player_modifier(player, "blood_frenzy", stats)
 			_spawn_zone_cast_pulse(origin, 180.0, Color(1.0, 0.12, 0.16, 0.92), 1.25)
 			if player != null and is_instance_valid(player) and player.has_method("apply_bloodthirst_heal"):
-				player.apply_bloodthirst_heal(int(stats.get("heal", 35)), 1.0)
+				player.apply_bloodthirst_heal(int(stats.get("heal", 15)), 1.0)
 		"overload_grid":
 			_spawn_zone_cast_pulse(origin, 260.0, tint.lightened(0.16), 1.25)
 			_activate_overload_grid(player, origin, stats, tint)

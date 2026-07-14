@@ -3,27 +3,35 @@ extends "res://scripts/arena/CoverMechanicBase.gd"
 const SIZE := Vector2(260, 180)
 const OFFSETS := [Vector2(300, 0), Vector2(-300, 0), Vector2(0, 300), Vector2(0, -300)]
 const STEP := 2.0
+const START_LAYOUTS := [
+	[Vector2(800, 600), Vector2(2540, 1320)],
+	[Vector2(1050, 1500), Vector2(2850, 650)],
+	[Vector2(650, 1150), Vector2(2500, 500)],
+]
 
-var _centers := [Vector2(800, 600), Vector2(2540, 1320)]
+var _centers: Array = []
 var _timer := STEP
 var _rng := RandomNumberGenerator.new()
 var _current_rects: Array = []
+var _pending_centers: Array = []
 
 
 func setup(arena: Rect2, players: Array, coop: Node) -> void:
 	super.setup(arena, players, coop)
-	if RunState.debug_profiling:
-		_rng.seed = 20260707
-	else:
-		_rng.randomize()
+	for center_variant in START_LAYOUTS[_variant_index]:
+		_centers.append(_arena.position + center_variant as Vector2)
+	_rng.seed = _room_seed
 	_current_rects = _rects_for_centers(_centers)
 	_apply_rects(_current_rects, true)
 
 
 func _physics_process(delta: float) -> void:
 	if _tick_telegraph(delta):
-		_current_rects = _telegraph_rects.duplicate()
-		_apply_rects(_current_rects, false)
+		var proposed_rects := _telegraph_rects.duplicate()
+		if _apply_rects(proposed_rects, false):
+			_current_rects = proposed_rects
+			_centers = _pending_centers.duplicate()
+		_pending_centers.clear()
 		return
 	_timer -= delta
 	if _timer <= 0.0 and _telegraph_rects.is_empty():
@@ -32,8 +40,15 @@ func _physics_process(delta: float) -> void:
 
 
 func _force_step() -> bool:
-	_current_rects = _next_rects()
-	return _apply_rects(_current_rects, false)
+	for _attempt in range(8):
+		var proposed_rects := _next_rects()
+		if _apply_rects(proposed_rects, false):
+			_current_rects = proposed_rects
+			_centers = _pending_centers.duplicate()
+			_pending_centers.clear()
+			return true
+	_pending_centers.clear()
+	return false
 
 
 func _next_rects() -> Array:
@@ -50,8 +65,8 @@ func _next_rects() -> Array:
 			if not _rects_overlap(candidate_rects[0] as Rect2, candidate_rects[1] as Rect2):
 				next_centers = candidate_centers
 				break
-	_centers = next_centers
-	return _rects_for_centers(_centers)
+	_pending_centers = next_centers
+	return _rects_for_centers(next_centers)
 
 
 func _rects_for_centers(centers: Array) -> Array:
@@ -70,6 +85,6 @@ func _rects_overlap(a: Rect2, b: Rect2) -> bool:
 
 func _draw() -> void:
 	for rect in _current_rects:
-		draw_rect(rect, Color(0.22, 0.3, 0.36, 0.34), true)
-		draw_rect(rect, Color(0.72, 0.9, 1.0, 0.5), false, 2.0)
+		draw_rect(rect, Color(0.16, 0.48, 0.82, 0.78), true)
+		draw_rect(rect, Color(0.62, 0.9, 1.0, 0.85), false, 2.0)
 	_draw_telegraph()
