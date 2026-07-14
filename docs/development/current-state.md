@@ -300,6 +300,8 @@ Last validation run in this state:
   - focused runtime check passed WHERE history/reset, all nine Hazard Floor phase/mine geometries,
     players-only damage routing, Tank exact-fill/cap behavior, and capped real-damage-only Wake healing
   - all `10` non-open WHERE IDs passed variants `0/1/2` through PerfRunner smoke (`30/30`)
+  - post-implementation review hardened physical-cover smoke validation so an empty obstacle set fails;
+    Bastion, Popup Pillars, and Drifting Cover pass every variant in both `1P` and `2P`
   - deterministic pre entity-ramp 160: `101.4/88.6/99.3` FPS (median `99.3`)
   - deterministic post entity-ramp 160: `93.4/90.9/100.8` FPS (median `93.4`, passes `>=89.4` retention)
   - deterministic pre flow-field 160: `55.2/53.1/57.5` FPS

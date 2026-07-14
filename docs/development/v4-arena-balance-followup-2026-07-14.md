@@ -45,7 +45,9 @@ Other classes are observation-only.
 
 ## Implementation Validation
 
-- Focused arena/combat checks pass, and all ten non-open WHERE IDs pass all three variants (`30/30`).
+- Focused arena/combat checks pass, and all ten non-open WHERE IDs pass all three variants (`30/30`). The
+  reviewed smoke contract requires registered projectile-blocking geometry for Bastion, Popup Pillars, and
+  Drifting Cover; all nine physical-cover variants pass in both `1P` and `2P`.
 - Entity 160 pre: `101.4/88.6/99.3` (median `99.3`); post: `93.4/90.9/100.8` (median `93.4`). Retention passes.
 - Flow 160 pre: `55.2/53.1/57.5`; post: `53.7/50.3/51.3`. The all-runs `>=60` gate fails, so performance work
   stopped at the approved bounded changes with the cap retained at `160`.

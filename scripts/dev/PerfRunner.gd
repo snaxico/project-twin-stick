@@ -225,7 +225,8 @@ class _Profiler extends Node:
 	func _run_where_smoke() -> bool:
 		if int(_coop.call("profiling_registered_enemy_count")) != 200:
 			return false
-		if not bool(_coop.call("profiling_cover_blocks_projectile")):
+		var cover_where := where_id == "bastion" or where_id == "drifting_cover" or where_id == "popup_pillars"
+		if cover_where and not bool(_coop.call("profiling_cover_blocks_projectile")):
 			return false
 		if where_id == "drifting_cover" or where_id == "popup_pillars":
 			var before := int(_coop.call("profiling_where_revision"))

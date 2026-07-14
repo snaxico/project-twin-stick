@@ -1199,7 +1199,7 @@ func profiling_all_enemies_reachable() -> bool:
 
 func profiling_cover_blocks_projectile() -> bool:
 	if _active_obstacle_rects.is_empty():
-		return true
+		return false
 	var rect: Rect2 = _active_obstacle_rects[0] as Rect2
 	var query := PhysicsRayQueryParameters2D.create(
 		Vector2(rect.position.x - 120.0, rect.get_center().y),
