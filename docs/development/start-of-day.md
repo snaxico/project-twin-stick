@@ -29,8 +29,9 @@ Read this first to restore project context quickly, then read `current-state.md`
 - Godot `4.6.2` same-screen local co-op twin-stick roguelite prototype.
 - Target player count is `1-2`.
 - V4 class-system implementation and polish round are implemented.
-- The active next validation is `docs/development/v4-round-2-plan.md`: performance follow-ups, bug fixes,
-  balance rebalance, class clarity, room variation, and progression/drop retuning.
+- The July 14 V4 playtest patch in `docs/development/v4-playtest-findings-2026-07-14.md` is implemented. The
+  active next validation is a focused 1P/2P live playtest of its upgrade gates, balance, UI, ability feel, and
+  redesigned WHERE catalog.
 
 ## Live Runtime Summary
 

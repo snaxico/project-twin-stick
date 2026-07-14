@@ -51,6 +51,9 @@ abilities, ultimates, and base mutations are free.
 - The old purchase loop remains removed; meta progression is now a banked-score unlock pool.
 - Upgrade rolls support common / rare / Signature rarity. Signature upgrades include tag amplifiers,
   transformers, and parasites.
+- Upgrade eligibility now checks exact equipped abilities for ability-specific upgrades. The generic Area and
+  Duration upgrades appear only when the kit contains an explicitly scalable ability and affect only those
+  flagged abilities; Piercing Overdrive additionally requires a projectile weapon.
 - Tags currently seed Fire, Frost, Toxic, Split, Momentum, and Pierce build axes.
 - Retired stat-stick weapon mutations (`rapid_fire`, `velocity`, `high_caliber`, `range`) are removed from
   mutation data and no longer compile into weapon stats.
@@ -91,7 +94,7 @@ abilities, ultimates, and base mutations are free.
   - `Turret`
   - `Minefield`
   - `Orbit`
-  - `Afterburn`: player-owned burning field
+  - `Afterburn`: player-following wake that emits overlapping burning trail segments
   - `Momentum Burst`: radial blast that scales with Momentum tier
   - `Deflect`: destroys nearby enemy projectiles and pulses damage
   - `Sonic Boom`: fast piercing line projectile
@@ -136,9 +139,12 @@ abilities, ultimates, and base mutations are free.
   - spitter is now a capped ranged special with a 0.45s telegraphed 3-shot fan
   - WaveDirector reserves the global shooter budget at spawn selection and releases it on cancellation/death
 - Implemented WHERE mechanics:
-  - Fire Grid, Frost Grid, Mine Grid
-  - Islands, Pinwheel, Tesla Arcs, Drifting Clouds
-  - Bastion, Pop-up Pillars, Sliding Gates, Bulwark, Drifting Cover, Shifting Maze
+  - Fire/Frost/Mine Hazard Floors share moving safe-zone geometry while retaining distinct route skins
+  - Roaming Sawblades, Tesla Arcs, Drifting Clouds
+  - Bastion, Pop-up Pillars, Drifting Cover
+- Hazard Floors, Sawblades, and pillar rise damage target players only. Hazard Floor transitions preserve a
+  reachable safe zone; Sawblades maintain a 120px dodge lane and cannot pair with Shrinking Arena; Pop-up
+  Pillars use three irregular nine-pillar layouts with connectivity-gated obstacle rebuilds.
 - Physical cover is owned by `CoopManager.rebuild_obstacles`; mechanics declare rect sets, while CoopManager
   validates bounds/connectivity, rebuilds flow targets, and relocates stranded enemies, pickups, and
   `player_deployable` nodes.
@@ -304,6 +310,9 @@ Last validation run in this state:
   Flamethrower.
 - Ability tuning changed: Shockwave `22 -> 28`, Momentum Burst `24 -> 28`, Orbit `9 -> 14`, Turret `18 -> 16`,
   Afterburn `9 -> 10`, Quake `10 -> 12`.
+- The July 14 playtest patch gives Orbit a scalable `20s` lifetime, raises Shockwave Resonance to one delayed
+  `1.5x`-radius / `1.3x`-damage slam, sets Shockwave Dash damage to `45`, and converts Afterburn to a moving wake
+  (`70px` radius, `0.15s` emission cadence, `1.5s` segment lifetime).
 - Passive/ultimate tuning changed: Risk max-Heat vulnerability `+50% -> +25%`, Bloodthirst heal-per-kill
   `8 -> 5`, Gorge bonus `4 -> 3`, combat ultimate charge reduced for higher-density rooms, Slipstream damage
   `1.12 -> 1.3` plus enemy/projectile slow and dash recharge.
@@ -316,6 +325,7 @@ Last validation run in this state:
   Blood Frenzy heal `35->25`; ability base cooldowns +~25% + quick_reflexes trimmed; Overheat decay `14->6` /
   delay `0.75->1.5` (stickier); ult charge `KILL 0.05->0.02` (~1/room); HP-pickup drop chance `0.06->0.03`
   (heal 8 unchanged); homing-projectile cap `MAX_ACTIVE_HOMING=40`.
+- The July 14 follow-up further reduces Tank overshield cap to `0.16` and raises decay to `13/s`.
 - **Enemy projectiles now persist** until they hit a wall/player/summon (ignore lifetime + max_distance for
   `team==enemy`), with an arena-bounds despawn backstop.
 - **Element mutations gate by delivery + dedupe** (`c9b9953`): fire_trail/freeze_shot/poison require
@@ -345,6 +355,10 @@ Last validation run in this state:
 - Phase 4 tuning is first-pass and should get one more live `1P` / `2P` feel check, especially rooms `10+`.
 - Champion readability inside dense waves still needs live validation after the cooldown/damage tuning.
 - The two next-room cards depend on existing enemy/modifier differentiation; keep watching whether choices feel meaningful.
+- `vampiric_wake` still declares `wake_lifesteal` without a runtime consumer; ownership/rounding behavior was not
+  specified by the approved patch and remains deliberately unimplemented.
+- The July 14 isolated `flowfield_stress` 200+200 bucket varied from `31.9` to `54.9` FPS across consecutive
+  runs; `entity_ramp` reached `138.3` FPS. Recheck the flow probe before drawing a tuning conclusion.
 - New V4 polish tuning is still first-pass and needs live 1P/2P feel checks across all four classes.
 - Deep runs may exhaust upgrade variety; parked until real run depths are known.
 - Objective-panel icons still use simple letter fallback glyphs (`H` / `K` / `C`).
@@ -352,12 +366,7 @@ Last validation run in this state:
 
 ## Next Step
 
-V4 implementation + polish round + Round 2 rebalance are all implemented on `v4/class-system` (canonical, in the
-main checkout). Open items:
-
-- **Playtest Round 2** across all four classes — confirm the eased early game feels fair (starting values are
-  conservative; easy to nudge), and that density/projectiles are comfortable.
-- **Flow-field perf optimization** is required before authoring obstacles into rooms (16 fps at 200 with
-  obstacles — see the Round 2 section above + `v4-arena-pathfinding-plan.md`). Until then the flow field stays
-  inert (no obstacles in any room).
-- Live-check contact damage, loadout assignment, ultimate cadence, and dense-room readability.
+Run a focused 1P/2P live playtest of the July 14 patch across all four classes. Prioritize Hazard Floor
+reachability/mine readability, Sawblade dodge lanes, pillar rise warnings, Orbit uptime, Tank sustain, the
+Afterburn wake, and controller focus on the pause/route screens. Re-run `flowfield_stress` in a quiet session
+because the latest isolated measurements were unusually variable.
