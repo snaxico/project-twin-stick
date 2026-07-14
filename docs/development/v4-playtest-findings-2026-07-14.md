@@ -203,7 +203,8 @@ checkerboard. Damage flavor stays as **fire / frost / mine skins** (kept as dist
 variety survives). Both are damage floors, so **no flow-field/obstacle cost** to the merge.
 - New unified mechanic (e.g. `HazardFloorMechanic`), skin param `fire | frost | mine`, absorbing
   `PulsingGridMechanic` + `IslandsMechanic`.
-- Frost skin keeps the slow zone modifier; mine skin keeps proximity blasts; fire skin is burn damage.
+- Frost skin keeps the slow zone modifier; mine skin keeps proximity blasts; fire skin deals direct periodic
+  damage with no lingering burn status.
 - Safe zones are **organic** (drifting pads / soft shapes), not a checkerboard — matches the "less structured"
   direction below.
 
@@ -245,12 +246,13 @@ safe zones you stand in; zones **reshuffle with a telegraph**.
 - **Safe zones:** 4 per set, radius `170`. Author 3 position sets. Always ≥2 zones live.
 - **Cycle:** hold `2.8s` → telegraph next set `0.8s` (amber rings on the incoming zones) → zones jump. `START_GRACE 1.5s` before first damage.
 - **Skins (off-zone effect, players-only):**
-  - `fire`: `5` dmg / `0.5s`.
+  - `fire`: direct `5` dmg / `0.5s`; no lingering burn DoT.
   - `frost`: `3` dmg / `0.5s` + move slow `×0.5` while off-zone.
   - `mine`: `10` proximity mines seeded in the hazard between zones each reshuffle; `22` dmg blast, trigger radius
-    `110`, blast radius `150`. **Placement rules:** each mine ≥ `230px` from any current safe-zone centre
-    (zone radius `170` + `60` margin, so standing in a zone is never inside a trigger); ≥ `200px` between mines
-    (no clumping). Triggered mines are **consumed until the next reshuffle** (like the old mine_grid
+    `110`, blast radius `150`. **Placement rules:** each mine ≥ `340px` from any current safe-zone centre
+    (zone radius `170` + trigger radius `110` + `60` margin, so standing in a zone never triggers a mine);
+    ≥ `300px` between mines (trigger and blast circles do not overlap; no simultaneous double-trigger/clumping).
+    Triggered mines are **consumed until the next reshuffle** (like the old mine_grid
     `_spent_mines`). Incoming mine positions are **telegraphed during the `0.8s` window** (dim markers) and only
     arm when the new set goes live.
 - **Fairness rule (acceptance):** telegraph ≥ `0.8s`; author position sets so the max gap from any current zone
