@@ -22,7 +22,7 @@
       "group": "ability",
       "rarity": "common",
       "max_level": 3,
-      "requires": ["projectile"],
+      "requires": [],
       "apply": "ability",
       "params": { "area_bonus_per_level": 0.25 }
     },
@@ -35,7 +35,7 @@
       "group": "ability",
       "rarity": "common",
       "max_level": 3,
-      "requires": ["projectile"],
+      "requires": [],
       "apply": "ability",
       "params": { "duration_bonus_per_level": 0.333 }
     },
@@ -48,7 +48,7 @@
       "group": "attribute",
       "rarity": "common",
       "max_level": 3,
-      "requires": ["projectile"],
+      "requires": [],
       "apply": "passive",
       "params": { "move_speed_values": [0.15, 0.3, 0.45] }
     },
@@ -159,6 +159,8 @@
       "group": "ability",
       "rarity": "rare",
       "requires": ["buff"],
+      "requires_ability": "overcharge",
+      "requires_weapon_tags": ["projectile"],
       "apply": "ability",
       "params": { "pierce_bonus": 2, "projectile_speed_mult": 1.2 }
     },
@@ -171,6 +173,7 @@
       "group": "ability",
       "rarity": "rare",
       "requires": ["blast"],
+      "requires_ability": "shockwave",
       "apply": "ability",
       "params": { "extra_pulses": 2, "pulse_interval": 0.4 }
     },
@@ -183,20 +186,9 @@
       "group": "ability",
       "rarity": "rare",
       "requires": ["mobility"],
+      "requires_ability": "dash",
       "apply": "ability",
       "params": { "passthrough_damage": 20 }
-    },
-    {
-      "id": "blink_twin_charge",
-      "name": "Twin Charge",
-      "description": "Mobility abilities store one extra charge when supported by that runtime.",
-      "icon": "dash",
-      "category": "ability",
-      "group": "ability",
-      "rarity": "rare",
-      "requires": ["mobility"],
-      "apply": "ability",
-      "params": { "extra_charges": 1 }
     },
     {
       "id": "shield_aegis_burst",
@@ -207,6 +199,7 @@
       "group": "ability",
       "rarity": "rare",
       "requires": ["defense"],
+      "requires_ability": "shield",
       "apply": "ability",
       "params": { "burst_radius": 200.0, "burst_damage": 40 }
     },
@@ -219,6 +212,7 @@
       "group": "ability",
       "rarity": "rare",
       "requires": ["summon"],
+      "requires_ability": "turret",
       "apply": "deployable",
       "params": { "gun_count": 2 }
     },
@@ -231,6 +225,7 @@
       "group": "ability",
       "rarity": "rare",
       "requires": ["summon"],
+      "requires_ability": "orbit",
       "apply": "deployable",
       "params": { "expand_interval": 2.0, "expand_bonus_radius": 120.0, "extra_orbs": 2 }
     },
@@ -243,6 +238,7 @@
       "group": "ability",
       "rarity": "rare",
       "requires": ["summon"],
+      "requires_ability": "minefield",
       "apply": "deployable",
       "params": { "mine_count_bonus": 3 }
     },
@@ -316,6 +312,7 @@
       "group": "ability",
       "rarity": "rare",
       "requires": ["mobile", "blast"],
+      "requires_ability": "momentum_burst",
       "apply": "ability",
       "params": { "pull_force": 780.0 }
     },
@@ -424,6 +421,7 @@
       "group": "radiance",
       "rarity": "signature",
       "requires": ["controller", "summon"],
+      "requires_ability": "summon",
       "apply": "deployable",
       "params": { "deployable_cap_bonus": 1 }
     },
@@ -460,6 +458,7 @@
       "group": "ability",
       "rarity": "signature",
       "requires": ["controller", "summon"],
+      "requires_ability": "summon",
       "apply": "deployable",
       "params": { "construct_count_bonus": 1 }
     },
@@ -472,6 +471,7 @@
       "group": "ability",
       "rarity": "rare",
       "requires": ["controller", "buff", "summon"],
+      "requires_ability": "reinforce",
       "apply": "deployable",
       "params": { "shield_amount": 35 }
     },

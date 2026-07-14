@@ -7,6 +7,7 @@
       "tags": ["blast"],
       "slot": "def",
       "type": "instant",
+      "area_scalable": true,
       "cooldown": 6.25,
       "duration": 0.0,
       "stats": {
@@ -38,6 +39,7 @@
       "tags": ["buff"],
       "slot": "off",
       "type": "sustained",
+      "duration_scalable": true,
       "cooldown": 15.0,
       "duration": 6.0,
       "stats": {
@@ -52,6 +54,7 @@
       "tags": ["defense"],
       "slot": "def",
       "type": "sustained",
+      "duration_scalable": true,
       "cooldown": 11.0,
       "duration": 3.0,
       "stats": {
@@ -82,6 +85,7 @@
       "tags": ["summon"],
       "slot": "off",
       "type": "instant",
+      "area_scalable": true,
       "cooldown": 9.0,
       "duration": 0.0,
       "stats": {
@@ -100,6 +104,7 @@
       "tags": ["summon"],
       "slot": "off",
       "type": "sustained",
+      "area_scalable": true,
       "cooldown": 15.0,
       "duration": 5.0,
       "stats": {
@@ -119,6 +124,8 @@
       "tags": ["field"],
       "slot": "class",
       "type": "sustained",
+      "area_scalable": true,
+      "duration_scalable": true,
       "cooldown": 10.0,
       "duration": 3.0,
       "stats": {
@@ -135,6 +142,7 @@
       "tags": ["blast"],
       "slot": "class",
       "type": "instant",
+      "area_scalable": true,
       "cooldown": 9.0,
       "duration": 0.0,
       "stats": {
@@ -152,6 +160,7 @@
       "tags": ["defense"],
       "slot": "class",
       "type": "instant",
+      "area_scalable": true,
       "cooldown": 10.0,
       "duration": 0.0,
       "stats": {
@@ -188,6 +197,7 @@
       "tags": ["blast"],
       "slot": "class",
       "type": "instant",
+      "area_scalable": true,
       "cooldown": 7.5,
       "duration": 0.0,
       "stats": {
@@ -204,6 +214,8 @@
       "tags": ["field"],
       "slot": "class",
       "type": "sustained",
+      "area_scalable": true,
+      "duration_scalable": true,
       "cooldown": 11.0,
       "duration": 4.0,
       "stats": {
@@ -240,6 +252,7 @@
       "tags": ["summon"],
       "slot": "class",
       "type": "instant",
+      "area_scalable": true,
       "cooldown": 15.0,
       "duration": 0.0,
       "stats": {
@@ -260,6 +273,7 @@
       "tags": ["buff"],
       "slot": "class",
       "type": "instant",
+      "area_scalable": true,
       "cooldown": 11.0,
       "duration": 0.0,
       "stats": {
@@ -274,6 +288,7 @@
       "tags": ["bolt", "blast", "dot"],
       "slot": "class",
       "type": "instant",
+      "area_scalable": true,
       "cooldown": 5.0,
       "duration": 0.0,
       "stats": {
@@ -299,6 +314,7 @@
       "tags": ["dot"],
       "slot": "class",
       "type": "instant",
+      "area_scalable": true,
       "cooldown": 6.25,
       "duration": 0.0,
       "stats": {

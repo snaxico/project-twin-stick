@@ -463,15 +463,16 @@ func _build_runtime_ability(player_index: int, ability_definition: Dictionary) -
 	var duration_mult := _mutation_system.get_ability_duration_multiplier(player_index)
 	_apply_radiance_ability_stats(player_index, ability_definition, stats)
 	var ability_type := str(ability_definition.get("type", "instant"))
-	var scales_duration := ability_type != "instant" and ability_type != "movement"
+	var scales_area := bool(ability_definition.get("area_scalable", false))
+	var scales_duration := bool(ability_definition.get("duration_scalable", false))
 	var base_cooldown := float(ability_definition.get("cooldown", 1.0))
 	var cooldown := maxf(0.2, base_cooldown * maxf(cooldown_mult, 0.1))
 	if _player_has_passive(player_index, "overheat"):
 		base_cooldown = 0.5
 		cooldown = 0.5
 	var duration := maxf(0.0, float(ability_definition.get("duration", 0.0)) * (duration_mult if scales_duration else 1.0))
-	for stat_key in ["radius", "orbit_radius", "distance"]:
-		if stats.has(stat_key):
+	for stat_key in ["radius", "orbit_radius", "distance", "trail_radius", "spread_radius", "explosion_radius", "attack_radius", "trigger_radius", "ignite_radius", "impact_pool_radius"]:
+		if scales_area and stats.has(stat_key):
 			stats[stat_key] = float(stats[stat_key]) * area_mult
 	for stat_key in ["duration", "trail_duration"]:
 		if scales_duration and stats.has(stat_key):

@@ -192,7 +192,7 @@ func get_ability_rare_effects(player_index: int, ability_id: String) -> Dictiona
 		var apply_scope := str(mutation.get("apply", ""))
 		if apply_scope != "ability" and apply_scope != "deployable":
 			continue
-		if not _mutation_targets_item(mutation, ability_tags):
+		if not _mutation_targets_item(mutation, ability_tags, ability_id):
 			continue
 		var params: Dictionary = (mutation.get("params", {}) as Dictionary).duplicate(true)
 		for key in params.keys():
@@ -324,10 +324,25 @@ func _can_still_pick(player_index: int, mutation_id: String) -> bool:
 func _mutation_requirements_met(player_index: int, mutation_id: String) -> bool:
 	if not _definition_map.has(mutation_id):
 		return false
+	var mutation: Dictionary = _definition_map[mutation_id] as Dictionary
 	var tag_set := _kit_tag_set(player_index)
-	for tag_variant in ((_definition_map[mutation_id] as Dictionary).get("requires", []) as Array):
+	for tag_variant in (mutation.get("requires", []) as Array):
 		if not tag_set.has(str(tag_variant)):
 			return false
+	var required_ability := str(mutation.get("requires_ability", ""))
+	if not required_ability.is_empty() and _get_equipped_ability_definition(player_index, required_ability).is_empty():
+		return false
+	var required_weapon_tags: Array = mutation.get("requires_weapon_tags", []) as Array
+	if not required_weapon_tags.is_empty():
+		var weapon_tags: Dictionary = {}
+		_add_tags(weapon_tags, RunState.get_weapon(player_index).get("tags", []) as Array)
+		for tag_variant in required_weapon_tags:
+			if not weapon_tags.has(str(tag_variant)):
+				return false
+	if mutation_id == "wide_pulse" and not _kit_has_ability_flag(player_index, "area_scalable"):
+		return false
+	if mutation_id == "duration" and not _kit_has_ability_flag(player_index, "duration_scalable"):
+		return false
 	return true
 
 func _get_rarity(mutation_id: String) -> String:
@@ -392,7 +407,23 @@ func _get_equipped_ability_definition(player_index: int, ability_id: String) -> 
 		return RunState.get_ability(player_index, slot_index)
 	return {}
 
-func _mutation_targets_item(mutation: Dictionary, item_tags: Dictionary) -> bool:
+
+func _kit_has_ability_flag(player_index: int, flag_name: String) -> bool:
+	var inventory = RunState.get_player_inventory(player_index)
+	if inventory == null:
+		return false
+	var ability_ids: Array = inventory.get_ability_ids()
+	for slot_index in range(ability_ids.size()):
+		var ability := RunState.get_ability(player_index, slot_index)
+		if bool(ability.get(flag_name, false)):
+			return true
+	return false
+
+
+func _mutation_targets_item(mutation: Dictionary, item_tags: Dictionary, ability_id: String = "") -> bool:
+	var required_ability := str(mutation.get("requires_ability", ""))
+	if not required_ability.is_empty() and ability_id != required_ability:
+		return false
 	var functional_requirements: Array = []
 	for tag_variant in (mutation.get("requires", []) as Array):
 		var tag := str(tag_variant)
