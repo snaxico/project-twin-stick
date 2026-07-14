@@ -87,9 +87,11 @@ Data-only gate edits are insufficient — the system must learn two new keys, ho
    - *Offer:* in `_mutation_requirements_met`, require the active weapon (`RunState.get_weapon`) to carry all
      listed tags. (Used by Piercing Overdrive.)
 3b. **`area_scalable` eligibility** (Wide Pulse) — mirror of `duration_scalable`.
-   - Add an `area_scalable: true` flag to abilities with a meaningful area; **A1** flags the eligible non-Orbit
-     area abilities (Shockwave, Shield, Minefield, Momentum Burst, Deflect, Ground Slam, Quake, Reinforce,
-     Afterburn, Summon, Fireball, Ignite — verify each). *Offer:* Wide Pulse eligible iff the kit has ≥1
+   - Add an `area_scalable: true` flag to abilities with a **real** area; **A1** flags the eligible non-Orbit
+     area abilities (Shockwave, Minefield, Momentum Burst, Deflect, Ground Slam, Quake, Reinforce, Afterburn,
+     Summon, Fireball, Ignite — verify each). **Shield is EXCLUDED:** its `radius` (78) only drives the
+     `_spawn_shield_effect` visual (`CoopManager.gd:1362`); immunity is time-based/global (`_shield_until`,
+     `Player.gd:695`), so scaling it is a dead interaction. *Offer:* Wide Pulse eligible iff the kit has ≥1
      `area_scalable` ability. *Effect:* expand the `_build_runtime_ability` area loop (`CoopManager.gd:473`) from
      `[radius, orbit_radius, distance]` to also include `trail_radius, spread_radius, explosion_radius,
      attack_radius, trigger_radius, ignite_radius, impact_pool_radius`; only scale keys the ability actually has.

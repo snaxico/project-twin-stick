@@ -117,12 +117,12 @@ runtime support, and A1 acceptance criteria. **Approved 2026-07-14 — Tier 1–
   heal/kill, Gorge/Overflow, and Blood Frenzy heal unchanged. Measure the effective HP/s drop after implementing
   as validation. Implemented in Slice B.
 - **Orbit stacks endlessly. DECISION (2026-07-14, updated): decouple orbit-node lifetime from slot-active
-  duration so Orbit mildly overlaps (overlap is wanted).** Add a **separate `orbit_lifetime` stat (~18–22s)** for
+  duration so Orbit mildly overlaps (overlap is wanted).** Add a **separate `orbit_lifetime` stat (first-pass `20s`)** for
   the orbit node, and keep the **slot-active `duration` below the cooldown**. This is required because Orbit calls
   `_set_slot_active()` and `_is_slot_ready()` needs *both* cooldown finished *and* the ability no longer active —
   so if we simply bumped the ability `duration` to 18–22s, the recast interval would grow to 18–22s and the old
   orbit would expire exactly as the next spawns → overlap of **1, not 2**. With the decoupled model (slot-active
-  < ~15s cooldown; node lifetime ~18–22s) you recast each cooldown while the previous orbit is still alive →
+  < ~15s cooldown; node lifetime `20s`) you recast each cooldown while the previous orbit is still alive →
   **~2 concurrent (the wanted overlap)** at base values. A *finite* `orbit_lifetime` is what fixes the original
   bug — orbits now expire instead of persisting forever. Concurrent count ≈ `ceil(orbit_lifetime /
   effective_cooldown)`, so a build that invests in cooldown reduction (Quick Reflexes) + Duration can stack more.
@@ -170,8 +170,8 @@ runtime support, and A1 acceptance criteria. **Approved 2026-07-14 — Tier 1–
 - **Shockwave Resonance** (`sw_resonance`). **DECISION: one big delayed slam.** Replace the 2 staggered pulses
   with a single larger second impact ~0.5s after the first (wider radius, more damage) — "boom… BOOM" instead
   of filler. Rework `extra_pulses`/`pulse_interval` params into a single delayed-slam definition.
-- **Shockdash** (`dash_shockdash`). **DECISION: just raise the number.** Bump `passthrough_damage` `20 → ~40+`;
-  no new mechanic, no knockback re-add. Tune the exact value during Slice D.
+- **Shockdash** (`dash_shockdash`). **DECISION: just raise the number.** Bump `passthrough_damage` `20 → 45`
+  (locked in Slice D); no new mechanic, no knockback re-add.
 - **Afterburn** (`afterburn`). **DECISION: burning wake that follows the player.** Convert the static field drop
   into a burning trail dragged behind movement over its duration (fits Mobile / kiting), with clearer feedback.
   This is the biggest of the three (runtime change from a placed field to a moving wake).
@@ -213,7 +213,7 @@ redesigned (aligns with the "quality over quantity" north star).
 | Mechanic | Finding | Direction | Status |
 |---|---|---|---|
 | Fire/Frost/Mine Grid + Islands | grids static/unavoidable; grid ≈ islands (redundant) | **MERGE → one "Hazard Floor" mechanic**, Islands model + organic moving safe zones + telegraph; fire/frost/mine skins | merge approved (spec set) |
-| Pinwheel (`PinwheelMechanic`) | central spokes weak — easy to evade | **rework → ROAMING SAWBLADES**: 2–3 spinning blades drift/bounce the whole arena; no fixed safe spot. Count/speed/damage TBD | direction approved (spec set) |
+| Pinwheel (`PinwheelMechanic`) | central spokes weak — easy to evade | **rework → ROAMING SAWBLADES**: `3` blades drift/bounce the whole arena; no fixed safe spot. Speed `130`, damage `8` (Spec 2) | direction approved (spec set) |
 | Pop-up Pillars (`PopupPillarsMechanic`) | needs more placements + color code; too structured | **more pillars + 3-state color (down=safe / rising=warning / up=solid) + damage-on-rise + HAND-AUTHORED ORGANIC CLUSTERS** (irregular designed sets per room, not a lattice) | direction approved (spec set) |
 | Sliding Gates (`SlidingGatesMechanic`) | boring | **CUT** | cut approved |
 | Bulwark (`BulwarkMechanic`) | boring | **CUT** | cut approved |
@@ -247,7 +247,12 @@ safe zones you stand in; zones **reshuffle with a telegraph**.
 - **Skins (off-zone effect, players-only):**
   - `fire`: `5` dmg / `0.5s`.
   - `frost`: `3` dmg / `0.5s` + move slow `×0.5` while off-zone.
-  - `mine`: proximity mines seeded in the hazard between zones, reseeded each reshuffle; `22` dmg blast, trigger `110`, blast radius `150`.
+  - `mine`: `10` proximity mines seeded in the hazard between zones each reshuffle; `22` dmg blast, trigger radius
+    `110`, blast radius `150`. **Placement rules:** each mine ≥ `230px` from any current safe-zone centre
+    (zone radius `170` + `60` margin, so standing in a zone is never inside a trigger); ≥ `200px` between mines
+    (no clumping). Triggered mines are **consumed until the next reshuffle** (like the old mine_grid
+    `_spent_mines`). Incoming mine positions are **telegraphed during the `0.8s` window** (dim markers) and only
+    arm when the new set goes live.
 - **Fairness rule (acceptance):** telegraph ≥ `0.8s`; author position sets so the max gap from any current zone
   to the nearest next-set zone ≤ `player_speed × telegraph` — i.e. both players can always reach a safe zone
   before the current set expires. No arena state where a player is unavoidably off-zone.
@@ -404,8 +409,10 @@ depends on A1 (gating). Slice E specs are approved (Spec 1/2/3 in "WHERE mechani
     (radius × `slam_radius_mult`, damage × `slam_damage_mult`) instead of N staggered equal pulses.
   - **Shockdash** → `dash_shockdash` `passthrough_damage` `20 → 45`.
   - **Afterburn** → burning wake following the player: during the `3s` duration, emit a burning segment at the
-    player's position every `~0.15s`; each segment lives `1.5s`, radius `70`, and applies the existing Afterburn
-    tick (`10` dmg / `0.35s`). Replaces the single placed field. (Locate the Afterburn field-spawn runtime in D.)
+    player's position every `~0.15s`; each segment lives `1.5s` and applies the existing Afterburn tick
+    (`10` dmg / `0.35s`). **Segment radius = the compiled `trail_radius`** — set data base `trail_radius: 70` and
+    read the scaled value per segment; do **not** hardcode `70`, or Wide Pulse's `area_scalable` scaling of
+    `trail_radius` is lost. Replaces the single placed field. (Locate the Afterburn field-spawn runtime in D.)
 - **Out of scope:** other abilities; gating (done in A1); numbers beyond these three.
 - **Acceptance:** Resonance produces one larger delayed slam (not 2 small pulses); Shockdash noticeably harder;
   Afterburn trails behind movement. First-pass values flagged for live feel-check.
@@ -451,7 +458,7 @@ Decided (no longer open) — A0 gate assignments approved 2026-07-14 (see the au
 
 First-pass values are set in the specs above; these get a **live feel-check** after implementation (validation,
 not open decisions): Shockdash `45`, Afterburn wake segments, sawblade count `3`/speed `130`/damage `8`,
-Hazard-Floor telegraph `0.8s`/cycle `3.6s`/skin damage, Pop-up Pillars ~`9`/rise `10`, Orbit `orbit_lifetime`
+Hazard-Floor telegraph `0.8s`/cycle `3.6s`/skin damage, Pop-up Pillars `9`/rise `10`, Orbit `orbit_lifetime`
 `20s` + slot-active `5s`, Tank overshield `0.16`/decay `13`.
 
 Out of scope (rejected, not pending): generalize-the-effects adaptive mutation families (Option B) — we chose
