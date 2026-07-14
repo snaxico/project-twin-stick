@@ -92,7 +92,7 @@ func spawn_opening_burst() -> void:
 	for index in range(burst_size):
 		if _obstacle_enemy_cap_reached():
 			break
-		var enemy_type := _pick_spawn_type(_room_composition if not _room_composition.is_empty() else _room_enemy_pool)
+		var enemy_type := _pick_spawn_type(_get_spawn_source())
 		var reserved_cost := _shooter_cost(enemy_type)
 		var spawn_position := _get_enemy_spawn_position_for_index(index, start_edge)
 		queue_enemy_spawn(enemy_type, spawn_position, health_multiplier, reserved_cost)
@@ -178,7 +178,7 @@ func _continuous_spawn(room_elapsed: float) -> void:
 		for index in range(batch):
 			if _obstacle_enemy_cap_reached():
 				break
-			var enemy_type := _pick_spawn_type(_room_composition if not _room_composition.is_empty() else _room_enemy_pool)
+			var enemy_type := _pick_spawn_type(_get_spawn_source())
 			var reserved_cost := _shooter_cost(enemy_type)
 			var spawn_position := _get_enemy_spawn_position() if batch == 1 else _get_enemy_spawn_position_for_index(index, stream_start_edge)
 			queue_enemy_spawn(enemy_type, spawn_position, health_multiplier, reserved_cost)
@@ -193,7 +193,7 @@ func _continuous_spawn(room_elapsed: float) -> void:
 		for index in range(burst_size):
 			if _obstacle_enemy_cap_reached():
 				break
-			var enemy_type := _pick_spawn_type(_room_composition if not _room_composition.is_empty() else _room_enemy_pool)
+			var enemy_type := _pick_spawn_type(_get_spawn_source())
 			var reserved_cost := _shooter_cost(enemy_type)
 			var spawn_position := _get_enemy_spawn_position_for_index(index, burst_start_edge)
 			queue_enemy_spawn(enemy_type, spawn_position, health_multiplier, reserved_cost)
@@ -241,6 +241,12 @@ func _pick_spawn_type(source) -> String:
 		return _roll_melee_type(source)
 	_active_shooter_budget += cost
 	return rolled_type
+
+
+func _get_spawn_source():
+	if not _room_composition.is_empty():
+		return _room_composition
+	return _room_enemy_pool
 
 
 func _roll_composition_enemy_type(composition: Dictionary) -> String:

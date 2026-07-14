@@ -310,8 +310,8 @@ func _nearest_passable_index_for_point(world_position: Vector2) -> int:
 		return _cell_index(point_cell)
 	var max_radius := maxi(_cols, _rows)
 	for search_radius in range(1, max_radius + 1):
-		var best_index := -1
-		var best_distance_sq := INF
+		var ring_best_index := -1
+		var ring_best_distance_sq := INF
 		for cell_y in range(point_cell.y - search_radius, point_cell.y + search_radius + 1):
 			for cell_x in range(point_cell.x - search_radius, point_cell.x + search_radius + 1):
 				if abs(cell_x - point_cell.x) != search_radius and abs(cell_y - point_cell.y) != search_radius:
@@ -321,11 +321,11 @@ func _nearest_passable_index_for_point(world_position: Vector2) -> int:
 					continue
 				var candidate_index := _cell_index(candidate_cell)
 				var distance_sq := world_position.distance_squared_to(_cell_center(candidate_cell))
-				if distance_sq < best_distance_sq:
-					best_distance_sq = distance_sq
-					best_index = candidate_index
-		if best_index >= 0:
-			return best_index
+				if distance_sq < ring_best_distance_sq:
+					ring_best_distance_sq = distance_sq
+					ring_best_index = candidate_index
+		if ring_best_index >= 0:
+			return ring_best_index
 	var best_index := -1
 	var best_distance_sq := INF
 	for index in range(_cols * _rows):

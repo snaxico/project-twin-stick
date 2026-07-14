@@ -587,8 +587,8 @@ func apply_poison(dps: float, duration: float) -> void:
 	_poison_until = max(_poison_until, _current_time_seconds() + max(duration, 0.1))
 	_poison_tick_at = min(_poison_tick_at, _current_time_seconds() + 0.2) if _poison_tick_at > 0.0 else _current_time_seconds() + 0.2
 
-func seed_rng(seed: int) -> void:
-	_random.seed = seed
+func seed_rng(rng_seed: int) -> void:
+	_random.seed = rng_seed
 
 func set_profiling_immortal(enabled: bool) -> void:
 	_profiling_immortal = enabled

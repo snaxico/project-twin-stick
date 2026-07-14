@@ -236,6 +236,9 @@ abilities, ultimates, and base mutations are free.
 Last validation run in this state:
 
 - `git diff --check`
+- Godot warning hygiene is clean for the July 14 patch: the Enemy RNG seed parameter no longer shadows the
+  built-in `seed`, WaveDirector no longer mixes Dictionary/Array values in a ternary, and FlowField's nearest
+  passable-cell search no longer redeclares parent-scope locals.
 - Godot headless parse:
   - `Godot_v4.6.2-stable_win64_console.exe --headless --path D:\GameDev\Project_Twin_stick --quit`
 - Bootstrap scene headless smoke boot:
