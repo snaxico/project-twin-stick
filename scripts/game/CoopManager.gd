@@ -31,8 +31,7 @@ const ParticleFactoryData = preload("res://scripts/juice/ParticleFactory.gd")
 const HitStopManagerData = preload("res://scripts/juice/HitStopManager.gd")
 const PauseDebugUiData = preload("res://scripts/game/PauseDebugUi.gd")
 const FlowFieldData = preload("res://scripts/game/FlowField.gd")
-const PulsingGridMechanicData = preload("res://scripts/arena/PulsingGridMechanic.gd")
-const IslandsMechanicData = preload("res://scripts/arena/IslandsMechanic.gd")
+const HazardFloorMechanicData = preload("res://scripts/arena/HazardFloorMechanic.gd")
 const PinwheelMechanicData = preload("res://scripts/arena/PinwheelMechanic.gd")
 const TeslaArcsMechanicData = preload("res://scripts/arena/TeslaArcsMechanic.gd")
 const DriftingCloudsMechanicData = preload("res://scripts/arena/DriftingCloudsMechanic.gd")
@@ -1041,10 +1040,8 @@ func _apply_where_mechanic() -> void:
 	var mechanic = null
 	match where_id:
 		"fire_grid", "frost_grid", "mine_grid":
-			mechanic = PulsingGridMechanicData.new()
+			mechanic = HazardFloorMechanicData.new()
 			mechanic.set_variant(where_id)
-		"islands":
-			mechanic = IslandsMechanicData.new()
 		"pinwheel":
 			mechanic = PinwheelMechanicData.new()
 		"tesla_arcs":

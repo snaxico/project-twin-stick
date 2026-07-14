@@ -3,10 +3,9 @@ extends Control
 const GAME_WORLD_SCENE = preload("res://scenes/game/GameWorld.tscn")
 const MODIFIERS_DATA_PATH := "res://data/modifiers.json"
 const WHERE_DISPLAY := {
-	"fire_grid": "Fire Grid",
-	"frost_grid": "Frost Grid",
-	"mine_grid": "Mine Grid",
-	"islands": "Islands",
+	"fire_grid": "Fire Hazard Floor",
+	"frost_grid": "Frost Hazard Floor",
+	"mine_grid": "Mine Hazard Floor",
 	"pinwheel": "Pinwheel",
 	"tesla_arcs": "Tesla Arcs",
 	"drifting_clouds": "Drifting Clouds",

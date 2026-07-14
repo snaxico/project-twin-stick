@@ -17,7 +17,6 @@ const IMPLEMENTED_WHERE: Array = [
 	"fire_grid",
 	"frost_grid",
 	"mine_grid",
-	"islands",
 	"pinwheel",
 	"tesla_arcs",
 	"drifting_clouds",
