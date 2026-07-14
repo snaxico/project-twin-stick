@@ -21,6 +21,7 @@ const MineFieldModifierData = preload("res://scripts/modifiers/MineFieldModifier
 const ShrinkingArenaModifierData = preload("res://scripts/modifiers/ShrinkingArenaModifier.gd")
 const TurretNodeData = preload("res://scripts/game/TurretNode.gd")
 const OrbitNodeData = preload("res://scripts/game/OrbitNode.gd")
+const AfterburnWakeData = preload("res://scripts/game/AfterburnWake.gd")
 const SummonNodeData = preload("res://scripts/game/SummonNode.gd")
 const HealthPickupData = preload("res://scripts/pickups/HealthPickup.gd")
 const HazardZoneData = preload("res://scripts/game/HazardZone.gd")
@@ -1379,7 +1380,9 @@ func _on_player_ability_activated(player, slot_index: int, ability_id: String, o
 			effects.add_child(orbit)
 			_active_orbits.append(orbit)
 		"afterburn":
-			_spawn_player_fire_zone(origin, stats)
+			var wake := AfterburnWakeData.new()
+			wake.configure(player, stats, effects)
+			effects.add_child(wake)
 			_spawn_zone_cast_pulse(origin, float(stats.get("trail_radius", stats.get("radius", 120.0))), tint, 0.75)
 		"momentum_burst":
 			var burst_stats := stats.duplicate(true)

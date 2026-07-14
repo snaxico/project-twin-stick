@@ -140,16 +140,19 @@ func spawn_player_shockwave(origin: Vector2, stats: Dictionary) -> void:
 
 
 func schedule_player_shockwave_resonance(origin: Vector2, stats: Dictionary) -> void:
-	var extra_pulses: int = maxi(0, int(stats.get("extra_pulses", 0)))
-	if extra_pulses <= 0:
+	var slam_delay := float(stats.get("slam_delay", 0.0))
+	var slam_radius_mult := float(stats.get("slam_radius_mult", 1.0))
+	var slam_damage_mult := float(stats.get("slam_damage_mult", 1.0))
+	if slam_delay <= 0.0 or slam_radius_mult <= 1.0 or slam_damage_mult <= 1.0:
 		return
-	var pulse_interval: float = maxf(0.01, float(stats.get("pulse_interval", 0.15)))
-	for pulse_index in range(extra_pulses):
-		_scheduled_player_shockwaves.append({
-			"trigger_at": float(_coop.call("get_room_elapsed")) + pulse_interval * float(pulse_index + 1),
-			"origin": origin,
-			"stats": stats.duplicate(true),
-		})
+	var slam_stats := stats.duplicate(true)
+	slam_stats["radius"] = float(slam_stats.get("radius", 250.0)) * slam_radius_mult
+	slam_stats["damage"] = float(slam_stats.get("damage", 30.0)) * slam_damage_mult
+	_scheduled_player_shockwaves.append({
+		"trigger_at": float(_coop.call("get_room_elapsed")) + slam_delay,
+		"origin": origin,
+		"stats": slam_stats,
+	})
 
 
 func spawn_enemy_shockwave(origin: Vector2, radius: float, damage: int, knockback_force: float, color: Color, destroy_projectiles: bool = false) -> void:
