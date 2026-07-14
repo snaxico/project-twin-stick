@@ -37,10 +37,7 @@ const TeslaArcsMechanicData = preload("res://scripts/arena/TeslaArcsMechanic.gd"
 const DriftingCloudsMechanicData = preload("res://scripts/arena/DriftingCloudsMechanic.gd")
 const BastionMechanicData = preload("res://scripts/arena/BastionMechanic.gd")
 const PopupPillarsMechanicData = preload("res://scripts/arena/PopupPillarsMechanic.gd")
-const SlidingGatesMechanicData = preload("res://scripts/arena/SlidingGatesMechanic.gd")
-const BulwarkMechanicData = preload("res://scripts/arena/BulwarkMechanic.gd")
 const DriftingCoverMechanicData = preload("res://scripts/arena/DriftingCoverMechanic.gd")
-const ShiftingMazeMechanicData = preload("res://scripts/arena/ShiftingMazeMechanic.gd")
 
 const MODIFIERS_DATA_PATH := "res://data/modifiers.json"
 const PROFILING_SEED := 20260707
@@ -1052,14 +1049,8 @@ func _apply_where_mechanic() -> void:
 			mechanic = BastionMechanicData.new()
 		"popup_pillars":
 			mechanic = PopupPillarsMechanicData.new()
-		"sliding_gates":
-			mechanic = SlidingGatesMechanicData.new()
-		"bulwark":
-			mechanic = BulwarkMechanicData.new()
 		"drifting_cover":
 			mechanic = DriftingCoverMechanicData.new()
-		"shifting_maze":
-			mechanic = ShiftingMazeMechanicData.new()
 		_:
 			return
 	_where_mechanic = mechanic

@@ -211,7 +211,7 @@ class _Profiler extends Node:
 			if not _smoke_passed:
 				push_error("PerfRunner: where smoke failed for %s" % where_id)
 				get_tree().quit(1)
-		if where_id == "drifting_cover" or where_id == "sliding_gates" or where_id == "bulwark" or where_id == "shifting_maze":
+		if where_id == "drifting_cover":
 			if _elapsed >= _next_forced_step_at:
 				_next_forced_step_at = _elapsed + 2.0
 				_coop.call("profiling_force_where_step")
@@ -221,7 +221,7 @@ class _Profiler extends Node:
 			return false
 		if not bool(_coop.call("profiling_cover_blocks_projectile")):
 			return false
-		if where_id == "drifting_cover" or where_id == "popup_pillars" or where_id == "sliding_gates" or where_id == "bulwark" or where_id == "shifting_maze":
+		if where_id == "drifting_cover" or where_id == "popup_pillars":
 			var before := int(_coop.call("profiling_where_revision"))
 			if not bool(_coop.call("profiling_force_where_step")):
 				return false

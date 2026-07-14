@@ -22,10 +22,7 @@ const IMPLEMENTED_WHERE: Array = [
 	"drifting_clouds",
 	"bastion",
 	"popup_pillars",
-	"sliding_gates",
-	"bulwark",
 	"drifting_cover",
-	"shifting_maze",
 ]
 const CHAMPION_INTERVAL_BANDS := [
 	{"until_depth": 10, "interval": 5},

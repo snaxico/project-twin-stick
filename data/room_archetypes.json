@@ -11,7 +11,7 @@
         "shooters": [],
         "shooter_ratio": 0.0
       },
-      "where_pool": ["fire_grid", "pinwheel", "tesla_arcs", "drifting_clouds", "sliding_gates", "open"],
+      "where_pool": ["fire_grid", "pinwheel", "tesla_arcs", "drifting_clouds", "open"],
       "twist_pool": ["enemy_speed", "accelerating_waves", "shielded"],
       "density_profile": "high",
       "reward_hint": "Crowd-control test",
@@ -45,7 +45,7 @@
         "shooters": [],
         "shooter_ratio": 0.0
       },
-      "where_pool": ["fire_grid", "mine_grid", "tesla_arcs", "shifting_maze", "open"],
+      "where_pool": ["fire_grid", "mine_grid", "tesla_arcs", "open"],
       "twist_pool": ["explosive_death", "explosive_death", "enemy_speed"],
       "density_profile": "high",
       "reward_hint": "Cleanup discipline",
@@ -62,7 +62,7 @@
         "shooters": [],
         "shooter_ratio": 0.0
       },
-      "where_pool": ["mine_grid", "bulwark", "sliding_gates", "popup_pillars", "open"],
+      "where_pool": ["mine_grid", "popup_pillars", "open"],
       "twist_pool": ["enemy_speed", "explosive_death", "shielded"],
       "density_profile": "medium",
       "reward_hint": "Space-control test",

@@ -11,10 +11,7 @@ const WHERE_DISPLAY := {
 	"drifting_clouds": "Drifting Clouds",
 	"bastion": "Bastion",
 	"popup_pillars": "Pop-up Pillars",
-	"sliding_gates": "Sliding Gates",
-	"bulwark": "Bulwark",
 	"drifting_cover": "Drifting Cover",
-	"shifting_maze": "Shifting Maze",
 }
 
 signal return_to_menu_requested(open_meta_menu: bool)
