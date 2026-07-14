@@ -12,9 +12,11 @@ var expand_interval := 0.0
 var expand_bonus_radius := 0.0
 var orb_visual_scale := 1.0
 var blocks_projectiles := false
+var orbit_lifetime := 20.0
 var tint := Color(0.56, 0.92, 1.0, 1.0)
 var _angle := 0.0
 var _hit_cooldowns: Dictionary = {}
+var _expires_at := 0.0
 
 func configure(orbit_owner: Node2D, stats: Dictionary, color: Color) -> void:
 	owner_node = orbit_owner
@@ -26,6 +28,8 @@ func configure(orbit_owner: Node2D, stats: Dictionary, color: Color) -> void:
 	expand_bonus_radius = maxf(0.0, float(stats.get("expand_bonus_radius", 0.0)))
 	orb_visual_scale = maxf(0.1, float(stats.get("orb_visual_scale", orb_visual_scale)))
 	blocks_projectiles = bool(stats.get("blocks_projectiles", blocks_projectiles))
+	orbit_lifetime = maxf(0.1, float(stats.get("orbit_lifetime", orbit_lifetime)))
+	_expires_at = Time.get_ticks_msec() / 1000.0 + orbit_lifetime
 	tint = color
 	configure_deployable_health(int(stats.get("orbit_health", stats.get("health", 140))), true)
 	set_physics_process(true)
@@ -37,9 +41,12 @@ func _physics_process(delta: float) -> void:
 	if owner_node == null or not is_instance_valid(owner_node):
 		despawn_deployable()
 		return
+	var now := Time.get_ticks_msec() / 1000.0
+	if now >= _expires_at:
+		despawn_deployable()
+		return
 	global_position = owner_node.global_position
 	_angle = fmod(_angle + rotation_speed * delta, TAU)
-	var now := Time.get_ticks_msec() / 1000.0
 	var effective_radius := _current_orbit_radius(now)
 	var orb_positions := _get_orb_positions(effective_radius)
 	for enemy in _get_candidate_enemies(effective_radius + 32.0):

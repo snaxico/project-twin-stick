@@ -105,6 +105,7 @@
       "slot": "off",
       "type": "sustained",
       "area_scalable": true,
+      "duration_scalable": true,
       "cooldown": 15.0,
       "duration": 5.0,
       "stats": {
@@ -114,6 +115,7 @@
         "rotation_speed": 2.6,
         "orb_visual_scale": 1.5,
         "blocks_projectiles": true,
+        "orbit_lifetime": 20.0,
         "orbit_health": 140
       }
     },
