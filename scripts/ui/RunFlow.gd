@@ -79,7 +79,7 @@ func _show_next_room_choice() -> void:
 		if first_button == null:
 			first_button = button
 	if first_button != null:
-		first_button.call_deferred("grab_focus")
+		call_deferred("_focus_route_card", first_button)
 
 func _clear_next_room_cards() -> void:
 	for child in next_room_card_row.get_children():
@@ -93,6 +93,10 @@ func _build_route_card(node: Dictionary) -> Button:
 	button.text = ""
 	var rare_bonus := float(node.get("rare_bonus", 0.0))
 	_apply_route_card_style(button, rare_bonus)
+	button.mouse_entered.connect(_on_route_card_mouse_entered.bind(button))
+	button.focus_entered.connect(_on_route_card_focus_entered.bind(button))
+	button.resized.connect(_update_route_card_pivot.bind(button))
+	_set_route_card_active(button, false)
 	var margin := MarginContainer.new()
 	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -115,8 +119,8 @@ func _build_route_card(node: Dictionary) -> Button:
 	trait_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	trait_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var trait_text := "Champion: %s" % _format_boss_name(str(node.get("boss_type", "Champion"))) if room_type == "boss" else str(node.get("trait_label", "Open room"))
-	trait_label.text = "%s  %s" % [_trait_icon_text("shield" if room_type == "boss" else str(node.get("trait_icon", "open"))), trait_text]
-	trait_label.add_theme_font_size_override("font_size", 15)
+	trait_label.text = trait_text
+	trait_label.add_theme_font_size_override("font_size", 17)
 	trait_label.add_theme_color_override("font_color", Color(0.88, 0.98, 1.0, 0.96))
 	title_row.add_child(trait_label)
 	var danger_label := Label.new()
@@ -171,18 +175,46 @@ func _apply_route_card_style(button: Button, rare_bonus: float) -> void:
 		border_color = Color(1.0, 0.80, 0.26, 0.96)
 	for state in ["normal", "hover", "pressed", "focus"]:
 		var style := StyleBoxFlat.new()
-		style.bg_color = Color(0.035, 0.055, 0.075, 0.96)
-		if state == "hover":
-			style.bg_color = Color(0.055, 0.085, 0.11, 0.98)
+		var is_active_state: bool = state == "hover" or state == "focus"
+		style.bg_color = Color(0.025, 0.04, 0.055, 0.88)
+		if is_active_state:
+			style.bg_color = Color(0.07, 0.13, 0.17, 0.99)
 		elif state == "pressed":
 			style.bg_color = Color(0.025, 0.045, 0.065, 0.98)
-		style.border_color = border_color.lightened(0.22) if state == "focus" else border_color
-		style.set_border_width_all(2 if rare_bonus > 0.0 or state == "focus" else 1)
+		style.border_color = border_color.lightened(0.28) if is_active_state else Color(border_color.r, border_color.g, border_color.b, border_color.a * 0.48)
+		style.set_border_width_all(3 if is_active_state else (2 if rare_bonus > 0.0 else 1))
+		if is_active_state:
+			style.shadow_color = Color(border_color.r, border_color.g, border_color.b, 0.42)
+			style.shadow_size = 8
 		style.corner_radius_top_left = 8
 		style.corner_radius_top_right = 8
 		style.corner_radius_bottom_left = 8
 		style.corner_radius_bottom_right = 8
 		button.add_theme_stylebox_override(state, style)
+
+
+func _on_route_card_mouse_entered(button: Button) -> void:
+	_focus_route_card(button)
+
+
+func _focus_route_card(button: Button) -> void:
+	button.grab_focus()
+	_on_route_card_focus_entered(button)
+
+
+func _on_route_card_focus_entered(button: Button) -> void:
+	for child in next_room_card_row.get_children():
+		if child is Button:
+			_set_route_card_active(child as Button, child == button)
+
+
+func _set_route_card_active(button: Button, active: bool) -> void:
+	button.modulate = Color.WHITE if active else Color(0.72, 0.76, 0.82, 0.86)
+	button.scale = Vector2.ONE * (1.03 if active else 1.0)
+
+
+func _update_route_card_pivot(button: Button) -> void:
+	button.pivot_offset = button.size * 0.5
 
 func _build_modifier_chip(display_name: String) -> PanelContainer:
 	var chip := PanelContainer.new()
@@ -210,29 +242,6 @@ func _build_modifier_chip(display_name: String) -> PanelContainer:
 	label.add_theme_color_override("font_color", Color(0.86, 0.94, 1.0, 0.94))
 	margin.add_child(label)
 	return chip
-
-func _trait_icon_text(icon_id: String) -> String:
-	match icon_id:
-		"flame":
-			return "F"
-		"snow":
-			return "*"
-		"scan":
-			return "#"
-		"shrink":
-			return "<>"
-		"swarm":
-			return "S"
-		"shield":
-			return "[]"
-		"bolt":
-			return "!"
-		"rising":
-			return "^"
-		"bomb":
-			return "!"
-		_:
-			return "O"
 
 func _danger_pips_text(pip_count: int) -> String:
 	var filled := ""
