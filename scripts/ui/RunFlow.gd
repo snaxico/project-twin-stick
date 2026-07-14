@@ -6,7 +6,7 @@ const WHERE_DISPLAY := {
 	"fire_grid": "Fire Hazard Floor",
 	"frost_grid": "Frost Hazard Floor",
 	"mine_grid": "Mine Hazard Floor",
-	"pinwheel": "Pinwheel",
+	"pinwheel": "Roaming Sawblades",
 	"tesla_arcs": "Tesla Arcs",
 	"drifting_clouds": "Drifting Clouds",
 	"bastion": "Bastion",

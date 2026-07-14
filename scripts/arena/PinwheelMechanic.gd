@@ -1,49 +1,117 @@
 extends "res://scripts/arena/ArenaMechanic.gd"
 
-const ARM_COUNT := 4
-const ARM_LEN := 520.0
-const ARM_W := 70.0
-const SPIN := 0.5
-const TICK := 0.4
+const BLADE_COUNT := 3
+const BLADE_RADIUS := 30.0
+const BLADE_SPEED := 130.0
+const MIN_CENTER_DISTANCE := BLADE_RADIUS * 2.0 + 120.0
+const CONTACT_DAMAGE := 8
+const REHIT_COOLDOWN := 0.5
+const COSMETIC_SPIN_SPEED := 4.5
 
-var _angle := 0.0
-var _tick := TICK
+var _positions: Array = []
+var _directions: Array = []
+var _hit_cooldowns: Array = []
+var _spin := 0.0
+
+
+func setup(arena: Rect2, players: Array, coop: Node) -> void:
+	super.setup(arena, players, coop)
+	var starts := [
+		Vector2(0.24, 0.28),
+		Vector2(0.72, 0.32),
+		Vector2(0.52, 0.74),
+	]
+	var rng := RandomNumberGenerator.new()
+	rng.randomize()
+	for index in range(BLADE_COUNT):
+		_positions.append(_arena.position + _arena.size * (starts[index] as Vector2))
+		_directions.append(Vector2.RIGHT.rotated(rng.randf_range(0.0, TAU)))
+		_hit_cooldowns.append({})
 
 
 func _physics_process(delta: float) -> void:
-	_angle = fmod(_angle + SPIN * delta, TAU)
-	_tick -= delta
-	if _tick <= 0.0:
-		_tick = TICK
-		_apply_hits()
+	_spin = fmod(_spin + COSMETIC_SPIN_SPEED * delta, TAU)
+	_tick_cooldowns(delta)
+	_move_blades(delta)
+	_apply_player_hits()
 	queue_redraw()
 
 
-func _apply_hits() -> void:
-	var hit: Dictionary = {}
-	var center := _arena.get_center()
-	var candidates := _players.duplicate()
-	if _coop != null:
-		candidates.append_array(_coop.get_nearby_enemy_target_nodes(center, ARM_LEN + ARM_W))
-	for actor in candidates:
-		if actor == null or not is_instance_valid(actor) or not (actor is Node2D):
-			continue
-		var pos := (actor as Node2D).global_position
-		for arm in range(ARM_COUNT):
-			var tip := center + Vector2.RIGHT.rotated(_angle + TAU * float(arm) / float(ARM_COUNT)) * ARM_LEN
-			if _point_segment_distance(pos, center, tip) <= ARM_W * 0.5:
-				hit[actor] = true
-				break
-	for actor in hit.keys():
-		if _players.has(actor):
-			_damage_player(actor, 5)
-		else:
-			_damage_enemy(actor, 5)
+func _move_blades(delta: float) -> void:
+	var proposed := _positions.duplicate()
+	for index in range(BLADE_COUNT):
+		var direction := _directions[index] as Vector2
+		var next_position := (_positions[index] as Vector2) + direction * BLADE_SPEED * delta
+		var minimum := _arena.position + Vector2.ONE * BLADE_RADIUS
+		var maximum := _arena.end - Vector2.ONE * BLADE_RADIUS
+		if next_position.x < minimum.x or next_position.x > maximum.x:
+			direction.x *= -1.0
+			next_position.x = clampf(next_position.x, minimum.x, maximum.x)
+		if next_position.y < minimum.y or next_position.y > maximum.y:
+			direction.y *= -1.0
+			next_position.y = clampf(next_position.y, minimum.y, maximum.y)
+		_directions[index] = direction.normalized()
+		proposed[index] = next_position
+
+	var blocked: Dictionary = {}
+	for first in range(BLADE_COUNT):
+		for second in range(first + 1, BLADE_COUNT):
+			if (proposed[first] as Vector2).distance_to(proposed[second] as Vector2) < MIN_CENTER_DISTANCE:
+				blocked[first] = true
+				blocked[second] = true
+				_turn_apart(first, second)
+	for index in range(BLADE_COUNT):
+		if not blocked.has(index):
+			_positions[index] = proposed[index]
+
+
+func _turn_apart(first: int, second: int) -> void:
+	var separation := (_positions[first] as Vector2) - (_positions[second] as Vector2)
+	if separation.length_squared() <= 0.001:
+		separation = Vector2.RIGHT.rotated(TAU * float(first + 1) / float(BLADE_COUNT))
+	var normal := separation.normalized()
+	_directions[first] = ((_directions[first] as Vector2).reflect(normal) + normal * 0.35).normalized()
+	_directions[second] = ((_directions[second] as Vector2).reflect(-normal) - normal * 0.35).normalized()
+
+
+func _tick_cooldowns(delta: float) -> void:
+	for blade_index in range(_hit_cooldowns.size()):
+		var cooldowns := _hit_cooldowns[blade_index] as Dictionary
+		for player_id in cooldowns.keys():
+			var remaining := float(cooldowns[player_id]) - delta
+			if remaining <= 0.0:
+				cooldowns.erase(player_id)
+			else:
+				cooldowns[player_id] = remaining
+
+
+func _apply_player_hits() -> void:
+	var radius_sq := BLADE_RADIUS * BLADE_RADIUS
+	for blade_index in range(BLADE_COUNT):
+		var cooldowns := _hit_cooldowns[blade_index] as Dictionary
+		for player in _players:
+			if not _valid_player(player):
+				continue
+			var player_id: int = player.get_instance_id()
+			if cooldowns.has(player_id):
+				continue
+			if (player as Node2D).global_position.distance_squared_to(_positions[blade_index] as Vector2) <= radius_sq:
+				_damage_player(player, CONTACT_DAMAGE)
+				cooldowns[player_id] = REHIT_COOLDOWN
+
+
+func _valid_player(player) -> bool:
+	if player == null or not is_instance_valid(player) or not (player is Node2D):
+		return false
+	return not player.has_method("is_alive") or player.is_alive()
 
 
 func _draw() -> void:
-	var center := _arena.get_center()
-	for arm in range(ARM_COUNT):
-		var dir := Vector2.RIGHT.rotated(_angle + TAU * float(arm) / float(ARM_COUNT))
-		draw_line(center, center + dir * ARM_LEN, Color(1.0, 0.45, 0.18, 0.58), ARM_W)
-	draw_circle(center, 54.0, Color(1.0, 0.62, 0.28, 0.65))
+	for center_variant in _positions:
+		var center := center_variant as Vector2
+		draw_circle(center, BLADE_RADIUS, Color(0.82, 0.18, 0.12, 0.85))
+		draw_arc(center, BLADE_RADIUS, 0.0, TAU, 24, Color(1.0, 0.72, 0.24, 0.95), 4.0)
+		for spoke in range(6):
+			var direction := Vector2.RIGHT.rotated(_spin + TAU * float(spoke) / 6.0)
+			draw_line(center, center + direction * (BLADE_RADIUS - 4.0), Color(1.0, 0.9, 0.62, 0.9), 3.0)
+		draw_circle(center, 7.0, Color(0.18, 0.12, 0.14, 1.0))

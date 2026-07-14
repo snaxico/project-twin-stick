@@ -631,6 +631,7 @@ func _build_choice_step(room_number: int) -> Array:
 func _build_run_node(room_number: int, room_type: String, slot: String, archetype: Dictionary = {}) -> Dictionary:
 	var is_champion := room_type != "combat"
 	var has_archetype := room_type == "combat" and not archetype.is_empty()
+	var where_id := _roll_archetype_where(archetype) if has_archetype else "open"
 	var title := ("Champion - Room %d" if is_champion else "Room %d") % room_number
 	if has_archetype:
 		title = "%s - Room %d" % [str(archetype.get("name", "Room")), room_number]
@@ -644,8 +645,8 @@ func _build_run_node(room_number: int, room_type: String, slot: String, archetyp
 		"side_objective": "" if is_champion else _roll_side_objective("combat"),
 		"enemy_pool": [] if has_archetype else _get_endless_enemy_pool(room_number),
 		"boss_type": _champion_boss_type(room_number) if is_champion else "",
-		"where": _roll_archetype_where(archetype) if has_archetype else "open",
-		"modifiers": _roll_archetype_twist(archetype) if has_archetype else [],
+		"where": where_id,
+		"modifiers": _roll_archetype_twist(archetype, where_id) if has_archetype else [],
 		"composition": (archetype.get("composition", {}) as Dictionary).duplicate(true) if has_archetype else {},
 		"next_node_ids": [],
 	}
@@ -926,10 +927,12 @@ func _roll_archetype_where(archetype: Dictionary) -> String:
 			return str(candidates[index])
 	return "open"
 
-func _roll_archetype_twist(archetype: Dictionary) -> Array:
+func _roll_archetype_twist(archetype: Dictionary, where_id := "open") -> Array:
 	if _random.randf() >= 0.55:
 		return []
 	var pool: Array = (archetype.get("twist_pool", []) as Array)
+	if where_id == "pinwheel":
+		pool = pool.filter(func(twist): return str(twist) != "shrinking_arena")
 	if pool.is_empty():
 		return []
 	return [str(pool[_random.randi_range(0, pool.size() - 1)])]
