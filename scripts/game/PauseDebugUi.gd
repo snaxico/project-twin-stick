@@ -292,7 +292,12 @@ func populate_pause_build_overlay() -> void:
 
 
 func _configure_pause_focus() -> void:
-	var buttons := [_resume_button, _pause_retry_button, _pause_main_menu_button]
+	var encyclopedia_button := _pause_panel.get_node_or_null("CenterContainer/PauseLayout/EncyclopediaButton") as Button
+	var buttons: Array[Button] = [_resume_button]
+	if encyclopedia_button != null:
+		buttons.append(encyclopedia_button)
+	buttons.append(_pause_retry_button)
+	buttons.append(_pause_main_menu_button)
 	for index in range(buttons.size()):
 		var button := buttons[index] as Button
 		button.focus_mode = Control.FOCUS_ALL
@@ -313,6 +318,7 @@ func _ensure_pause_encyclopedia_button() -> void:
 	pause_layout.add_child(button)
 	var retry_index := _pause_retry_button.get_index() if _pause_retry_button != null else pause_layout.get_child_count() - 1
 	pause_layout.move_child(button, retry_index)
+	_configure_pause_focus()
 
 
 func _set_nodes_physics_paused(nodes: Array, paused: bool) -> void:
