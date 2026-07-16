@@ -30,8 +30,9 @@ Read this first to restore project context quickly, then read `current-state.md`
 - Target player count is `1-2`.
 - V4 class-system implementation and polish round are implemented.
 - The July 14 V4 playtest patch in `docs/development/v4-playtest-findings-2026-07-14.md` is implemented. The
-  active next validation is a focused 1P/2P live playtest of its upgrade gates, balance, UI, ability feel, and
-  redesigned WHERE catalog.
+  arena/Tank/Vampiric Wake follow-up in `docs/development/v4-arena-balance-followup-2026-07-14.md` is also
+  implemented and validated headlessly. The active next validation is a focused 1P/2P live playtest of all
+  WHERE variants, Tank mortality, Vampiric Wake feel, upgrade gates, UI, and ability feel.
 
 ## Live Runtime Summary
 
@@ -121,6 +122,8 @@ Read this first to restore project context quickly, then read `current-state.md`
 - Deep runs may exhaust upgrade variety; parked until real run depths are known.
 - Objective-panel icons still use simple letter fallback glyphs (`H` / `K` / `C`).
 - Pulsar EMP / hazard readability and Hive deflector readability need live feel validation in dense rooms.
+- The bounded flow-field optimization did not meet the required `60 FPS` floor at 160 enemies; the obstacle
+  cap remains `160`, and broader pathfinding/rendering work requires a separate approved performance plan.
 
 ## Validation Reminder
 
