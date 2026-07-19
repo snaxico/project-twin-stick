@@ -396,7 +396,9 @@ larger sawblades, Fire/Frost expanding patches, spawn-model A/B, the extended En
 telemetry, and profile sandboxing. Slice 3's acceptance harness passes equal uncapped totals (`75/75`),
 seeded sequence reproduction, builder resolution, RNG isolation, and sandbox isolation; both spawn models
 measured a `144.9` median in the Hive 2P/heavy perf gate. The impact source audit is recorded in
-`v4-feel-polish-findings.md`.
+`v4-feel-polish-findings.md`. A post-review correction also wires the Fire/Frost telegraph/fade
+damage-phase assertion to the actual damage path; the targeted Fire/Frost WHERE smokes pass after the
+fix.
 
 Next work is the live gate: Fireball/toggle/readout visual checks, the Slice 4 paired A/B matrix and sandboxed
 full runs, and the structured Slice 5 1P/2P feel check. Do not tune values or choose a spawn-model winner

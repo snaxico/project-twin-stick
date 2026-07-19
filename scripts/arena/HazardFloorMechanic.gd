@@ -137,7 +137,8 @@ func _update_patch_effects(delta: float) -> void:
 	for player in _players:
 		if not _valid_player(player):
 			continue
-		var inside_active_patch := _position_in_active_patch((player as Node2D).global_position)
+		var player_position := (player as Node2D).global_position
+		var inside_active_patch := _position_in_active_patch(player_position)
 		if _floor_kind == "frost_grid":
 			if inside_active_patch:
 				player.apply_zone_modifier("frost_grid", 0.5, 1.0)
@@ -156,6 +157,29 @@ func _position_in_active_patch(position: Vector2) -> bool:
 		if position.distance_squared_to(patch.get("center", Vector2.ZERO) as Vector2) <= radius * radius:
 			return true
 	return false
+
+
+func _position_in_non_damage_patch(position: Vector2) -> bool:
+	for patch_variant in _patches:
+		var patch := patch_variant as Dictionary
+		if _patch_is_active(patch):
+			continue
+		var radius := PATCH_START_RADIUS if _patch_is_telegraphing(patch) else PATCH_END_RADIUS
+		if position.distance_squared_to(patch.get("center", Vector2.ZERO) as Vector2) <= radius * radius:
+			return true
+	return false
+
+
+func _damage_player(player, amount: int) -> void:
+	if _floor_kind != "mine_grid" and _valid_player(player):
+		var player_position := (player as Node2D).global_position
+		if not _position_in_active_patch(player_position) and _position_in_non_damage_patch(player_position):
+			_profiling_invalid_damage_phase = true
+	super._damage_player(player, amount)
+
+
+func _patch_is_telegraphing(patch: Dictionary) -> bool:
+	return float(patch.get("age", 0.0)) < TELEGRAPH_TIME
 
 
 func _patch_is_active(patch: Dictionary) -> bool:

@@ -37,8 +37,9 @@ Read this first to restore project context quickly, then read `current-state.md`
   implemented and validated headlessly.
 - The 2026-07-19 feel-polish pass has completed its performance measurement, concrete feel fixes, spawn A/B
   prototype, debug tooling, and source-level impact audit. Evidence is in
-  `docs/development/v4-feel-polish-findings.md`. Next work is the live Slice 4/5 gate; tuning remains locked
-  until those observations are recorded.
+  `docs/development/v4-feel-polish-findings.md`. A post-review correction wires the Fire/Frost
+  telegraph/fade damage-phase smoke to the actual damage path. Next work is the live Slice 4/5 gate; tuning
+  remains locked until those observations are recorded.
 
 ## Live Runtime Summary
 

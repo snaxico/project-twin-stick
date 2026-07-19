@@ -42,6 +42,9 @@ Decision: no Slice 1b proposed now; proceed to the concrete feel fixes.
     least 95% of safe cells in one traversable component on the specified inflated grid.
   - Repeated Fire/Frost runs with the same seed produce identical center sequences.
   - Mine Floor's existing smoke remains unchanged.
+- Post-review correction: the Fire/Frost "no damage during telegraph/fade" smoke now wires
+  `_profiling_invalid_damage_phase` from the actual hazard damage path, so the profiler assertion is no
+  longer vacuous. Focused Fire/Frost WHERE smokes still pass after the correction.
 - Aimed-ability acceptance covered auto target, manual aim, fallback aim, and movement independence.
 - Hive 2P/heavy post-slice runs: `145.0`, `144.9`, `144.9` average FPS versus pre-slice
   `145.0`, `144.9`, `145.0`; no regression.
