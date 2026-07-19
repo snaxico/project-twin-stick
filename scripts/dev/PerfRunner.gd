@@ -29,11 +29,19 @@ func _ready() -> void:
 		return
 	var players := clampi(int(_read_arg("--players=", "1")), 1, 2)
 	var build := _read_arg("--build=", "base")
+	var spawn_model := _sanitize_spawn_model(_read_arg("--spawn-model=", "trickle"))
 	var smoke := OS.get_cmdline_user_args().has("--smoke")
-	call_deferred("_run", scenario, players, build, smoke)
+	call_deferred("_run", scenario, players, build, smoke, spawn_model)
 
 func run_from_menu(scenario: String, players: int, build: String) -> void:
-	call_deferred("_run", scenario, clampi(players, 1, 2), build, false)
+	call_deferred(
+		"_run",
+		scenario,
+		clampi(players, 1, 2),
+		build,
+		false,
+		RunState.pending_spawn_model
+	)
 
 func _read_arg(prefix: String, fallback: String) -> String:
 	for arg in OS.get_cmdline_user_args():
@@ -41,7 +49,16 @@ func _read_arg(prefix: String, fallback: String) -> String:
 			return arg.substr(prefix.length()).strip_edges()
 	return fallback
 
-func _run(scenario: String, players: int, build: String, smoke: bool) -> void:
+func _sanitize_spawn_model(value: String) -> String:
+	return "pulsed" if value == "pulsed" else "trickle"
+
+func _run(
+	scenario: String,
+	players: int,
+	build: String,
+	smoke: bool,
+	spawn_model: String
+) -> void:
 	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
 	Engine.max_fps = 0
 	if scenario == "entity_ramp" or scenario == "flowfield_stress":
@@ -86,6 +103,7 @@ func _run(scenario: String, players: int, build: String, smoke: bool) -> void:
 		"enemy_mix": "mixed",
 		"starting_mutations": [],
 		"player_abilities": abilities,
+		"spawn_model": _sanitize_spawn_model(spawn_model),
 	}
 	if profiling_room:
 		options["where"] = where_id
@@ -116,7 +134,12 @@ func _run(scenario: String, players: int, build: String, smoke: bool) -> void:
 	get_tree().change_scene_to_packed(RUN_FLOW_SCENE)
 
 	var profiler := _Profiler.new()
-	profiler.scenario = "%s players=%d build=%s" % [scenario, players, build]
+	profiler.scenario = "%s players=%d build=%s spawn_model=%s" % [
+		scenario,
+		players,
+		build,
+		spawn_model,
+	]
 	profiler.raw_scenario = scenario
 	profiler.smoke = smoke
 	profiler.where_id = where_id
@@ -227,6 +250,8 @@ class _Profiler extends Node:
 			return false
 		var cover_where := where_id == "bastion" or where_id == "drifting_cover" or where_id == "popup_pillars"
 		if cover_where and not bool(_coop.call("profiling_cover_blocks_projectile")):
+			return false
+		if _coop.has_method("profiling_where_slice2_valid") and not bool(_coop.call("profiling_where_slice2_valid")):
 			return false
 		if where_id == "drifting_cover" or where_id == "popup_pillars":
 			var before := int(_coop.call("profiling_where_revision"))

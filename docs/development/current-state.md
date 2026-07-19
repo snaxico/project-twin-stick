@@ -139,14 +139,16 @@ abilities, ultimates, and base mutations are free.
   - spitter is now a capped ranged special with a 0.45s telegraphed 3-shot fan
   - WaveDirector reserves the global shooter budget at spawn selection and releases it on cancellation/death
 - Implemented WHERE mechanics:
-  - Fire/Frost/Mine Hazard Floors share moving safe-zone geometry while retaining distinct route skins
+  - Fire/Frost Hazard Floors use deterministic expanding damage patches with telegraph/grow/hold/fade phases;
+    Mine Floor retains its roam-and-avoid moving-safe-zone geometry
   - Roaming Sawblades, Tesla Arcs, Drifting Clouds
   - Bastion, Pop-up Pillars, Drifting Cover
   - Sweeping Laser Lanes with a fixed co-op opening and alternating horizontal/vertical sweeps
 - Every non-open WHERE has three hidden deterministic layouts with no immediate selected-layout repeat;
   Fire/Frost/Mine share one Hazard Floor family history. Retries reuse the selected layout and seed.
-- All WHERE damage targets players only. Hazard Floor transitions preserve a reachable safe zone; Sawblades
-  maintain a 120px dodge lane and cannot pair with Shrinking Arena; Pop-up Pillars use three irregular
+- All WHERE damage targets players only. Fire/Frost patch layouts preserve a traversable safe-cell component;
+  Sawblades use a `42px` blade radius, maintain a 120px dodge lane, and cannot pair with Shrinking Arena;
+  Pop-up Pillars use three irregular
   nine-pillar layouts with connectivity-gated obstacle rebuilds. Drifting Cover applies moves transactionally
   and retries rejected layouts without desynchronizing visuals from collision.
 - Physical cover is owned by `CoopManager.rebuild_obstacles`; mechanics declare rect sets, while CoopManager
@@ -161,7 +163,10 @@ abilities, ultimates, and base mutations are free.
   a Batch-B cover WHERE cap concurrent enemies at `WaveDirector.MAX_OBSTACLE_ENEMIES = 160` (gated on
   `CoopManager.has_flow_obstacles()`); open/hazard rooms stay uncapped. Keeps cover rooms ≥60fps and readable;
   the perf probes inject 200 directly and intentionally bypass the cap.
-- Rooms use continuous time-based spawning:
+- Rooms support two debug-switchable time-based spawn models:
+  - `trickle` remains the normal-run default
+  - `pulsed` groups only the continuous stream into `4.0s` pulses spread over `0.8s`; opening and periodic
+    bursts are unchanged
   - opening burst at room start
   - enemies spawn on a timer until room duration expires
   - room clears when spawning is done and all enemies are dead
@@ -386,6 +391,13 @@ Last validation run in this state:
 
 ## Next Step
 
-Run a focused 1P/2P live playtest of all three WHERE layouts, especially laser opening readability and Drifting
-Cover transitions, plus Tank sustain and Vampiric Wake healing. The flow-field 160 gate is documented as failed;
-any broader optimization needs its own approved plan.
+The automated portions of the 2026-07-19 feel-polish plan are implemented through Slice 3: aimed abilities,
+larger sawblades, Fire/Frost expanding patches, spawn-model A/B, the extended Encounter Builder, overlay
+telemetry, and profile sandboxing. Slice 3's acceptance harness passes equal uncapped totals (`75/75`),
+seeded sequence reproduction, builder resolution, RNG isolation, and sandbox isolation; both spawn models
+measured a `144.9` median in the Hive 2P/heavy perf gate. The impact source audit is recorded in
+`v4-feel-polish-findings.md`.
+
+Next work is the live gate: Fireball/toggle/readout visual checks, the Slice 4 paired A/B matrix and sandboxed
+full runs, and the structured Slice 5 1P/2P feel check. Do not tune values or choose a spawn-model winner
+until those observations produce user-locked 4b/5b subplans.

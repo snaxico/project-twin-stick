@@ -39,6 +39,8 @@ var _debug_overlay_panel: PanelContainer = null
 var _debug_spawn_option: OptionButton = null
 var _debug_weapon_option: OptionButton = null
 var _debug_god_check: CheckBox = null
+var _debug_perf_label: Label = null
+var _debug_spawn_model_label: Label = null
 
 
 func setup(
@@ -59,6 +61,7 @@ func setup(
 	_pause_main_menu_button = pause_main_menu_button
 	_mutation_system = mutation_system
 	_ability_registry = ability_registry
+	set_process(true)
 
 
 func bind_ui() -> void:
@@ -96,6 +99,19 @@ func build_debug_overlay() -> void:
 	title.text = "Debug Overlay"
 	title.add_theme_font_size_override("font_size", 17)
 	layout.add_child(title)
+	_debug_perf_label = Label.new()
+	_debug_perf_label.text = "FPS -- | E 0  P 0  D 0"
+	layout.add_child(_debug_perf_label)
+	var model_row := HBoxContainer.new()
+	model_row.add_theme_constant_override("separation", 8)
+	layout.add_child(model_row)
+	_debug_spawn_model_label = Label.new()
+	_debug_spawn_model_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	model_row.add_child(_debug_spawn_model_label)
+	var model_button := Button.new()
+	model_button.text = "Toggle Next Room"
+	model_button.pressed.connect(_on_debug_spawn_model_toggled)
+	model_row.add_child(model_button)
 	var spawn_row := HBoxContainer.new()
 	spawn_row.add_theme_constant_override("separation", 8)
 	layout.add_child(spawn_row)
@@ -139,6 +155,32 @@ func build_debug_overlay() -> void:
 	_debug_god_check.button_pressed = RunState.debug_profiling
 	_debug_god_check.toggled.connect(_on_debug_god_toggled)
 	layout.add_child(_debug_god_check)
+	_refresh_debug_readout()
+
+
+func _process(_delta: float) -> void:
+	if _debug_overlay_panel == null or not is_instance_valid(_debug_overlay_panel) or not _debug_overlay_panel.visible:
+		return
+	_refresh_debug_readout()
+
+
+func _refresh_debug_readout() -> void:
+	if _debug_perf_label != null and _coop != null and _coop.has_method("get_debug_entity_counts"):
+		var counts := _coop.call("get_debug_entity_counts") as Dictionary
+		_debug_perf_label.text = "FPS %d | E %d  P %d  D %d" % [
+			Engine.get_frames_per_second(),
+			int(counts.get("enemies", 0)),
+			int(counts.get("projectiles", 0)),
+			int(counts.get("deployables", 0)),
+		]
+	if _debug_spawn_model_label != null:
+		var active := str(_coop.call("get_active_spawn_model")) if _coop != null and _coop.has_method("get_active_spawn_model") else RunState.spawn_model
+		_debug_spawn_model_label.text = "Spawn  %s / pending %s" % [active, RunState.pending_spawn_model]
+
+
+func _on_debug_spawn_model_toggled() -> void:
+	RunState.set_pending_spawn_model("pulsed" if RunState.pending_spawn_model == "trickle" else "trickle")
+	_refresh_debug_readout()
 
 
 func set_game_paused(paused: bool) -> void:

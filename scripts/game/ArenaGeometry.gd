@@ -22,21 +22,36 @@ static func boss_room_player_spawn_position(index: int, player_count: int, arena
 	)
 
 
-static func enemy_spawn_position_for_index(spawn_index: int, start_edge: int, inner_margin: float, arena_size: Vector2) -> Vector2:
+static func enemy_spawn_position_for_index(
+	spawn_index: int,
+	start_edge: int,
+	inner_margin: float,
+	arena_size: Vector2,
+	rng: RandomNumberGenerator = null
+) -> Vector2:
 	var edge := (start_edge + spawn_index) % 4
-	return enemy_spawn_position_for_edge(edge, inner_margin, arena_size)
+	return enemy_spawn_position_for_edge(edge, inner_margin, arena_size, rng)
 
 
-static func enemy_spawn_position_for_edge(edge: int, inner_margin: float, arena_size: Vector2) -> Vector2:
+static func enemy_spawn_position_for_edge(
+	edge: int,
+	inner_margin: float,
+	arena_size: Vector2,
+	rng: RandomNumberGenerator = null
+) -> Vector2:
 	match edge:
 		0:
-			return Vector2(randf_range(inner_margin, arena_size.x - inner_margin), inner_margin + randf_range(0.0, 60.0))
+			return Vector2(_randf_range(rng, inner_margin, arena_size.x - inner_margin), inner_margin + _randf_range(rng, 0.0, 60.0))
 		1:
-			return Vector2(randf_range(inner_margin, arena_size.x - inner_margin), arena_size.y - inner_margin - randf_range(0.0, 60.0))
+			return Vector2(_randf_range(rng, inner_margin, arena_size.x - inner_margin), arena_size.y - inner_margin - _randf_range(rng, 0.0, 60.0))
 		2:
-			return Vector2(inner_margin + randf_range(0.0, 60.0), randf_range(inner_margin, arena_size.y - inner_margin))
+			return Vector2(inner_margin + _randf_range(rng, 0.0, 60.0), _randf_range(rng, inner_margin, arena_size.y - inner_margin))
 		_:
-			return Vector2(arena_size.x - inner_margin - randf_range(0.0, 60.0), randf_range(inner_margin, arena_size.y - inner_margin))
+			return Vector2(arena_size.x - inner_margin - _randf_range(rng, 0.0, 60.0), _randf_range(rng, inner_margin, arena_size.y - inner_margin))
+
+
+static func _randf_range(rng: RandomNumberGenerator, minimum: float, maximum: float) -> float:
+	return rng.randf_range(minimum, maximum) if rng != null else randf_range(minimum, maximum)
 
 
 static func champion_spawn_position(arena_center: Vector2) -> Vector2:

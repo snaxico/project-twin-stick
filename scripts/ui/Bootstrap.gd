@@ -106,6 +106,18 @@ var _modifier_definitions: Array = []
 var _debug_modifier_toggles: Array = []
 var _debug_perf_option: OptionButton = null
 var _debug_perf_button: Button = null
+var _debug_archetype_row: HBoxContainer = null
+var _debug_archetype_option: OptionButton = null
+var _debug_where_row: HBoxContainer = null
+var _debug_where_option: OptionButton = null
+var _debug_variant_row: HBoxContainer = null
+var _debug_variant_spin: SpinBox = null
+var _debug_depth_row: HBoxContainer = null
+var _debug_depth_spin: SpinBox = null
+var _debug_seed_row: HBoxContainer = null
+var _debug_seed_spin: SpinBox = null
+var _debug_spawn_model_row: HBoxContainer = null
+var _debug_spawn_model_option: OptionButton = null
 var _home_encyclopedia_button: Button = null
 var _setup_mode: String = "play"
 var _ability_registry = AbilityRegistryData.new()
@@ -302,7 +314,13 @@ func _refresh_menu_state(_unused: Variant = null) -> void:
 	debug_step_row.visible = false
 	debug_room_modifiers_row.visible = encounter_builder_mode
 	debug_modifier_row.visible = false
-	debug_layout_row.visible = encounter_builder_mode and str(debug_room_type_option.get_selected_metadata()) == "combat"
+	debug_layout_row.visible = false
+	var builder_combat := encounter_builder_mode and str(debug_room_type_option.get_selected_metadata()) == "combat"
+	for builder_row in [_debug_archetype_row, _debug_where_row, _debug_variant_row, _debug_depth_row, _debug_seed_row]:
+		if builder_row != null:
+			builder_row.visible = builder_combat
+	if _debug_spawn_model_row != null:
+		_debug_spawn_model_row.visible = _is_debug_menu_enabled()
 	var perf_row := menu_layout.get_node_or_null("PerfScenarioRow")
 	if perf_row != null:
 		perf_row.visible = encounter_builder_mode and _is_debug_menu_enabled()
@@ -322,9 +340,16 @@ func _refresh_menu_state(_unused: Variant = null) -> void:
 			summary_lines.append("Champion: %s" % debug_secondary_option.get_item_text(debug_secondary_option.selected))
 		if debug_room_objective_row.visible:
 			summary_lines.append("Objective: %s" % debug_room_objective_option.get_item_text(debug_room_objective_option.selected))
-		if debug_layout_row.visible:
-			summary_lines.append("Enemy Mix: %s" % debug_layout_option.get_item_text(debug_layout_option.selected))
+		if builder_combat and _debug_archetype_option != null and _debug_where_option != null:
+			summary_lines.append("Room: %s + %s  depth %d  seed %d" % [
+				_debug_archetype_option.get_item_text(_debug_archetype_option.selected),
+				_debug_where_option.get_item_text(_debug_where_option.selected),
+				int(_debug_depth_spin.value),
+				int(_debug_seed_spin.value),
+			])
 		summary_lines.append("Room Modifiers: %d" % _get_selected_room_modifiers().size())
+	if _debug_spawn_model_option != null and _debug_spawn_model_row.visible:
+		summary_lines.append("Spawn model: %s" % _debug_spawn_model_option.get_item_text(_debug_spawn_model_option.selected))
 	summary_lines.append("Pick class, class weapon, and three abilities; the ultimate fills Y.")
 	status_label.text = "\n".join(summary_lines)
 	start_button.text = "Launch Encounter" if encounter_builder_mode else "Start Run"
@@ -389,12 +414,19 @@ func _build_debug_start_options() -> Dictionary:
 		"player_classes": _build_player_class_selection(),
 		"player_weapons": _build_player_weapon_selection(),
 		"player_abilities": _build_player_ability_selection(),
+		"spawn_model": str(_debug_spawn_model_option.get_selected_metadata()) if _debug_spawn_model_option != null and _is_debug_menu_enabled() else "trickle",
 	}
 	if not options["enabled"]:
 		return options
 	options["room_type"] = str(debug_room_type_option.get_selected_metadata())
 	options["room_objective"] = str(debug_room_objective_option.get_selected_metadata())
-	options["enemy_mix"] = str(debug_layout_option.get_selected_metadata())
+	if str(options["room_type"]) == "combat" and _debug_archetype_option != null:
+		options["archetype_id"] = str(_debug_archetype_option.get_selected_metadata())
+		options["where"] = str(_debug_where_option.get_selected_metadata())
+		options["where_variant"] = int(_debug_variant_spin.value)
+		options["where_seed"] = int(_debug_seed_spin.value)
+		options["debug_spawn_seed"] = int(_debug_seed_spin.value)
+		options["depth"] = int(_debug_depth_spin.value)
 	if str(options["room_type"]) == "boss":
 		options["boss_type"] = str(debug_secondary_option.get_selected_metadata())
 	options["modifiers"] = _get_selected_room_modifiers()
@@ -1192,7 +1224,100 @@ func _configure_debug_builder_rows() -> void:
 		debug_room_modifiers_spinbox.visible = false
 	_create_modifier_selector()
 	_debug_mutation_toggles.clear()
+	_create_feel_polish_debug_rows()
 	_create_perf_launcher_row()
+
+func _create_feel_polish_debug_rows() -> void:
+	if _debug_archetype_row != null and is_instance_valid(_debug_archetype_row):
+		return
+	_debug_archetype_row = _create_debug_labeled_row("DebugArchetypeRow", "Archetype")
+	_debug_archetype_option = OptionButton.new()
+	_debug_archetype_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_debug_archetype_row.add_child(_debug_archetype_option)
+	var archetype_entries: Array = []
+	for archetype_variant in RunState.get_room_archetype_catalog():
+		var archetype := archetype_variant as Dictionary
+		archetype_entries.append({
+			"label": str(archetype.get("name", str(archetype.get("id", "")).capitalize())),
+			"value": str(archetype.get("id", "")),
+		})
+	_populate_profile_option(_debug_archetype_option, archetype_entries, "horde")
+	_debug_archetype_option.item_selected.connect(_on_debug_archetype_selected)
+
+	_debug_where_row = _create_debug_labeled_row("DebugWhereRow", "WHERE")
+	_debug_where_option = OptionButton.new()
+	_debug_where_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_debug_where_option.item_selected.connect(_refresh_menu_state)
+	_debug_where_row.add_child(_debug_where_option)
+
+	_debug_variant_row = _create_debug_labeled_row("DebugWhereVariantRow", "WHERE Variant")
+	_debug_variant_spin = SpinBox.new()
+	_debug_variant_spin.min_value = 0
+	_debug_variant_spin.max_value = 2
+	_debug_variant_spin.step = 1
+	_debug_variant_spin.value_changed.connect(_refresh_menu_state)
+	_debug_variant_row.add_child(_debug_variant_spin)
+
+	_debug_depth_row = _create_debug_labeled_row("DebugDepthRow", "Depth")
+	_debug_depth_spin = SpinBox.new()
+	_debug_depth_spin.min_value = 1
+	_debug_depth_spin.max_value = 99
+	_debug_depth_spin.step = 1
+	_debug_depth_spin.value = 3
+	_debug_depth_spin.value_changed.connect(_refresh_menu_state)
+	_debug_depth_row.add_child(_debug_depth_spin)
+
+	_debug_seed_row = _create_debug_labeled_row("DebugSeedRow", "Seed")
+	_debug_seed_spin = SpinBox.new()
+	_debug_seed_spin.min_value = 1
+	_debug_seed_spin.max_value = 2147483647
+	_debug_seed_spin.step = 1
+	_debug_seed_spin.value = 1001
+	_debug_seed_spin.value_changed.connect(_refresh_menu_state)
+	_debug_seed_row.add_child(_debug_seed_spin)
+
+	_debug_spawn_model_row = _create_debug_labeled_row("DebugSpawnModelRow", "Spawn Model")
+	_debug_spawn_model_option = OptionButton.new()
+	_debug_spawn_model_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_populate_profile_option(_debug_spawn_model_option, [
+		{"label": "Trickle", "value": "trickle"},
+		{"label": "Pulsed", "value": "pulsed"},
+	], "trickle")
+	_debug_spawn_model_option.item_selected.connect(_refresh_menu_state)
+	_debug_spawn_model_row.add_child(_debug_spawn_model_option)
+	_refresh_debug_where_options()
+
+func _create_debug_labeled_row(row_name: String, label_text: String) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.name = row_name
+	row.add_theme_constant_override("separation", 10)
+	menu_layout.add_child(row)
+	menu_layout.move_child(row, status_label.get_index())
+	var label := Label.new()
+	label.text = label_text
+	label.custom_minimum_size = Vector2(160.0, 0.0)
+	row.add_child(label)
+	return row
+
+func _on_debug_archetype_selected(_index: int) -> void:
+	_refresh_debug_where_options()
+	_refresh_menu_state()
+
+func _refresh_debug_where_options() -> void:
+	if _debug_where_option == null or _debug_archetype_option == null:
+		return
+	var selected_id := str(_debug_archetype_option.get_selected_metadata())
+	var where_pool: Array = ["open"]
+	for archetype_variant in RunState.get_room_archetype_catalog():
+		var archetype := archetype_variant as Dictionary
+		if str(archetype.get("id", "")) == selected_id:
+			where_pool = (archetype.get("where_pool", ["open"]) as Array).duplicate()
+			break
+	_debug_where_option.clear()
+	for where_variant in where_pool:
+		var where_id := str(where_variant)
+		_debug_where_option.add_item("Open" if where_id == "open" else where_id.replace("_", " ").capitalize())
+		_debug_where_option.set_item_metadata(_debug_where_option.item_count - 1, where_id)
 
 func _create_launch_cheat_row() -> void:
 	pass

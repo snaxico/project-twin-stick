@@ -11,6 +11,9 @@ const BASE_RAMP_DURATION := 45.0
 const CHAMPION_SPAWN_DELAY := 10.0
 const SHOOTER_COST := {"spitter": 1}
 const SHOOTER_BUDGET_BASE := 6
+const PULSE_PERIOD := 4.0
+const PULSE_SPREAD := 0.8
+const PULSE_EDGES := 2
 # Physics wall: ~200 CharacterBody2D enemies bunching around physical cover push move_and_slide past the
 # 60fps budget. Open rooms have no obstacles and stay uncapped (the swarm power-fantasy lives there). When a
 # room has physical cover (a Batch-B WHERE mechanic), cap the concurrent live+pending count — this keeps cover
@@ -36,6 +39,12 @@ var _next_burst_at := 0.0
 var _boss_spawned := false
 var _active_boss = null
 var _active_shooter_budget := 0
+var _spawn_model := "trickle"
+var _spawn_rng: RandomNumberGenerator = null
+var _pulse_accumulated := 0
+var _next_pulse_at := PULSE_PERIOD
+var _pending_pulse_spawns: Array = []
+var _spawn_event_log: Array = []
 
 
 func setup(coop: Node, enemies_parent: Node) -> void:
@@ -61,6 +70,16 @@ func start_room(room_config: Dictionary, room_enemy_pool: Array, room_depth: int
 	_boss_spawned = false
 	_active_boss = null
 	_active_shooter_budget = 0
+	_spawn_model = RunState.apply_pending_spawn_model()
+	_spawn_rng = null
+	var debug_seed := int(RunState.debug_spawn_seed)
+	if _spawn_model == "pulsed" or debug_seed > 0:
+		_spawn_rng = RandomNumberGenerator.new()
+		_spawn_rng.seed = debug_seed if debug_seed > 0 else _derived_spawn_seed()
+	_pulse_accumulated = 0
+	_next_pulse_at = PULSE_PERIOD
+	_pending_pulse_spawns.clear()
+	_spawn_event_log.clear()
 
 
 func check_wave_progress() -> void:
@@ -71,11 +90,13 @@ func check_wave_progress() -> void:
 		_spawn_boss()
 	if not _spawning_done and not _is_profiling_no_spawn():
 		_continuous_spawn(room_elapsed)
+	if _spawn_model == "pulsed":
+		_process_pending_pulse_spawns(room_elapsed)
 	# Defensive: a champion room must spawn its champion before it can clear, even if future
 	# tuning ever made the spawn delay exceed the room duration.
 	if _room_type == "boss" and not _boss_spawned and _spawning_done:
 		_spawn_boss()
-	if _spawning_done and bool(_coop.call("is_enemy_list_empty")) and _pending_enemy_spawns <= 0:
+	if _spawning_done and _pending_pulse_spawns.is_empty() and bool(_coop.call("is_enemy_list_empty")) and _pending_enemy_spawns <= 0:
 		_coop.call("handle_wave_room_clear")
 
 
@@ -88,14 +109,14 @@ func spawn_opening_burst() -> void:
 		burst_size *= 2
 	burst_size = _scale_spawn_count(burst_size)
 	var health_multiplier := 0.5 if bool(flags.get("swarm", false)) else 1.0
-	var start_edge := randi() % 4
+	var start_edge := _randi_mod(4)
 	for index in range(burst_size):
 		if _obstacle_enemy_cap_reached():
 			break
 		var enemy_type := _pick_spawn_type(_get_spawn_source())
 		var reserved_cost := _shooter_cost(enemy_type)
 		var spawn_position := _get_enemy_spawn_position_for_index(index, start_edge)
-		queue_enemy_spawn(enemy_type, spawn_position, health_multiplier, reserved_cost)
+		_queue_logged_enemy_spawn(enemy_type, spawn_position, health_multiplier, reserved_cost)
 		_enemies_spawned += 1
 
 
@@ -158,8 +179,18 @@ func get_active_shooter_budget() -> int:
 	return _active_shooter_budget
 
 
+func get_active_spawn_model() -> String:
+	return _spawn_model
+
+
+func get_spawn_event_log() -> Array:
+	return _spawn_event_log.duplicate(true)
+
+
 func _continuous_spawn(room_elapsed: float) -> void:
 	if room_elapsed >= _room_duration:
+		if _spawn_model == "pulsed" and _pulse_accumulated > 0:
+			_schedule_pulse(room_elapsed)
 		_spawning_done = true
 		return
 	var flags := _get_minor_modifier_flags()
@@ -174,30 +205,95 @@ func _continuous_spawn(room_elapsed: float) -> void:
 			current_interval = lerpf(current_interval, current_interval * 0.6, ramp)
 		_next_spawn_at = room_elapsed + current_interval
 		var batch := _consume_scaled_stream_count(2 if bool(flags.get("swarm", false)) else 1)
-		var stream_start_edge := randi() % 4 if batch > 1 else 0
-		for index in range(batch):
-			if _obstacle_enemy_cap_reached():
-				break
-			var enemy_type := _pick_spawn_type(_get_spawn_source())
-			var reserved_cost := _shooter_cost(enemy_type)
-			var spawn_position := _get_enemy_spawn_position() if batch == 1 else _get_enemy_spawn_position_for_index(index, stream_start_edge)
-			queue_enemy_spawn(enemy_type, spawn_position, health_multiplier, reserved_cost)
-			_enemies_spawned += 1
+		if _spawn_model == "pulsed":
+			_pulse_accumulated += batch
+		else:
+			_spawn_trickle_batch(batch, health_multiplier)
+	if _spawn_model == "pulsed" and room_elapsed >= _next_pulse_at:
+		while room_elapsed >= _next_pulse_at:
+			_next_pulse_at += PULSE_PERIOD
+		_schedule_pulse(room_elapsed)
 	if room_elapsed >= _next_burst_at:
 		_next_burst_at = room_elapsed + _burst_interval
 		var burst_size := _get_burst_size(false)
 		if bool(flags.get("swarm", false)):
 			burst_size *= 2
 		burst_size = _scale_spawn_count(burst_size)
-		var burst_start_edge := randi() % 4
+		var burst_start_edge := _randi_mod(4)
 		for index in range(burst_size):
 			if _obstacle_enemy_cap_reached():
 				break
 			var enemy_type := _pick_spawn_type(_get_spawn_source())
 			var reserved_cost := _shooter_cost(enemy_type)
 			var spawn_position := _get_enemy_spawn_position_for_index(index, burst_start_edge)
-			queue_enemy_spawn(enemy_type, spawn_position, health_multiplier, reserved_cost)
+			_queue_logged_enemy_spawn(enemy_type, spawn_position, health_multiplier, reserved_cost)
 			_enemies_spawned += 1
+
+
+func _spawn_trickle_batch(batch: int, health_multiplier: float) -> void:
+	var stream_start_edge := _randi_mod(4) if batch > 1 else 0
+	for index in range(batch):
+		if _obstacle_enemy_cap_reached():
+			break
+		var enemy_type := _pick_spawn_type(_get_spawn_source())
+		var reserved_cost := _shooter_cost(enemy_type)
+		var spawn_position := _get_enemy_spawn_position() if batch == 1 else _get_enemy_spawn_position_for_index(index, stream_start_edge)
+		_queue_logged_enemy_spawn(enemy_type, spawn_position, health_multiplier, reserved_cost)
+		_enemies_spawned += 1
+
+
+func _schedule_pulse(room_elapsed: float) -> void:
+	var count := _pulse_accumulated
+	_pulse_accumulated = 0
+	if count <= 0:
+		return
+	var edges: Array[int] = [_randi_mod(4)]
+	if count > 1 and PULSE_EDGES > 1:
+		var second_edge := _randi_mod(4)
+		while second_edge == edges[0]:
+			second_edge = _randi_mod(4)
+		edges.append(second_edge)
+	for index in range(count):
+		var ratio := float(index) / float(maxi(count - 1, 1))
+		_pending_pulse_spawns.append({
+			"spawn_at": room_elapsed + PULSE_SPREAD * ratio,
+			"edge": edges[index % edges.size()],
+		})
+
+
+func _process_pending_pulse_spawns(room_elapsed: float) -> void:
+	if _pending_pulse_spawns.is_empty():
+		return
+	var flags := _get_minor_modifier_flags()
+	var health_multiplier := 0.5 if bool(flags.get("swarm", false)) else 1.0
+	var remaining: Array = []
+	for entry_variant in _pending_pulse_spawns:
+		var entry := entry_variant as Dictionary
+		if room_elapsed + 0.0001 < float(entry.get("spawn_at", room_elapsed)):
+			remaining.append(entry)
+			continue
+		if _obstacle_enemy_cap_reached():
+			continue
+		var enemy_type := _pick_spawn_type(_get_spawn_source())
+		var reserved_cost := _shooter_cost(enemy_type)
+		var spawn_position := ArenaGeometry.enemy_spawn_position_for_edge(
+			int(entry.get("edge", 0)),
+			ARENA_MARGIN + 48.0,
+			ARENA_SIZE,
+			_position_rng()
+		)
+		_queue_logged_enemy_spawn(enemy_type, spawn_position, health_multiplier, reserved_cost)
+		_enemies_spawned += 1
+	_pending_pulse_spawns = remaining
+
+
+func _queue_logged_enemy_spawn(enemy_type: String, spawn_position: Vector2, health_multiplier: float, reserved_cost: int) -> void:
+	_spawn_event_log.append({
+		"time": float(_coop.call("get_room_elapsed")) if _coop != null else 0.0,
+		"type": enemy_type,
+		"position": spawn_position,
+	})
+	queue_enemy_spawn(enemy_type, spawn_position, health_multiplier, reserved_cost)
 
 
 func _spawn_queued_enemy_instance(enemy_type: String, spawn_position: Vector2, health_multiplier: float, reserved_cost: int = 0) -> void:
@@ -225,7 +321,7 @@ func _spawn_boss() -> void:
 func _roll_wave_enemy_type(pool: Array) -> String:
 	if pool.is_empty():
 		return "chaser"
-	return str(pool[randi() % pool.size()])
+	return str(pool[_randi_mod(pool.size())])
 
 
 func _pick_spawn_type(source) -> String:
@@ -253,10 +349,10 @@ func _roll_composition_enemy_type(composition: Dictionary) -> String:
 	var shooters: Array = (composition.get("shooters", []) as Array)
 	var melee_bias: Array = (composition.get("melee_bias", []) as Array)
 	var shooter_ratio := clampf(float(composition.get("shooter_ratio", 0.0)), 0.0, 1.0)
-	if not shooters.is_empty() and randf() < shooter_ratio:
-		return str(shooters[randi() % shooters.size()])
+	if not shooters.is_empty() and _randf() < shooter_ratio:
+		return str(shooters[_randi_mod(shooters.size())])
 	if not melee_bias.is_empty():
-		return str(melee_bias[randi() % melee_bias.size()])
+		return str(melee_bias[_randi_mod(melee_bias.size())])
 	return "chaser"
 
 
@@ -276,7 +372,7 @@ func _roll_melee_type(source) -> String:
 			filtered.append(enemy_type)
 	if filtered.is_empty():
 		return "chaser"
-	return str(filtered[randi() % filtered.size()])
+	return str(filtered[_randi_mod(filtered.size())])
 
 
 func _shooter_cost(enemy_type: String) -> int:
@@ -398,13 +494,34 @@ func _get_champion_spawn_position() -> Vector2:
 
 func _get_enemy_spawn_position() -> Vector2:
 	var inner_margin := ARENA_MARGIN + 48.0
-	var edge := randi() % 4
-	return ArenaGeometry.enemy_spawn_position_for_edge(edge, inner_margin, ARENA_SIZE)
+	var edge := _randi_mod(4)
+	return ArenaGeometry.enemy_spawn_position_for_edge(edge, inner_margin, ARENA_SIZE, _position_rng())
 
 
 func _get_enemy_spawn_position_for_index(spawn_index: int, start_edge: int) -> Vector2:
 	var inner_margin := ARENA_MARGIN + 48.0
-	return ArenaGeometry.enemy_spawn_position_for_index(spawn_index, start_edge, inner_margin, ARENA_SIZE)
+	return ArenaGeometry.enemy_spawn_position_for_index(spawn_index, start_edge, inner_margin, ARENA_SIZE, _position_rng())
+
+
+func _position_rng() -> RandomNumberGenerator:
+	return _spawn_rng
+
+
+func _randf() -> float:
+	return _spawn_rng.randf() if _spawn_rng != null else randf()
+
+
+func _randi_mod(modulus: int) -> int:
+	if modulus <= 0:
+		return 0
+	return int((_spawn_rng.randi() if _spawn_rng != null else randi()) % modulus)
+
+
+func _derived_spawn_seed() -> int:
+	var explicit_seed := int(_room_config.get("where_seed", 0))
+	if explicit_seed != 0:
+		return explicit_seed
+	return 20260719 + _room_depth * 7919 + str(_room_config.get("archetype_id", _room_type)).hash()
 
 
 func _get_minor_modifier_flags() -> Dictionary:

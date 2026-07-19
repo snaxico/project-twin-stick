@@ -1173,6 +1173,15 @@ func profiling_where_revision() -> int:
 		return int(_where_mechanic.revision)
 	return 0
 
+func profiling_where_slice2_valid() -> bool:
+	if _where_mechanic == null or not is_instance_valid(_where_mechanic):
+		return false
+	if _where_mechanic.has_method("profiling_dodge_lane_valid"):
+		return bool(_where_mechanic.profiling_dodge_lane_valid())
+	if _where_mechanic.has_method("profiling_patch_model_valid"):
+		return bool(_where_mechanic.profiling_patch_model_valid())
+	return true
+
 func profiling_registered_enemy_count() -> int:
 	return _enemy_nodes.size()
 
@@ -2211,6 +2220,34 @@ func get_radiance_deployable_count(player_index: int = -1) -> int:
 				continue
 			total += 1
 	return total
+
+func get_active_spawn_model() -> String:
+	if _wave_director != null and _wave_director.has_method("get_active_spawn_model"):
+		return str(_wave_director.get_active_spawn_model())
+	return RunState.spawn_model
+
+func get_spawn_event_log() -> Array:
+	if _wave_director != null and _wave_director.has_method("get_spawn_event_log"):
+		return _wave_director.get_spawn_event_log()
+	return []
+
+func get_debug_entity_counts() -> Dictionary:
+	var active_projectiles := 0
+	for projectile in projectiles.get_children():
+		if projectile == null or not is_instance_valid(projectile):
+			continue
+		if projectile.has_method("is_projectile_active") and not bool(projectile.is_projectile_active()):
+			continue
+		active_projectiles += 1
+	var active_deployables := 0
+	for deployable in get_tree().get_nodes_in_group("player_deployable"):
+		if deployable != null and is_instance_valid(deployable):
+			active_deployables += 1
+	return {
+		"enemies": get_live_enemy_count(),
+		"projectiles": active_projectiles,
+		"deployables": active_deployables,
+	}
 
 func get_minor_modifier_flags() -> Dictionary:
 	return _minor_modifier_flags.duplicate()

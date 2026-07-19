@@ -16,7 +16,10 @@ Read this first to restore project context quickly, then read `current-state.md`
 - `docs/development/current-state.md` is the compact runtime source of truth.
 - `docs/development/v4-implementation-plan.md` and `docs/development/v4-polish-round-plan.md` are the shipped
   V4 implementation sources.
-- `docs/development/v4-round-2-plan.md` is the active follow-up plan.
+- `docs/development/v5-roadmap.md` is the phase-ordered prototype-to-game roadmap (2026-07-19).
+- `docs/development/v4-feel-polish-plan.md` is the active patch plan (Phase 1 of the roadmap). Automated
+  implementation is complete through Slice 3; live Slice 4/5 gates remain.
+- `docs/development/v4-round-2-plan.md` is the shipped Round 2 plan, historical context.
 - `docs/development/structure-rework-plan.md` is archived V3 context, not the current implementation target.
 - `docs/design/game-direction.md` is the broader direction source of truth.
 - `docs/design/class-system-redesign.md` is the V4 design spec (4 classes, kit/mutation/tag systems, art
@@ -31,8 +34,11 @@ Read this first to restore project context quickly, then read `current-state.md`
 - V4 class-system implementation and polish round are implemented.
 - The July 14 V4 playtest patch in `docs/development/v4-playtest-findings-2026-07-14.md` is implemented. The
   arena/Tank/Vampiric Wake follow-up in `docs/development/v4-arena-balance-followup-2026-07-14.md` is also
-  implemented and validated headlessly. The active next validation is a focused 1P/2P live playtest of all
-  WHERE variants, Tank mortality, Vampiric Wake feel, upgrade gates, UI, and ability feel.
+  implemented and validated headlessly.
+- The 2026-07-19 feel-polish pass has completed its performance measurement, concrete feel fixes, spawn A/B
+  prototype, debug tooling, and source-level impact audit. Evidence is in
+  `docs/development/v4-feel-polish-findings.md`. Next work is the live Slice 4/5 gate; tuning remains locked
+  until those observations are recorded.
 
 ## Live Runtime Summary
 

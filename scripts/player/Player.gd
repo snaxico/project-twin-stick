@@ -775,9 +775,7 @@ func _try_activate_ability(slot_index: int, now: float) -> void:
 	var ability_id := str(slot.get("id", ""))
 	if ability_id.is_empty():
 		return
-	var direction := _move_facing if _move_facing.length() > 0.0 else Vector2.RIGHT
-	if _get_move_input().length() <= 0.0 and _aim_facing.length() > 0.0:
-		direction = _aim_facing
+	var direction := _get_ability_cast_direction(now)
 	if _is_ultimate_slot(slot_index, slot) and not _is_ultimate_ready(slot_index, slot):
 		return
 	match ability_id:
@@ -812,6 +810,20 @@ func _try_activate_ability(slot_index: int, now: float) -> void:
 				return
 			_set_slot_cooldown(slot_index, now)
 			_emit_ability(slot_index, direction)
+
+func _get_ability_cast_direction(now: float) -> Vector2:
+	var manual_aim_vector := _get_manual_aim_vector(now)
+	var manual_aim_active := manual_aim_vector.length() > MANUAL_AIM_DEADZONE
+	if manual_aim_active:
+		_aim_facing = manual_aim_vector.normalized()
+	_auto_target = _find_auto_target(manual_aim_active)
+	return _resolve_ability_cast_direction(manual_aim_active)
+
+func _resolve_ability_cast_direction(manual_aim_active: bool) -> Vector2:
+	var weapon_direction := _get_weapon_fire_direction(manual_aim_active)
+	if weapon_direction.length_squared() > 0.001:
+		return weapon_direction.normalized()
+	return _aim_facing.normalized() if _aim_facing.length_squared() > 0.001 else Vector2.RIGHT
 
 func _on_dash_started(slot_index: int, now: float) -> void:
 	_dash_invuln_until = maxf(_dash_invuln_until, now + float((_get_ability_slot(slot_index).get("stats", {}) as Dictionary).get("invulnerability_duration", 0.2)))

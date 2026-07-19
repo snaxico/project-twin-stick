@@ -1,6 +1,7 @@
 extends Node
 
 const SAVE_PATH := "user://profile_state.save"
+const SANDBOX_PATH := "user://profile_sandbox.cfg"
 const UNLOCK_TABLE := [
 	{"id": "class:mobile", "kind": "class", "content_id": "mobile", "name": "Stormrunner", "cost": 0, "free": true},
 	{"id": "class:tank", "kind": "class", "content_id": "tank", "name": "Tank", "cost": 0, "free": true},
@@ -55,16 +56,32 @@ const UNLOCK_TABLE := [
 var screen_effect_level: String = "full"
 var banked_score: int = 0
 var unlocked_ids: Array[String] = []
+var _save_path := SAVE_PATH
+var _sandbox_mode := ""
 
 func _ready() -> void:
+	_configure_save_path()
 	load_profile()
+
+func _configure_save_path() -> void:
+	for arg in OS.get_cmdline_user_args():
+		if not arg.begins_with("--profile-sandbox="):
+			continue
+		var requested_mode := arg.substr("--profile-sandbox=".length()).strip_edges()
+		if requested_mode != "fresh" and requested_mode != "keep":
+			continue
+		_sandbox_mode = requested_mode
+		_save_path = SANDBOX_PATH
+		if _sandbox_mode == "fresh" and FileAccess.file_exists(_save_path):
+			DirAccess.remove_absolute(ProjectSettings.globalize_path(_save_path))
+		return
 
 func load_profile() -> void:
 	_apply_default_unlocks()
-	if not FileAccess.file_exists(SAVE_PATH):
+	if not FileAccess.file_exists(_save_path):
 		save_profile()
 		return
-	var file := FileAccess.open(SAVE_PATH, FileAccess.READ)
+	var file := FileAccess.open(_save_path, FileAccess.READ)
 	if file == null:
 		return
 	var parsed: Variant = JSON.parse_string(file.get_as_text())
@@ -83,7 +100,7 @@ func load_profile() -> void:
 	save_profile()
 
 func save_profile() -> void:
-	var file := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
+	var file := FileAccess.open(_save_path, FileAccess.WRITE)
 	if file == null:
 		return
 	file.store_string(JSON.stringify({
@@ -181,3 +198,9 @@ func _find_unlock_index(unlock_id: String) -> int:
 		if str((UNLOCK_TABLE[index] as Dictionary).get("id", "")) == unlock_id:
 			return index
 	return -1
+
+func get_active_save_path() -> String:
+	return _save_path
+
+func is_sandboxed() -> bool:
+	return not _sandbox_mode.is_empty()

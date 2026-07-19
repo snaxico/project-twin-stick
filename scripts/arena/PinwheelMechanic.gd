@@ -1,7 +1,7 @@
 extends "res://scripts/arena/ArenaMechanic.gd"
 
 const BLADE_COUNT := 3
-const BLADE_RADIUS := 30.0
+const BLADE_RADIUS := 42.0
 const BLADE_SPEED := 130.0
 const MIN_CENTER_DISTANCE := BLADE_RADIUS * 2.0 + 120.0
 const CONTACT_DAMAGE := 9
@@ -105,6 +105,17 @@ func _valid_player(player) -> bool:
 	if player == null or not is_instance_valid(player) or not (player is Node2D):
 		return false
 	return not player.has_method("is_alive") or player.is_alive()
+
+
+func profiling_dodge_lane_valid() -> bool:
+	if MIN_CENTER_DISTANCE - BLADE_RADIUS * 2.0 < 120.0:
+		return false
+	for first in range(_positions.size()):
+		for second in range(first + 1, _positions.size()):
+			var edge_gap := (_positions[first] as Vector2).distance_to(_positions[second] as Vector2) - BLADE_RADIUS * 2.0
+			if edge_gap < 120.0 - 0.01:
+				return false
+	return true
 
 
 func _draw() -> void:

@@ -43,6 +43,9 @@ var rooms_completed: int = 0
 var run_outcome: String = "in_progress"
 var debug_run_setup: Dictionary = {}
 var debug_profiling: bool = false  # dev: PerfRunner sets this so players are immortal during a profile run
+var spawn_model := "trickle"
+var pending_spawn_model := "trickle"
+var debug_spawn_seed := 0
 var player_inventories: Array = []
 var xp_current: int = 0
 var xp_level: int = 0
@@ -83,6 +86,9 @@ func start_new_run(configs: Array, debug_options: Dictionary = {}) -> void:
 	_class_registry.reload()
 	debug_run_setup = _build_default_debug_run_setup()
 	debug_run_setup.merge(debug_options, true)
+	spawn_model = _sanitize_spawn_model(str(debug_run_setup.get("spawn_model", "trickle")))
+	pending_spawn_model = spawn_model
+	debug_spawn_seed = maxi(0, int(debug_run_setup.get("debug_spawn_seed", 0)))
 	player_configs = configs.duplicate()
 	run_outcome = "in_progress"
 	rooms_completed = 0
@@ -140,6 +146,20 @@ func get_map_node(node_id: String) -> Dictionary:
 
 func is_debug_single_room_mode() -> bool:
 	return bool(debug_run_setup.get("enabled", false)) and str(debug_run_setup.get("launch_mode", "normal_run")) == "single_room"
+
+func set_pending_spawn_model(value: String) -> void:
+	pending_spawn_model = _sanitize_spawn_model(value)
+
+func apply_pending_spawn_model() -> String:
+	spawn_model = _sanitize_spawn_model(pending_spawn_model)
+	return spawn_model
+
+func get_room_archetype_catalog() -> Array:
+	var entries: Array = []
+	for archetype_id in _room_archetype_ids:
+		if _room_archetypes_by_id.has(archetype_id):
+			entries.append((_room_archetypes_by_id[archetype_id] as Dictionary).duplicate(true))
+	return entries
 
 func select_map_node(node_id: String) -> bool:
 	if not reachable_node_ids.has(node_id):
@@ -580,10 +600,14 @@ func _filter_unlocked_abilities(ability_ids: Array) -> Array:
 
 func _build_single_room_map() -> Array:
 	var room_type := str(debug_run_setup.get("room_type", "combat"))
-	var room_depth: int = maxi(1, int(debug_run_setup.get("step_index", 0)) + 1)
+	var room_depth: int = maxi(1, int(debug_run_setup.get("depth", int(debug_run_setup.get("step_index", 0)) + 1)))
 	if room_type == "elite":
 		room_type = "combat"
-	var node := _build_run_node(room_depth, room_type, "single_room")
+	var forced_archetype: Dictionary = {}
+	var archetype_id := str(debug_run_setup.get("archetype_id", ""))
+	if room_type == "combat" and _room_archetypes_by_id.has(archetype_id):
+		forced_archetype = (_room_archetypes_by_id[archetype_id] as Dictionary).duplicate(true)
+	var node := _build_run_node(room_depth, room_type, "single_room", forced_archetype)
 	node["id"] = "single_room"
 	node["title"] = "Encounter Builder"
 	node["description"] = "Single-room debug encounter."
@@ -996,6 +1020,13 @@ func _build_default_debug_run_setup() -> Dictionary:
 		"room_type": "combat",
 		"room_objective": "kill_all",
 		"enemy_mix": "mixed",
+		"archetype_id": "mixed",
+		"where": "open",
+		"where_variant": 0,
+		"where_seed": 0,
+		"depth": 1,
+		"spawn_model": "trickle",
+		"debug_spawn_seed": 0,
 		"modifiers": [],
 		"starting_mutations": [],
 		"starting_level": 0,
@@ -1005,6 +1036,9 @@ func _build_default_debug_run_setup() -> Dictionary:
 		"player_abilities": [],
 		"step_index": 0,
 	}
+
+func _sanitize_spawn_model(value: String) -> String:
+	return "pulsed" if value == "pulsed" else "trickle"
 
 func _apply_debug_starting_mutations() -> void:
 	if not bool(debug_run_setup.get("enabled", false)):
