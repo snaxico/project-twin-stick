@@ -13,6 +13,7 @@ var wake_heal_per_hit := 0
 
 var _expires_at: float = 0.0
 var _next_tick_at: float = 0.0
+var _configured := false
 
 func configure(zone_radius: float, zone_damage: int, zone_lifetime: float, zone_tick_interval: float, zone_team: String, zone_knockback_force: float = 0.0, zone_source_player_index: int = -1, zone_healing_owner: Node = null, zone_wake_heal_per_hit: int = 0) -> void:
 	radius = max(zone_radius, 8.0)
@@ -24,9 +25,13 @@ func configure(zone_radius: float, zone_damage: int, zone_lifetime: float, zone_
 	source_player_index = zone_source_player_index
 	healing_owner = zone_healing_owner
 	wake_heal_per_hit = maxi(0, zone_wake_heal_per_hit)
+	_configured = true
+	if is_inside_tree():
+		_expires_at = maxf(_expires_at, _current_time_seconds() + lifetime)
 	queue_redraw()
 
 func _ready() -> void:
+	add_to_group("fire_trail_zone")
 	_expires_at = _current_time_seconds() + lifetime
 	_next_tick_at = _current_time_seconds()
 
@@ -98,6 +103,24 @@ func _get_combat_owner() -> Node:
 		current = current.get_parent()
 	var owner_tree := get_tree()
 	return owner_tree.current_scene if owner_tree != null else null
+
+func can_merge_fire_trail_zone(zone_position: Vector2, zone_radius: float, zone_team: String, zone_source_player_index: int) -> bool:
+	if not _configured:
+		return false
+	if team != zone_team or source_player_index != zone_source_player_index:
+		return false
+	var merge_radius := maxf(radius, zone_radius) * 0.65
+	return global_position.distance_squared_to(zone_position) <= merge_radius * merge_radius
+
+func refresh_fire_trail_zone(zone_position: Vector2, zone_radius: float, zone_damage: int, zone_lifetime: float, zone_tick_interval: float, zone_knockback_force: float = 0.0) -> void:
+	global_position = zone_position
+	radius = maxf(radius, max(zone_radius, 8.0))
+	damage = maxi(damage, max(zone_damage, 1))
+	lifetime = maxf(lifetime, max(zone_lifetime, 0.1))
+	tick_interval = minf(tick_interval, max(zone_tick_interval, 0.1))
+	knockback_force = maxf(knockback_force, max(zone_knockback_force, 0.0))
+	_expires_at = maxf(_expires_at, _current_time_seconds() + lifetime)
+	queue_redraw()
 
 func _draw() -> void:
 	var remaining_ratio := clampf((_expires_at - _current_time_seconds()) / maxf(lifetime, 0.01), 0.0, 1.0)

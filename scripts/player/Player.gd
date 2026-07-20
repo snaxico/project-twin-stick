@@ -75,6 +75,7 @@ var _weapon_profile_name := "Rifle"
 var _weapon_range := 950.0
 var _weapon_area := 4.0
 var _weapon_feedback_profile := "rifle"
+var _weapon_fire_weight := 1.0
 var _weapon_impact_weight := 1.0
 var _weapon_stats: Dictionary = {}
 var _class_id := ""
@@ -253,6 +254,10 @@ func apply_loadout(loadout: Dictionary) -> void:
 	_weapon_id = str(loadout.get("weapon_id", "rifle"))
 	_weapon_profile_name = str(loadout.get("weapon_name", "Rifle"))
 	_weapon_stats = (loadout.get("weapon_stats", {}) as Dictionary).duplicate(true)
+	var feedback := _weapon_feedback_for_id(_weapon_id)
+	_weapon_feedback_profile = str(feedback.get("profile", "rifle"))
+	_weapon_fire_weight = float(feedback.get("fire_weight", 1.0))
+	_weapon_impact_weight = float(feedback.get("impact_weight", 1.0))
 	_heal_disabled = bool(loadout.get("heal_disabled", false))
 	_base_projectile_damage = int(round(float(_weapon_stats.get("damage", _weapon_stats.get("max_damage_per_second", projectile_damage)))))
 	if str(_weapon_stats.get("projectile_kind", "bullet")) == "beam":
@@ -721,7 +726,7 @@ func _can_attack(now: float) -> bool:
 	return not _is_slot_active_by_id("shield", now) and not _is_downed
 
 func _fire_weapon(now: float, fire_direction: Vector2) -> void:
-	var muzzle_weight := _weapon_impact_weight
+	var muzzle_weight := _weapon_fire_weight
 	if _is_slot_active_by_id("overcharge", now):
 		muzzle_weight += 0.2
 	_next_weapon_fire_at = now + _get_current_weapon_fire_interval()
@@ -756,6 +761,23 @@ func _fire_weapon(now: float, fire_direction: Vector2) -> void:
 	projectile_config["source_type"] = "weapon"
 	projectile_config["source_player_index"] = player_index
 	fire_requested.emit(global_position + fire_direction * 24.0, fire_direction, projectile_config)
+
+func _weapon_feedback_for_id(weapon_id: String) -> Dictionary:
+	match weapon_id:
+		"scattergun":
+			return {"profile": "scatter", "fire_weight": 1.22, "impact_weight": 1.14}
+		"rocket":
+			return {"profile": "slug", "fire_weight": 1.52, "impact_weight": 1.48}
+		"beam":
+			return {"profile": "beam", "fire_weight": 0.88, "impact_weight": 0.82}
+		"whirlwind":
+			return {"profile": "slash", "fire_weight": 1.04, "impact_weight": 0.96}
+		"arc_wand":
+			return {"profile": "zap", "fire_weight": 0.94, "impact_weight": 0.9}
+		"flamethrower":
+			return {"profile": "burn", "fire_weight": 0.98, "impact_weight": 0.88}
+		_:
+			return {"profile": "rifle", "fire_weight": 1.0, "impact_weight": 1.0}
 
 func _get_current_weapon_fire_interval() -> float:
 	var overcharge_multiplier := _get_overcharge_fire_rate_multiplier(_current_time_seconds())

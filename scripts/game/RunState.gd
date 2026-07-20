@@ -86,6 +86,7 @@ func start_new_run(configs: Array, debug_options: Dictionary = {}) -> void:
 	_class_registry.reload()
 	debug_run_setup = _build_default_debug_run_setup()
 	debug_run_setup.merge(debug_options, true)
+	debug_run_setup["kit_size"] = _sanitize_kit_size(int(debug_run_setup.get("kit_size", 3)))
 	spawn_model = _sanitize_spawn_model(str(debug_run_setup.get("spawn_model", "trickle")))
 	pending_spawn_model = spawn_model
 	debug_spawn_seed = maxi(0, int(debug_run_setup.get("debug_spawn_seed", 0)))
@@ -518,7 +519,7 @@ func _build_default_player_inventories(player_count: int, selected_classes: Arra
 		var chosen: Array = []
 		if index < selected_abilities.size() and selected_abilities[index] is Array:
 			chosen = (selected_abilities[index] as Array).duplicate()
-		var normalized := _normalize_class_ability_loadout(inventory.class_id, chosen)
+		var normalized := _normalize_class_ability_loadout(inventory.class_id, chosen, _active_kit_size())
 		inventory.set_ability_ids(normalized)
 		inventories.append(inventory)
 	return inventories
@@ -537,7 +538,7 @@ func _normalize_inventory_loadout(inventory) -> void:
 	inventory.ultimate_id = str(class_definition.get("ultimate", ""))
 	if not _is_weapon_in_class_pool(inventory.class_id, str(inventory.weapon_id)):
 		inventory.weapon_id = _first_class_weapon_id(inventory.class_id)
-	var normalized := _normalize_class_ability_loadout(inventory.class_id, inventory.get_chosen_ability_ids())
+	var normalized := _normalize_class_ability_loadout(inventory.class_id, inventory.get_chosen_ability_ids(), _active_kit_size())
 	inventory.set_ability_ids(normalized)
 
 func _first_unlocked_weapon_id() -> String:
@@ -565,27 +566,38 @@ func _first_class_weapon_id(class_id: String) -> String:
 func _is_weapon_in_class_pool(class_id: String, weapon_id: String) -> bool:
 	return _class_registry.get_weapon_pool(_normalize_class_id(class_id)).has(weapon_id) and _weapons_by_id.has(weapon_id)
 
-func _normalize_class_ability_loadout(class_id: String, chosen_abilities: Array) -> Array:
+func _normalize_class_ability_loadout(class_id: String, chosen_abilities: Array, kit_size: int = 3) -> Array:
 	var normalized_class_id := _normalize_class_id(class_id)
 	var ability_pool := _class_registry.get_ability_pool(normalized_class_id)
+	var non_ultimate_slots := _sanitize_kit_size(kit_size)
 	var chosen: Array = []
 	for ability_id_variant in chosen_abilities:
 		var ability_id := str(ability_id_variant)
 		if ability_pool.has(ability_id) and _ability_registry.has(ability_id) and not chosen.has(ability_id):
 			chosen.append(ability_id)
-		if chosen.size() >= 3:
+		if chosen.size() >= non_ultimate_slots:
 			break
 	for ability_id_variant in ability_pool:
-		if chosen.size() >= 3:
+		if chosen.size() >= non_ultimate_slots:
 			break
 		var ability_id := str(ability_id_variant)
 		if _ability_registry.has(ability_id) and not chosen.has(ability_id):
 			chosen.append(ability_id)
+	while chosen.size() < non_ultimate_slots:
+		chosen.append("")
 	while chosen.size() < 3:
 		chosen.append("")
 	var ultimate_id := _class_registry.get_ultimate_id(normalized_class_id)
 	chosen.append(ultimate_id if _ability_registry.has(ultimate_id) else "")
 	return chosen
+
+func _active_kit_size() -> int:
+	if not bool(debug_run_setup.get("enabled", false)):
+		return 3
+	return _sanitize_kit_size(int(debug_run_setup.get("kit_size", 3)))
+
+func _sanitize_kit_size(value: int) -> int:
+	return clampi(value, 2, 3)
 
 func _filter_unlocked_abilities(ability_ids: Array) -> Array:
 	var filtered: Array = []
@@ -1027,6 +1039,7 @@ func _build_default_debug_run_setup() -> Dictionary:
 		"depth": 1,
 		"spawn_model": "trickle",
 		"debug_spawn_seed": 0,
+		"kit_size": 3,
 		"modifiers": [],
 		"starting_mutations": [],
 		"starting_level": 0,

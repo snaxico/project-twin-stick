@@ -4,6 +4,7 @@ extends "res://scripts/game/DeployableNode.gd"
 signal fire_requested(origin, direction, config)
 
 const ParticleFactoryData = preload("res://scripts/juice/ParticleFactory.gd")
+const PerfProbeData = preload("res://scripts/dev/PerfProbe.gd")
 
 var fire_rate := 3.2
 var damage := 12
@@ -13,6 +14,8 @@ var gun_count := 1
 var tint := Color(0.9, 0.95, 1.0, 1.0)
 var owner_player_index := -1
 var _next_fire_at := 0.0
+var _cached_target: Node2D = null
+var _next_target_scan_at := 0.0
 
 func configure(stats: Dictionary, color: Color, owner_node = null) -> void:
 	fire_rate = float(stats.get("fire_rate", fire_rate))
@@ -27,7 +30,9 @@ func configure(stats: Dictionary, color: Color, owner_node = null) -> void:
 	queue_redraw()
 
 func _physics_process(_delta: float) -> void:
+	var perf_started_at := PerfProbeData.begin("deployable_tick")
 	if not is_alive():
+		PerfProbeData.end("deployable_tick", perf_started_at)
 		return
 	var target := _find_target()
 	var now := Time.get_ticks_msec() / 1000.0
@@ -54,8 +59,14 @@ func _physics_process(_delta: float) -> void:
 					"source_player_index": owner_player_index,
 				})
 	queue_redraw()
+	PerfProbeData.end("deployable_tick", perf_started_at)
 
 func _find_target() -> Node2D:
+	var now := Time.get_ticks_msec() / 1000.0
+	if now < _next_target_scan_at and _cached_target != null and is_instance_valid(_cached_target):
+		if (not _cached_target.has_method("is_alive") or _cached_target.is_alive()) and global_position.distance_squared_to(_cached_target.global_position) <= attack_range * attack_range:
+			return _cached_target
+	_next_target_scan_at = now + 0.14
 	var tree := get_tree()
 	if tree == null:
 		return null
@@ -78,7 +89,8 @@ func _find_target() -> Node2D:
 			continue
 		best_distance_sq = distance_sq
 		best_target = candidate as Node2D
-	return best_target
+	_cached_target = best_target
+	return _cached_target
 
 func _draw() -> void:
 	draw_circle(Vector2.ZERO, 18.0, Color(tint.r, tint.g, tint.b, 0.3))

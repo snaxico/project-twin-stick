@@ -2,6 +2,7 @@ class_name AbilityMine
 extends "res://scripts/game/DeployableNode.gd"
 
 const ParticleFactoryData = preload("res://scripts/juice/ParticleFactory.gd")
+const PerfProbeData = preload("res://scripts/dev/PerfProbe.gd")
 
 var trigger_radius := 52.0
 var explosion_radius := 88.0
@@ -10,6 +11,8 @@ var tint := Color(1.0, 0.82, 0.34, 1.0)
 var owner_player_index := -1
 var _detonating := false
 var _detonate_at := 0.0
+var _cached_candidates: Array = []
+var _next_candidate_scan_at := 0.0
 
 func configure(radius: float, mine_damage: int, color: Color, mine_trigger_radius: float = 52.0, mine_health: int = 45, source_player_index: int = -1) -> void:
 	explosion_radius = radius
@@ -22,14 +25,18 @@ func configure(radius: float, mine_damage: int, color: Color, mine_trigger_radiu
 	queue_redraw()
 
 func _physics_process(_delta: float) -> void:
+	var perf_started_at := PerfProbeData.begin("deployable_tick")
 	if not is_alive():
+		PerfProbeData.end("deployable_tick", perf_started_at)
 		return
 	var now := Time.get_ticks_msec() / 1000.0
 	if _detonating and now >= _detonate_at:
 		_explode()
+		PerfProbeData.end("deployable_tick", perf_started_at)
 		return
 	if _detonating:
 		queue_redraw()
+		PerfProbeData.end("deployable_tick", perf_started_at)
 		return
 	for enemy in _get_candidate_enemies(trigger_radius):
 		if enemy == null or not is_instance_valid(enemy) or not enemy.has_method("is_alive") or not enemy.is_alive():
@@ -38,8 +45,10 @@ func _physics_process(_delta: float) -> void:
 			_detonating = true
 			_detonate_at = now + 0.12
 			queue_redraw()
+			PerfProbeData.end("deployable_tick", perf_started_at)
 			return
 	queue_redraw()
+	PerfProbeData.end("deployable_tick", perf_started_at)
 
 func _explode() -> void:
 	var explosion_radius_sq := explosion_radius * explosion_radius
@@ -78,13 +87,19 @@ func get_owner_player_index() -> int:
 	return owner_player_index
 
 func _get_candidate_enemies(radius: float) -> Array:
+	var now := Time.get_ticks_msec() / 1000.0
+	if now < _next_candidate_scan_at:
+		return _cached_candidates
+	_next_candidate_scan_at = now + 0.14
 	var tree := get_tree()
 	if tree == null:
 		return []
 	var combat_owner := tree.current_scene
 	if combat_owner != null and combat_owner.has_method("get_nearby_enemy_target_nodes"):
-		return combat_owner.get_nearby_enemy_target_nodes(global_position, radius)
-	return tree.get_nodes_in_group("aim_target")
+		_cached_candidates = combat_owner.get_nearby_enemy_target_nodes(global_position, radius)
+	else:
+		_cached_candidates = tree.get_nodes_in_group("aim_target")
+	return _cached_candidates
 
 func _on_deployable_destroyed() -> void:
 	var parent_node := get_parent()

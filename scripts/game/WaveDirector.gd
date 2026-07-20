@@ -155,6 +155,13 @@ func clear_active_boss_if(enemy) -> void:
 		_active_boss = null
 
 
+func profiling_set_active_boss(boss) -> void:
+	if not RunState.debug_profiling:
+		return
+	_active_boss = boss
+	_boss_spawned = boss != null and is_instance_valid(boss)
+
+
 func get_active_boss():
 	return _active_boss
 

@@ -289,6 +289,8 @@ func _attempt_hit_target(target: Node) -> void:
 		return
 	if target.has_method("get_team") and str(target.get_team()) == team:
 		return
+	if team == "player" and target is Node:
+		target.set_meta("profiled_projectile_impact_frame", Engine.get_physics_frames())
 	if knockback_force > 0.0 and target.has_method("apply_knockback"):
 		target.apply_knockback(direction, knockback_force)
 	target.apply_damage(damage)
@@ -340,11 +342,16 @@ func _spawn_impact_fire_pool() -> void:
 	if get_parent() == null:
 		return
 	_impact_pool_spawned = true
+	var pool_damage: int = max(1, int(round(float(damage) * impact_pool_damage_percent)))
+	var reusable_pool = _find_reusable_impact_fire_pool()
+	if reusable_pool != null:
+		reusable_pool.call("refresh_fire_trail_zone", global_position, impact_pool_radius, pool_damage, impact_pool_lifetime, trail_tick_interval, knockback_force)
+		return
 	var pool := FireTrailZoneData.new()
 	pool.global_position = global_position
 	pool.configure(
 		impact_pool_radius,
-		max(1, int(round(float(damage) * impact_pool_damage_percent))),
+		pool_damage,
 		impact_pool_lifetime,
 		trail_tick_interval,
 		team,
@@ -352,6 +359,17 @@ func _spawn_impact_fire_pool() -> void:
 		source_player_index
 	)
 	get_parent().add_child(pool)
+
+func _find_reusable_impact_fire_pool():
+	var parent := get_parent()
+	if parent == null:
+		return null
+	for child in parent.get_children():
+		if child == null or not is_instance_valid(child) or child == self:
+			continue
+		if child.has_method("can_merge_fire_trail_zone") and bool(child.can_merge_fire_trail_zone(global_position, impact_pool_radius, team, source_player_index)):
+			return child
+	return null
 
 func _finish_projectile() -> void:
 	if not _pooled:

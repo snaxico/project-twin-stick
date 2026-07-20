@@ -118,6 +118,8 @@ var _debug_seed_row: HBoxContainer = null
 var _debug_seed_spin: SpinBox = null
 var _debug_spawn_model_row: HBoxContainer = null
 var _debug_spawn_model_option: OptionButton = null
+var _debug_kit_size_row: HBoxContainer = null
+var _debug_kit_size_option: OptionButton = null
 var _home_encyclopedia_button: Button = null
 var _setup_mode: String = "play"
 var _ability_registry = AbilityRegistryData.new()
@@ -321,6 +323,8 @@ func _refresh_menu_state(_unused: Variant = null) -> void:
 			builder_row.visible = builder_combat
 	if _debug_spawn_model_row != null:
 		_debug_spawn_model_row.visible = _is_debug_menu_enabled()
+	if _debug_kit_size_row != null:
+		_debug_kit_size_row.visible = encounter_builder_mode and _is_debug_menu_enabled()
 	var perf_row := menu_layout.get_node_or_null("PerfScenarioRow")
 	if perf_row != null:
 		perf_row.visible = encounter_builder_mode and _is_debug_menu_enabled()
@@ -350,7 +354,8 @@ func _refresh_menu_state(_unused: Variant = null) -> void:
 		summary_lines.append("Room Modifiers: %d" % _get_selected_room_modifiers().size())
 	if _debug_spawn_model_option != null and _debug_spawn_model_row.visible:
 		summary_lines.append("Spawn model: %s" % _debug_spawn_model_option.get_item_text(_debug_spawn_model_option.selected))
-	summary_lines.append("Pick class, class weapon, and three abilities; the ultimate fills Y.")
+	var kit_size := _selected_kit_size()
+	summary_lines.append("Pick class, class weapon, and %d abilities; the ultimate fills Y." % kit_size)
 	status_label.text = "\n".join(summary_lines)
 	start_button.text = "Launch Encounter" if encounter_builder_mode else "Start Run"
 	for row_index in range(_class_rows.size()):
@@ -415,6 +420,7 @@ func _build_debug_start_options() -> Dictionary:
 		"player_weapons": _build_player_weapon_selection(),
 		"player_abilities": _build_player_ability_selection(),
 		"spawn_model": str(_debug_spawn_model_option.get_selected_metadata()) if _debug_spawn_model_option != null and _is_debug_menu_enabled() else "trickle",
+		"kit_size": _selected_kit_size(),
 	}
 	if not options["enabled"]:
 		return options
@@ -1285,6 +1291,16 @@ func _create_feel_polish_debug_rows() -> void:
 	], "trickle")
 	_debug_spawn_model_option.item_selected.connect(_refresh_menu_state)
 	_debug_spawn_model_row.add_child(_debug_spawn_model_option)
+
+	_debug_kit_size_row = _create_debug_labeled_row("DebugKitSizeRow", "Kit Size")
+	_debug_kit_size_option = OptionButton.new()
+	_debug_kit_size_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_populate_profile_option(_debug_kit_size_option, [
+		{"label": "3 abilities", "value": "3"},
+		{"label": "2 abilities", "value": "2"},
+	], "3")
+	_debug_kit_size_option.item_selected.connect(_refresh_menu_state)
+	_debug_kit_size_row.add_child(_debug_kit_size_option)
 	_refresh_debug_where_options()
 
 func _create_debug_labeled_row(row_name: String, label_text: String) -> HBoxContainer:
@@ -1651,21 +1667,27 @@ func _build_player_ability_selection() -> Array:
 		selections.append(_get_player_ability_pair(player_index))
 	return selections
 
+func _selected_kit_size() -> int:
+	if _debug_kit_size_option == null or not _is_debug_menu_enabled():
+		return 3
+	return clampi(int(str(_debug_kit_size_option.get_selected_metadata())), 2, 3)
+
 func _get_player_ability_pair(player_index: int) -> Array:
 	if player_index < 0 or player_index >= _ability_rows.size():
-		return _default_abilities_for_class(_get_player_class_selection(player_index))
+		return _default_abilities_for_class(_get_player_class_selection(player_index)).slice(0, _selected_kit_size())
 	var row_data: Dictionary = _ability_rows[player_index]
 	var allowed_ids := _get_class_ability_ids(_get_player_class_selection(player_index))
+	var kit_size := _selected_kit_size()
 	var selected: Array = []
 	for ability_id_variant in (row_data.get("selection", []) as Array):
 		var ability_id := str(ability_id_variant)
 		if allowed_ids.has(ability_id) and not selected.has(ability_id):
 			selected.append(ability_id)
-	while selected.size() > 3:
+	while selected.size() > kit_size:
 		selected.pop_back()
-	if selected.size() < 3:
+	if selected.size() < kit_size:
 		for ability_id in allowed_ids:
-			if selected.size() >= 3:
+			if selected.size() >= kit_size:
 				break
 			if not selected.has(ability_id):
 				selected.append(ability_id)
@@ -1675,7 +1697,7 @@ func _get_player_ability_pair(player_index: int) -> Array:
 
 
 func _on_ability_slot_pressed(player_index: int, slot_index: int) -> void:
-	if player_index < 0 or player_index >= _ability_rows.size() or slot_index < 0 or slot_index >= 3:
+	if player_index < 0 or player_index >= _ability_rows.size() or slot_index < 0 or slot_index >= _selected_kit_size():
 		return
 	var row_data: Dictionary = _ability_rows[player_index]
 	row_data["selected_slot"] = slot_index
@@ -1693,9 +1715,10 @@ func _on_ability_card_toggled(pressed: bool, player_index: int, ability_id: Stri
 		return
 	var row_data: Dictionary = _ability_rows[player_index]
 	var selected: Array = (row_data.get("selection", []) as Array).duplicate()
-	while selected.size() < 3:
+	var kit_size := _selected_kit_size()
+	while selected.size() < kit_size:
 		selected.append("")
-	var selected_slot := clampi(int(row_data.get("selected_slot", 0)), 0, 2)
+	var selected_slot := clampi(int(row_data.get("selected_slot", 0)), 0, kit_size - 1)
 	var existing_slot := selected.find(ability_id)
 	if existing_slot >= 0 and existing_slot != selected_slot:
 		selected[existing_slot] = selected[selected_slot]
@@ -1712,13 +1735,18 @@ func _sync_ability_row_buttons(player_index: int) -> void:
 	var cards: Dictionary = row_data.get("cards", {}) as Dictionary
 	var selected := _get_player_ability_pair(player_index)
 	var allowed_ids := _get_class_ability_ids(_get_player_class_selection(player_index))
-	var selected_slot := clampi(int(row_data.get("selected_slot", 0)), 0, 2)
+	var kit_size := _selected_kit_size()
+	var selected_slot := clampi(int(row_data.get("selected_slot", 0)), 0, kit_size - 1)
+	if int(row_data.get("selected_slot", 0)) != selected_slot:
+		row_data["selected_slot"] = selected_slot
+		_ability_rows[player_index] = row_data
 	var slot_cards: Array = row_data.get("slot_cards", []) as Array
 	var accent := _class_accent(_get_player_class_selection(player_index))
 	for slot_index in range(slot_cards.size()):
 		var slot_button: Button = slot_cards[slot_index]
 		if slot_button == null:
 			continue
+		slot_button.visible = slot_index < kit_size
 		var ability_id := str(selected[slot_index]) if slot_index < selected.size() else ""
 		slot_button.text = "%s\n%s" % [LOADOUT_ABILITY_LABELS[slot_index], _format_name(ability_id)]
 		slot_button.set_pressed_no_signal(slot_index == selected_slot)
@@ -1744,16 +1772,23 @@ func _sync_ability_row_buttons(player_index: int) -> void:
 	if summary != null:
 		var class_def := RunState.get_class_definition(_get_player_class_selection(player_index))
 		var ultimate_id := str(class_def.get("ultimate", ""))
-		if selected.size() >= 3:
-			summary.text = "A %s  |  X %s  |  B %s  |  Y %s" % [
-				_format_name(str(selected[0])),
-				_format_name(str(selected[1])),
-				_format_name(str(selected[2])),
-				_format_name(ultimate_id),
-			]
+		if selected.size() >= kit_size:
+			if kit_size == 2:
+				summary.text = "A %s  |  X %s  |  Y %s" % [
+					_format_name(str(selected[0])),
+					_format_name(str(selected[1])),
+					_format_name(ultimate_id),
+				]
+			else:
+				summary.text = "A %s  |  X %s  |  B %s  |  Y %s" % [
+					_format_name(str(selected[0])),
+					_format_name(str(selected[1])),
+					_format_name(str(selected[2])),
+					_format_name(ultimate_id),
+				]
 			summary.modulate = Color(0.84, 0.92, 1.0, 0.92)
 		else:
-			summary.text = "Select three class abilities."
+			summary.text = "Select %d class abilities." % kit_size
 			summary.modulate = Color(1.0, 0.8, 0.42, 0.96)
 
 func _select_defaults_for_class(player_index: int) -> void:
@@ -1783,7 +1818,7 @@ func _first_weapon_id_for_class(class_id: String) -> String:
 	return str(ids[0]) if not ids.is_empty() else "rifle"
 
 func _default_abilities_for_class(class_id: String) -> Array:
-	return _get_class_ability_ids(class_id).slice(0, 3)
+	return _get_class_ability_ids(class_id).slice(0, _selected_kit_size())
 
 func _create_loadout_card(text: String, tooltip: String) -> Button:
 	var card := Button.new()
@@ -1842,7 +1877,8 @@ func _can_start_run(player_count: int) -> bool:
 		if not _get_class_weapon_ids(class_id).has(_get_player_weapon_selection(player_index)):
 			return false
 		var selected_abilities := _get_player_ability_pair(player_index)
-		if selected_abilities.size() != 3:
+		var kit_size := _selected_kit_size()
+		if selected_abilities.size() != kit_size:
 			return false
 		var class_ability_ids := _get_class_ability_ids(class_id)
 		for ability_id in selected_abilities:

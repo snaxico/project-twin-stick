@@ -1,6 +1,7 @@
 extends "res://scripts/game/DeployableNode.gd"
 
 const ParticleFactoryData = preload("res://scripts/juice/ParticleFactory.gd")
+const PerfProbeData = preload("res://scripts/dev/PerfProbe.gd")
 
 var _owner = null
 var _damage := 14
@@ -11,6 +12,8 @@ var _attack_interval := 0.55
 var _tint := Color.WHITE
 var _next_attack_at := 0.0
 var _overcharged := false
+var _cached_target: Node2D = null
+var _next_target_scan_at := 0.0
 
 func configure(owner_node, stats: Dictionary, color: Color) -> void:
 	_owner = owner_node
@@ -24,11 +27,14 @@ func configure(owner_node, stats: Dictionary, color: Color) -> void:
 	configure_deployable_health(int(stats.get("construct_health", stats.get("health", 100))), true)
 
 func _physics_process(delta: float) -> void:
+	var perf_started_at := PerfProbeData.begin("deployable_tick")
 	if not is_alive():
+		PerfProbeData.end("deployable_tick", perf_started_at)
 		return
 	var target := _find_target()
 	if target == null:
 		queue_redraw()
+		PerfProbeData.end("deployable_tick", perf_started_at)
 		return
 	var offset: Vector2 = target.global_position - global_position
 	var distance := offset.length()
@@ -38,8 +44,14 @@ func _physics_process(delta: float) -> void:
 	else:
 		_try_attack(target, offset)
 	queue_redraw()
+	PerfProbeData.end("deployable_tick", perf_started_at)
 
 func _find_target() -> Node2D:
+	var now := Time.get_ticks_msec() / 1000.0
+	if now < _next_target_scan_at and _cached_target != null and is_instance_valid(_cached_target):
+		if not _cached_target.has_method("is_alive") or _cached_target.is_alive():
+			return _cached_target
+	_next_target_scan_at = now + 0.16
 	var combat_owner := _get_combat_owner()
 	var candidates: Array = []
 	if combat_owner != null and combat_owner.has_method("get_nearby_enemy_target_nodes"):
@@ -58,7 +70,8 @@ func _find_target() -> Node2D:
 		if distance_sq < best_distance_sq:
 			best_distance_sq = distance_sq
 			best_target = candidate as Node2D
-	return best_target
+	_cached_target = best_target
+	return _cached_target
 
 func _try_attack(target: Node2D, offset: Vector2) -> void:
 	var now := Time.get_ticks_msec() / 1000.0

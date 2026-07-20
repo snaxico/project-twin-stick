@@ -1,6 +1,7 @@
 extends CharacterBody2D
 
 const ParticleFactoryData = preload("res://scripts/juice/ParticleFactory.gd")
+const PerfProbeData = preload("res://scripts/dev/PerfProbe.gd")
 const PULSAR_ARENA_MARGIN := 260.0
 const PULSAR_TELEPORT_MIN_DISTANCE := 400.0
 const PULSAR_REACTIVE_TELEPORT_DISTANCE := 250.0
@@ -8,6 +9,7 @@ const SEPARATION_RADIUS := 64.0
 const SEPARATION_STRENGTH := 120.0
 const SEPARATION_UPDATE_INTERVAL := 4
 const FLOW_SAMPLE_UPDATE_INTERVAL := 12
+const SOFT_PHYSICS_UPDATE_INTERVAL := 4
 const MAX_SEPARATION_NEIGHBORS := 8
 const HIVE_DEFLECTOR_VULNERABLE_WINDOW := 6.0
 const BLOOM_COLOR_MULTIPLIER := 1.45
@@ -171,6 +173,7 @@ var _flow_direction_cache_frame := -1
 var _combat_owner: Node = null
 var _random := RandomNumberGenerator.new()
 var _next_contact_at := 0.0
+var _soft_movement_until := 0.0
 var _next_fire_at := 0.0
 var _next_ability_at := 0.0
 var _next_spawn_at := 0.0
@@ -202,6 +205,7 @@ var _feedback_weight := 1.0
 var _alive := true
 var _base_visual_scale := Vector2.ONE
 var _visual_anim_base := Vector2.ONE
+var _base_collision_mask := 1
 var _spawn_anim := 0.0
 var _hit_punch := 0.0
 var _idle_phase := 0.0
@@ -241,10 +245,12 @@ func _ready() -> void:
 	if collision_shape != null and collision_shape.shape is CircleShape2D:
 		collision_shape.shape = (collision_shape.shape as CircleShape2D).duplicate()
 		_base_collision_radius = (collision_shape.shape as CircleShape2D).radius
+	_base_collision_mask = collision_mask
 
 func setup(type_name: String, combat_owner: Node) -> void:
 	_combat_owner = combat_owner
 	_alive = true
+	collision_mask = _base_collision_mask
 	_target = null
 	_external_velocity = Vector2.ZERO
 	_shield_active = false
@@ -623,10 +629,19 @@ func get_death_effects() -> Array:
 	return effects
 
 func _physics_process(delta: float) -> void:
+	var perf_started_at := PerfProbeData.begin("enemy_physics")
 	if not _alive:
+		PerfProbeData.end("enemy_physics", perf_started_at)
 		return
 	var now := _current_time_seconds()
 	_update_status_effects(now)
+	var soft_movement := _use_soft_crowd_movement()
+	_apply_soft_collision_mode(soft_movement)
+	if soft_movement and _should_skip_soft_physics_update():
+		global_position += velocity * delta
+		_update_dynamic_visuals(delta)
+		PerfProbeData.end("enemy_physics", perf_started_at)
+		return
 	_refresh_target_if_due()
 	var desired_velocity := Vector2.ZERO
 	if _target != null:
@@ -658,11 +673,18 @@ func _physics_process(delta: float) -> void:
 		_external_velocity = _external_velocity.move_toward(Vector2.ZERO, delta * 14.0)
 	desired_velocity += _apply_separation()
 	velocity = desired_velocity + _external_velocity
-	move_and_slide()
+	if soft_movement:
+		global_position += velocity * delta
+	else:
+		move_and_slide()
 	_update_dynamic_visuals(delta)
+	PerfProbeData.end("enemy_physics", perf_started_at)
 
 func _apply_separation() -> Vector2:
 	if is_champion() or _combat_owner == null:
+		_separation_push = Vector2.ZERO
+		return Vector2.ZERO
+	if _use_soft_crowd_movement():
 		_separation_push = Vector2.ZERO
 		return Vector2.ZERO
 	var frame := Engine.get_physics_frames()
@@ -700,6 +722,25 @@ func _apply_separation() -> Vector2:
 		push = push.normalized() * max_push
 	_separation_push = push
 	return _separation_push
+
+func _use_soft_crowd_movement() -> bool:
+	if is_champion() or _combat_owner == null:
+		return false
+	var now := _current_time_seconds()
+	if now < _soft_movement_until:
+		return true
+	if _combat_owner.has_method("should_use_soft_enemy_movement") and bool(_combat_owner.should_use_soft_enemy_movement(global_position)):
+		_soft_movement_until = now + 0.35
+		return true
+	return false
+
+func _should_skip_soft_physics_update() -> bool:
+	return Engine.get_physics_frames() % SOFT_PHYSICS_UPDATE_INTERVAL != _target_refresh_frame_offset % SOFT_PHYSICS_UPDATE_INTERVAL
+
+func _apply_soft_collision_mode(enabled: bool) -> void:
+	var desired_mask := 0 if enabled else _base_collision_mask
+	if collision_mask != desired_mask:
+		collision_mask = desired_mask
 
 func _update_status_effects(now: float) -> void:
 	if now >= _slow_until:
@@ -801,8 +842,7 @@ func _attempt_contact_damage(now: float) -> void:
 	candidates.append_array(tree.get_nodes_in_group("player_deployable"))
 	for candidate in candidates:
 		any_hit = _attempt_contact_damage_against(candidate, range_squared) or any_hit
-	if any_hit:
-		_next_contact_at = now + (0.65 if is_champion() else 0.45)
+	_next_contact_at = now + ((0.65 if is_champion() else 0.45) if any_hit else 0.12)
 
 func _attempt_contact_damage_against(candidate, range_squared: float) -> bool:
 	if not is_instance_valid(candidate) or not (candidate is Node2D):
@@ -1266,6 +1306,8 @@ func _die(already_exploded: bool = false) -> void:
 		queue_free()
 
 func _spawn_hit_particles(weight: float, shield_pop: bool = false) -> void:
+	if not shield_pop and _combat_owner != null and _combat_owner.has_method("should_suppress_combat_vfx") and bool(_combat_owner.should_suppress_combat_vfx()):
+		return
 	var parent_node := get_parent()
 	if parent_node == null:
 		return

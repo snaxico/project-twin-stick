@@ -7,6 +7,7 @@ const AbilityRegistryData = preload("res://scripts/game/AbilityRegistry.gd")
 const EnemyTypes = preload("res://scripts/game/EnemyTypes.gd")
 const ArenaGeometry = preload("res://scripts/game/ArenaGeometry.gd")
 const ProjectileSystemData = preload("res://scripts/game/ProjectileSystem.gd")
+const PerfProbeData = preload("res://scripts/dev/PerfProbe.gd")
 const ArenaVisualsData = preload("res://scripts/game/ArenaVisuals.gd")
 const GameHudData = preload("res://scripts/game/GameHud.gd")
 const WaveDirectorData = preload("res://scripts/game/WaveDirector.gd")
@@ -59,6 +60,11 @@ const BOSS_HIT_FEEDBACK_INTERVAL := 0.22
 const HEALTH_DROP_CHANCE := 0.03
 const MAX_ACTIVE_SUMMONS := 5
 const ENEMY_SEPARATION_CELL_SIZE := 96.0
+const SOFT_CLUSTER_RADIUS := 132.0
+const SOFT_CLUSTER_COUNT := 14
+const SOFT_GLOBAL_ENEMY_THRESHOLD := 120
+const MAX_COSMETIC_TRANSIENT_CHILDREN := 140
+const COSMETIC_TRANSIENT_GROUP := "cosmetic_transient"
 const FLOW_FIELD_CELL_SIZE := 150.0
 const FLOW_TARGET_UPDATE_INTERVAL := 0.12
 const OBSTACLE_EDGE_EXCLUSION := ARENA_MARGIN + 168.0
@@ -178,6 +184,10 @@ var _active_mines: Array = []
 var _next_hud_refresh_at := 0.0
 var _enemy_separation_grid: Dictionary = {}
 var _enemy_separation_grid_frame := -1
+var _nearby_enemy_query_cache: Dictionary = {}
+var _nearby_enemy_query_cache_frame := -1
+var _soft_cluster_cache: Dictionary = {}
+var _soft_cluster_cache_frame := -1
 var _projectile_system = null
 var _screen_effect_level := "full"
 var _hit_stop_manager = null
@@ -1088,10 +1098,12 @@ func _physics_process(delta: float) -> void:
 		return
 	_room_elapsed += delta
 	_update_screen_atmosphere()
+	var combat_effects_started_at := PerfProbeData.begin("combat_effects")
 	_combat_effects.update_scheduled_enemy_shockwaves()
 	_combat_effects.update_scheduled_player_shockwaves()
 	_combat_effects.update_scheduled_enemy_hazards()
 	_combat_effects.update_scheduled_pulsar_emps()
+	PerfProbeData.end("combat_effects", combat_effects_started_at)
 	_projectile_system.tick(delta)
 	_side_objectives.update(delta, _player_nodes)
 	_flow_target_update_elapsed += delta
@@ -1151,6 +1163,105 @@ func profiling_inject(seed: int, count: int = 200) -> bool:
 		spawned += 1
 	_enemy_separation_grid_frame = -1
 	return spawned == count
+
+func profiling_hold_enemy_load(count: int, spitter_count: int, seed: int = PROFILING_SEED) -> bool:
+	if not RunState.debug_profiling or _wave_director == null:
+		return false
+	_enemy_nodes = _cleanup_instance_array(_enemy_nodes)
+	while _enemy_nodes.size() > count:
+		var enemy = _enemy_nodes.pop_back()
+		if enemy != null and is_instance_valid(enemy):
+			enemy.queue_free()
+	var live_count := _enemy_nodes.size()
+	if live_count >= count:
+		return true
+	if _profiling_rng.seed == 0:
+		_profiling_rng.seed = seed
+	var live_spitters := 0
+	for enemy in _enemy_nodes:
+		if enemy != null and is_instance_valid(enemy) and enemy.has_method("get_type_name") and str(enemy.get_type_name()) == "spitter":
+			live_spitters += 1
+	while live_count < count:
+		var enemy_type := "spitter" if live_spitters < spitter_count else _profiling_melee_type(live_count)
+		var enemy = _profiling_spawn_enemy(enemy_type, _profiling_position(_profiling_rng), seed + live_count)
+		if enemy == null:
+			return false
+		live_count += 1
+		if enemy_type == "spitter":
+			live_spitters += 1
+	_enemy_separation_grid_frame = -1
+	return true
+
+
+func profiling_spawn_hive_champion_once() -> bool:
+	if not RunState.debug_profiling:
+		return false
+	var active_boss = get_active_boss()
+	if active_boss != null and is_instance_valid(active_boss):
+		return true
+	var boss := _spawn_enemy_instance("boss_hive", ARENA_CENTER + Vector2(0.0, -360.0), 1.0)
+	if boss == null:
+		return false
+	if boss.has_method("apply_champion_scale"):
+		boss.apply_champion_scale(_room_depth, get_player_count())
+	if _wave_director != null and _wave_director.has_method("profiling_set_active_boss"):
+		_wave_director.profiling_set_active_boss(boss)
+	on_boss_spawned()
+	return true
+
+
+func profiling_cast_ability(player_index: int, ability_id: String) -> bool:
+	if not RunState.debug_profiling or player_index < 0 or player_index >= _player_nodes.size():
+		return false
+	var player = _player_nodes[player_index]
+	if player == null or not is_instance_valid(player):
+		return false
+	var ability_definition := _find_player_ability_definition(player_index, ability_id)
+	if ability_definition.is_empty():
+		return false
+	var runtime_ability := _build_runtime_ability(player_index, ability_definition)
+	if runtime_ability.is_empty():
+		return false
+	var stats: Dictionary = (runtime_ability.get("stats", {}) as Dictionary).duplicate(true)
+	stats["source_player_index"] = player_index
+	stats["color"] = player.player_config.tint if "player_config" in player else Color.WHITE
+	_on_player_ability_activated(player, _slot_index_for_ability(player_index, ability_id), ability_id, player.global_position, Vector2.RIGHT, stats)
+	return true
+
+
+func _find_player_ability_definition(player_index: int, ability_id: String) -> Dictionary:
+	var inventory = RunState.get_player_inventory(player_index)
+	if inventory == null:
+		return {}
+	var ability_ids: Array = inventory.get_ability_ids()
+	for slot_index in range(ability_ids.size()):
+		if str(ability_ids[slot_index]) == ability_id:
+			return RunState.get_ability(player_index, slot_index)
+	return {}
+
+
+func _slot_index_for_ability(player_index: int, ability_id: String) -> int:
+	var inventory = RunState.get_player_inventory(player_index)
+	if inventory == null:
+		return -1
+	var ability_ids: Array = inventory.get_ability_ids()
+	for slot_index in range(ability_ids.size()):
+		if str(ability_ids[slot_index]) == ability_id:
+			return slot_index
+	return -1
+
+
+func _profiling_melee_type(index: int) -> String:
+	match index % 4:
+		0:
+			return "chaser"
+		1:
+			return "charger"
+		2:
+			return "splitter"
+		_:
+			return "bomber"
+
 
 func profiling_remove_enemy(enemy) -> void:
 	if enemy == null or not is_instance_valid(enemy):
@@ -1359,8 +1470,9 @@ func _on_player_fire_requested(origin: Vector2, direction: Vector2, projectile_c
 
 func _on_player_ability_activated(player, slot_index: int, ability_id: String, origin: Vector2, direction: Vector2, stats: Dictionary) -> void:
 	var tint: Color = stats.get("color", Color.WHITE)
-	_spawn_ability_activation_flash(origin, tint, ability_id)
-	_play_sfx("play_explosion", [0.85, ability_id])
+	if ability_id != "dash":
+		_spawn_ability_activation_flash(origin, tint, ability_id)
+		_play_sfx("play_explosion", [0.85, ability_id])
 	match ability_id:
 		"shockwave":
 			_combat_effects.spawn_player_shockwave(origin, stats)
@@ -1529,7 +1641,7 @@ func _fire_ability_projectile(player, origin: Vector2, direction: Vector2, stats
 	_on_player_fire_requested(origin + direction.normalized() * 28.0, direction, projectile_config)
 
 func _spawn_summons(player, origin: Vector2, stats: Dictionary, tint: Color) -> void:
-	var construct_count := maxi(1, int(stats.get("construct_count", 2)))
+	var construct_count := maxi(1, int(stats.get("construct_count", 2)) + int(stats.get("construct_count_bonus", 0)))
 	var spread_radius := float(stats.get("spread_radius", 70.0))
 	for summon_index in range(construct_count):
 		_enforce_summon_cap(MAX_ACTIVE_SUMMONS - 1)
@@ -1767,7 +1879,22 @@ func _spawn_enemy_death_global_vfx(enemy_type_name: String) -> void:
 		_play_sfx("play_explosion", [1.45, "boss"])
 		_spawn_screen_flash(Color(1.0, 1.0, 1.0, 0.18), 0.2)
 	else:
-		_play_sfx("play_enemy_death", [0.8])
+		_play_sfx("play_enemy_death", [_enemy_death_sfx_weight(enemy_type_name)])
+
+func _enemy_death_sfx_weight(enemy_type_name: String) -> float:
+	match enemy_type_name:
+		"splitter_mini":
+			return 0.54
+		"chaser":
+			return 0.72
+		"spitter", "splitter":
+			return 0.84
+		"bomber", "charger":
+			return 0.96
+		"elite_charger", "elite_spitter", "elite_support":
+			return 1.2
+		_:
+			return 0.8
 
 func _on_run_level_up(_new_level: int) -> void:
 	_spawn_screen_flash(Color(0.42, 1.0, 0.72, 0.18), 0.22)
@@ -1852,6 +1979,9 @@ func _apply_enemy_death_effects(enemy) -> void:
 func _should_suppress_combat_vfx() -> bool:
 	return _projectile_system.should_suppress_combat_vfx()
 
+func should_suppress_combat_vfx() -> bool:
+	return _should_suppress_combat_vfx()
+
 func add_screen_trauma(amount: float) -> void:
 	if _screen_effects_enabled() and screen_shake != null and screen_shake.has_method("add_trauma"):
 		screen_shake.add_trauma(amount)
@@ -1904,7 +2034,8 @@ func _on_enemy_hit_received(_enemy, _damage_amount: int, _lethal: bool) -> void:
 			screen_shake.add_trauma(0.08 if not is_champion_hit else 0.10)
 		if not _lethal:
 			_request_hit_stop(0.45 if not is_champion_hit else 0.55, 35)
-	_play_sfx("play_impact_profile", [0.85, "hit"])
+	if not _enemy.has_meta("profiled_projectile_impact_frame") or int(_enemy.get_meta("profiled_projectile_impact_frame")) != Engine.get_physics_frames():
+		_play_sfx("play_impact_profile", [0.85, "hit"])
 
 func _spawn_health_pickup(spawn_position: Vector2) -> void:
 	if _room_clear_started or not is_inside_tree():
@@ -1940,9 +2071,10 @@ func _on_player_damage_taken(player, amount: int, _current_health: int) -> void:
 	_spawn_screen_flash(Color(0.95, 0.12, 0.12, 0.18 + 0.16 * hit_weight), 0.22)
 
 func _on_muzzle_flash_requested(origin: Vector2, direction: Vector2, color: Color, feedback_profile: String, impact_weight: float) -> void:
-	var flash := ParticleFactoryData.create_muzzle_flash(color, direction, feedback_profile, impact_weight + 0.18)
-	flash.global_position = origin
-	effects.add_child(flash)
+	if not _should_suppress_combat_vfx():
+		var flash := ParticleFactoryData.create_muzzle_flash(color, direction, feedback_profile, impact_weight + 0.18)
+		flash.global_position = origin
+		effects.add_child(flash)
 	_play_sfx("play_fire", [feedback_profile, impact_weight])
 
 func _update_revives(delta: float) -> void:
@@ -2079,6 +2211,18 @@ func _clamp_runtime_nodes() -> void:
 			continue
 		enemy.global_position.x = clampf(enemy.global_position.x, clamp_rect.position.x + 36.0, clamp_rect.end.x - 36.0)
 		enemy.global_position.y = clampf(enemy.global_position.y, clamp_rect.position.y + 36.0, clamp_rect.end.y - 36.0)
+	_trim_cosmetic_transients()
+
+func _trim_cosmetic_transients() -> void:
+	var cosmetic_children: Array = []
+	for child in effects.get_children():
+		if child != null and is_instance_valid(child) and child.is_in_group(COSMETIC_TRANSIENT_GROUP):
+			cosmetic_children.append(child)
+	var overflow := cosmetic_children.size() - MAX_COSMETIC_TRANSIENT_CHILDREN
+	for index in range(maxi(overflow, 0)):
+		var child = cosmetic_children[index]
+		if child != null and is_instance_valid(child):
+			child.queue_free()
 
 func _load_modifier_definitions() -> void:
 	_modifier_definitions.clear()
@@ -2308,15 +2452,52 @@ func get_enemy_count() -> int:
 
 func get_nearby_enemy_target_nodes(world_position: Vector2, radius: float) -> Array:
 	_rebuild_enemy_separation_grid_if_needed()
+	var current_frame := Engine.get_physics_frames()
+	if _nearby_enemy_query_cache_frame != current_frame:
+		_nearby_enemy_query_cache_frame = current_frame
+		_nearby_enemy_query_cache.clear()
 	var results: Array = []
 	var center_cell := _get_enemy_separation_cell(world_position)
 	var cell_radius := int(ceil(radius / ENEMY_SEPARATION_CELL_SIZE))
+	var cache_key := "%d:%d:%d" % [center_cell.x, center_cell.y, cell_radius]
+	if _nearby_enemy_query_cache.has(cache_key):
+		return (_nearby_enemy_query_cache[cache_key] as Array).duplicate()
 	for cell_x in range(center_cell.x - cell_radius, center_cell.x + cell_radius + 1):
 		for cell_y in range(center_cell.y - cell_radius, center_cell.y + cell_radius + 1):
 			var key := Vector2i(cell_x, cell_y)
 			if _enemy_separation_grid.has(key):
 				results.append_array(_enemy_separation_grid[key] as Array)
+	_nearby_enemy_query_cache[cache_key] = results.duplicate()
 	return results
+
+func should_use_soft_enemy_movement(world_position: Vector2) -> bool:
+	if has_flow_obstacles():
+		return false
+	if get_live_enemy_count() >= SOFT_GLOBAL_ENEMY_THRESHOLD:
+		return true
+	var current_frame := Engine.get_physics_frames()
+	if _soft_cluster_cache_frame != current_frame:
+		_soft_cluster_cache_frame = current_frame
+		_soft_cluster_cache.clear()
+	var center_cell := _get_enemy_separation_cell(world_position)
+	var cache_key := "%d:%d" % [center_cell.x, center_cell.y]
+	if _soft_cluster_cache.has(cache_key):
+		return bool(_soft_cluster_cache[cache_key])
+	var radius_sq := SOFT_CLUSTER_RADIUS * SOFT_CLUSTER_RADIUS
+	var count := 0
+	for enemy in get_nearby_enemy_target_nodes(world_position, SOFT_CLUSTER_RADIUS):
+		if enemy == null or not is_instance_valid(enemy) or not (enemy is Node2D):
+			continue
+		if enemy.has_method("is_alive") and not enemy.is_alive():
+			continue
+		if (enemy as Node2D).global_position.distance_squared_to(world_position) > radius_sq:
+			continue
+		count += 1
+		if count >= SOFT_CLUSTER_COUNT:
+			_soft_cluster_cache[cache_key] = true
+			return true
+	_soft_cluster_cache[cache_key] = false
+	return false
 
 func _rebuild_enemy_separation_grid_if_needed() -> void:
 	var current_frame := Engine.get_physics_frames()

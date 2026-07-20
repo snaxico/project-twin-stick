@@ -105,6 +105,14 @@ func _build_fire_frames(profile: String, weight: float) -> PackedVector2Array:
 		duration = 0.085
 	elif profile == "scatter":
 		duration = 0.065
+	elif profile == "beam":
+		duration = 0.038
+	elif profile == "burn":
+		duration = 0.072
+	elif profile == "slash":
+		duration = 0.05
+	elif profile == "zap":
+		duration = 0.045
 	var sample_count := int(MIX_RATE * duration)
 	var frames := PackedVector2Array()
 	frames.resize(sample_count)
@@ -121,18 +129,42 @@ func _build_fire_frames(profile: String, weight: float) -> PackedVector2Array:
 			carrier = _rng.randf_range(220.0, 360.0) * pitch
 			tone_mix = 0.72
 			noise_mix = 0.22
+		"beam":
+			carrier = _rng.randf_range(1760.0, 2320.0) * pitch
+			tone_mix = 0.54
+			noise_mix = 0.1
+		"burn":
+			carrier = _rng.randf_range(180.0, 260.0) * pitch
+			tone_mix = 0.24
+			noise_mix = 0.68
+		"slash":
+			carrier = _rng.randf_range(520.0, 760.0) * pitch
+			tone_mix = 0.2
+			noise_mix = 0.72
+		"zap":
+			carrier = _rng.randf_range(2100.0, 2850.0) * pitch
+			tone_mix = 0.46
+			noise_mix = 0.28
 	var detune := _rng.randf_range(1.01, 1.04)
 	for index in range(sample_count):
 		var t := float(index) / MIX_RATE
 		var attack := clampf(t / 0.008, 0.0, 1.0)
 		var env := attack * exp(-t * (28.0 - weight * 3.0))
 		var pitch_env := 1.0 + (0.16 if profile != "slug" else -0.1) * exp(-t * 24.0)
+		if profile == "beam":
+			pitch_env = 1.0 + 0.04 * sin(TAU * 42.0 * t)
+		elif profile == "zap":
+			pitch_env = 1.0 + _rng.randf_range(-0.08, 0.08)
 		var noise := _rng.randf_range(-1.0, 1.0)
 		var tone := sin(TAU * carrier * pitch_env * t) * tone_mix
 		tone += sin(TAU * carrier * detune * pitch_env * t) * tone_mix * 0.22
 		tone += sin(TAU * carrier * 1.92 * pitch_env * t) * tone_mix * 0.12
 		if profile == "slug":
 			tone += sin(TAU * (carrier * 0.52) * t) * 0.42
+		elif profile == "slash":
+			tone += sin(TAU * lerpf(carrier * 1.6, carrier * 0.42, t / duration) * t) * 0.28
+		elif profile == "burn":
+			noise *= lerpf(1.35, 0.8, t / duration)
 		var sample := (noise * noise_mix + tone) * env * (0.28 + weight * 0.05)
 		frames[index] = Vector2(sample, sample)
 	return frames
@@ -192,14 +224,28 @@ func _build_profiled_hit_frames(weight: float, profile: String) -> PackedVector2
 		"squelch":
 			base_frequency = 240.0 * pitch
 			noise_mix = 0.36
+		"beam":
+			base_frequency = 1820.0 * pitch
+			noise_mix = 0.05
+		"slash":
+			base_frequency = 620.0 * pitch
+			noise_mix = 0.42
+		"zap":
+			base_frequency = 2240.0 * pitch
+			noise_mix = 0.2
+		"burn":
+			base_frequency = 190.0 * pitch
+			noise_mix = 0.62
 	for index in range(sample_count):
 		var t := float(index) / MIX_RATE
 		var progress := t / duration
 		var attack := clampf(t / 0.007, 0.0, 1.0)
 		var env := attack * exp(-t * (34.0 - weight * 4.0))
 		var sweep := base_frequency * (1.0 + progress * 0.22)
-		if profile == "thump" or profile == "boom" or profile == "squelch":
+		if profile == "thump" or profile == "boom" or profile == "squelch" or profile == "slash" or profile == "burn":
 			sweep = base_frequency * (1.0 - progress * 0.35)
+		elif profile == "zap":
+			sweep = base_frequency * (1.0 + _rng.randf_range(-0.22, 0.28))
 		var sample := (
 			sin(TAU * sweep * t) * 0.42
 			+ sin(TAU * sweep * 1.015 * t) * 0.14

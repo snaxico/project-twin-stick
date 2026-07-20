@@ -5,11 +5,14 @@ const FireTrailZoneData = preload("res://scripts/weapons/FireTrailZone.gd")
 const ProjectileRendererData = preload("res://scripts/weapons/ProjectileRenderer.gd")
 const ParticleFactoryData = preload("res://scripts/juice/ParticleFactory.gd")
 const ArenaGeometry = preload("res://scripts/game/ArenaGeometry.gd")
+const PerfProbeData = preload("res://scripts/dev/PerfProbe.gd")
 
 const MAX_ACTIVE_PROJECTILES := 180
 const MAX_ACTIVE_HOMING := 40
 const ENEMY_PROJECTILE_COLOR := Color(1.0, 0.0, 0.0, 1.0)
-const COMBAT_VFX_LOAD_THRESHOLD := 150
+const COMBAT_VFX_LOAD_THRESHOLD := 110
+const COMBAT_VFX_COSMETIC_CHILD_THRESHOLD := 120
+const COSMETIC_TRANSIENT_GROUP := "cosmetic_transient"
 const BEAM_VISUAL_GRACE := 0.16
 
 var _coop: Node = null
@@ -46,7 +49,9 @@ func ensure_renderer() -> void:
 
 
 func tick(delta: float) -> void:
+	var perf_started_at := PerfProbeData.begin("projectile_system")
 	_update_homing_projectiles(delta)
+	PerfProbeData.end("projectile_system", perf_started_at)
 
 
 func handle_player_fire(origin: Vector2, direction: Vector2, projectile_config: Dictionary) -> void:
@@ -231,6 +236,13 @@ func should_suppress_combat_vfx() -> bool:
 	cleanup_active_projectiles()
 	_cleanup_homing_projectiles()
 	var enemy_count := int(_coop.call("get_enemy_count")) if _coop != null and _coop.has_method("get_enemy_count") else 0
+	var cosmetic_count := 0
+	if _effects_container != null and is_instance_valid(_effects_container):
+		for child in _effects_container.get_children():
+			if child != null and is_instance_valid(child) and child.is_in_group(COSMETIC_TRANSIENT_GROUP):
+				cosmetic_count += 1
+				if cosmetic_count >= COMBAT_VFX_COSMETIC_CHILD_THRESHOLD:
+					return true
 	return enemy_count + _active_projectiles.size() + _active_homing_projectiles.size() >= COMBAT_VFX_LOAD_THRESHOLD
 
 

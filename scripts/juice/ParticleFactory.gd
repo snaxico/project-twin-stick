@@ -1,6 +1,7 @@
 extends RefCounted
 
 const BLOOM_COLOR_MULTIPLIER := 1.45
+const COSMETIC_TRANSIENT_GROUP := "cosmetic_transient"
 
 static var _particle_texture: Texture2D = null
 
@@ -94,6 +95,7 @@ static func create_death_burst(color: Color, weight: float = 1.0) -> GPUParticle
 
 static func create_debris_ring(color: Color, radius: float = 84.0, spoke_count: int = 12, duration: float = 0.22) -> Node2D:
 	var node := Node2D.new()
+	_mark_transient(node)
 	for index in range(maxi(spoke_count, 1)):
 		var direction := Vector2.RIGHT.rotated(TAU * float(index) / float(maxi(spoke_count, 1)))
 		var spoke := Line2D.new()
@@ -248,6 +250,7 @@ static func create_projectile_trail(color: Color, style: String = "default") -> 
 
 static func create_neon_crescent(color: Color, radius: float, direction: Vector2, arc_degrees: float = 115.0) -> Node2D:
 	var node := Node2D.new()
+	_mark_transient(node)
 	node.rotation = direction.angle() if direction.length() > 0.0 else 0.0
 	var outer := Line2D.new()
 	outer.width = 10.0
@@ -271,6 +274,7 @@ static func create_neon_crescent(color: Color, radius: float, direction: Vector2
 
 static func create_flame_cone(color: Color, length: float, half_angle: float, direction: Vector2) -> Node2D:
 	var node := Node2D.new()
+	_mark_transient(node)
 	node.rotation = direction.angle() if direction.length() > 0.0 else 0.0
 	var flame := Polygon2D.new()
 	flame.color = _bloom_color(Color(color.r, color.g * 0.72, color.b * 0.35, 0.34))
@@ -297,6 +301,7 @@ static func create_flame_cone(color: Color, length: float, half_angle: float, di
 
 static func create_lightning_path(points: PackedVector2Array, color: Color, width: float = 5.0) -> Node2D:
 	var node := Node2D.new()
+	_mark_transient(node)
 	var line := Line2D.new()
 	line.width = width
 	line.antialiased = true
@@ -320,6 +325,7 @@ static func create_lightning_path(points: PackedVector2Array, color: Color, widt
 
 static func create_zone_pulse(color: Color, radius: float, weight: float = 1.0) -> Node2D:
 	var node := Node2D.new()
+	_mark_transient(node)
 	var ring := create_explosion_ring(color, radius, 3.0 + weight)
 	node.add_child(ring)
 	var burst := create_explosion_burst(color, 0.55 + weight * 0.25)
@@ -331,6 +337,7 @@ static func create_zone_pulse(color: Color, radius: float, weight: float = 1.0) 
 
 static func _create_ring_effect(color: Color, start_radius: float, end_radius: float, duration: float, thickness: float) -> Node2D:
 	var node := Node2D.new()
+	_mark_transient(node)
 	var ring := Line2D.new()
 	ring.closed = true
 	ring.width = thickness
@@ -350,6 +357,7 @@ static func _create_ring_effect(color: Color, start_radius: float, end_radius: f
 
 static func _create_particles() -> GPUParticles2D:
 	var particles := GPUParticles2D.new()
+	_mark_transient(particles)
 	particles.texture = _get_particle_texture()
 	particles.local_coords = false
 	var canvas_material := CanvasItemMaterial.new()
@@ -363,6 +371,9 @@ static func _bloom_color(color: Color) -> Color:
 static func _configure_one_shot(particles: GPUParticles2D) -> void:
 	particles.finished.connect(particles.queue_free)
 	particles.emitting = true
+
+static func _mark_transient(node: Node) -> void:
+	node.add_to_group(COSMETIC_TRANSIENT_GROUP)
 
 static func _build_circle_points(radius: float, point_count: int) -> PackedVector2Array:
 	var points: Array = []

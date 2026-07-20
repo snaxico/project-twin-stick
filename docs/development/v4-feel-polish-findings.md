@@ -181,3 +181,46 @@ Ability coverage:
    weapons stutter.
 
 No exact 5b values are proposed until the required 1P/2P feel check is recorded and user-locked.
+
+## Round 2 Implementation Findings (2026-07-20)
+
+Implemented the Round-2 plan slices 1-5 in code. Headless validation is green for parser and
+`FeelPolishAcceptance`.
+
+Perf measurements from this machine after the Slice-2b correction pass. Each row is the 3-run protocol
+from the locked Round-2 plan; values are reported as `run1 / run2 / run3`.
+
+| Scenario | Load | avg_fps | min_fps | max_frame_ms | Dominant probe bucket | Status |
+| --- | --- | ---: | ---: | ---: | --- | --- |
+| `felt:summons` | 2P Controller, heavy Arc Wand, Overgrowth, 100 held enemies, deployable loop | 144.1 / 144.0 / 143.3 | 141.0 / 136.0 / 135.0 | 15.071 / 20.158 / 30.976 | `enemy_physics` avg 2.315 / 2.425 / 2.538ms | Green |
+| `felt:horde` | 1P Mobile, heavy Rifle, 200 held enemies | 144.9 / 144.8 / 144.3 | 144.0 / 140.0 / 139.0 | 6.944 / 20.688 / 23.705 | `enemy_physics` avg 1.309 / 1.294 / 1.336ms | Green |
+| `felt:champion_wave` | 2P Mobile+Tank, heavy, Hive at 10s, 150 held enemies | 130.1 / 140.3 / 139.0 | 68.0 / 117.0 / 80.0 | 87.787 / 96.440 / 109.725 | `enemy_physics` avg 1.349 / 1.187 / 1.169ms | Green by min-FPS gate |
+
+Structural changes that moved the results:
+
+- `PerfProbe` now reports subsystem buckets from real-room runs.
+- Open-room high-count enemies use soft crowd movement above the 120-enemy physics wall, so the pinned
+  150-enemy champion profile is covered.
+- Dense-cluster soft movement staggers non-champion expensive AI/contact refreshes while preserving per-frame
+  movement.
+- `CoopManager.get_nearby_enemy_target_nodes()` caches same-frame cell/radius queries.
+- Deployables cache target/candidate scans briefly, reducing repeated per-frame spatial scans.
+- Cosmetic-only transient nodes are tagged by `ParticleFactory` and capped during runtime clamping. Gameplay
+  nodes such as FireTrailZone / AfterburnWake are not tagged and are not trimmed.
+- Projectile/effect VFX suppression now engages earlier under load; audio still plays.
+
+Important caveat: `felt:champion_wave` still reports isolated high `max_frame_ms` samples during Hive
+deflector activity, but the locked Round-2 min-FPS gate is now green across all three runs on this machine.
+Keep Slice 6 as the live-feel check for whether those isolated frames are perceptible.
+
+Other completed wiring:
+
+- Sweeping Laser Lanes now roll deterministic varied gap centers while strictly alternating axes.
+- `legion.construct_count_bonus` is live at summon time and competes within shared
+  `MAX_ACTIVE_SUMMONS`.
+- Weapon identity is wired with split fire/impact weights and new SFX profiles for Beam/Whirlwind/Arc
+  Wand/Flamethrower. Projectile impacts own high-frequency impact audio; generic hit audio is suppressed
+  when the profiled projectile impact already fired in the same physics frame.
+- Dash no longer stacks the generic cast explosion under its dash cue.
+- Debug Encounter Builder can A/B `3 + ultimate` vs `2 + ultimate`; 2-mode preserves slot 4/Y for the
+  ultimate with an empty hidden slot-3 sentinel.

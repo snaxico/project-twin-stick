@@ -17,8 +17,11 @@ Read this first to restore project context quickly, then read `current-state.md`
 - `docs/development/v4-implementation-plan.md` and `docs/development/v4-polish-round-plan.md` are the shipped
   V4 implementation sources.
 - `docs/development/v5-roadmap.md` is the phase-ordered prototype-to-game roadmap (2026-07-19).
-- `docs/development/v4-feel-polish-plan.md` is the active patch plan (Phase 1 of the roadmap). Automated
-  implementation is complete through Slice 3; live Slice 4/5 gates remain.
+- `docs/development/v4-feel-polish-round-2-plan.md` is the active Round-2 patch plan (2026-07-20);
+  Slices 1-5 are implemented locally, with Slice 6 live playtest/verdicts still open. It supersedes the
+  open remainder of `v4-feel-polish-plan.md`.
+- `docs/development/v4-feel-polish-plan.md` is the implemented Round-1 plan (`c728aa0` + `9afac67`);
+  evidence in `docs/development/v4-feel-polish-findings.md`.
 - `docs/development/v4-round-2-plan.md` is the shipped Round 2 plan, historical context.
 - `docs/development/structure-rework-plan.md` is archived V3 context, not the current implementation target.
 - `docs/design/game-direction.md` is the broader direction source of truth.
@@ -35,11 +38,16 @@ Read this first to restore project context quickly, then read `current-state.md`
 - The July 14 V4 playtest patch in `docs/development/v4-playtest-findings-2026-07-14.md` is implemented. The
   arena/Tank/Vampiric Wake follow-up in `docs/development/v4-arena-balance-followup-2026-07-14.md` is also
   implemented and validated headlessly.
-- The 2026-07-19 feel-polish pass has completed its performance measurement, concrete feel fixes, spawn A/B
-  prototype, debug tooling, and source-level impact audit. Evidence is in
-  `docs/development/v4-feel-polish-findings.md`. A post-review correction wires the Fire/Frost
-  telegraph/fade damage-phase smoke to the actual damage path. Next work is the live Slice 4/5 gate; tuning
-  remains locked until those observations are recorded.
+- The 2026-07-19 feel-polish pass is implemented (`c728aa0` + `9afac67`) and reviewed clean; evidence in
+  `docs/development/v4-feel-polish-findings.md`.
+- The 2026-07-20 Round-2 implementation is in tree: `PerfProbe` + `felt:*` PerfRunner profiles,
+  high-load/dense-cluster enemy soft movement, same-frame target-query/deployable target caching, cosmetic-only
+  transient-node caps,
+  deterministic varied Sweeping Laser gaps, Legion summon wiring, weapon fire/impact identity, dash SFX
+  dedupe, and a debug 2-vs-3 kit-size A/B seam. Remaining work: live Slice-6 playtest/verdicts and the
+  follow-up Mobile-baseline class-balance tuning plan. Headless pinned 3-run felt profiles pass the locked
+  min-FPS gate (`summons`, `horde`, `champion_wave`), though champion-wave still needs live verification for
+  isolated Hive-activity frame spikes.
 
 ## Live Runtime Summary
 

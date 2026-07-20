@@ -239,6 +239,7 @@ func build() -> void:
 			_apply_progress_bar_tint(slot_bar, slot_color, 0.82)
 			slot_box.add_child(slot_bar)
 			ability_slots.append({
+				"container": slot_box,
 				"label": slot_label,
 				"charge_label": slot_charge_label,
 				"bar": slot_bar,
@@ -572,11 +573,19 @@ func _refresh_bottom_hud() -> void:
 		var ability_slots: Array = card.get("ability_slots", []) as Array
 		for slot_index in range(ability_slots.size()):
 			var slot_hud_data: Dictionary = player.get_ability_hud_data(slot_index)
+			var skill_id := str(slot_hud_data.get("skill_id", ""))
+			var slot_nodes: Dictionary = ability_slots[slot_index] as Dictionary
+			var slot_root: Control = slot_nodes.get("container", null) as Control
+			if skill_id.is_empty():
+				if slot_root != null:
+					slot_root.visible = false
+				continue
+			if slot_root != null:
+				slot_root.visible = true
 			var slot_duration := maxf(float(slot_hud_data.get("cooldown_duration", 1.0)), 0.01)
 			var slot_ratio := 1.0 - clampf(float(slot_hud_data.get("cooldown_remaining", 0.0)) / slot_duration, 0.0, 1.0)
 			if bool(slot_hud_data.get("is_ultimate", false)):
 				slot_ratio = clampf(float(slot_hud_data.get("ready_ratio", 0.0)), 0.0, 1.0)
-			var slot_nodes: Dictionary = ability_slots[slot_index] as Dictionary
 			(slot_nodes.get("label") as Label).text = str(slot_hud_data.get("name", "Ability %d" % (slot_index + 1)))
 			_update_slot_charge_label(slot_nodes.get("charge_label") as Label, slot_hud_data)
 			(slot_nodes.get("bar") as ProgressBar).value = slot_ratio * 100.0

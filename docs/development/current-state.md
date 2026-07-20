@@ -69,7 +69,9 @@ abilities, ultimates, and base mutations are free.
   - mutation inventory
 - V4 removed in-run weapon switching. A run has one active weapon selected before launch.
 - Pre-run setup selects each player's class, one weapon from that class pool, and three abilities from that
-  class pool; the class ultimate auto-equips into the fourth face-button slot.
+  class pool; the class ultimate auto-equips into the fourth face-button slot. Debug Encounter Builder can
+  A/B test 2 abilities + ultimate via `debug_run_setup.kit_size`; 2-mode keeps slot 3 empty and leaves the
+  ultimate on slot 4 / `Y`.
 - Same-class co-op is allowed.
 - Current class data:
   - `mobile` / Stormrunner: rifle or beam; Dash, Shockwave, Afterburn, Momentum Burst, Deflect, Sonic Boom; ultimate Slipstream.
@@ -143,7 +145,7 @@ abilities, ultimates, and base mutations are free.
     Mine Floor retains its roam-and-avoid moving-safe-zone geometry
   - Roaming Sawblades, Tesla Arcs, Drifting Clouds
   - Bastion, Pop-up Pillars, Drifting Cover
-  - Sweeping Laser Lanes with a fixed co-op opening and alternating horizontal/vertical sweeps
+  - Sweeping Laser Lanes with deterministic varied co-op openings and alternating horizontal/vertical sweeps
 - Every non-open WHERE has three hidden deterministic layouts with no immediate selected-layout repeat;
   Fire/Frost/Mine share one Hazard Floor family history. Retries reuse the selected layout and seed.
 - All WHERE damage targets players only. Fire/Frost patch layouts preserve a traversable safe-cell component;
@@ -318,6 +320,20 @@ Last validation run in this state:
     `avg_fps=1.5`, `200` enemies `avg_fps=1.0`).
   - After fix, clustered results were: `100` enemies `avg_fps=144.6`, `150` enemies `avg_fps=144.1`,
     `200` enemies `avg_fps=119.3`; normal heavy PerfRunner remained stable.
+- V4 feel-polish Round-2 implementation validation:
+  - Godot headless editor parse: PASS.
+  - `FeelPolishAcceptance.tscn`: PASS (`total=75`, seeded trickle/pulsed repro green).
+  - `where:sweeping_laser_lanes --smoke`: PASS.
+  - Pinned 3-run felt profiles now use the locked heavy loads:
+    - `felt:summons`: 2P Controller deployable profile, heavy Arc Wand, Overgrowth, 100 held enemies;
+      `min_fps=141.0 / 136.0 / 135.0`.
+    - `felt:horde`: 1P Mobile horde profile, heavy Rifle, 200 held enemies;
+      `min_fps=144.0 / 140.0 / 139.0`.
+    - `felt:champion_wave`: 2P Mobile+Tank, heavy, Hive at `t=10s`, 150 held enemies;
+      `min_fps=68.0 / 117.0 / 80.0`.
+  - Slice-2b corrections: high-load soft movement engages above 120 live enemies, dense-cluster soft
+    movement staggers non-champion expensive refreshes, and runtime trimming is limited to
+    `ParticleFactory`-tagged cosmetic transients so gameplay zones are protected.
 
 ## V4 Polish Stat Table
 

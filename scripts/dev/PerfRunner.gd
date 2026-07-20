@@ -18,9 +18,10 @@ extends Node
 
 const RUN_FLOW_SCENE := preload("res://scenes/ui/RunFlow.tscn")
 const PlayerConfigData := preload("res://scripts/player/PlayerConfig.gd")
+const PerfProbeData := preload("res://scripts/dev/PerfProbe.gd")
 
-const WARMUP_SECONDS := 4.0
-const SAMPLE_SECONDS := 10.0
+const WARMUP_SECONDS := 5.0
+const SAMPLE_SECONDS := 35.0
 const PROFILING_SEED := 20260707
 
 func _ready() -> void:
@@ -65,11 +66,18 @@ func _run(
 		get_tree().change_scene_to_file("res://scenes/dev/ProfilingHarness.tscn")
 		return
 
+	var felt_config := _felt_scenario_config(scenario)
+	if not felt_config.is_empty():
+		players = int(felt_config.get("players", players))
+		build = str(felt_config.get("build", build))
+		spawn_model = str(felt_config.get("spawn_model", spawn_model))
 	var room_type := "combat"
 	var champion_type := ""
 	var where_id := ""
 	var profiling_room := false
-	if scenario.begins_with("champion:"):
+	if not felt_config.is_empty():
+		room_type = "combat"
+	elif scenario.begins_with("champion:"):
 		room_type = "boss"
 		champion_type = scenario.substr("champion:".length())
 	elif scenario.begins_with("room:"):
@@ -94,17 +102,32 @@ func _run(
 	var abilities := []
 	for i in range(players):
 		configs.append(PlayerConfigData.new(i + 1, "hybrid", tints[i % tints.size()]))
-		abilities.append(["overcharge", "dash"])
+		if not felt_config.is_empty():
+			var felt_abilities: Array = felt_config.get("abilities", []) as Array
+			abilities.append((felt_abilities[i] as Array).duplicate() if i < felt_abilities.size() else [])
+		else:
+			abilities.append(["overcharge", "dash"])
 	var options := {
 		"enabled": true,
 		"launch_mode": "single_room",
 		"room_type": room_type,
 		"room_objective": "kill_all",
 		"enemy_mix": "mixed",
-		"starting_mutations": [],
+		"starting_mutations": (felt_config.get("starting_mutations", []) as Array).duplicate() if not felt_config.is_empty() else [],
 		"player_abilities": abilities,
+		"player_classes": (felt_config.get("classes", []) as Array).duplicate() if not felt_config.is_empty() else [],
+		"player_weapons": (felt_config.get("weapons", []) as Array).duplicate() if not felt_config.is_empty() else [],
 		"spawn_model": _sanitize_spawn_model(spawn_model),
 	}
+	if not felt_config.is_empty():
+		options["archetype_id"] = str(felt_config.get("archetype_id", "mixed"))
+		options["where"] = str(felt_config.get("where", "open"))
+		options["where_seed"] = PROFILING_SEED
+		options["depth"] = int(felt_config.get("depth", 1))
+		options["profiling"] = true
+		options["side_objective"] = ""
+		options["modifiers"] = (felt_config.get("modifiers", []) as Array).duplicate()
+		options["composition"] = (felt_config.get("composition", {}) as Dictionary).duplicate(true)
 	if profiling_room:
 		options["where"] = where_id
 		options["where_variant"] = clampi(int(_read_arg("--variant=", "0")), 0, 2)
@@ -127,7 +150,8 @@ func _run(
 		for i in range(players):
 			var inv = RunState.get_player_inventory(i)
 			if inv != null:
-				inv.weapon_id = "scattergun"
+				if felt_config.is_empty():
+					inv.weapon_id = "scattergun"
 				inv.weapon_level = 5
 				inv.mutations.append_array(["piercing_rounds", "ricochet", "fire_trail"])
 
@@ -143,14 +167,86 @@ func _run(
 	profiler.raw_scenario = scenario
 	profiler.smoke = smoke
 	profiler.where_id = where_id
+	profiler.felt_config = felt_config.duplicate(true)
 	profiler.process_mode = Node.PROCESS_MODE_ALWAYS
 	get_tree().root.add_child.call_deferred(profiler)
+
+
+func _felt_scenario_config(scenario: String) -> Dictionary:
+	match scenario:
+		"felt:summons":
+			return {
+				"players": 2,
+				"build": "heavy",
+				"spawn_model": "trickle",
+				"classes": ["controller", "controller"],
+				"weapons": ["arc_wand", "arc_wand"],
+				"abilities": [["summon", "turret", "orbit"], ["summon", "turret", "orbit"]],
+				"starting_mutations": ["overgrowth"],
+				"archetype_id": "gauntlet",
+				"where": "open",
+				"depth": 8,
+				"enemy_target": 100,
+				"spitter_target": 6,
+				"cast_loop": ["summon", "turret", "orbit", "overload_grid"],
+				"composition": {
+					"melee_density": "low",
+					"melee_bias": ["charger", "splitter", "bomber"],
+					"shooters": ["spitter"],
+					"shooter_ratio": 0.35,
+				},
+			}
+		"felt:horde":
+			return {
+				"players": 1,
+				"build": "heavy",
+				"spawn_model": "trickle",
+				"classes": ["mobile"],
+				"weapons": ["rifle"],
+				"abilities": [["dash", "shockwave", "afterburn"]],
+				"archetype_id": "horde",
+				"where": "open",
+				"depth": 10,
+				"enemy_target": 200,
+				"spitter_target": 0,
+				"composition": {
+					"melee_density": "high",
+					"melee_bias": ["chaser", "charger", "splitter", "bomber"],
+					"shooters": [],
+					"shooter_ratio": 0.0,
+				},
+			}
+		"felt:champion_wave":
+			return {
+				"players": 2,
+				"build": "heavy",
+				"spawn_model": "trickle",
+				"classes": ["mobile", "tank"],
+				"weapons": ["rifle", "scattergun"],
+				"abilities": [["dash", "shockwave", "afterburn"], ["dash", "ground_slam", "orbit"]],
+				"archetype_id": "mixed",
+				"where": "open",
+				"depth": 10,
+				"enemy_target": 150,
+				"spitter_target": 6,
+				"modifiers": ["enemy_speed", "shielded"],
+				"champion_at": 10.0,
+				"composition": {
+					"melee_density": "medium",
+					"melee_bias": ["chaser", "charger", "splitter", "bomber"],
+					"shooters": ["spitter"],
+					"shooter_ratio": 0.3,
+				},
+			}
+		_:
+			return {}
 
 class _Profiler extends Node:
 	var scenario := ""
 	var raw_scenario := ""
 	var smoke := false
 	var where_id := ""
+	var felt_config: Dictionary = {}
 	var _elapsed := 0.0
 	var _frames := 0
 	var _fps_sum := 0.0
@@ -167,8 +263,11 @@ class _Profiler extends Node:
 	var _smoke_ran := false
 	var _smoke_passed := true
 	var _next_forced_step_at := 0.0
+	var _next_cast_at := 0.0
+	var _cast_cursor := 0
 
 	func _ready() -> void:
+		PerfProbeData.set_enabled(true)
 		print("=== PERF RUNNER: %s (warmup %.0fs, sample %.0fs, vsync off) ===" % [scenario, WARMUP_SECONDS, SAMPLE_SECONDS])
 
 	func _process(delta: float) -> void:
@@ -178,6 +277,7 @@ class _Profiler extends Node:
 			return
 		if not _sampling_started:
 			_sampling_started = true
+			PerfProbeData.reset()
 			return
 		var fps := Performance.get_monitor(Performance.TIME_FPS)
 		var process_ms := Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0
@@ -191,6 +291,7 @@ class _Profiler extends Node:
 		_node_sum += Performance.get_monitor(Performance.OBJECT_NODE_COUNT)
 		_frame_ms_max = maxf(_frame_ms_max, frame_ms)
 		_record_worst_frame(_elapsed, frame_ms)
+		PerfProbeData.sample_frame()
 		_frames += 1
 		if _elapsed >= WARMUP_SECONDS + SAMPLE_SECONDS:
 			_emit_and_quit()
@@ -208,7 +309,13 @@ class _Profiler extends Node:
 		print("%s,%.1f,%.1f,%.3f,%.3f,%.3f,%.0f,%.0f" % [
 			scenario, _fps_sum / f, _fps_min, _frame_ms_max, _proc_sum / f, _phys_sum / f, _draw_sum / f, _node_sum / f,
 		])
+		var probe := PerfProbeData.snapshot()
+		print("probe_bucket,avg_ms,max_ms")
+		for row_variant in probe.get("rows", []):
+			var row := row_variant as Dictionary
+			print("%s,%.3f,%.3f" % [str(row.get("bucket", "")), float(row.get("avg_ms", 0.0)), float(row.get("max_ms", 0.0))])
 		print("=== PERF RUNNER DONE ===")
+		PerfProbeData.set_enabled(false)
 		var avg_fps := _fps_sum / f
 		get_tree().quit(1 if (not _smoke_passed or avg_fps < 60.0) else 0)
 
@@ -216,6 +323,9 @@ class _Profiler extends Node:
 		if _coop == null:
 			_coop = _find_coop(get_tree().root)
 		if _coop == null:
+			return
+		if not felt_config.is_empty():
+			_drive_felt_scenario()
 			return
 		if raw_scenario == "shooter_budget" and smoke and not _smoke_ran:
 			_smoke_ran = true
@@ -263,6 +373,22 @@ class _Profiler extends Node:
 			if not bool(_coop.call("profiling_all_enemies_reachable")):
 				return false
 		return true
+
+	func _drive_felt_scenario() -> void:
+		var target := int(felt_config.get("enemy_target", 0))
+		if target > 0:
+			_coop.call("profiling_hold_enemy_load", target, int(felt_config.get("spitter_target", 0)), PROFILING_SEED)
+		if felt_config.has("champion_at") and _elapsed >= float(felt_config.get("champion_at", INF)):
+			_coop.call("profiling_spawn_hive_champion_once")
+		var cast_loop: Array = felt_config.get("cast_loop", []) as Array
+		if cast_loop.is_empty() or _elapsed < _next_cast_at:
+			return
+		_next_cast_at = _elapsed + 1.0
+		var ability_id := str(cast_loop[_cast_cursor % cast_loop.size()])
+		_cast_cursor += 1
+		var player_count := int(felt_config.get("players", 1))
+		for player_index in range(player_count):
+			_coop.call("profiling_cast_ability", player_index, ability_id)
 
 	func _find_coop(node: Node) -> Node:
 		if node != null and node.has_method("profiling_inject"):

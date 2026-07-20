@@ -5,6 +5,7 @@ extends Node
 ##   godot --headless --path <project> res://scenes/dev/FeelPolishAcceptance.tscn
 
 const WaveDirectorScript := preload("res://scripts/game/WaveDirector.gd")
+const MutationSystemScript := preload("res://scripts/game/MutationSystem.gd")
 const TEST_SEED := 424242
 const STEP_SECONDS := 0.05
 const END_SECONDS := 48.0
@@ -65,6 +66,7 @@ func _run() -> void:
 	_check_builder_config(failures, "gauntlet", "bastion", 6, 1002, "low")
 	_check_builder_config(failures, "mixed", "fire_grid", 8, 1003, "medium")
 	_check_seeded_spawn_does_not_consume_global_rng(failures)
+	_check_round_2_contracts(failures)
 
 	if failures.is_empty():
 		print(
@@ -113,7 +115,7 @@ func _read_arg(prefix: String, fallback: String) -> String:
 
 
 func _simulate(model: String) -> Array:
-	RunState.start_new_run([], {
+	RunState.start_new_run([null], {
 		"enabled": true,
 		"launch_mode": "single_room",
 		"room_type": "combat",
@@ -145,6 +147,70 @@ func _simulate(model: String) -> Array:
 	director.free()
 	coop.free()
 	return event_log
+
+
+func _check_round_2_contracts(failures: Array[String]) -> void:
+	_check_legion_effect_is_live(failures)
+	_check_kit_size_two_layout(failures)
+	_check_weapon_feedback_wiring(failures)
+
+
+func _check_legion_effect_is_live(failures: Array[String]) -> void:
+	RunState.start_new_run([null], {
+		"enabled": true,
+		"launch_mode": "single_room",
+		"player_classes": ["controller"],
+		"player_weapons": ["arc_wand"],
+		"player_abilities": [["summon", "turret", "orbit"]],
+		"starting_mutations": ["legion"],
+	})
+	var mutation_system = MutationSystemScript.new()
+	var effects := mutation_system.get_ability_rare_effects(0, "summon")
+	if int(effects.get("construct_count_bonus", 0)) != 1:
+		failures.append("legion construct_count_bonus was not compiled into summon stats")
+	var coop_source := _read_res_text("res://scripts/game/CoopManager.gd")
+	if not coop_source.contains("construct_count_bonus"):
+		failures.append("legion construct_count_bonus is not read by summon spawning")
+
+
+func _check_kit_size_two_layout(failures: Array[String]) -> void:
+	RunState.start_new_run([null], {
+		"enabled": true,
+		"launch_mode": "single_room",
+		"kit_size": 2,
+		"player_classes": ["mobile"],
+		"player_abilities": [["dash", "shockwave", "overcharge"]],
+	})
+	var inventory = RunState.get_player_inventory(0)
+	if inventory == null:
+		failures.append("kit_size=2 did not create an inventory")
+		return
+	var ability_ids: Array = inventory.get_ability_ids()
+	if ability_ids.size() != 4:
+		failures.append("kit_size=2 runtime did not keep four slots")
+		return
+	if str(ability_ids[0]) != "dash" or str(ability_ids[1]) != "shockwave" or str(ability_ids[2]) != "":
+		failures.append("kit_size=2 did not use two abilities plus empty sentinel")
+	if str(ability_ids[3]) != "slipstream":
+		failures.append("kit_size=2 did not keep the ultimate in slot 4/Y")
+
+
+func _check_weapon_feedback_wiring(failures: Array[String]) -> void:
+	var player_source := _read_res_text("res://scripts/player/Player.gd")
+	for expected in ["rifle", "scattergun", "rocket", "beam", "whirlwind", "arc_wand", "flamethrower"]:
+		if not player_source.contains("\"%s\"" % expected):
+			failures.append("weapon feedback map is missing %s" % expected)
+	if not player_source.contains("_weapon_fire_weight") or not player_source.contains("_weapon_impact_weight"):
+		failures.append("weapon fire/impact weights are not split")
+	var sfx_source := _read_res_text("res://scripts/juice/SfxEngine.gd")
+	for expected_profile in ["beam", "slash", "zap", "burn"]:
+		if not sfx_source.contains("\"%s\"" % expected_profile):
+			failures.append("SFX profile generator is missing %s" % expected_profile)
+
+
+func _read_res_text(path: String) -> String:
+	var file := FileAccess.open(path, FileAccess.READ)
+	return file.get_as_text() if file != null else ""
 
 
 func _check_builder_config(

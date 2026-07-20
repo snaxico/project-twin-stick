@@ -2,6 +2,7 @@ class_name OrbitNode
 extends "res://scripts/game/DeployableNode.gd"
 
 const ParticleFactoryData = preload("res://scripts/juice/ParticleFactory.gd")
+const PerfProbeData = preload("res://scripts/dev/PerfProbe.gd")
 
 var owner_node: Node2D = null
 var orb_count := 3
@@ -17,6 +18,8 @@ var tint := Color(0.56, 0.92, 1.0, 1.0)
 var _angle := 0.0
 var _hit_cooldowns: Dictionary = {}
 var _expires_at := 0.0
+var _cached_candidates: Array = []
+var _next_candidate_scan_at := 0.0
 
 func configure(orbit_owner: Node2D, stats: Dictionary, color: Color) -> void:
 	owner_node = orbit_owner
@@ -36,14 +39,18 @@ func configure(orbit_owner: Node2D, stats: Dictionary, color: Color) -> void:
 	queue_redraw()
 
 func _physics_process(delta: float) -> void:
+	var perf_started_at := PerfProbeData.begin("deployable_tick")
 	if not is_alive():
+		PerfProbeData.end("deployable_tick", perf_started_at)
 		return
 	if owner_node == null or not is_instance_valid(owner_node):
 		despawn_deployable()
+		PerfProbeData.end("deployable_tick", perf_started_at)
 		return
 	var now := Time.get_ticks_msec() / 1000.0
 	if now >= _expires_at:
 		despawn_deployable()
+		PerfProbeData.end("deployable_tick", perf_started_at)
 		return
 	global_position = owner_node.global_position
 	_angle = fmod(_angle + rotation_speed * delta, TAU)
@@ -65,6 +72,7 @@ func _physics_process(delta: float) -> void:
 	if blocks_projectiles:
 		_block_enemy_projectiles(orb_positions)
 	queue_redraw()
+	PerfProbeData.end("deployable_tick", perf_started_at)
 
 func _get_orb_positions(effective_radius: float = -1.0) -> Array:
 	var points: Array = []
@@ -90,13 +98,19 @@ func _current_orbit_radius(now: float) -> float:
 	return orbit_radius + expand_bonus_radius * pulse
 
 func _get_candidate_enemies(radius: float) -> Array:
+	var now := Time.get_ticks_msec() / 1000.0
+	if now < _next_candidate_scan_at:
+		return _cached_candidates
+	_next_candidate_scan_at = now + 0.14
 	var tree := get_tree()
 	if tree == null:
 		return []
 	var combat_owner := tree.current_scene
 	if combat_owner != null and combat_owner.has_method("get_nearby_enemy_target_nodes"):
-		return combat_owner.get_nearby_enemy_target_nodes(global_position, radius)
-	return tree.get_nodes_in_group("aim_target")
+		_cached_candidates = combat_owner.get_nearby_enemy_target_nodes(global_position, radius)
+	else:
+		_cached_candidates = tree.get_nodes_in_group("aim_target")
+	return _cached_candidates
 
 func _block_enemy_projectiles(orb_positions: Array) -> void:
 	var tree := get_tree()
